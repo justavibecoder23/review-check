@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Lọc review nhiễu và tìm nhược điểm thật của sản phẩm Shopee, TikTok Shop." />
+    <title>Review Thật? | Kiểm tra trước khi mua</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <a class="brand" href="/" aria-label="Review Thật trang chủ"><span>✓</span> Review Thật?</a>
+        <p>Kiểm tra nhược điểm thật trước khi bấm mua.</p>
+      </header>
+
+      <section class="hero" aria-labelledby="page-title">
+        <div class="eyebrow">Shopee &amp; TikTok Shop</div>
+        <h1 id="page-title">Đừng để review seeding<br />quyết định giỏ hàng của bạn.</h1>
+        <p class="intro">Dán link sản phẩm. Bot sẽ lấy các bình luận công khai, bỏ phản hồi nhận xu/khen chung chung và gom các nhược điểm lặp lại.</p>
+        <form id="analyze-form" class="url-form">
+          <label class="sr-only" for="product-url">Link sản phẩm</label>
+          <input id="product-url" name="url" type="url" placeholder="Dán link Shopee hoặc TikTok Shop vào đây…" autocomplete="url" required />
+          <button id="submit-button" type="submit">Phân tích review <span>→</span></button>
+        </form>
+        <div class="supported"><span>Hỗ trợ link</span> Shopee <i></i> TikTok Shop <b>•</b> Không cần đăng nhập</div>
+      </section>
+
+      <section class="steps" aria-label="Quy trình xử lý">
+        <div><strong>01</strong><span>Lấy review công khai</span></div>
+        <div><strong>02</strong><span>Lọc review nhiễu</span></div>
+        <div><strong>03</strong><span>Gom nhược điểm thật</span></div>
+      </section>
+
+      <section id="loading" class="loading hidden" aria-live="polite">
+        <div class="spinner"></div><p><strong>Đang xem các đánh giá…</strong><br /><span id="loading-copy">Kết nối nguồn bình luận</span></p>
+      </section>
+
+      <section id="result" class="result hidden" aria-live="polite">
+        <div id="source-notice" class="notice hidden"></div>
+        <div class="result-heading">
+          <div>
+            <div id="platform-tag" class="platform-tag"></div>
+            <h2>Kết quả lọc review</h2>
+            <p id="verdict"></p>
+          </div>
+          <a id="original-link" target="_blank" rel="noreferrer">Mở sản phẩm ↗</a>
+        </div>
+
+        <div class="metrics">
+          <article><strong id="scanned">—</strong><span>review đã quét</span></article>
+          <article><strong id="genuine">—</strong><span>review giữ lại</span></article>
+          <article><strong id="excluded">—</strong><span>review đã loại</span></article>
+          <article><strong id="confidence">—</strong><span>độ tin cậy dữ liệu</span></article>
+        </div>
+
+        <div class="content-grid">
+          <section class="issues-panel">
+            <div class="panel-title"><div><span class="dot"></span> Điểm cần cân nhắc</div><small>Chỉ tính review đã lọc</small></div>
+            <div id="issues" class="issues"></div>
+          </section>
+          <aside class="filter-card">
+            <h3>Bot đã bỏ qua gì?</h3>
+            <p>Các phản hồi sau không đủ bằng chứng về trải nghiệm sử dụng.</p>
+            <ul>
+              <li><span>×</span> Review nhận xu / seeding</li>
+              <li><span>×</span> Khen chê một từ</li>
+              <li><span>×</span> Chưa dùng đã đánh giá</li>
+            </ul>
+            <p class="filter-footnote">Đây là bộ lọc hỗ trợ quyết định, không thay thế việc xem kỹ sản phẩm.</p>
+          </aside>
+        </div>
+
+        <details class="review-details">
+          <summary>Xem <span id="review-count">0</span> review đã xử lý</summary>
+          <div id="review-list" class="review-list"></div>
+        </details>
+      </section>
+      <p id="form-error" class="error hidden" role="alert"></p>
+    </main>
+    <footer>Review Thật? · Bộ lọc theo quy tắc, ưu tiên tốc độ và chi phí thấp.</footer>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
