@@ -96,6 +96,9 @@ export async function getReviews(url) {
       warnings
     };
   } catch (error) {
+    if (process.env.ALLOW_DEMO_REVIEWS !== 'true') {
+      throw Object.assign(new Error(`Không lấy được review thật từ ${platform}: ${error.message}`), { statusCode: 502 });
+    }
     warnings.push(`Không thể lấy dữ liệu trực tiếp: ${error.message}`);
     warnings.push('Đang hiển thị dữ liệu mô phỏng để kiểm tra luồng. Không dùng kết quả này để quyết định mua hàng.');
     return {
