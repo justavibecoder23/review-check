@@ -14,14 +14,22 @@ Mở `http://localhost:3000`, dán một link sản phẩm. Không cần cài pa
 
 ## Nguồn dữ liệu thực tế
 
-Trình duyệt không được phép tự quét review Shopee/TikTok do CORS và cơ chế chống bot. Vì vậy việc lấy dữ liệu nằm ở server:
+Shopee bảo vệ endpoint review bằng chữ ký chống bot tạo trong phiên trình duyệt. Do đó ứng dụng Vercel **không gọi trực tiếp** API nội bộ Shopee. Thay vào đó, thư mục `bot/` chứa một collector độc lập chạy Chromium/Playwright; nó nhận link, lấy tối đa 50 review thật, cache 15 phút và trả về API JSON.
 
-- Shopee: server thử lấy 50 review công khai bằng endpoint công khai khi URL có `shopId` và `itemId`.
-- TikTok Shop hoặc trường hợp Shopee bị chặn: cấu hình một bot thu thập hợp lệ rồi gán `REVIEWS_BOT_URL` và (nếu có) `REVIEWS_BOT_TOKEN`.
+Bot nhận `POST /reviews` với JSON `{ "url": "...", "platform": "Shopee", "limit": 50 }` và trả `{ "reviews": [{ "rating": 1-5, "text": "...", "date": "...", "verified": true, "author": "..." }] }`.
 
-Bot nhận `POST` JSON `{ "url": "...", "platform": "Shopee | TikTok Shop", "limit": 50 }` và cần trả `{ "reviews": [{ "rating": 1-5, "text": "...", "date": "...", "verified": true, "author": "..." }] }`.
+### Triển khai bot
 
-Khi không có nguồn live, giao diện **luôn báo rõ** đang dùng dữ liệu mô phỏng. Đây là để demo được hoàn chỉnh mà không tạo ra nhận định sai về sản phẩm thật.
+Deploy riêng thư mục `bot/` lên một dịch vụ hỗ trợ Docker. Thiết lập biến môi trường `REVIEWS_BOT_TOKEN` là một chuỗi bí mật mạnh. Sau đó tại Vercel, thêm:
+
+```text
+REVIEWS_BOT_URL=https://<ten-bot-cua-ban>/reviews
+REVIEWS_BOT_TOKEN=<cung-gia-tri-voi-bot>
+```
+
+Vercel sẽ gửi link sản phẩm sang bot; bot không trả review mô phỏng. Khi Shopee từ chối phiên thu thập, giao diện báo lỗi thay vì hiển thị review của sản phẩm khác.
+
+TikTok Shop chưa có collector trong phiên bản này và sẽ báo rõ là chưa hỗ trợ.
 
 ## Lọc chi phí thấp
 

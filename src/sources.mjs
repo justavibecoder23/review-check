@@ -20,44 +20,6 @@ function platformFrom(url) {
   throw Object.assign(new Error('Link chưa thuộc Shopee hoặc TikTok Shop.'), { statusCode: 400 });
 }
 
-function extractShopeeIds(url) {
-  const direct = url.match(/-i\.(\d+)\.(\d+)/);
-  const product = url.match(/\/product\/(\d+)\/(\d+)/);
-  const [, shopId, itemId] = direct || product || [];
-  return shopId && itemId ? { shopId, itemId } : null;
-}
-
-function mapShopeeRating(rating) {
-  return {
-    rating: rating.rating_star || 0,
-    text: rating.comment || '',
-    date: rating.mtime ? new Date(rating.mtime * 1000).toLocaleDateString('vi-VN') : 'Không rõ ngày',
-    verified: Boolean(rating.author_username),
-    author: rating.author_username || 'Khách đã mua'
-  };
-}
-
-async function loadShopeeReviews(url) {
-  const ids = extractShopeeIds(url);
-  if (!ids) throw new Error('Không đọc được mã sản phẩm từ link Shopee này.');
-  const query = new URLSearchParams({ itemid: ids.itemId, shopid: ids.shopId, limit: '50', offset: '0', type: '0', filter: '0' });
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8_000);
-  try {
-    const response = await fetch(`https://shopee.vn/api/v4/item/get_ratings?${query}`, {
-      headers: { 'user-agent': 'Mozilla/5.0', 'accept': 'application/json' },
-      signal: controller.signal
-    });
-    if (!response.ok) throw new Error(`Shopee trả về HTTP ${response.status}`);
-    const body = await response.json();
-    const reviews = (body?.data?.ratings || []).map(mapShopeeRating).filter((item) => item.text);
-    if (!reviews.length) throw new Error('Shopee không trả về bình luận công khai.');
-    return reviews;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 async function loadFromConfiguredBot(url, platform) {
   const endpoint = process.env.REVIEWS_BOT_URL;
   if (!endpoint) throw new Error('Chưa cấu hình bot thu thập đánh giá.');
@@ -84,14 +46,10 @@ export async function getReviews(url) {
   const platform = platformFrom(parsed.href);
   const warnings = [];
   try {
-    const reviews = process.env.REVIEWS_BOT_URL
-      ? await loadFromConfiguredBot(parsed.href, platform)
-      : platform === 'Shopee'
-        ? await loadShopeeReviews(parsed.href)
-        : await loadFromConfiguredBot(parsed.href, platform);
+    const reviews = await loadFromConfiguredBot(parsed.href, platform);
     return {
       reviews,
-      source: { type: 'live', label: process.env.REVIEWS_BOT_URL ? 'Bot thu thập đã cấu hình' : 'Bình luận công khai Shopee' },
+      source: { type: 'live', label: 'Bot thu thập đã cấu hình' },
       product: { platform, url: parsed.href },
       warnings
     };
