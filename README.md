@@ -14,7 +14,17 @@ Mở `http://localhost:3000`, dán một link sản phẩm. Không cần cài pa
 
 ## Nguồn dữ liệu thực tế
 
-Shopee bảo vệ endpoint review bằng chữ ký chống bot tạo trong phiên trình duyệt. Do đó ứng dụng Vercel **không gọi trực tiếp** API nội bộ Shopee. Thay vào đó, thư mục `bot/` chứa một collector độc lập chạy Chromium/Playwright; nó nhận link, lấy tối đa 50 review thật, cache 15 phút và trả về API JSON.
+Với Shopee, ứng dụng gọi Actor Apify `zen-studio/shopee-product-reviews-scraper` từ API backend của Vercel. Mỗi yêu cầu chỉ thu thập tối đa **10 review có nội dung**. Token không bao giờ được gửi xuống trình duyệt.
+
+Tại Vercel → **Settings → Environment Variables**, thêm biến:
+
+```text
+APIFY_TOKEN=<token Apify mới>
+```
+
+Sau đó redeploy. Không đưa token vào mã nguồn, GitHub hay trình duyệt. Actor là dịch vụ bên thứ ba; chỉ sử dụng khi bạn có quyền phù hợp với dữ liệu và điều khoản của nguồn.
+
+TikTok Shop hiện vẫn dùng collector độc lập nếu đã cấu hình:
 
 Bot nhận `POST /reviews` với JSON `{ "url": "...", "platform": "Shopee", "limit": 50 }` và trả `{ "reviews": [{ "rating": 1-5, "text": "...", "date": "...", "verified": true, "author": "..." }] }`.
 
@@ -29,7 +39,7 @@ REVIEWS_BOT_TOKEN=<cung-gia-tri-voi-bot>
 
 Vercel sẽ gửi link sản phẩm sang bot; bot không trả review mô phỏng. Khi Shopee từ chối phiên thu thập, giao diện báo lỗi thay vì hiển thị review của sản phẩm khác.
 
-TikTok Shop chưa có collector trong phiên bản này và sẽ báo rõ là chưa hỗ trợ.
+TikTok Shop chưa có collector trong phiên bản này và sẽ báo rõ là chưa hỗ trợ nếu chưa cấu hình bot.
 
 ## Lọc chi phí thấp
 
