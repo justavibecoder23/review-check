@@ -40,16 +40,69 @@ async function loadFromConfiguredBot(url, platform) {
   })).filter((review) => review.text);
 }
 
+function getShopeeIds(url) {
+  const pathname = new URL(url).pathname;
+  const canonicalMatch = pathname.match(/(?:-i\.|\/product-i\.)(\d+)\.(\d+)/i);
+  const productPathMatch = pathname.match(/\/product\/(\d+)\/(\d+)/i);
+  const match = canonicalMatch || productPathMatch;
+  if (!match) {
+    throw Object.assign(new Error('Không đọc được mã shop và mã sản phẩm từ link Shopee.'), { statusCode: 400 });
+  }
+  return { shopId: match[1], itemId: match[2] };
+}
+
+function canonicalShopeeUrl(url) {
+  const { shopId, itemId } = getShopeeIds(url);
+  return `https://shopee.vn/product-i.${shopId}.${itemId}`;
+}
+
+async function loadFromApify(url) {
+  const token = process.env.APIFY_TOKEN;
+  if (!token) throw new Error('Chưa cấu hình APIFY_TOKEN trên máy chủ.');
+
+  const endpoint = 'https://api.apify.com/v2/acts/zen-studio~shopee-product-reviews-scraper/run-sync-get-dataset-items';
+  const upstream = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      startUrls: [{ url: canonicalShopeeUrl(url) }],
+      contentFilter: 'with comments',
+      maxReviewsPerProduct: 10
+    }),
+    signal: AbortSignal.timeout(55_000)
+  });
+
+  if (!upstream.ok) {
+    const detail = (await upstream.text()).slice(0, 240);
+    throw new Error(`Apify trả về HTTP ${upstream.status}${detail ? `: ${detail}` : ''}`);
+  }
+  const items = await upstream.json();
+  if (!Array.isArray(items)) throw new Error('Apify không trả về danh sách review hợp lệ.');
+
+  return items.map((review) => ({
+    rating: Number(review.ratingStar) || 0,
+    text: String(review.comment || '').trim(),
+    date: review.createdAt ? new Date(review.createdAt).toLocaleDateString('vi-VN') : 'Không rõ ngày',
+    verified: true,
+    author: review.author || 'Khách đã mua'
+  })).filter((review) => review.text);
+}
+
 export async function getReviews(url) {
   let parsed;
   try { parsed = new URL(url); } catch { throw Object.assign(new Error('Link không hợp lệ.'), { statusCode: 400 }); }
   const platform = platformFrom(parsed.href);
   const warnings = [];
   try {
-    const reviews = await loadFromConfiguredBot(parsed.href, platform);
+    const reviews = platform === 'Shopee'
+      ? await loadFromApify(parsed.href)
+      : await loadFromConfiguredBot(parsed.href, platform);
     return {
       reviews,
-      source: { type: 'live', label: 'Bot thu thập đã cấu hình' },
+      source: { type: 'live', label: platform === 'Shopee' ? 'Apify · Shopee Product Reviews Scraper' : 'Bot thu thập đã cấu hình' },
       product: { platform, url: parsed.href },
       warnings
     };
