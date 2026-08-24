@@ -15,6 +15,15 @@ const DEMO_REVIEWS = [
   { rating: 3, text: 'Không giống màu trên ảnh, giao hàng hơi lâu nhưng shop có phản hồi.', date: '01/08/2026', verified: true }
 ];
 
+const DEFAULT_SHOPEE_REVIEW_LIMIT = 10;
+const MAX_SHOPEE_REVIEW_LIMIT = 100;
+
+export function getShopeeReviewLimit(value = process.env.SHOPEE_REVIEW_LIMIT) {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  if (!Number.isFinite(parsed)) return DEFAULT_SHOPEE_REVIEW_LIMIT;
+  return Math.min(Math.max(parsed, 1), MAX_SHOPEE_REVIEW_LIMIT);
+}
+
 function platformFrom(url) {
   const host = new URL(url).hostname.toLowerCase();
   if (isShopeeUrl(url)) return 'Shopee';
@@ -42,7 +51,7 @@ async function loadFromConfiguredBot(url, platform) {
   })).filter((review) => review.text);
 }
 
-async function loadFromApify(url) {
+async function loadFromApify(url, reviewLimit) {
   const token = process.env.APIFY_TOKEN;
   if (!token) throw new Error('Chưa cấu hình APIFY_TOKEN trên máy chủ.');
 
@@ -56,7 +65,7 @@ async function loadFromApify(url) {
     body: JSON.stringify({
       startUrls: [{ url }],
       contentFilter: 'with comments',
-      maxReviewsPerProduct: 10
+      maxReviewsPerProduct: reviewLimit
     }),
     // Chừa thời gian cho bước mở link rút gọn và cho Vercel đóng gói phản hồi.
     signal: AbortSignal.timeout(48_000)
@@ -89,6 +98,7 @@ export async function getReviews(url) {
     ? await resolveShopeeProductUrl(parsed.href)
     : null;
   const productUrl = shopeeProduct?.canonicalUrl || parsed.href;
+  const reviewLimit = platform === 'Shopee' ? getShopeeReviewLimit() : 50;
 
   if (shopeeProduct?.wasShortened) {
     warnings.push('Đã mở link chia sẻ Shopee và chuẩn hóa về đúng sản phẩm trước khi thu thập review.');
@@ -96,11 +106,15 @@ export async function getReviews(url) {
 
   try {
     const reviews = platform === 'Shopee'
-      ? await loadFromApify(productUrl)
+      ? await loadFromApify(productUrl, reviewLimit)
       : await loadFromConfiguredBot(productUrl, platform);
     return {
       reviews,
-      source: { type: 'live', label: platform === 'Shopee' ? 'Apify · Shopee Product Reviews Scraper' : 'Bot thu thập đã cấu hình' },
+      source: {
+        type: 'live',
+        label: platform === 'Shopee' ? 'Apify · Shopee Product Reviews Scraper' : 'Bot thu thập đã cấu hình',
+        reviewLimit
+      },
       product: {
         platform,
         url: productUrl,
@@ -121,7 +135,7 @@ export async function getReviews(url) {
     warnings.push('Đang hiển thị dữ liệu mô phỏng để kiểm tra luồng. Không dùng kết quả này để quyết định mua hàng.');
     return {
       reviews: DEMO_REVIEWS,
-      source: { type: 'demo', label: 'Dữ liệu mô phỏng' },
+      source: { type: 'demo', label: 'Dữ liệu mô phỏng', reviewLimit },
       product: {
         platform,
         url: productUrl,
