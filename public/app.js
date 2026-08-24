@@ -9,11 +9,33 @@ const delayLines = ['Kết nối nguồn bình luận', 'Đang bỏ review nhậ
 
 const navLinks = [...document.querySelectorAll('.main-nav a[href^="#"]')];
 const navIndicator = document.querySelector('.nav-indicator');
+const siteHeader = document.querySelector('.site-header');
+const navToggle = document.querySelector('.nav-toggle');
+const navToggleLabel = document.querySelector('.nav-toggle-label');
 const navSections = navLinks
   .map((link) => document.querySelector(link.hash))
   .filter(Boolean);
 let indicatorAnimation;
 let activeNavId;
+
+function setMobileMenu(open) {
+  if (!siteHeader || !navToggle) return;
+  siteHeader.classList.toggle('is-menu-open', open);
+  navToggle.setAttribute('aria-expanded', String(open));
+  if (navToggleLabel) navToggleLabel.textContent = open ? 'Đóng menu' : 'Mở menu';
+}
+
+if (navToggle) {
+  navToggle.addEventListener('click', () => {
+    setMobileMenu(navToggle.getAttribute('aria-expanded') !== 'true');
+  });
+  document.addEventListener('click', (event) => {
+    if (siteHeader?.classList.contains('is-menu-open') && !siteHeader.contains(event.target)) setMobileMenu(false);
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') setMobileMenu(false);
+  });
+}
 
 function moveNavIndicator(targetLink, shouldAnimate = true) {
   if (!navIndicator || !targetLink || targetLink.offsetParent === null) return;
@@ -87,8 +109,12 @@ if (navSections.length) {
   });
 
   navSections.forEach((section) => sectionObserver.observe(section));
-  navLinks.forEach((link) => link.addEventListener('click', () => setActiveNav(link.hash.slice(1))));
+  navLinks.forEach((link) => link.addEventListener('click', () => {
+    setActiveNav(link.hash.slice(1));
+    setMobileMenu(false);
+  }));
   window.addEventListener('resize', () => {
+    if (window.innerWidth > 900) setMobileMenu(false);
     const activeLink = navLinks.find((link) => link.classList.contains('is-active'));
     if (activeLink) moveNavIndicator(activeLink, false);
   });
