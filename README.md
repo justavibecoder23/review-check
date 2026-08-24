@@ -14,7 +14,7 @@ Mở `http://localhost:3000`, dán một link sản phẩm. Không cần cài pa
 
 ## Nguồn dữ liệu thực tế
 
-Với Shopee, ứng dụng gọi Actor Apify `zen-studio/shopee-product-reviews-scraper` từ API backend của Vercel. Mỗi yêu cầu chỉ thu thập tối đa **10 review có nội dung**. Token không bao giờ được gửi xuống trình duyệt.
+Với Shopee, ứng dụng gọi Actor Apify `zen-studio/shopee-product-reviews-scraper` từ API backend của Vercel. Số review tối đa cho mỗi sản phẩm được điều khiển bằng biến môi trường `SHOPEE_REVIEW_LIMIT`; giá trị mặc định là **10**, phạm vi an toàn từ **1–100**. Token và cấu hình này không được gửi xuống trình duyệt.
 
 Backend chấp nhận cả link sản phẩm đầy đủ và link được chia sẻ/rút gọn từ Shopee, gồm `s.shopee.vn`, `vn.shp.ee` và `shope.ee`. Với link rút gọn, máy chủ sẽ:
 
@@ -29,9 +29,10 @@ Tại Vercel → **Settings → Environment Variables**, thêm biến:
 
 ```text
 APIFY_TOKEN=<token Apify mới>
+SHOPEE_REVIEW_LIMIT=10
 ```
 
-Sau đó redeploy. Không đưa token vào mã nguồn, GitHub hay trình duyệt. Actor là dịch vụ bên thứ ba; chỉ sử dụng khi bạn có quyền phù hợp với dữ liệu và điều khoản của nguồn.
+Muốn đổi nhanh số lượng review, chỉ cần sửa giá trị `SHOPEE_REVIEW_LIMIT` trong Vercel rồi redeploy. Nếu bỏ trống hoặc nhập giá trị không hợp lệ, backend dùng 10; giá trị nhỏ hơn 1 hoặc lớn hơn 100 được tự động đưa về giới hạn gần nhất. Không đưa token vào mã nguồn, GitHub hay trình duyệt. Actor là dịch vụ bên thứ ba; chỉ sử dụng khi bạn có quyền phù hợp với dữ liệu và điều khoản của nguồn.
 
 TikTok Shop hiện vẫn dùng collector độc lập nếu đã cấu hình:
 
