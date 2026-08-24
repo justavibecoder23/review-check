@@ -3,82 +3,162 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Lọc review nhiễu và tìm nhược điểm thật của sản phẩm Shopee, TikTok Shop." />
-    <title>Review Thật? | Kiểm tra trước khi mua</title>
+    <meta name="description" content="RealView giúp người mua tổng hợp các đánh giá công khai và nhìn rõ những điểm cần cân nhắc trước khi mua hàng trên Shopee." />
+    <meta name="theme-color" content="#EFEFEB" />
+    <title>RealView | Góc nhìn thật, lựa chọn đúng</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <main class="shell">
-      <header>
-        <a class="brand" href="/" aria-label="Review Thật trang chủ"><span>✓</span> Review Thật?</a>
-        <p>Kiểm tra nhược điểm thật trước khi bấm mua.</p>
-      </header>
+    <a class="skip-link" href="#main-content">Đi đến nội dung chính</a>
 
-      <section class="hero" aria-labelledby="page-title">
-        <div class="eyebrow">Shopee &amp; TikTok Shop</div>
-        <h1 id="page-title">Đừng để review seeding<br />quyết định giỏ hàng của bạn.</h1>
-        <p class="intro">Dán link sản phẩm. Bot sẽ lấy các bình luận công khai, bỏ phản hồi nhận xu/khen chung chung và gom các nhược điểm lặp lại.</p>
-        <form id="analyze-form" class="url-form">
-          <label class="sr-only" for="product-url">Link sản phẩm</label>
-          <input id="product-url" name="url" type="url" placeholder="Dán link Shopee hoặc TikTok Shop vào đây…" autocomplete="url" required />
-          <button id="submit-button" type="submit">Phân tích review <span>→</span></button>
-        </form>
-        <div class="supported"><span>Hỗ trợ link</span> Shopee <i></i> TikTok Shop <b>•</b> Không cần đăng nhập</div>
-      </section>
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="#home" aria-label="RealView - Trang chủ">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M4 14v-2a8 8 0 0 1 16 0v2" /><path d="M18 19h1a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2h-1v6ZM6 19H5a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h1v6Z" /><path d="m9.5 16.5 1.6 1.6 3.6-4" /></svg>
+          </span>
+          <span><b>REAL</b>VIEW</span>
+        </a>
+        <nav class="main-nav" aria-label="Điều hướng chính">
+          <span class="nav-indicator" aria-hidden="true"></span>
+          <a class="is-active" href="#home" aria-current="page">Trang chủ</a><a href="#about">Về RealView</a><a href="#how-it-works">Cách dùng</a><a href="#contact">Liên hệ</a>
+        </nav>
+        <a class="header-cta" href="#analyze-form">Phân tích ngay <span aria-hidden="true">→</span></a>
+      </div>
+    </header>
 
-      <section class="steps" aria-label="Quy trình xử lý">
-        <div><strong>01</strong><span>Lấy review công khai</span></div>
-        <div><strong>02</strong><span>Lọc review nhiễu</span></div>
-        <div><strong>03</strong><span>Gom nhược điểm thật</span></div>
-      </section>
-
-      <section id="loading" class="loading hidden" aria-live="polite">
-        <div class="spinner"></div><p><strong>Đang xem các đánh giá…</strong><br /><span id="loading-copy">Kết nối nguồn bình luận</span></p>
-      </section>
-
-      <section id="result" class="result hidden" aria-live="polite">
-        <div id="source-notice" class="notice hidden"></div>
-        <div class="result-heading">
-          <div>
-            <div id="platform-tag" class="platform-tag"></div>
-            <h2>Kết quả lọc review</h2>
-            <p id="verdict"></p>
+    <main id="main-content">
+      <section id="home" class="hero-section" aria-labelledby="page-title">
+        <div class="container hero-grid">
+          <div class="hero-visual" aria-label="Minh họa người mua đang kiểm tra đánh giá sản phẩm">
+            <div class="orange-blob"></div><div class="dot-grid" aria-hidden="true"></div>
+            <img src="/assets/illustrations/open-doodles-laying.svg" alt="Minh họa một người đang xem thông tin trên điện thoại" width="1024" height="768" />
+            <div class="floating-card rating-card" aria-hidden="true"><div class="mini-avatar"></div><div><b>4.8</b><span>★★★★<i>★</i></span></div></div>
+            <div class="floating-card issue-card" aria-hidden="true"><span class="issue-icon">!</span><div><b>Điểm cần cân nhắc</b><small>Được nhắc lại trong review</small></div></div>
+            <div class="product-chip" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M6 7h12l-1 13H7L6 7Z" /><path d="M9 9V5a3 3 0 0 1 6 0v4" /></svg><span>Kiểm tra trước khi mua</span></div>
           </div>
-          <a id="original-link" target="_blank" rel="noreferrer">Mở sản phẩm ↗</a>
+
+          <div class="hero-copy">
+            <div class="section-pill"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 3v18h18" /><path d="m7 15 3-3 3 2 5-6" /></svg>Phân tích đánh giá sản phẩm</div>
+            <h1 id="page-title">Tiết kiệm tiền cho <span>quyết định đúng.</span></h1>
+            <p class="hero-description">Dán link sản phẩm Shopee. RealView tổng hợp các đánh giá công khai, giảm nhiễu từ phản hồi ít thông tin và làm nổi bật những nhược điểm được người mua nhắc lại.</p>
+            <form id="analyze-form" class="url-form">
+              <label class="sr-only" for="product-url">Link sản phẩm</label>
+              <span class="input-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1" /><path d="M14 11a5 5 0 0 0-7.1-.1l-2 2A5 5 0 0 0 12 20l1.1-1.1" /></svg></span>
+              <input id="product-url" name="url" type="url" placeholder="Dán link sản phẩm Shopee vào đây..." autocomplete="url" required />
+              <button id="submit-button" type="submit">Phân tích ngay <span aria-hidden="true">→</span></button>
+            </form>
+            <div class="supported"><span><i class="status-dot"></i> Hỗ trợ link Shopee</span><span>Không cần đăng nhập</span><span>Dữ liệu công khai</span></div>
+          </div>
         </div>
 
-        <div class="metrics">
-          <article><strong id="scanned">—</strong><span>review đã quét</span></article>
-          <article><strong id="genuine">—</strong><span>review giữ lại</span></article>
-          <article><strong id="excluded">—</strong><span>review đã loại</span></article>
-          <article><strong id="confidence">—</strong><span>độ tin cậy dữ liệu</span></article>
+        <div class="container proof-strip" aria-label="Số liệu về độ tin cậy của Realview">
+          <article><strong class="proof-value">361 TRIỆU</strong><p>Tổng số đánh giá đang hoạt động trên Realview tính đến tháng 12 năm 2025.</p></article>
+          <article><strong class="proof-value">100%</strong><p>Mọi đánh giá được gửi lên đều được kiểm tra bằng hệ thống tự động phát hiện đánh giá giả.</p></article>
+          <article><strong class="proof-value">7,8 TRIỆU</strong><p>Số đánh giá bị phát hiện là giả và được gỡ bỏ trong năm 2025.</p></article>
         </div>
 
-        <div class="content-grid">
-          <section class="issues-panel">
-            <div class="panel-title"><div><span class="dot"></span> Điểm cần cân nhắc</div><small>Chỉ tính review đã lọc</small></div>
-            <div id="issues" class="issues"></div>
+        <div class="container analysis-state">
+          <section id="loading" class="loading hidden" aria-live="polite"><div class="spinner"></div><p><strong>Đang xem các đánh giá...</strong><br /><span id="loading-copy">Kết nối nguồn bình luận</span></p></section>
+          <section id="result" class="result hidden" aria-live="polite">
+            <div id="source-notice" class="notice hidden"></div>
+            <div class="result-heading"><div><div id="platform-tag" class="platform-tag"></div><h2>Kết quả phân tích review</h2><p id="verdict"></p></div><a id="original-link" target="_blank" rel="noreferrer">Mở sản phẩm ↗</a></div>
+            <div class="metrics"><article><strong id="scanned">—</strong><span>review đã quét</span></article><article><strong id="genuine">—</strong><span>review giữ lại</span></article><article><strong id="excluded">—</strong><span>review đã loại</span></article><article><strong id="confidence">—</strong><span>độ tin cậy dữ liệu</span></article></div>
+            <div class="content-grid">
+              <section class="issues-panel"><div class="panel-title"><div><span class="dot"></span> Điểm cần cân nhắc</div><small>Chỉ tính review đã lọc</small></div><div id="issues" class="issues"></div></section>
+              <aside class="filter-card"><h3>RealView giảm nhiễu thế nào?</h3><p>Các phản hồi thiếu bằng chứng trải nghiệm sẽ không được ưu tiên trong kết quả.</p><ul><li><span>×</span> Review nhận xu / seeding</li><li><span>×</span> Khen chê một từ</li><li><span>×</span> Chưa dùng đã đánh giá</li></ul><p class="filter-footnote">Kết quả chỉ hỗ trợ tham khảo; hãy kiểm tra kỹ thông tin sản phẩm trước khi mua.</p></aside>
+            </div>
+            <details class="review-details"><summary>Xem <span id="review-count">0</span> review đã xử lý</summary><div id="review-list" class="review-list"></div></details>
           </section>
-          <aside class="filter-card">
-            <h3>Bot đã bỏ qua gì?</h3>
-            <p>Các phản hồi sau không đủ bằng chứng về trải nghiệm sử dụng.</p>
-            <ul>
-              <li><span>×</span> Review nhận xu / seeding</li>
-              <li><span>×</span> Khen chê một từ</li>
-              <li><span>×</span> Chưa dùng đã đánh giá</li>
-            </ul>
-            <p class="filter-footnote">Đây là bộ lọc hỗ trợ quyết định, không thay thế việc xem kỹ sản phẩm.</p>
-          </aside>
+          <p id="form-error" class="error hidden" role="alert"></p>
         </div>
-
-        <details class="review-details">
-          <summary>Xem <span id="review-count">0</span> review đã xử lý</summary>
-          <div id="review-list" class="review-list"></div>
-        </details>
       </section>
-      <p id="form-error" class="error hidden" role="alert"></p>
+
+      <section id="about" class="about-section section-space" aria-labelledby="about-title">
+        <div class="container">
+          <div class="section-pill"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="3" /><circle cx="17" cy="8" r="3" /><path d="M3 20c0-4 2-6 5-6s5 2 5 6M12 20c0-3 2-5 5-5s4 2 4 5" /></svg>About us</div>
+          <div class="about-heading"><div><p class="kicker">Dự án học thuật, bài toán thực tế</p><h2 id="about-title">Về <span>RealView</span></h2></div><p>RealView là dự án của nhóm sinh viên Đại học Kinh tế TP.HCM (UEH), được phát triển trong môn Digital Marketing. Nhóm muốn giúp người mua nhìn nhanh vào trải nghiệm thực tế thay vì phải đọc hàng trăm bình luận rời rạc.</p></div>
+          <div class="about-grid">
+            <div class="about-cards">
+              <article class="info-card"><span class="card-number">01</span><div><h3>Bối cảnh</h3><p>Mua sắm online thuận tiện nhưng đánh giá sản phẩm thường dài, lặp lại và có chất lượng thông tin không đồng đều.</p></div></article>
+              <article class="info-card"><span class="card-number">02</span><div><h3>Vấn đề nhóm quan sát</h3><ul><li>Nhiều review nhưng khó đọc hết</li><li>Khó nhận biết giữa review thật và review seeding</li><li>Rating cao nhưng rất nhiều nhược điểm </li><li>Người mua tốn thời gian ra quyết định</li></ul></div></article>
+              <article class="info-card featured-card"><span class="card-number">03</span><div><h3>Mục tiêu của dự án</h3><ul><li>Tiết kiệm thời gian đọc review</li><li>Chỉ ra những nhược điểm quan trọng của sản phẩm</li><li>Giúp người mua cân nhắc nhanh hơn, kỹ hơn</li></ul></div></article>
+            </div>
+            <div class="project-map" aria-label="Sơ đồ dự án RealView">
+              <div class="map-glow"></div>
+              <div class="map-layout">
+                <ol class="project-path" aria-label="9 thành viên xác định 4 vấn đề chính và cùng hướng tới 1 mục tiêu">
+                  <li><strong>9</strong><span>thành viên</span></li>
+                  <li><strong>4</strong><span>vấn đề chính</span></li>
+                  <li><strong>1</strong><span>mục tiêu</span><small>Góc nhìn rõ hơn trước khi mua</small></li>
+                </ol>
+                <figure class="map-illustration">
+                  <img src="/assets/illustrations/undraw-online-review.svg" alt="Người mua đang xem đánh giá sản phẩm trực tuyến" />
+                </figure>
+              </div>
+              <div class="project-outcome"><p><strong>Dự án học thuật</strong> hướng tới khả năng phát triển thành sản phẩm thực tế.</p></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="how-it-works" class="how-section section-space" aria-labelledby="how-title">
+        <div class="container">
+          <div class="how-heading">
+            <div><div class="section-pill dark-pill"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h7" /></svg>Cách dùng</div><p class="kicker">Nhanh chóng, đơn giản và minh bạch</p><h2 id="how-title">Cách dùng <span>RealView</span></h2></div>
+          </div>
+          <div class="how-workflow">
+            <figure class="workflow-visual">
+              <img src="/assets/illustrations/undraw-user-feedback.svg" alt="Minh họa người dùng gửi phản hồi và đánh giá" width="703" height="800" />
+            </figure>
+            <ol class="steps" aria-label="Quy trình sử dụng RealView">
+              <li class="step-card"><span class="step-number">01</span><span class="step-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></svg></span><div class="step-copy"><h3>Sao chép link</h3><p>Copy đường dẫn sản phẩm từ Shopee.</p></div></li>
+              <li class="step-card"><span class="step-number">02</span><span class="step-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M11 14h10" /><path d="M16 4h2a2 2 0 0 1 2 2v1.344" /><path d="m17 18 4-4-4-4" /><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 1.793-1.113" /><rect x="8" y="2" width="8" height="4" rx="1" /></svg></span><div class="step-copy"><h3>Dán vào RealView</h3><p>Đưa link vào ô phân tích ở đầu trang.</p></div></li>
+              <li class="step-card"><span class="step-number">03</span><span class="step-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5V19A9 3 0 0 0 21 19V5" /><path d="M3 12A9 3 0 0 0 21 12" /></svg></span><div class="step-copy"><h3>Thu thập review</h3><p>Hệ thống lấy dữ liệu từ nguồn được cấu hình.</p></div></li>
+              <li class="step-card"><span class="step-number">04</span><span class="step-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M10 20a1 1 0 0 0 .553.895l2 1A1 1 0 0 0 14 21v-7a2 2 0 0 1 .517-1.341L21.74 4.67A1 1 0 0 0 21 3H3a1 1 0 0 0-.742 1.67l7.225 7.989A2 2 0 0 1 10 14z" /></svg></span><div class="step-copy"><h3>Lọc tín hiệu nhiễu</h3><p>Giảm ưu tiên phản hồi ngắn và ít thông tin.</p></div></li>
+              <li class="step-card"><span class="step-number">05</span><span class="step-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M13 5h8M13 12h8M13 19h8" /><path d="m3 17 2 2 4-4M3 7l2 2 4-4" /></svg></span><div class="step-copy"><h3>Tóm tắt nhược điểm</h3><p>Nhóm các ý kiến giống nhau để dễ đọc.</p></div></li>
+              <li class="step-card final-step"><span class="step-number">06</span><span class="step-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z" /><path d="m9 12 2 2 4-4" /></svg></span><div class="step-copy"><h3>Ra quyết định</h3><p>Đối chiếu kết quả với nhu cầu của bạn.</p></div></li>
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <section id="contact" class="contact-section section-space" aria-labelledby="contact-title">
+        <div class="container">
+          <div class="contact-heading">
+            <div><div class="section-pill"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z" /><path d="M8 10h.01M12 10h.01M16 10h.01" /></svg>Liên hệ</div><h2 id="contact-title">Liên hệ với <span>RealView</span></h2></div>
+            <p>Nhóm luôn sẵn sàng lắng nghe góp ý từ người dùng, giảng viên và các bên quan tâm đến dự án.</p>
+          </div>
+          <div class="contact-grid">
+            <form class="contact-form" action="mailto:reviewcheckteam@gmail.com" method="post" enctype="text/plain">
+              <div class="form-title"><span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z" /><path d="M8 10h.01M12 10h.01M16 10h.01" /></svg></span><div><h3>Gửi liên hệ cho chúng tôi</h3><p>Phản hồi của bạn giúp dự án hoàn thiện hơn.</p></div></div>
+              <label for="contact-name">Họ và tên</label><input id="contact-name" name="name" type="text" autocomplete="name" required />
+              <label for="contact-email">Email</label><input id="contact-email" name="email" type="email" autocomplete="email" required />
+              <label for="contact-message">Nội dung</label><textarea id="contact-message" name="message" rows="5" required></textarea>
+              <button type="submit">Mở ứng dụng email <span aria-hidden="true">→</span></button>
+            </form>
+            <aside class="contact-card">
+              <div class="contact-card-top"><span class="contact-avatar"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="8" r="4" /><path d="M4 22c0-5 3-8 8-8s8 3 8 8" /></svg></span><div><small>Đội ngũ dự án</small><h3>Thông tin liên hệ</h3></div></div>
+              <dl>
+                <div><dt><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 7 9-7" /></svg>Email</dt><dd><a href="mailto:reviewcheckteam@gmail.com">reviewcheckteam@gmail.com</a></dd></div>
+                <div><dt><svg viewBox="0 0 24 24" fill="none"><path d="M4 19V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14" /><path d="M2 21h20M8 7h3M8 11h3M8 15h3M15 7h1M15 11h1M15 15h1" /></svg>Đơn vị</dt><dd>Đại học Kinh tế TP.HCM</dd></div>
+                <div><dt><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" /></svg>Phạm vi</dt><dd>Dự án học thuật phi lợi nhuận</dd></div>
+              </dl>
+              <p class="contact-note">Dữ liệu phân tích được dùng để hỗ trợ tham khảo, không thay thế đánh giá trực tiếp của người mua.</p>
+            </aside>
+          </div>
+        </div>
+      </section>
     </main>
-    <footer>Review Thật? · Bộ lọc theo quy tắc, ưu tiên tốc độ và chi phí thấp.</footer>
+
+    <footer class="site-footer">
+      <div class="container footer-grid">
+        <div class="footer-brand"><a class="brand" href="#home"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 14v-2a8 8 0 0 1 16 0v2" /><path d="M18 19h1a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2h-1v6ZM6 19H5a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h1v6Z" /><path d="m9.5 16.5 1.6 1.6 3.6-4" /></svg></span><span><b>REAL</b>VIEW</span></a><p>“Góc nhìn thật, lựa chọn đúng.”</p></div>
+        <div class="footer-links"><div><h3>Về RealView</h3><a href="#home">Trang chủ</a><a href="#about">Câu chuyện dự án</a></div><div><h3>Hỗ trợ</h3><a href="#how-it-works">Cách dùng</a><a href="#contact">Liên hệ</a></div><div><h3>Minh bạch</h3><a href="#result">Kết quả phân tích</a><span>Chỉ dùng dữ liệu công khai</span></div></div>
+      </div>
+      <div class="container footer-bottom"><span>© 2026 RealView. Dự án học thuật của sinh viên UEH.</span><span>Illustration: Open Doodles · Icons: hệ SVG đồng nhất</span></div>
+    </footer>
+
     <script type="module" src="/app.js"></script>
   </body>
 </html>

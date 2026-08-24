@@ -7,6 +7,93 @@ const errorBox = document.querySelector('#form-error');
 const sourceNotice = document.querySelector('#source-notice');
 const delayLines = ['Kết nối nguồn bình luận', 'Đang bỏ review nhận xu và khen chung chung', 'Đang nhóm các phản hồi trùng ý'];
 
+const navLinks = [...document.querySelectorAll('.main-nav a[href^="#"]')];
+const navIndicator = document.querySelector('.nav-indicator');
+const navSections = navLinks
+  .map((link) => document.querySelector(link.hash))
+  .filter(Boolean);
+let indicatorAnimation;
+let activeNavId;
+
+function moveNavIndicator(targetLink, shouldAnimate = true) {
+  if (!navIndicator || !targetLink || targetLink.offsetParent === null) return;
+
+  const targetX = targetLink.offsetLeft;
+  const targetWidth = targetLink.offsetWidth;
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const canAnimate = shouldAnimate && navIndicator.dataset.ready && !reduceMotion && navIndicator.animate;
+
+  if (!canAnimate) {
+    indicatorAnimation?.cancel();
+    navIndicator.style.width = `${targetWidth}px`;
+    navIndicator.style.borderRadius = '11px';
+    navIndicator.style.transform = `translate3d(${targetX}px, 0, 0)`;
+    navIndicator.dataset.ready = 'true';
+    return;
+  }
+
+  const computedStyle = window.getComputedStyle(navIndicator);
+  const currentMatrix = new DOMMatrixReadOnly(computedStyle.transform);
+  const currentX = currentMatrix.m41;
+  const currentWidth = Number.parseFloat(computedStyle.width) || targetWidth;
+  const circleSize = 38;
+  const circleStartX = currentX + (currentWidth - circleSize) / 2;
+  const circleEndX = targetX + (targetWidth - circleSize) / 2;
+
+  indicatorAnimation?.cancel();
+  indicatorAnimation = navIndicator.animate([
+    { width: `${currentWidth}px`, borderRadius: '11px', transform: `translate3d(${currentX}px, 0, 0)`, offset: 0 },
+    { width: `${circleSize}px`, borderRadius: '50%', transform: `translate3d(${circleStartX}px, -3px, 0)`, offset: .24 },
+    { width: `${circleSize}px`, borderRadius: '50%', transform: `translate3d(${circleEndX}px, -3px, 0)`, offset: .72 },
+    { width: `${targetWidth}px`, borderRadius: '11px', transform: `translate3d(${targetX}px, 0, 0)`, offset: 1 },
+  ], {
+    duration: 520,
+    easing: 'cubic-bezier(.22, 1, .36, 1)',
+  });
+
+  indicatorAnimation.onfinish = () => {
+    navIndicator.style.width = `${targetWidth}px`;
+    navIndicator.style.borderRadius = '11px';
+    navIndicator.style.transform = `translate3d(${targetX}px, 0, 0)`;
+    indicatorAnimation = undefined;
+  };
+}
+
+function setActiveNav(sectionId, shouldAnimate = true) {
+  const targetLink = navLinks.find((link) => link.hash === `#${sectionId}`);
+  if (!targetLink) return;
+  const sectionChanged = activeNavId !== sectionId;
+  activeNavId = sectionId;
+
+  navLinks.forEach((link) => {
+    const isActive = link === targetLink;
+    link.classList.toggle('is-active', isActive);
+    if (isActive) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+  });
+  moveNavIndicator(targetLink, shouldAnimate && sectionChanged);
+}
+
+if (navSections.length) {
+  const initialSection = navSections.find((section) => `#${section.id}` === window.location.hash) || navSections[0];
+  setActiveNav(initialSection.id, false);
+
+  const sectionObserver = new IntersectionObserver((entries) => {
+    const currentSection = entries.find((entry) => entry.isIntersecting);
+    if (currentSection) setActiveNav(currentSection.target.id);
+  }, {
+    rootMargin: '-22% 0px -68% 0px',
+    threshold: 0,
+  });
+
+  navSections.forEach((section) => sectionObserver.observe(section));
+  navLinks.forEach((link) => link.addEventListener('click', () => setActiveNav(link.hash.slice(1))));
+  window.addEventListener('resize', () => {
+    const activeLink = navLinks.find((link) => link.classList.contains('is-active'));
+    if (activeLink) moveNavIndicator(activeLink, false);
+  });
+}
+
 function escapeHtml(value) {
   return String(value).replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 }
