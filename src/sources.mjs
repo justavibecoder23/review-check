@@ -1,3 +1,5 @@
+import { extractMarketplaceUrl, isShopeeUrl, resolveShopeeProductUrl } from './shopee-url.mjs';
+
 const DEMO_REVIEWS = [
   { rating: 5, text: 'Nhận xu nên đánh giá cho shop 5 sao nha mọi người.', date: '12/08/2026', verified: false },
   { rating: 5, text: 'Hàng đẹp, giao nhanh, đóng gói kỹ.', date: '11/08/2026', verified: false },
@@ -15,7 +17,7 @@ const DEMO_REVIEWS = [
 
 function platformFrom(url) {
   const host = new URL(url).hostname.toLowerCase();
-  if (host.includes('shopee.')) return 'Shopee';
+  if (isShopeeUrl(url)) return 'Shopee';
   if (host === 'vm.tiktok.com' || host === 'vt.tiktok.com' || host.includes('tiktok.com')) return 'TikTok Shop';
   throw Object.assign(new Error('Link chưa thuộc Shopee hoặc TikTok Shop.'), { statusCode: 400 });
 }
@@ -40,22 +42,6 @@ async function loadFromConfiguredBot(url, platform) {
   })).filter((review) => review.text);
 }
 
-function getShopeeIds(url) {
-  const pathname = new URL(url).pathname;
-  const canonicalMatch = pathname.match(/(?:-i\.|\/product-i\.)(\d+)\.(\d+)/i);
-  const productPathMatch = pathname.match(/\/product\/(\d+)\/(\d+)/i);
-  const match = canonicalMatch || productPathMatch;
-  if (!match) {
-    throw Object.assign(new Error('Không đọc được mã shop và mã sản phẩm từ link Shopee.'), { statusCode: 400 });
-  }
-  return { shopId: match[1], itemId: match[2] };
-}
-
-function canonicalShopeeUrl(url) {
-  const { shopId, itemId } = getShopeeIds(url);
-  return `https://shopee.vn/product-i.${shopId}.${itemId}`;
-}
-
 async function loadFromApify(url) {
   const token = process.env.APIFY_TOKEN;
   if (!token) throw new Error('Chưa cấu hình APIFY_TOKEN trên máy chủ.');
@@ -68,11 +54,12 @@ async function loadFromApify(url) {
       'content-type': 'application/json'
     },
     body: JSON.stringify({
-      startUrls: [{ url: canonicalShopeeUrl(url) }],
+      startUrls: [{ url }],
       contentFilter: 'with comments',
       maxReviewsPerProduct: 10
     }),
-    signal: AbortSignal.timeout(55_000)
+    // Chừa thời gian cho bước mở link rút gọn và cho Vercel đóng gói phản hồi.
+    signal: AbortSignal.timeout(48_000)
   });
 
   if (!upstream.ok) {
@@ -93,17 +80,37 @@ async function loadFromApify(url) {
 
 export async function getReviews(url) {
   let parsed;
-  try { parsed = new URL(url); } catch { throw Object.assign(new Error('Link không hợp lệ.'), { statusCode: 400 }); }
+  try { parsed = new URL(extractMarketplaceUrl(url)); } catch (error) {
+    throw Object.assign(new Error(error?.message || 'Link không hợp lệ.'), { statusCode: error?.statusCode || 400 });
+  }
   const platform = platformFrom(parsed.href);
   const warnings = [];
+  const shopeeProduct = platform === 'Shopee'
+    ? await resolveShopeeProductUrl(parsed.href)
+    : null;
+  const productUrl = shopeeProduct?.canonicalUrl || parsed.href;
+
+  if (shopeeProduct?.wasShortened) {
+    warnings.push('Đã mở link chia sẻ Shopee và chuẩn hóa về đúng sản phẩm trước khi thu thập review.');
+  }
+
   try {
     const reviews = platform === 'Shopee'
-      ? await loadFromApify(parsed.href)
-      : await loadFromConfiguredBot(parsed.href, platform);
+      ? await loadFromApify(productUrl)
+      : await loadFromConfiguredBot(productUrl, platform);
     return {
       reviews,
       source: { type: 'live', label: platform === 'Shopee' ? 'Apify · Shopee Product Reviews Scraper' : 'Bot thu thập đã cấu hình' },
-      product: { platform, url: parsed.href },
+      product: {
+        platform,
+        url: productUrl,
+        originalUrl: parsed.href,
+        ...(shopeeProduct ? {
+          shopId: shopeeProduct.shopId,
+          itemId: shopeeProduct.itemId,
+          resolvedFromShortLink: shopeeProduct.wasShortened
+        } : {})
+      },
       warnings
     };
   } catch (error) {
@@ -115,7 +122,16 @@ export async function getReviews(url) {
     return {
       reviews: DEMO_REVIEWS,
       source: { type: 'demo', label: 'Dữ liệu mô phỏng' },
-      product: { platform, url: parsed.href },
+      product: {
+        platform,
+        url: productUrl,
+        originalUrl: parsed.href,
+        ...(shopeeProduct ? {
+          shopId: shopeeProduct.shopId,
+          itemId: shopeeProduct.itemId,
+          resolvedFromShortLink: shopeeProduct.wasShortened
+        } : {})
+      },
       warnings
     };
   }
