@@ -49,6 +49,18 @@
               <input id="product-url" name="url" type="url" placeholder="Dán link sản phẩm Shopee vào đây..." autocomplete="url" required />
               <button id="submit-button" type="submit">Phân tích ngay <span aria-hidden="true">→</span></button>
             </form>
+            <div class="analysis-status-shell">
+              <section id="loading" class="loading hidden" role="status" aria-live="polite" aria-atomic="true">
+                <div class="spinner" aria-hidden="true"></div>
+                <div class="loading-content">
+                  <span class="loading-kicker"><i></i> RealView đang xử lý</span>
+                  <p><strong>Đang chuẩn bị kết quả cho bạn</strong><span id="loading-copy">Đang xác thực liên kết sản phẩm...</span></p>
+                  <div class="loading-progress" aria-hidden="true"><span></span></div>
+                  <small>Thường mất khoảng 15–45 giây. Vui lòng giữ trang này mở.</small>
+                </div>
+              </section>
+              <p id="form-error" class="error hidden" role="alert"></p>
+            </div>
             <div class="supported"><span><i class="status-dot"></i> Hỗ trợ link Shopee</span><span>Không cần đăng nhập</span><span>Dữ liệu công khai</span></div>
           </div>
         </div>
@@ -60,7 +72,6 @@
         </div>
 
         <div class="container analysis-state">
-          <section id="loading" class="loading hidden" aria-live="polite"><div class="spinner"></div><p><strong>Đang xem các đánh giá...</strong><br /><span id="loading-copy">Kết nối nguồn bình luận</span></p></section>
           <section id="result" class="result hidden" aria-live="polite">
             <div id="source-notice" class="notice hidden"></div>
             <div class="result-heading"><div><div id="platform-tag" class="platform-tag"></div><h2>Kết quả phân tích review</h2><p id="verdict"></p></div><a id="original-link" target="_blank" rel="noreferrer">Mở sản phẩm ↗</a></div>
@@ -71,7 +82,6 @@
             </div>
             <details class="review-details"><summary>Xem <span id="review-count">0</span> review đã xử lý</summary><div id="review-list" class="review-list"></div></details>
           </section>
-          <p id="form-error" class="error hidden" role="alert"></p>
         </div>
       </section>
 

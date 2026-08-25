@@ -5,7 +5,14 @@ const loading = document.querySelector('#loading');
 const result = document.querySelector('#result');
 const errorBox = document.querySelector('#form-error');
 const sourceNotice = document.querySelector('#source-notice');
-const delayLines = ['Kết nối nguồn bình luận', 'Đang bỏ review nhận xu và khen chung chung', 'Đang nhóm các phản hồi trùng ý'];
+const loadingCopy = document.querySelector('#loading-copy');
+const defaultButtonContent = button?.innerHTML;
+const delayLines = [
+  'Đang xác thực liên kết sản phẩm...',
+  'Đang lấy các đánh giá công khai...',
+  'Đang giảm nhiễu và sắp xếp phản hồi...',
+  'Đang chuẩn bị kết quả dễ đọc...'
+];
 
 const navLinks = [...document.querySelectorAll('.main-nav a[href^="#"]')];
 const navIndicator = document.querySelector('.nav-indicator');
@@ -184,11 +191,18 @@ if (form) form.addEventListener('submit', async (event) => {
   result.classList.add('hidden');
   loading.classList.remove('hidden');
   button.disabled = true;
+  button.setAttribute('aria-busy', 'true');
+  button.innerHTML = 'Đang phân tích <span aria-hidden="true">•••</span>';
+  form.setAttribute('aria-busy', 'true');
+  if (loadingCopy) loadingCopy.textContent = delayLines[0];
+  requestAnimationFrame(() => {
+    loading.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
   let index = 0;
   const interval = setInterval(() => {
     index = (index + 1) % delayLines.length;
-    document.querySelector('#loading-copy').textContent = delayLines[index];
-  }, 700);
+    if (loadingCopy) loadingCopy.textContent = delayLines[index];
+  }, 1900);
   try {
     const response = await fetch('/api/analyze', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: input.value.trim() }) });
     const data = await response.json();
@@ -201,5 +215,8 @@ if (form) form.addEventListener('submit', async (event) => {
     clearInterval(interval);
     loading.classList.add('hidden');
     button.disabled = false;
+    button.removeAttribute('aria-busy');
+    form.removeAttribute('aria-busy');
+    if (defaultButtonContent) button.innerHTML = defaultButtonContent;
   }
 });
