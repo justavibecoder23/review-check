@@ -168,7 +168,17 @@ function render(data) {
   result.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-form.addEventListener('submit', async (event) => {
+function openResultsPage(data) {
+  try {
+    sessionStorage.setItem('realview:last-analysis', JSON.stringify(data));
+    window.location.assign('/results.html');
+  } catch {
+    // Giữ giao diện kết quả cũ làm phương án dự phòng nếu trình duyệt chặn sessionStorage.
+    render(data);
+  }
+}
+
+if (form) form.addEventListener('submit', async (event) => {
   event.preventDefault();
   errorBox.classList.add('hidden');
   result.classList.add('hidden');
@@ -183,7 +193,7 @@ form.addEventListener('submit', async (event) => {
     const response = await fetch('/api/analyze', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: input.value.trim() }) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Không thể phân tích link này.');
-    render(data);
+    openResultsPage(data);
   } catch (error) {
     errorBox.textContent = error.message;
     errorBox.classList.remove('hidden');

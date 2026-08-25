@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Kết quả phân tích các đánh giá sản phẩm được RealView giữ lại và loại bỏ." />
+    <meta name="theme-color" content="#EFEFEB" />
+    <title>Kết quả phân tích review | RealView</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="results-page">
+    <a class="skip-link" href="#main-content">Đi đến nội dung chính</a>
+
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="/#home" aria-label="RealView - Trang chủ">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M4 14v-2a8 8 0 0 1 16 0v2" /><path d="M18 19h1a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2h-1v6ZM6 19H5a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h1v6Z" /><path d="m9.5 16.5 1.6 1.6 3.6-4" /></svg>
+          </span>
+          <span><b>REAL</b>VIEW</span>
+        </a>
+        <nav id="main-navigation" class="main-nav static-nav" aria-label="Điều hướng chính">
+          <a href="/#home">Trang chủ</a>
+          <a class="nav-about" href="/#about"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="9" cy="8" r="3" /><path d="M3.5 20c0-4 2-6 5.5-6s5.5 2 5.5 6" /><path d="M15 5.4a3 3 0 0 1 0 5.2M16.5 14.2c2.7.5 4 2.4 4 5.8" /></svg>Về RealView</a>
+          <a href="/#how-it-works">Cách dùng</a>
+        </nav>
+        <a class="header-contact" href="/contact.html" aria-label="Mở trang Liên hệ RealView"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z" /><path d="M8 10h.01M12 10h.01M16 10h.01" /></svg><span>Liên hệ</span></a>
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="main-navigation">
+          <span class="nav-toggle-label sr-only">Mở menu</span>
+          <span class="nav-toggle-lines" aria-hidden="true"><i></i><i></i></span>
+        </button>
+      </div>
+    </header>
+
+    <main id="main-content" class="results-main">
+      <section id="results-empty" class="container results-empty hidden" aria-labelledby="empty-title">
+        <img src="/assets/illustrations/undraw-online-review.svg" alt="Minh họa người dùng đang đọc đánh giá trực tuyến" />
+        <div>
+          <p class="results-eyebrow">Kết quả phân tích</p>
+          <h1 id="empty-title">Chưa có dữ liệu review.</h1>
+          <p>Hãy dán link sản phẩm trên trang chủ để RealView thu thập, lọc và sắp xếp các đánh giá.</p>
+          <a class="results-primary-action" href="/#home">Phân tích sản phẩm <span aria-hidden="true">→</span></a>
+        </div>
+      </section>
+
+      <div id="results-content" class="hidden">
+        <section class="results-hero" aria-labelledby="results-title">
+          <div class="container results-hero-inner">
+            <div class="results-heading-copy">
+              <p id="results-platform" class="results-eyebrow">Shopee</p>
+              <h1 id="results-title">Kết quả phân tích review</h1>
+              <p id="results-verdict" class="results-verdict">Kết quả chỉ hỗ trợ tham khảo; hãy kiểm tra kỹ thông tin sản phẩm trước khi mua.</p>
+            </div>
+            <div class="results-actions" aria-label="Thao tác nhanh">
+              <button id="show-excluded" class="results-action-card results-action-card--illustrated results-secondary-action" type="button">
+                <span class="results-action-illustration" aria-hidden="true"><img src="/assets/illustrations/results-review-cleanup.svg" alt="" /></span>
+                <span class="results-action-label">Hiện các review đã bị loại bỏ</span>
+                <span class="results-action-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="m6 9 6 6 6-6" /></svg></span>
+              </button>
+              <button id="filter-method" class="results-action-card results-action-card--illustrated results-method-action" type="button">
+                <span class="results-action-illustration" aria-hidden="true"><img src="/assets/illustrations/results-review-filter.svg" alt="" /></span>
+                <span class="results-action-label">Chúng tôi lọc review như thế nào?</span>
+                <span class="results-action-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="m6 9 6 6 6-6" /></svg></span>
+              </button>
+              <a id="open-product" class="results-action-card results-product-action" href="/#home" target="_blank" rel="noreferrer">
+                <span class="results-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M6 8h12l1 13H5L6 8Z" /><path d="M9 10V6a3 3 0 0 1 6 0v4" /></svg></span>
+                <span class="results-action-label">Mở sản phẩm</span>
+                <span class="results-action-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M7 17 17 7" /><path d="M7 7h10v10" /></svg></span>
+              </a>
+            </div>
+          </div>
+        </section>
+
+        <section id="kept-reviews" class="review-collection" aria-labelledby="kept-title">
+          <div class="container">
+            <div class="review-collection-heading">
+              <div>
+                <span class="collection-kicker kept-kicker"><i aria-hidden="true"></i> Được giữ lại</span>
+                <h2 id="kept-title">Những review đáng tham khảo</h2>
+                <p>Nhóm phản hồi có đủ thông tin để hỗ trợ bạn cân nhắc sản phẩm.</p>
+              </div>
+              <div class="collection-summary">
+                <div><strong id="kept-count">0</strong><span>review giữ lại</span></div>
+                <div><strong id="excluded-count-top">0</strong><span>review đã loại</span></div>
+              </div>
+            </div>
+
+            <div class="review-carousel" data-carousel="kept">
+              <div class="carousel-controls" aria-label="Điều khiển danh sách review giữ lại">
+                <button class="carousel-button carousel-prev" type="button" aria-label="Xem các review trước">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+                </button>
+                <button class="carousel-button carousel-next" type="button" aria-label="Xem các review tiếp theo">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+                </button>
+              </div>
+              <div id="kept-track" class="review-track" tabindex="0" aria-label="Danh sách review được giữ lại"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="excluded-reviews" class="review-collection excluded-collection" aria-labelledby="excluded-title">
+          <div class="container">
+            <div class="review-collection-heading">
+              <div>
+                <span class="collection-kicker excluded-kicker"><i aria-hidden="true"></i> Đã giảm ưu tiên</span>
+                <h2 id="excluded-title">Review đã bị loại khỏi kết quả</h2>
+                <p>Các review này vẫn được hiển thị để bạn biết RealView đã loại nội dung nào và vì sao.</p>
+              </div>
+              <div class="collection-summary excluded-summary">
+                <div><strong id="excluded-count">0</strong><span>review đã loại</span></div>
+              </div>
+            </div>
+
+            <div class="review-carousel" data-carousel="excluded">
+              <div class="carousel-controls" aria-label="Điều khiển danh sách review bị loại">
+                <button class="carousel-button carousel-prev" type="button" aria-label="Xem các review trước">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+                </button>
+                <button class="carousel-button carousel-next" type="button" aria-label="Xem các review tiếp theo">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+                </button>
+              </div>
+              <div id="excluded-track" class="review-track" tabindex="0" aria-label="Danh sách review đã bị loại"></div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <div id="result-toast" class="result-toast" role="status" aria-live="polite"></div>
+
+    <footer class="site-footer">
+      <div class="container footer-grid">
+        <div class="footer-brand"><a class="brand" href="/#home"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 14v-2a8 8 0 0 1 16 0v2" /><path d="M18 19h1a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2h-1v6ZM6 19H5a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h1v6Z" /><path d="m9.5 16.5 1.6 1.6 3.6-4" /></svg></span><span><b>REAL</b>VIEW</span></a><p>“Góc nhìn thật, lựa chọn đúng.”</p></div>
+        <div class="footer-links"><div><h3>Về RealView</h3><a href="/#home">Trang chủ</a><a href="/#about">Câu chuyện dự án</a></div><div><h3>Hỗ trợ</h3><a href="/#how-it-works">Cách dùng</a><a href="/contact.html">Liên hệ</a></div><div><h3>Minh bạch</h3><a href="#kept-reviews">Review giữ lại</a><a href="#excluded-reviews">Review đã loại</a></div></div>
+      </div>
+      <div class="container footer-bottom"><span>© 2026 RealView. Dự án học thuật của sinh viên UEH.</span><span>Illustration: unDraw · Storyset by Freepik · Icons: Lucide</span></div>
+    </footer>
+
+    <script type="module" src="/results.js"></script>
+  </body>
+</html>
