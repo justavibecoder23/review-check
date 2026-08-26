@@ -173,7 +173,8 @@ function renderResult(data) {
     document.querySelector('#excluded-reviews').scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
   document.querySelector('#filter-method').addEventListener('click', () => {
-    showToast('Phần tiêu chí lọc review đang được hoàn thiện và sẽ sớm được công bố.');
+    const criteriaSection = document.querySelector('#review-criteria');
+    criteriaSection?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
   content.classList.remove('hidden');
