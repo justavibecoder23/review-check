@@ -172,11 +172,7 @@ function renderResult(data) {
   document.querySelector('#show-excluded').addEventListener('click', () => {
     document.querySelector('#excluded-reviews').scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
-  document.querySelector('#filter-method').addEventListener('click', () => {
-    const criteriaSection = document.querySelector('#review-criteria');
-    criteriaSection?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  });
-
+  
   content.classList.remove('hidden');
 }
 
