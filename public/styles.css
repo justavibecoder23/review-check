@@ -187,6 +187,8 @@ blockquote footer { margin-top: 7px; color: #9a4507; font-size: 10px; }
 .about-heading .kicker { display: none; }
 .about-heading h1, .about-heading h2, .how-heading h2, .contact-heading h1, .contact-heading h2 { margin: 0; font-size: clamp(54px, 8vw, 104px); line-height: .9; letter-spacing: -6px; text-transform: uppercase; }
 .about-heading h1 span, .about-heading h2 span, .how-heading h2 span, .contact-heading h1 span, .contact-heading h2 span { color: var(--orange); }
+.realview-wordmark .real-part { color: #fc781f; }
+.realview-wordmark .view-part { color: #161616; }
 .about-heading > p, .contact-heading > p { margin: 0 0 4px; color: #50504b; font-size: 15px; line-height: 1.7; }
 .about-grid { margin-top: 70px; display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(380px, .88fr); gap: 48px; }
 .about-cards { display: grid; gap: 15px; }
