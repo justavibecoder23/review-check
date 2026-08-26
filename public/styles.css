@@ -85,6 +85,8 @@ main section[id] { scroll-margin-top: 90px; }
 .section-pill svg { width: 16px; height: 16px; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .hero-copy h1 { max-width: 620px; margin: 22px 0 21px; font-size: clamp(52px, 5.6vw, 82px); line-height: .98; letter-spacing: -4.2px; font-weight: 900; text-wrap: balance; }
 .hero-copy h1 span { color: var(--orange); }
+.hero-copy h1 .hero-heading-line { display: block; white-space: nowrap; }
+.hero-copy h1 .hero-heading-line-primary { color: inherit; }
 .hero-description { max-width: 590px; margin: 0; color: #4e4e49; font-size: 17px; line-height: 1.68; }
 .url-form { max-width: 670px; margin-top: 30px; padding: 6px; display: flex; align-items: center; border: 1.5px solid var(--ink); border-radius: 999px; background: white; box-shadow: 0 16px 45px rgba(33,22,14,.1); }
 .input-icon { display: grid; width: 46px; flex: 0 0 46px; place-items: center; }
