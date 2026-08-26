@@ -6,6 +6,7 @@ const result = document.querySelector('#result');
 const errorBox = document.querySelector('#form-error');
 const sourceNotice = document.querySelector('#source-notice');
 const loadingCopy = document.querySelector('#loading-copy');
+const backToTop = document.querySelector('.back-to-top');
 const defaultButtonContent = button?.innerHTML;
 const delayLines = [
   'Đang xác thực liên kết sản phẩm...',
@@ -24,6 +25,17 @@ const navSections = navLinks
   .filter(Boolean);
 let indicatorAnimation;
 let activeNavId;
+
+function updateBackToTop() {
+  if (!backToTop) return;
+  backToTop.classList.toggle('is-visible', window.scrollY > window.innerHeight);
+}
+
+backToTop?.addEventListener('click', () => {
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+window.addEventListener('scroll', updateBackToTop, { passive: true });
+updateBackToTop();
 
 function setMobileMenu(open) {
   if (!siteHeader || !navToggle) return;
