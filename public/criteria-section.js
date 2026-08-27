@@ -146,16 +146,24 @@
   const setupSubpageNavigation = () => {
     const header = document.querySelector('.site-header');
     const toggle = document.querySelector('.nav-toggle');
+    const toggleLabel = document.querySelector('.nav-toggle-label');
     const nav = document.querySelector('#main-navigation');
     if (!header || !toggle || !nav || toggle.dataset.ready === 'true') return;
     toggle.dataset.ready = 'true';
+    const setMenuOpen = (open) => {
+      header.classList.toggle('is-menu-open', open);
+      toggle.setAttribute('aria-expanded', String(open));
+      if (toggleLabel) toggleLabel.textContent = open ? 'Đóng menu' : 'Mở menu';
+    };
     toggle.addEventListener('click', () => {
-      const isOpen = header.classList.toggle('is-menu-open');
-      toggle.setAttribute('aria-expanded', String(isOpen));
+      setMenuOpen(toggle.getAttribute('aria-expanded') !== 'true');
     });
-    nav.addEventListener('click', () => {
-      header.classList.remove('is-menu-open');
-      toggle.setAttribute('aria-expanded', 'false');
+    nav.addEventListener('click', () => setMenuOpen(false));
+    document.addEventListener('click', (event) => {
+      if (header.classList.contains('is-menu-open') && !header.contains(event.target)) setMenuOpen(false);
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') setMenuOpen(false);
     });
   };
 
