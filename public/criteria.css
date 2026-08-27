@@ -99,12 +99,14 @@ html { scroll-behavior: smooth; }
 }
 
 @media (max-width: 680px) {
-  .criteria-main { padding-top: 88px; }
+  .criteria-main { padding: 24px 0 32px; }
   .criteria-page .criteria-section { width: 100%; border-radius: 0; box-shadow: none; }
   .criteria-section { scroll-margin-top: 78px; }
   .criteria-hero, .criteria-metrics, .criteria-process, .criteria-library { padding-left: 20px; padding-right: 20px; }
-  .criteria-hero { padding-top: 42px; padding-bottom: 44px; gap: 18px; }
-  .criteria-hero h1 { font-size: clamp(40px, 12.5vw, 58px); }
+  .criteria-hero { padding-top: 34px; padding-bottom: 44px; gap: 18px; }
+  .criteria-purpose { max-width: 100%; justify-content: center; text-align: center; line-height: 1.35; }
+  .criteria-hero h1 { font-size: clamp(38px, 11.5vw, 52px); }
+  .criteria-mission { font-size: 16px; }
   .criteria-mission br { display: none; }
   .criteria-hero-art { min-height: 300px; }
   .criteria-art-frame { width: min(86vw, 360px); }
@@ -117,7 +119,7 @@ html { scroll-behavior: smooth; }
   .criteria-metric span { font-size: 12px; }
   .criteria-metrics-note, .criteria-process-note { border-radius: 16px; }
   .criteria-process, .criteria-library { padding-top: 58px; padding-bottom: 58px; }
-  .criteria-section-heading h2 { font-size: 40px; }
+  .criteria-section-heading h2 { font-size: 38px; }
   .criteria-steps, .criteria-card-grid { grid-template-columns: 1fr; }
   .criteria-steps { margin-top: 46px; }
   .criteria-step { padding: 18px 0 28px; border-bottom: 1px solid rgba(22,22,22,.08); }
@@ -125,6 +127,12 @@ html { scroll-behavior: smooth; }
   .criteria-card { min-height: 0; }
   .criteria-closing { align-items: stretch; flex-direction: column; text-align: center; }
   .criteria-closing a { text-align: center; }
+}
+
+@media (max-width: 420px) {
+  .criteria-primary-cta { width: 100%; justify-content: center; }
+  .criteria-hero-art { min-height: 270px; }
+  .criteria-section-heading h2 { font-size: 36px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
