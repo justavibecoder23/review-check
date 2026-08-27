@@ -107,14 +107,23 @@
     cloud.href = `#${item[0]}`;
   };
   setCloudLabel(scrollSections[0]?.id);
-  if ('IntersectionObserver' in window && scrollSections.length) {
-    const scrollObserver = new IntersectionObserver((entries) => {
-      const visible = entries
-        .filter((entry) => entry.isIntersecting)
-        .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-      if (visible) setCloudLabel(visible.target.id);
-    }, { rootMargin: '-24% 0px -62% 0px', threshold: [0, .2, .5] });
-    scrollSections.forEach((section) => scrollObserver.observe(section));
+  if (scrollSections.length) {
+    let lastSectionId = scrollSections[0].id;
+    const updateCloudFromScroll = () => {
+      const activationLine = window.innerHeight * 0.3;
+      const currentSection = scrollSections.reduce((current, section) => {
+        const currentTop = current.getBoundingClientRect().top;
+        const sectionTop = section.getBoundingClientRect().top;
+        return sectionTop <= activationLine && sectionTop >= currentTop ? section : current;
+      }, scrollSections[0]);
+      if (currentSection.id !== lastSectionId) {
+        lastSectionId = currentSection.id;
+        setCloudLabel(lastSectionId);
+      }
+    };
+    updateCloudFromScroll();
+    window.addEventListener('scroll', updateCloudFromScroll, { passive: true });
+    window.addEventListener('resize', updateCloudFromScroll);
   }
 
   nav.querySelectorAll('.nav-parent').forEach((parent) => {
