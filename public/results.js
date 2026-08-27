@@ -4,7 +4,6 @@ const emptyState = document.querySelector('#results-empty');
 const siteHeader = document.querySelector('.site-header');
 const navToggle = document.querySelector('.nav-toggle');
 const navToggleLabel = document.querySelector('.nav-toggle-label');
-let toastTimer;
 
 function setMobileMenu(open) {
   if (!siteHeader || !navToggle) return;
@@ -25,112 +24,104 @@ function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 }
 
-function safeProductUrl(value) {
+function safeUrl(value, fallback = '/#home') {
   try {
     const url = new URL(value);
-    return ['http:', 'https:'].includes(url.protocol) ? url.href : '/#home';
+    return ['http:', 'https:'].includes(url.protocol) ? url.href : fallback;
   } catch {
-    return '/#home';
+    return fallback;
   }
+}
+
+function safeImageUrl(value) {
+  const url = safeUrl(value, '');
+  return url && /^https?:/i.test(url) ? url : '';
+}
+
+function clamp(value, minimum, maximum) {
+  return Math.min(maximum, Math.max(minimum, Number(value) || 0));
+}
+
+function toneForScore(score) {
+  if (score > 80) return { id: 'green', label: 'Độ tin cậy cao' };
+  if (score >= 60) return { id: 'yellow', label: 'Khá đáng tin' };
+  if (score >= 50) return { id: 'orange', label: 'Nên cân nhắc kỹ' };
+  return { id: 'red', label: 'Độ tin cậy thấp' };
+}
+
+function fallbackTrust(data, reviews) {
+  const included = reviews.filter((review) => review.included !== false);
+  const excluded = reviews.filter((review) => review.included === false);
+  const average = included.length ? included.reduce((sum, review) => sum + clamp(review.rating, 0, 5), 0) / included.length : 0;
+  const usefulRatio = reviews.length ? included.length / reviews.length : 0;
+  const verifiedRatio = included.length ? included.filter((review) => review.verified).length / included.length : 0;
+  const detailedRatio = included.length ? included.filter((review) => String(review.text || '').length >= 45).length / included.length : 0;
+  const score = Math.round(clamp(average / 5 * 55 + usefulRatio * 15 + verifiedRatio * 15 + detailedRatio * 15, 0, 100));
+  const tone = toneForScore(score);
+  const confidenceScore = Number(data?.stats?.confidenceScore) || Math.round(clamp(18 + Math.min(reviews.length, 30) / 30 * 32 + usefulRatio * 18 + verifiedRatio * 16 + detailedRatio * 16, 0, 97));
+  return {
+    score,
+    tone: tone.id,
+    label: tone.label,
+    confidence: { score: confidenceScore, label: confidenceScore >= 78 ? 'Cao' : confidenceScore >= 56 ? 'Trung bình' : 'Thấp' },
+    summary: data?.verdict || 'Điểm số phản ánh mức hài lòng và chất lượng bằng chứng trong các review hữu ích.',
+    pros: [{ title: 'Phản hồi tích cực', detail: `${included.filter((review) => Number(review.rating) >= 4).length} review hữu ích chấm từ 4 sao.`, mentions: included.filter((review) => Number(review.rating) >= 4).length }],
+    cons: [{ title: 'Phản hồi cần cân nhắc', detail: `${included.filter((review) => Number(review.rating) <= 3).length} review hữu ích chấm từ 3 sao trở xuống.`, mentions: included.filter((review) => Number(review.rating) <= 3).length }],
+    drivers: [
+      { impact: usefulRatio >= .6 ? 'up' : 'down', title: 'Tỷ lệ review hữu ích', detail: `${included.length}/${reviews.length} review vượt qua bước giảm nhiễu.` },
+      { impact: verifiedRatio >= .6 ? 'up' : 'down', title: 'Khả năng kiểm chứng', detail: `${Math.round(verifiedRatio * 100)}% review giữ lại đến từ người mua đã xác minh.` },
+      ...(excluded.length ? [{ impact: 'neutral', title: 'Review đã bị loại', detail: `${excluded.length} phản hồi không được dùng để kết luận sản phẩm.` }] : [])
+    ],
+    engine: 'rules'
+  };
+}
+
+function starMarkup(rating) {
+  const safeRating = Math.round(clamp(rating, 0, 5));
+  return Array.from({ length: 5 }, (_, index) => `<span class="evidence-star ${index < safeRating ? 'is-filled' : ''}" aria-hidden="true">★</span>`).join('');
 }
 
 function authorName(review) {
   const author = String(review.author || '').trim();
-  if (!author || /^\*+$/.test(author)) return 'Người mua Shopee';
-  return author;
+  return !author || /^\*+$/.test(author) ? 'Người mua Shopee' : author;
 }
 
-function authorInitial(name) {
-  const visible = name.replace(/\*+/g, '').trim();
-  return (visible[0] || 'R').toLocaleUpperCase('vi');
-}
-
-function starMarkup(rating) {
-  const safeRating = Math.max(0, Math.min(5, Number(rating) || 0));
-  return Array.from({ length: 5 }, (_, index) => `
-    <span class="review-star ${index < safeRating ? 'is-filled' : ''}" aria-hidden="true">
-      <svg viewBox="0 0 24 24"><path d="m12 2.8 2.8 5.7 6.3.9-4.5 4.4 1 6.3-5.6-3-5.6 3 1-6.3-4.5-4.4 6.3-.9L12 2.8Z" /></svg>
-    </span>`).join('');
-}
-
-function reviewCard(review, index, included) {
+function reviewCard(review, included, index) {
   const name = authorName(review);
-  const reason = String(review.exclusionReason || 'Nội dung chưa đủ thông tin để đưa vào kết quả chính.');
-  const rating = Math.max(0, Math.min(5, Number(review.rating) || 0));
-  const date = String(review.date || 'Không rõ ngày');
+  const initial = name.replace(/\*+/g, '').trim().charAt(0).toLocaleUpperCase('vi') || 'R';
+  const rating = Math.round(clamp(review.rating, 0, 5));
+  const reason = review.exclusionReason || 'Nội dung chưa đủ thông tin để đưa vào kết quả chính.';
   return `
-    <article class="rv-review-card ${included ? 'rv-review-kept' : 'rv-review-excluded'}" aria-label="Review ${index + 1}, ${rating} trên 5 sao">
-      <header class="rv-review-author">
-        <span class="rv-avatar-wrap" aria-hidden="true">
-          <span class="rv-review-avatar">${escapeHtml(authorInitial(name))}</span>
-          ${review.verified ? '<span class="rv-avatar-verified"><svg viewBox="0 0 24 24" fill="none"><path d="m7.5 12.5 3 3 6-7" /><path d="M12 3.5 19 7v5c0 4.5-3 7.2-7 8.5-4-1.3-7-4-7-8.5V7l7-3.5Z" /></svg></span>' : ''}
-        </span>
-        <span class="rv-review-person">
-          <strong>${escapeHtml(name)}</strong>
-          <span class="rv-review-meta">${review.verified ? '<span class="rv-verified-copy">Người mua đã xác minh</span>' : '<span>Người mua Shopee</span>'}<i aria-hidden="true"></i><span>${escapeHtml(date)}</span></span>
-        </span>
+    <article class="evidence-card ${included ? 'is-kept' : 'is-excluded'}" aria-label="Review ${index + 1}, ${rating} trên 5 sao">
+      <header>
+        <span class="evidence-avatar" aria-hidden="true">${escapeHtml(initial)}</span>
+        <span class="evidence-person"><strong>${escapeHtml(name)}</strong><small>${review.verified ? 'Đã xác minh mua hàng' : 'Chưa có tín hiệu xác minh'} · ${escapeHtml(review.date || 'Không rõ ngày')}</small></span>
+        ${review.verified ? '<span class="verified-mark" title="Đã xác minh mua hàng" aria-label="Đã xác minh mua hàng">✓</span>' : ''}
       </header>
-      <div class="rv-review-stars" role="img" aria-label="${rating} trên 5 sao">${starMarkup(rating)}</div>
-      <p class="rv-review-text">${escapeHtml(review.text || 'Review không có nội dung chữ.')}</p>
-      ${included ? '' : `<div class="rv-exclusion-note"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5h16" /><path d="M7 12h10" /><path d="M10 19h4" /><path d="m17 16 4 4" /><path d="m21 16-4 4" /></svg><span><small>Lý do giảm ưu tiên</small><strong>${escapeHtml(reason)}</strong></span></div>`}
+      <div class="evidence-stars" role="img" aria-label="${rating} trên 5 sao">${starMarkup(rating)}</div>
+      <p>${escapeHtml(review.text || 'Review không có nội dung chữ.')}</p>
+      ${included ? '<span class="evidence-label">Được dùng làm bằng chứng</span>' : `<div class="exclusion-reason"><small>Lý do bị loại</small><strong>${escapeHtml(reason)}</strong></div>`}
     </article>`;
 }
 
-function emptyCollection(included) {
-  return `
-    <article class="rv-empty-collection">
-      <span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M8 6h13M8 12h13M8 18h9" /><path d="m3 6 .5.5L5 5M3 12l.5.5L5 11M3 18l.5.5L5 17" /></svg></span>
-      <div><strong>${included ? 'Chưa có review đủ điều kiện' : 'Không có review nào bị loại'}</strong><p>${included ? 'RealView chưa tìm thấy phản hồi đủ thông tin trong lượt phân tích này.' : 'Tất cả review thu thập được đều đã vượt qua bước giảm nhiễu.'}</p></div>
-    </article>`;
+function emptyReviewState(included) {
+  return `<div class="review-empty"><strong>${included ? 'Chưa có review đủ điều kiện' : 'Không có review nào bị loại'}</strong><span>${included ? 'Mẫu dữ liệu hiện tại chưa có phản hồi đủ chi tiết.' : 'Tất cả review thu thập được đều vượt qua bước giảm nhiễu.'}</span></div>`;
 }
 
-function pageCapacity() {
-  if (window.matchMedia('(max-width: 700px)').matches) return 3;
-  if (window.matchMedia('(max-width: 960px)').matches) return 4;
-  return 8;
+function renderSentimentList(selector, items) {
+  const root = document.querySelector(selector);
+  root.innerHTML = items.map((item) => `
+    <article class="sentiment-item">
+      <span class="sentiment-check" aria-hidden="true">${selector.includes('pros') ? '✓' : '!'}</span>
+      <div><h4>${escapeHtml(item.title)}</h4><p>${escapeHtml(item.detail)}</p></div>
+      ${Number(item.mentions) > 0 ? `<b>${Math.round(Number(item.mentions))}×</b>` : ''}
+    </article>`).join('');
 }
 
-function reviewPages(reviews, included) {
-  if (!reviews.length) return `<div class="review-page review-page-empty">${emptyCollection(included)}</div>`;
-  const capacity = pageCapacity();
-  const pages = [];
-  for (let start = 0; start < reviews.length; start += capacity) {
-    const cards = reviews.slice(start, start + capacity)
-      .map((review, index) => reviewCard(review, start + index, included))
-      .join('');
-    pages.push(`<div class="review-page" aria-label="Trang review ${Math.floor(start / capacity) + 1}">${cards}</div>`);
-  }
-  return pages.join('');
-}
-
-function setupCarousel(root) {
-  const track = root.querySelector('.review-track');
-  const previous = root.querySelector('.carousel-prev');
-  const next = root.querySelector('.carousel-next');
-
-  function updateControls() {
-    const maxScroll = Math.max(0, track.scrollWidth - track.clientWidth);
-    previous.disabled = track.scrollLeft < 4;
-    next.disabled = track.scrollLeft > maxScroll - 4 || maxScroll < 4;
-  }
-
-  function move(direction) {
-    track.scrollBy({ left: direction * track.clientWidth, behavior: 'smooth' });
-  }
-
-  previous.addEventListener('click', () => move(-1));
-  next.addEventListener('click', () => move(1));
-  track.addEventListener('scroll', updateControls, { passive: true });
-  window.addEventListener('resize', updateControls);
-  requestAnimationFrame(updateControls);
-}
-
-function showToast(message) {
-  const toast = document.querySelector('#result-toast');
-  clearTimeout(toastTimer);
-  toast.textContent = message;
-  toast.classList.add('is-visible');
-  toastTimer = setTimeout(() => toast.classList.remove('is-visible'), 3200);
+function driverIcon(impact) {
+  if (impact === 'up') return '↗';
+  if (impact === 'down') return '↘';
+  return '→';
 }
 
 function renderResult(data) {
@@ -139,41 +130,76 @@ function renderResult(data) {
   const reviews = Array.isArray(data.reviews) ? data.reviews : [];
   const keptReviews = reviews.filter((review) => review.included !== false);
   const excludedReviews = reviews.filter((review) => review.included === false);
-  const kept = Number(stats.genuine ?? keptReviews.length) || 0;
-  const excluded = Number(stats.excluded ?? excludedReviews.length) || 0;
+  const trust = data.trust || fallbackTrust(data, reviews);
+  const score = Math.round(clamp(trust.score, 0, 100));
+  const tone = toneForScore(score);
+  const confidenceScore = Math.round(clamp(trust.confidence?.score ?? stats.confidenceScore, 0, 100));
+  const confidenceLabel = trust.confidence?.label || stats.confidence || (confidenceScore >= 78 ? 'Cao' : confidenceScore >= 56 ? 'Trung bình' : 'Thấp');
+  const platform = String(product.platform || 'Shopee');
+  const productUrl = safeUrl(product.url);
+  const productTitle = String(product.title || `Sản phẩm đang phân tích trên ${platform}`);
 
-  document.querySelector('#results-platform').textContent = String(product.platform || 'Shopee').toLocaleUpperCase('vi');
-  document.querySelector('#results-verdict').textContent = data.verdict || 'Kết quả chỉ hỗ trợ tham khảo; hãy kiểm tra kỹ thông tin sản phẩm trước khi mua.';
-  document.querySelector('#open-product').href = safeProductUrl(product.url);
-  document.querySelector('#kept-count').textContent = kept;
-  document.querySelector('#excluded-count-top').textContent = excluded;
-  document.querySelector('#excluded-count').textContent = excluded;
+  document.querySelector('#results-platform').textContent = platform.toLocaleUpperCase('vi');
+  document.querySelector('#results-title').textContent = productTitle;
+  const metaParts = [];
+  if (product.price) metaParts.push(String(product.price));
+  if (product.rating) metaParts.push(`${product.rating} sao trên sàn`);
+  if (product.itemId) metaParts.push(`Mã SP ${product.itemId}`);
+  document.querySelector('#product-meta').textContent = metaParts.join(' · ') || 'Phân tích từ review công khai';
 
-  const keptTrack = document.querySelector('#kept-track');
-  const excludedTrack = document.querySelector('#excluded-track');
-  let capacity = pageCapacity();
+  for (const selector of ['#open-product', '#product-inline-link']) document.querySelector(selector).href = productUrl;
+  document.querySelector('#open-product span').textContent = `Xem sản phẩm trên ${platform}`;
 
-  function renderReviewCollections() {
-    keptTrack.innerHTML = reviewPages(keptReviews, true);
-    excludedTrack.innerHTML = reviewPages(excludedReviews, false);
-    keptTrack.scrollTo({ left: 0 });
-    excludedTrack.scrollTo({ left: 0 });
+  const imageUrl = safeImageUrl(product.image);
+  if (imageUrl) {
+    const image = document.querySelector('#product-image');
+    const illustration = document.querySelector('#product-illustration');
+    image.src = imageUrl;
+    image.alt = `Ảnh ${productTitle}`;
+    image.classList.remove('hidden');
+    illustration.classList.add('hidden');
+    image.addEventListener('error', () => {
+      image.classList.add('hidden');
+      illustration.classList.remove('hidden');
+    }, { once: true });
   }
 
-  renderReviewCollections();
-  window.addEventListener('resize', () => {
-    const nextCapacity = pageCapacity();
-    if (nextCapacity === capacity) return;
-    capacity = nextCapacity;
-    renderReviewCollections();
-  });
+  document.querySelector('#trust-card').dataset.tone = tone.id;
+  document.querySelector('#trust-gauge').style.setProperty('--score', score);
+  document.querySelector('#trust-gauge').setAttribute('aria-label', `TrustScore ${score} trên 100`);
+  document.querySelector('#trust-score').textContent = score;
+  document.querySelector('#action-score').textContent = score;
+  document.querySelector('#trust-label').textContent = trust.label || tone.label;
+  document.querySelector('#confidence-score').textContent = `${confidenceScore}%`;
+  document.querySelector('#confidence-label').textContent = confidenceLabel;
+  document.querySelector('#trust-summary').textContent = trust.summary || data.verdict;
+  document.querySelector('#analysis-source').textContent = trust.engine === 'gemini' ? 'Gemini AI + bộ lọc RealView' : 'Bộ lọc minh bạch RealView';
 
-  document.querySelectorAll('.review-carousel').forEach(setupCarousel);
-  document.querySelector('#show-excluded').addEventListener('click', () => {
-    document.querySelector('#excluded-reviews').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  });
-  
+  const scanned = Number(stats.scanned ?? reviews.length) || 0;
+  const kept = Number(stats.genuine ?? keptReviews.length) || 0;
+  const excluded = Number(stats.excluded ?? excludedReviews.length) || 0;
+  document.querySelector('#scanned-count').textContent = scanned;
+  document.querySelector('#kept-count-top').textContent = kept;
+  document.querySelector('#excluded-count-top').textContent = excluded;
+  document.querySelector('#kept-count').textContent = kept;
+  document.querySelector('#excluded-count').textContent = excluded;
+
+  renderSentimentList('#pros-list', Array.isArray(trust.pros) && trust.pros.length ? trust.pros : fallbackTrust(data, reviews).pros);
+  renderSentimentList('#cons-list', Array.isArray(trust.cons) && trust.cons.length ? trust.cons : fallbackTrust(data, reviews).cons);
+
+  const drivers = Array.isArray(trust.drivers) ? trust.drivers : [];
+  document.querySelector('#trust-drivers').innerHTML = drivers.map((driver, index) => `
+    <article class="driver-card" data-impact="${['up', 'down', 'neutral'].includes(driver.impact) ? driver.impact : 'neutral'}">
+      <span class="driver-number">0${index + 1}</span>
+      <span class="driver-impact" aria-hidden="true">${driverIcon(driver.impact)}</span>
+      <div><small>${driver.impact === 'up' ? 'Nâng điểm' : driver.impact === 'down' ? 'Hạ điểm' : 'Giới hạn kết luận'}</small><h3>${escapeHtml(driver.title)}</h3><p>${escapeHtml(driver.detail)}</p></div>
+    </article>`).join('');
+
+  document.querySelector('#kept-list').innerHTML = keptReviews.length ? keptReviews.map((review, index) => reviewCard(review, true, index)).join('') : emptyReviewState(true);
+  document.querySelector('#excluded-list').innerHTML = excludedReviews.length ? excludedReviews.map((review, index) => reviewCard(review, false, index)).join('') : emptyReviewState(false);
+
   content.classList.remove('hidden');
+  document.querySelector('#result-action-bar').classList.remove('hidden');
 }
 
 let data;

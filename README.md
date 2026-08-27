@@ -51,6 +51,15 @@ Vercel sẽ gửi link sản phẩm sang bot; bot không trả review mô phỏn
 
 TikTok Shop chưa có collector trong phiên bản này và sẽ báo rõ là chưa hỗ trợ nếu chưa cấu hình bot.
 
-## Lọc chi phí thấp
+## TrustScore và phân tích Gemini
 
-Không gọi AI trong phiên bản mặc định. Bộ lọc quy tắc loại review nhận xu/seeding, review quá ngắn, và phản hồi chưa sử dụng; sau đó nhóm các cụm nhược điểm: chất liệu, form/size, sai mô tả, giao hàng, trải nghiệm sử dụng. Cách này cho phản hồi nhanh và không phát sinh chi phí API.
+RealView chấm TrustScore trên thang 100 từ mức hài lòng, tỷ lệ review hữu ích, tín hiệu mua đã xác minh và độ chi tiết của phản hồi. Khi có `GEMINI_API_KEY`, backend gọi Gemini để tổng hợp ưu/nhược điểm và giải thích các yếu tố nâng hoặc hạ điểm. Khóa chỉ được đặt trong biến môi trường máy chủ, tuyệt đối không đưa vào `public/` hoặc mã JavaScript chạy trên trình duyệt.
+
+Tại Vercel → **Settings → Environment Variables**, thêm:
+
+```text
+GEMINI_API_KEY=<khóa Gemini của bạn>
+GEMINI_MODEL=gemini-3.5-flash
+```
+
+Nếu Gemini chưa được cấu hình hoặc tạm thời không phản hồi, website vẫn trả kết quả bằng bộ chấm điểm quy tắc để người dùng không bị kẹt. Giao diện hiển thị đúng nguồn phân tích của lượt chạy.

@@ -1,4 +1,5 @@
 import { getReviews } from './sources.mjs';
+import { buildTrustAnalysis } from './trust-analysis.mjs';
 
 const issueDefinitions = [
   { id: 'chat-lieu', label: 'Chất liệu / độ bền', words: ['vải mỏng', 'mỏng', 'xù', 'bong', 'rách', 'sờn', 'mùi', 'cứng', 'thô', 'nhão', 'kém chất lượng', 'dễ hỏng'] },
@@ -39,13 +40,6 @@ function shouldKeep(review) {
   return { keep: true, reason: null };
 }
 
-function confidenceFor(reviews, genuine) {
-  if (!reviews.length) return 'Thấp';
-  const detailed = genuine.filter((review) => review.text.length > 45).length;
-  const score = Math.min(100, Math.round(35 + genuine.length / reviews.length * 35 + detailed / reviews.length * 30));
-  return score >= 72 ? 'Cao' : score >= 52 ? 'Trung bình' : 'Thấp';
-}
-
 export async function analyzeProductUrl(rawUrl) {
   if (typeof rawUrl !== 'string' || !rawUrl.trim()) {
     const error = new Error('Hãy dán link sản phẩm Shopee hoặc TikTok Shop.');
@@ -77,6 +71,8 @@ export async function analyzeProductUrl(rawUrl) {
 
   const lowRatings = genuine.filter((review) => review.rating <= 3).length;
   const signal = issues.length === 0 ? 'Chưa thấy nhược điểm lặp lại rõ ràng' : issues[0].label;
+  const processedReviews = checked.map(({ filter, ...review }) => ({ ...review, included: filter.keep, exclusionReason: filter.reason }));
+  const trust = await buildTrustAnalysis(processedReviews);
   return {
     product,
     source,
@@ -86,7 +82,8 @@ export async function analyzeProductUrl(rawUrl) {
       genuine: genuine.length,
       excluded: excluded.length,
       lowRatings,
-      confidence: confidenceFor(reviews, genuine)
+      confidence: trust.confidence.label,
+      confidenceScore: trust.confidence.score
     },
     verdict: issues.some((issue) => issue.count >= 3)
       ? `Cần cân nhắc: nhiều phản hồi thật đề cập “${signal.toLowerCase()}”.`
@@ -94,6 +91,7 @@ export async function analyzeProductUrl(rawUrl) {
         ? `Có một số phản hồi cần lưu ý về ${signal.toLowerCase()}.`
         : 'Chưa đủ tín hiệu tiêu cực đáng tin để kết luận sản phẩm có vấn đề.',
     issues,
-    reviews: checked.map(({ filter, ...review }) => ({ ...review, included: filter.keep, exclusionReason: filter.reason }))
+    trust,
+    reviews: processedReviews
   };
 }

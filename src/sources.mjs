@@ -42,13 +42,38 @@ async function loadFromConfiguredBot(url, platform) {
   if (!response.ok) throw new Error(`Bot trả về HTTP ${response.status}`);
   const body = await response.json();
   if (!Array.isArray(body.reviews)) throw new Error('Bot không trả về danh sách reviews hợp lệ.');
-  return body.reviews.map((review) => ({
-    rating: Number(review.rating) || 0,
-    text: String(review.text || ''),
-    date: review.date || 'Không rõ ngày',
-    verified: Boolean(review.verified),
-    author: review.author || 'Khách đã mua'
-  })).filter((review) => review.text);
+  return {
+    reviews: body.reviews.map((review) => ({
+      rating: Number(review.rating) || 0,
+      text: String(review.text || ''),
+      date: review.date || 'Không rõ ngày',
+      verified: Boolean(review.verified),
+      author: review.author || 'Khách đã mua'
+    })).filter((review) => review.text),
+    productMeta: normaliseProductMeta(body.product)
+  };
+}
+
+function firstValue(source, paths) {
+  for (const path of paths) {
+    const value = path.split('.').reduce((current, key) => current?.[key], source);
+    if (value !== undefined && value !== null && String(value).trim()) return value;
+  }
+  return undefined;
+}
+
+function normaliseProductMeta(source = {}) {
+  if (!source || typeof source !== 'object') return {};
+  const title = firstValue(source, ['title', 'name', 'productName', 'productTitle', 'itemName', 'product.name', 'item.name']);
+  const image = firstValue(source, ['image', 'imageUrl', 'productImage', 'thumbnail', 'product.image', 'item.image']);
+  const price = firstValue(source, ['price', 'productPrice', 'currentPrice', 'product.price', 'item.price']);
+  const rating = firstValue(source, ['productRating', 'ratingAverage', 'averageRating', 'product.rating', 'item.rating']);
+  return {
+    ...(title ? { title: String(title) } : {}),
+    ...(image ? { image: String(image) } : {}),
+    ...(price ? { price: String(price) } : {}),
+    ...(rating ? { rating: Number(rating) || String(rating) } : {})
+  };
 }
 
 async function loadFromApify(url, reviewLimit) {
@@ -78,13 +103,16 @@ async function loadFromApify(url, reviewLimit) {
   const items = await upstream.json();
   if (!Array.isArray(items)) throw new Error('Apify không trả về danh sách review hợp lệ.');
 
-  return items.map((review) => ({
-    rating: Number(review.ratingStar) || 0,
-    text: String(review.comment || '').trim(),
-    date: review.createdAt ? new Date(review.createdAt).toLocaleDateString('vi-VN') : 'Không rõ ngày',
-    verified: true,
-    author: review.author || 'Khách đã mua'
-  })).filter((review) => review.text);
+  return {
+    reviews: items.map((review) => ({
+      rating: Number(review.ratingStar) || 0,
+      text: String(review.comment || '').trim(),
+      date: review.createdAt ? new Date(review.createdAt).toLocaleDateString('vi-VN') : 'Không rõ ngày',
+      verified: true,
+      author: review.author || 'Khách đã mua'
+    })).filter((review) => review.text),
+    productMeta: normaliseProductMeta(items[0])
+  };
 }
 
 export async function getReviews(url) {
@@ -105,9 +133,10 @@ export async function getReviews(url) {
   }
 
   try {
-    const reviews = platform === 'Shopee'
+    const collected = platform === 'Shopee'
       ? await loadFromApify(productUrl, reviewLimit)
       : await loadFromConfiguredBot(productUrl, platform);
+    const reviews = collected.reviews;
     return {
       reviews,
       source: {
@@ -119,6 +148,7 @@ export async function getReviews(url) {
         platform,
         url: productUrl,
         originalUrl: parsed.href,
+        ...collected.productMeta,
         ...(shopeeProduct ? {
           shopId: shopeeProduct.shopId,
           itemId: shopeeProduct.itemId,
@@ -140,6 +170,7 @@ export async function getReviews(url) {
         platform,
         url: productUrl,
         originalUrl: parsed.href,
+        title: platform === 'Shopee' ? 'Sản phẩm đang phân tích trên Shopee' : 'Sản phẩm đang phân tích trên TikTok Shop',
         ...(shopeeProduct ? {
           shopId: shopeeProduct.shopId,
           itemId: shopeeProduct.itemId,
