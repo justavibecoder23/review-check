@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { analyzeProductUrl } from './src/analyze.mjs';
+import { answerWebsiteQuestion } from './src/site-chatbot.mjs';
 
 const port = Number(process.env.PORT || 3000);
 const host = process.env.HOST || '127.0.0.1';
@@ -38,6 +39,12 @@ const server = createServer(async (request, response) => {
       return sendJson(response, 200, result);
     }
 
+    if (request.method === 'POST' && url.pathname === '/api/chat') {
+      const body = await getBody(request);
+      const result = await answerWebsiteQuestion(body.messages);
+      return sendJson(response, 200, result);
+    }
+
     if (request.method !== 'GET' && request.method !== 'HEAD') {
       return sendJson(response, 405, { error: 'Phương thức không được hỗ trợ.' });
     }
@@ -61,3 +68,4 @@ const server = createServer(async (request, response) => {
 server.listen(port, host, () => {
   console.log(`Review Check đang chạy tại http://${host}:${port}`);
 });
+
