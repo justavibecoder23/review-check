@@ -1,0 +1,724 @@
+[
+  {
+    "id": "about_001",
+    "category": "about_realview",
+    "title": "RealView là gì?",
+    "question_variants": ["RealView là gì?", "Website RealView dùng để làm gì?", "Giới thiệu RealView cho tôi"],
+    "answer": "RealView là nền tảng hỗ trợ người mua hàng online hiểu rõ hơn các đánh giá sản phẩm trước khi đưa ra quyết định. RealView phân tích rating và nội dung review, sau đó trình bày TrustScore, Confidence, ưu điểm, nhược điểm và các review đáng tham khảo.",
+    "tags": ["RealView", "giới thiệu", "phân tích review"]
+  },
+  {
+    "id": "about_002",
+    "category": "about_realview",
+    "title": "RealView dành cho ai?",
+    "question_variants": ["RealView dành cho ai?", "Ai nên dùng RealView?", "Tôi có phù hợp dùng RealView không?"],
+    "answer": "RealView hướng tới người mua hàng online, đặc biệt là những người thường đọc review trước khi mua và muốn tiết kiệm thời gian tổng hợp nhiều ý kiến.",
+    "tags": ["người dùng", "mua sắm online", "đối tượng"]
+  },
+  {
+    "id": "about_003",
+    "category": "about_realview",
+    "title": "RealView hỗ trợ nền tảng nào?",
+    "question_variants": ["RealView hỗ trợ sàn nào?", "Có phân tích Shopee không?", "Có dùng được TikTok Shop không?"],
+    "answer": "Phiên bản hiện tại của RealView tập trung hỗ trợ sản phẩm trên Shopee và TikTok Shop.",
+    "tags": ["Shopee", "TikTok Shop", "nền tảng hỗ trợ"]
+  },
+  {
+    "id": "about_004",
+    "category": "about_realview",
+    "title": "RealView có phải sàn thương mại điện tử không?",
+    "question_variants": ["RealView có bán hàng không?", "RealView có phải sàn thương mại điện tử không?", "Tôi mua sản phẩm trực tiếp trên RealView được không?"],
+    "answer": "Không. RealView không trực tiếp bán sản phẩm và không phải sàn thương mại điện tử. Đây là công cụ hỗ trợ phân tích review để người dùng có thêm cơ sở trước khi quyết định mua hàng.",
+    "tags": ["sàn thương mại điện tử", "mua hàng", "vai trò"]
+  },
+  {
+    "id": "about_005",
+    "category": "about_realview",
+    "title": "Mục tiêu của RealView",
+    "question_variants": ["Mục tiêu của RealView là gì?", "RealView giải quyết vấn đề gì?", "Vì sao RealView được tạo ra?"],
+    "answer": "RealView được xây dựng để giúp người dùng tiết kiệm thời gian đọc review, giảm ảnh hưởng của các đánh giá ít giá trị thông tin và đưa ra quyết định mua hàng có cơ sở hơn.",
+    "tags": ["mục tiêu", "tiết kiệm thời gian", "quyết định mua hàng"]
+  },
+  {
+    "id": "about_006",
+    "category": "about_realview",
+    "title": "RealView phân tích những dữ liệu nào?",
+    "question_variants": ["RealView đọc những gì?", "Hệ thống phân tích rating hay nội dung?", "Dữ liệu nào được dùng để phân tích?"],
+    "answer": "RealView xem xét cả rating bằng số sao và nội dung review khả dụng. Rating không phải yếu tố duy nhất; nội dung người mua viết là phần quan trọng để hiểu trải nghiệm, ưu điểm, nhược điểm và mức độ nhất quán của tập review.",
+    "tags": ["rating", "nội dung review", "dữ liệu"]
+  },
+  {
+    "id": "about_007",
+    "category": "about_realview",
+    "title": "Kết quả RealView cung cấp",
+    "question_variants": ["RealView trả về kết quả gì?", "Sau khi phân tích tôi sẽ thấy gì?", "Trang kết quả có những phần nào?"],
+    "answer": "Kết quả có thể gồm thông tin sản phẩm, TrustScore, Confidence, các ưu điểm và nhược điểm được tổng hợp, những yếu tố làm tăng hoặc giảm độ tin cậy, review đáng tham khảo và review bị loại hoặc giảm giá trị trong phân tích.",
+    "tags": ["kết quả", "TrustScore", "Confidence", "ưu nhược điểm"]
+  },
+  {
+    "id": "about_008",
+    "category": "about_realview",
+    "title": "RealView có quyết định mua hàng thay người dùng không?",
+    "question_variants": ["RealView có quyết định thay tôi không?", "Hệ thống có bảo tôi phải mua không?", "Kết quả có phải lời khuyên mua hàng tuyệt đối không?"],
+    "answer": "Không. RealView là công cụ hỗ trợ ra quyết định. Người dùng nên kết hợp kết quả phân tích với nhu cầu, ngân sách và mức độ chấp nhận rủi ro của chính mình.",
+    "tags": ["hỗ trợ quyết định", "khuyến nghị", "người dùng"]
+  },
+  {
+    "id": "about_009",
+    "category": "about_realview",
+    "title": "RealView có đảm bảo sản phẩm không có vấn đề không?",
+    "question_variants": ["RealView có bảo đảm chất lượng sản phẩm không?", "Phân tích tốt thì sản phẩm chắc chắn tốt chứ?", "RealView có cam kết sản phẩm không lỗi không?"],
+    "answer": "Không. RealView tổng hợp thông tin từ tập review khả dụng và không thể bảo đảm chất lượng tuyệt đối của từng sản phẩm hoặc từng lần mua hàng.",
+    "tags": ["bảo đảm", "chất lượng sản phẩm", "giới hạn"]
+  },
+  {
+    "id": "about_010",
+    "category": "about_realview",
+    "title": "RealView khác việc chỉ nhìn rating như thế nào?",
+    "question_variants": ["Sao không chỉ xem số sao?", "RealView khác rating trung bình ở đâu?", "Tại sao cần phân tích nội dung review?"],
+    "answer": "Rating trung bình chỉ cho biết mức điểm tổng quát. RealView còn phân tích nội dung review để xem số sao có phù hợp với lời nhận xét hay không, người mua thường nhắc đến khía cạnh nào và các ý kiến có tạo thành pattern đáng chú ý hay không.",
+    "tags": ["rating", "nội dung", "khác biệt"]
+  },
+  {
+    "id": "usage_001",
+    "category": "how_to_use",
+    "title": "Cách sử dụng RealView",
+    "question_variants": ["Dùng RealView như thế nào?", "Hướng dẫn sử dụng RealView", "Tôi bắt đầu phân tích bằng cách nào?"],
+    "answer": "Bạn mở sản phẩm trên Shopee hoặc TikTok Shop, sao chép link sản phẩm, dán link vào ô phân tích của RealView và gửi yêu cầu. Khi xử lý xong, RealView sẽ hiển thị trang kết quả để bạn xem.",
+    "tags": ["hướng dẫn", "dán link", "phân tích"]
+  },
+  {
+    "id": "usage_002",
+    "category": "how_to_use",
+    "title": "Bước đầu tiên khi dùng RealView",
+    "question_variants": ["Tôi phải làm gì đầu tiên?", "Bắt đầu với RealView ở đâu?", "Cần chuẩn bị gì để phân tích?"],
+    "answer": "Bạn cần mở đúng trang sản phẩm trên Shopee hoặc TikTok Shop và sao chép link của sản phẩm muốn kiểm tra.",
+    "tags": ["bắt đầu", "link sản phẩm", "Shopee", "TikTok Shop"]
+  },
+  {
+    "id": "usage_003",
+    "category": "how_to_use",
+    "title": "Cách lấy link sản phẩm",
+    "question_variants": ["Lấy link sản phẩm ở đâu?", "Tôi sao chép đường dẫn thế nào?", "Cần dán loại link nào?"],
+    "answer": "Bạn dùng chức năng sao chép liên kết trên trang sản phẩm hoặc sao chép địa chỉ trang sản phẩm từ trình duyệt. Hãy gửi link của một sản phẩm cụ thể thay vì link trang chủ, danh mục hoặc gian hàng.",
+    "tags": ["sao chép liên kết", "link sản phẩm", "đường dẫn"]
+  },
+  {
+    "id": "usage_004",
+    "category": "how_to_use",
+    "title": "Có cần tự nhập review không?",
+    "question_variants": ["Tôi có phải chép từng review không?", "Có cần nhập nội dung đánh giá thủ công không?", "Chỉ dán link có được không?"],
+    "answer": "Theo luồng sử dụng đã thiết kế, bạn chỉ cần cung cấp link sản phẩm. RealView sẽ xử lý các review khả dụng cho sản phẩm đó; bạn không cần chép từng review vào chatbot.",
+    "tags": ["review", "tự động", "link sản phẩm"]
+  },
+  {
+    "id": "usage_005",
+    "category": "how_to_use",
+    "title": "Đọc phần đầu trang kết quả",
+    "question_variants": ["Nên xem gì trước trên trang kết quả?", "Phần đầu kết quả nói gì?", "TrustScore và Confidence nằm ở đâu?"],
+    "answer": "Phần đầu trang kết quả ưu tiên hiển thị sản phẩm, TrustScore và Confidence để bạn nhận biết ngay độ đáng tin của tập review và mức độ chắc chắn của kết quả.",
+    "tags": ["trang kết quả", "TrustScore", "Confidence"]
+  },
+  {
+    "id": "usage_006",
+    "category": "how_to_use",
+    "title": "Đọc phần ưu và nhược điểm",
+    "question_variants": ["Xem ưu nhược điểm ở đâu?", "Sau TrustScore nên đọc gì?", "RealView tóm tắt điểm mạnh yếu thế nào?"],
+    "answer": "Sau phần TrustScore và Confidence, bạn có thể đọc các ưu điểm và nhược điểm được tổng hợp từ những chủ đề lặp lại trong review. Đây là bản tóm tắt dữ liệu, không phải cam kết tuyệt đối về sản phẩm.",
+    "tags": ["ưu điểm", "nhược điểm", "tóm tắt review"]
+  },
+  {
+    "id": "usage_007",
+    "category": "how_to_use",
+    "title": "Xem lý do TrustScore cao hoặc thấp",
+    "question_variants": ["Tại sao điểm lại cao?", "Xem lý do điểm thấp ở đâu?", "RealView giải thích TrustScore không?"],
+    "answer": "Có. Trang kết quả giải thích các yếu tố làm tăng hoặc giảm độ tin cậy, chẳng hạn chất lượng nội dung, sự phù hợp giữa rating và lời nhận xét, mức độ trùng lặp, tính nhất quán và độ bao phủ các khía cạnh.",
+    "tags": ["giải thích", "TrustScore", "độ tin cậy"]
+  },
+  {
+    "id": "usage_008",
+    "category": "how_to_use",
+    "title": "Mở danh sách review đáng tham khảo",
+    "question_variants": ["Làm sao xem review hữu ích?", "Review đáng tham khảo nằm ở đâu?", "Tôi muốn đọc các đánh giá tốt để tham khảo"],
+    "answer": "Bạn cuộn xuống phần review đáng tham khảo ở cuối trang kết quả và mở mục này để xem chi tiết. Giao diện có thể thu gọn danh sách; bạn cần bấm vào mục tương ứng để mở rộng.",
+    "tags": ["review hữu ích", "mở rộng", "cuộn trang"]
+  },
+  {
+    "id": "usage_009",
+    "category": "how_to_use",
+    "title": "Mở danh sách review bị loại",
+    "question_variants": ["Xem review bị loại ở đâu?", "Tại sao tôi chưa thấy review bị loại?", "Làm sao mở các đánh giá bị loại?"],
+    "answer": "Bạn cuộn xuống cuối trang kết quả và bấm mở phần review bị loại hoặc giảm giá trị. Mục này được thu gọn để trang dễ đọc hơn.",
+    "tags": ["review bị loại", "mở rộng", "trang kết quả"]
+  },
+  {
+    "id": "usage_010",
+    "category": "how_to_use",
+    "title": "Cách dùng kết quả để cân nhắc mua hàng",
+    "question_variants": ["Tôi nên dùng kết quả thế nào?", "RealView giúp quyết định mua ra sao?", "Sau khi xem kết quả tôi làm gì tiếp?"],
+    "answer": "Hãy đọc TrustScore cùng Confidence, sau đó xem ưu điểm, nhược điểm và các review cụ thể. Nếu một nhược điểm liên quan trực tiếp tới nhu cầu của bạn, hãy cân nhắc kỹ dù tập review có TrustScore cao.",
+    "tags": ["quyết định mua", "cân nhắc", "đọc kết quả"]
+  },
+  {
+    "id": "trustscore_001",
+    "category": "trustscore",
+    "title": "TrustScore là gì?",
+    "question_variants": ["TrustScore là gì?", "Điểm TrustScore nghĩa là gì?", "Chỉ số độ tin cậy là gì?"],
+    "answer": "TrustScore là chỉ số trên thang 0–100 thể hiện mức độ đáng tin cậy của tập hợp review mà RealView phân tích. Chỉ số này đo độ tin cậy của thông tin review, không phải chất lượng tuyệt đối của sản phẩm.",
+    "tags": ["TrustScore", "0-100", "độ tin cậy"]
+  },
+  {
+    "id": "trustscore_002",
+    "category": "trustscore",
+    "title": "TrustScore có phải điểm chất lượng sản phẩm không?",
+    "question_variants": ["TrustScore có phải điểm sản phẩm không?", "Điểm 80 có nghĩa sản phẩm tốt 80 điểm à?", "TrustScore chấm chất lượng hay review?"],
+    "answer": "Không. TrustScore chấm mức độ đáng tin của tập review. Một sản phẩm có thể có nhiều nhược điểm nghiêm trọng nhưng TrustScore vẫn cao nếu các review mô tả những vấn đề đó rõ ràng, tự nhiên và nhất quán.",
+    "tags": ["TrustScore", "chất lượng sản phẩm", "phân biệt"]
+  },
+  {
+    "id": "trustscore_003",
+    "category": "trustscore",
+    "title": "TrustScore được thể hiện trên thang nào?",
+    "question_variants": ["TrustScore có thang bao nhiêu?", "Điểm tối đa là bao nhiêu?", "TrustScore tính từ 0 đến mấy?"],
+    "answer": "TrustScore được thể hiện trên thang từ 0 đến 100.",
+    "tags": ["TrustScore", "thang điểm", "100"]
+  },
+  {
+    "id": "trustscore_004",
+    "category": "trustscore",
+    "title": "TrustScore xem xét những yếu tố nào?",
+    "question_variants": ["TrustScore dựa trên gì?", "Những yếu tố nào ảnh hưởng TrustScore?", "Hệ thống chấm độ tin cậy thế nào?"],
+    "answer": "RealView xem xét chất lượng thông tin của review, sự phù hợp giữa rating và nội dung, mức độ nguyên bản hoặc trùng lặp bất thường, tính nhất quán giữa nhiều review và mức độ bao phủ các khía cạnh quan trọng của sản phẩm.",
+    "tags": ["TrustScore", "yếu tố", "rating", "nội dung"]
+  },
+  {
+    "id": "trustscore_005",
+    "category": "trustscore",
+    "title": "Rating ảnh hưởng TrustScore như thế nào?",
+    "question_variants": ["Rating có ảnh hưởng TrustScore không?", "Số sao có được dùng để tính độ tin cậy không?", "Điểm 4.9 sao có làm TrustScore cao không?"],
+    "answer": "Rating có được xem xét nhưng không quyết định một mình. RealView quan tâm tới việc số sao có phù hợp với nội dung review hay không, thay vì mặc định rating cao đồng nghĩa với tập review đáng tin.",
+    "tags": ["rating", "số sao", "TrustScore"]
+  },
+  {
+    "id": "trustscore_006",
+    "category": "trustscore",
+    "title": "Rating cao có đồng nghĩa TrustScore cao không?",
+    "question_variants": ["4.9 sao thì TrustScore chắc cao đúng không?", "Rating cao có luôn đáng tin không?", "Số sao và TrustScore có giống nhau không?"],
+    "answer": "Không. Rating cao nhưng nội dung quá ngắn, trùng lặp hoặc mâu thuẫn với số sao vẫn có thể làm độ tin cậy giảm. TrustScore và rating là hai khái niệm khác nhau.",
+    "tags": ["rating cao", "TrustScore", "không đồng nghĩa"]
+  },
+  {
+    "id": "trustscore_007",
+    "category": "trustscore",
+    "title": "Sản phẩm bị chê nhiều có thể có TrustScore cao không?",
+    "question_variants": ["Review tiêu cực nhiều sao TrustScore vẫn cao?", "Sản phẩm tệ có thể có điểm tin cậy cao không?", "Vì sao nhiều nhược điểm mà TrustScore cao?"],
+    "answer": "Có. Nếu nhiều review tiêu cực cung cấp trải nghiệm cụ thể và cùng phản ánh một vấn đề nhất quán, tập review đó vẫn có thể đáng tin. TrustScore cao trong trường hợp này không có nghĩa sản phẩm tốt.",
+    "tags": ["review tiêu cực", "TrustScore cao", "nhược điểm"]
+  },
+  {
+    "id": "trustscore_008",
+    "category": "trustscore",
+    "title": "Vì sao TrustScore có thể thấp?",
+    "question_variants": ["Tại sao TrustScore thấp?", "Điều gì làm giảm độ tin cậy?", "Vì sao sản phẩm bị chấm điểm tin cậy thấp?"],
+    "answer": "TrustScore có thể thấp khi nhiều review quá ít thông tin, rating và nội dung không khớp, xuất hiện trùng lặp bất thường, các nhận xét thiếu nhất quán hoặc tập review không bao phủ đủ khía cạnh quan trọng của sản phẩm.",
+    "tags": ["TrustScore thấp", "nguyên nhân", "độ tin cậy"]
+  },
+  {
+    "id": "trustscore_009",
+    "category": "trustscore",
+    "title": "Vì sao TrustScore có thể cao?",
+    "question_variants": ["Tại sao TrustScore cao?", "Điều gì làm tăng độ tin cậy?", "Vì sao tập review được đánh giá cao?"],
+    "answer": "TrustScore có thể cao khi review cung cấp thông tin cụ thể, rating phù hợp với nội dung, ít dấu hiệu trùng lặp bất thường, nhiều người mua độc lập cùng nhắc đến các pattern tương tự và dữ liệu bao phủ tốt những khía cạnh quan trọng.",
+    "tags": ["TrustScore cao", "nguyên nhân", "pattern"]
+  },
+  {
+    "id": "trustscore_010",
+    "category": "trustscore",
+    "title": "Số lượng review có quyết định TrustScore không?",
+    "question_variants": ["Nhiều review thì TrustScore cao hơn à?", "Số lượng review có làm tăng điểm không?", "Hai nghìn review có chắc đáng tin hơn hai mươi review không?"],
+    "answer": "Không nhất thiết. Số lượng review chủ yếu giúp tăng mức độ tự tin vào kết quả khi dữ liệu hợp lệ và hữu ích. Một tập review lớn vẫn có thể kém tin cậy nếu chất lượng nội dung thấp hoặc có nhiều dấu hiệu bất thường.",
+    "tags": ["số lượng review", "TrustScore", "Confidence"]
+  },
+  {
+    "id": "trustscore_011",
+    "category": "trustscore",
+    "title": "Review bị loại có được dùng cho TrustScore không?",
+    "question_variants": ["Review bị loại có tính điểm không?", "TrustScore có dùng đánh giá ít thông tin không?", "Dữ liệu nào bị bỏ khỏi phép phân tích chính?"],
+    "answer": "Các review bị xác định là quá ít thông tin, trùng lặp bất thường hoặc không đủ giá trị về trải nghiệm sản phẩm có thể bị loại khỏi tập dữ liệu chính hoặc giảm ảnh hưởng. Việc bị loại không đồng nghĩa review đó chắc chắn là giả.",
+    "tags": ["review bị loại", "TrustScore", "dữ liệu chính"]
+  },
+  {
+    "id": "trustscore_012",
+    "category": "trustscore",
+    "title": "TrustScore có thể thay đổi không?",
+    "question_variants": ["TrustScore có thay đổi theo thời gian không?", "Vì sao lần sau điểm khác?", "Điểm tin cậy có cố định không?"],
+    "answer": "TrustScore có thể thay đổi khi tập review khả dụng thay đổi hoặc khi có thêm dữ liệu để phân tích. Kết quả phản ánh dữ liệu tại thời điểm RealView thực hiện phân tích.",
+    "tags": ["TrustScore", "thay đổi", "dữ liệu mới"]
+  },
+  {
+    "id": "trustscore_013",
+    "category": "trustscore",
+    "title": "TrustScore có phát hiện review giả không?",
+    "question_variants": ["TrustScore có phải điểm phát hiện fake review không?", "Điểm thấp có nghĩa toàn review giả à?", "TrustScore xác định seeding được không?"],
+    "answer": "Không. TrustScore không phải kết luận rằng review là thật hay giả. RealView chỉ nhận diện các dấu hiệu như trùng lặp, bất thường hoặc ít giá trị thông tin để đánh giá mức độ đáng tin của cả tập review.",
+    "tags": ["fake review", "seeding", "TrustScore", "giới hạn"]
+  },
+  {
+    "id": "trustscore_014",
+    "category": "trustscore",
+    "title": "Có nên mua chỉ vì TrustScore cao không?",
+    "question_variants": ["TrustScore cao thì có nên mua không?", "Điểm tin cậy cao có phải tín hiệu mua ngay?", "Tôi chỉ nhìn TrustScore được không?"],
+    "answer": "Không nên chỉ dựa vào TrustScore. Bạn cần đọc thêm ưu điểm, nhược điểm, Confidence và các review đáng tham khảo. TrustScore cao chỉ cho biết thông tin review tương đối đáng tin, không cho biết sản phẩm chắc chắn phù hợp với bạn.",
+    "tags": ["quyết định mua", "TrustScore cao", "cân nhắc"]
+  },
+  {
+    "id": "trustscore_015",
+    "category": "trustscore",
+    "title": "RealView có công bố lý do chấm TrustScore không?",
+    "question_variants": ["TrustScore có giải thích được không?", "Tôi muốn biết vì sao có điểm này", "RealView có minh bạch cách đánh giá không?"],
+    "answer": "Có. Một trong các nguyên tắc của RealView là kết quả có thể giải thích. Trang kết quả nêu những yếu tố đang làm tăng hoặc giảm độ tin cậy để người dùng không chỉ nhìn vào một con số.",
+    "tags": ["giải thích", "minh bạch", "TrustScore"]
+  },
+  {
+    "id": "confidence_001",
+    "category": "confidence",
+    "title": "Confidence là gì?",
+    "question_variants": ["Confidence là gì?", "Mức độ tự tin nghĩa là gì?", "Chỉ số Confidence nói lên điều gì?"],
+    "answer": "Confidence thể hiện mức độ RealView tự tin vào kết quả phân tích dựa trên lượng và chất lượng dữ liệu hiện có. Confidence được tách riêng khỏi TrustScore.",
+    "tags": ["Confidence", "mức độ tự tin", "dữ liệu"]
+  },
+  {
+    "id": "confidence_002",
+    "category": "confidence",
+    "title": "Confidence khác TrustScore như thế nào?",
+    "question_variants": ["Confidence và TrustScore khác gì nhau?", "Hai chỉ số này có giống nhau không?", "Vì sao cần tách Confidence?"],
+    "answer": "TrustScore trả lời câu hỏi tập review đáng tin đến mức nào, còn Confidence cho biết dữ liệu hiện có đủ mạnh để RealView tự tin vào kết quả đó đến đâu.",
+    "tags": ["Confidence", "TrustScore", "phân biệt"]
+  },
+  {
+    "id": "confidence_003",
+    "category": "confidence",
+    "title": "Vì sao Confidence thấp?",
+    "question_variants": ["Tại sao Confidence thấp?", "Điều gì làm mức độ tự tin giảm?", "Vì sao RealView chưa chắc chắn?"],
+    "answer": "Confidence có thể thấp khi có quá ít review hợp lệ, nhiều review bị loại, dữ liệu không bao phủ đủ khía cạnh sản phẩm, các nhận xét mâu thuẫn lớn hoặc kết quả chưa ổn định.",
+    "tags": ["Confidence thấp", "review hợp lệ", "thiếu dữ liệu"]
+  },
+  {
+    "id": "confidence_004",
+    "category": "confidence",
+    "title": "Vì sao Confidence cao?",
+    "question_variants": ["Tại sao Confidence cao?", "Khi nào RealView tự tin vào kết quả?", "Điều gì làm Confidence tăng?"],
+    "answer": "Confidence có thể cao khi có đủ review hợp lệ, dữ liệu bao phủ tốt các khía cạnh quan trọng và kết quả phân tích tương đối ổn định.",
+    "tags": ["Confidence cao", "đủ dữ liệu", "ổn định"]
+  },
+  {
+    "id": "confidence_005",
+    "category": "confidence",
+    "title": "TrustScore cao nhưng Confidence thấp nghĩa là gì?",
+    "question_variants": ["Điểm tin cậy cao mà Confidence thấp là sao?", "TrustScore cao nhưng ít dữ liệu thì hiểu thế nào?", "Hai chỉ số trái ngược có lỗi không?"],
+    "answer": "Điều đó có nghĩa tập review hiện có cho tín hiệu tương đối đáng tin, nhưng dữ liệu chưa đủ để RealView chắc chắn mạnh về kết luận. Bạn nên xem kết quả như thông tin tham khảo và đọc kỹ các review cụ thể.",
+    "tags": ["TrustScore cao", "Confidence thấp", "diễn giải"]
+  },
+  {
+    "id": "confidence_006",
+    "category": "confidence",
+    "title": "TrustScore thấp nhưng Confidence cao nghĩa là gì?",
+    "question_variants": ["Điểm tin cậy thấp mà Confidence cao là sao?", "Confidence cao có cứu TrustScore thấp không?", "RealView chắc chắn rằng review kém tin cậy à?"],
+    "answer": "Điều đó có nghĩa RealView có tương đối đủ dữ liệu để nhận thấy tập review có nhiều yếu tố làm giảm độ tin cậy. Confidence cao không biến TrustScore thấp thành cao; nó chỉ cho biết kết luận có cơ sở dữ liệu mạnh hơn.",
+    "tags": ["TrustScore thấp", "Confidence cao", "diễn giải"]
+  },
+  {
+    "id": "confidence_007",
+    "category": "confidence",
+    "title": "Nhiều review có làm Confidence cao hơn không?",
+    "question_variants": ["Càng nhiều review thì Confidence càng cao à?", "Số lượng dữ liệu ảnh hưởng Confidence thế nào?", "Nhiều đánh giá có đủ để tự tin không?"],
+    "answer": "Số lượng review hợp lệ là một yếu tố quan trọng, nhưng không phải yếu tố duy nhất. Dữ liệu cũng cần có chất lượng, độ bao phủ và mức ổn định phù hợp.",
+    "tags": ["số lượng review", "Confidence", "chất lượng dữ liệu"]
+  },
+  {
+    "id": "confidence_008",
+    "category": "confidence",
+    "title": "Nên làm gì khi Confidence thấp?",
+    "question_variants": ["Confidence thấp thì tôi nên làm gì?", "Có nên tin kết quả khi Confidence thấp không?", "Cách đọc kết quả ít dữ liệu"],
+    "answer": "Khi Confidence thấp, bạn nên thận trọng, đọc trực tiếp các review đáng tham khảo và tìm thêm thông tin trước khi quyết định. Không nên xem phần tóm tắt là kết luận chắc chắn.",
+    "tags": ["Confidence thấp", "hướng dẫn", "thận trọng"]
+  },
+  {
+    "id": "analysis_001",
+    "category": "review_analysis",
+    "title": "RealView phân tích rating và nội dung như thế nào?",
+    "question_variants": ["RealView dùng rating và nội dung ra sao?", "Hệ thống có đọc cả số sao lẫn chữ không?", "Quy trình phân tích review gồm gì?"],
+    "answer": "RealView xem xét cả số sao và nội dung review. Hệ thống dùng nội dung để nhận diện trải nghiệm, khía cạnh, ưu nhược điểm và kiểm tra xem lời nhận xét có phù hợp với rating hay không.",
+    "tags": ["rating", "nội dung review", "phân tích"]
+  },
+  {
+    "id": "analysis_002",
+    "category": "review_analysis",
+    "title": "Rating và nội dung không khớp thì sao?",
+    "question_variants": ["Năm sao nhưng chê sản phẩm thì sao?", "Rating lệch với nội dung được xử lý thế nào?", "Số sao và lời viết mâu thuẫn có ảnh hưởng không?"],
+    "answer": "Sự không phù hợp giữa rating và nội dung là một dấu hiệu làm giảm độ tin cậy. Ví dụ review cho 5 sao nhưng mô tả sản phẩm rất tệ sẽ được xem là thiếu nhất quán.",
+    "tags": ["rating", "mâu thuẫn", "độ tin cậy"]
+  },
+  {
+    "id": "analysis_003",
+    "category": "review_analysis",
+    "title": "RealView tổng hợp ưu điểm như thế nào?",
+    "question_variants": ["Ưu điểm được lấy từ đâu?", "RealView tìm điểm mạnh sản phẩm thế nào?", "Ai viết phần ưu điểm?"],
+    "answer": "Ưu điểm được tổng hợp từ các khía cạnh tích cực được nhiều review độc lập cùng đề cập. RealView ưu tiên pattern lặp lại thay vì lấy một ý kiến riêng lẻ làm kết luận chung.",
+    "tags": ["ưu điểm", "pattern", "tổng hợp"]
+  },
+  {
+    "id": "analysis_004",
+    "category": "review_analysis",
+    "title": "RealView tổng hợp nhược điểm như thế nào?",
+    "question_variants": ["Nhược điểm được lấy từ đâu?", "RealView tìm vấn đề sản phẩm thế nào?", "Các điểm trừ được tổng hợp ra sao?"],
+    "answer": "Nhược điểm được tổng hợp từ các vấn đề hoặc trải nghiệm tiêu cực lặp lại trong nhiều review. Tần suất và mức độ nhất quán giúp xác định điểm nào đáng chú ý hơn.",
+    "tags": ["nhược điểm", "vấn đề", "tổng hợp"]
+  },
+  {
+    "id": "analysis_005",
+    "category": "review_analysis",
+    "title": "Một review có đủ để tạo ưu hoặc nhược điểm không?",
+    "question_variants": ["Một người chê thì có thành nhược điểm không?", "RealView có kết luận từ một review không?", "Ý kiến cá biệt được xử lý thế nào?"],
+    "answer": "RealView ưu tiên các đặc điểm được nhiều người mua độc lập cùng đề cập, nên một ý kiến cá biệt thường không nên được coi là kết luận chung nếu chưa có thêm dữ liệu hỗ trợ.",
+    "tags": ["ý kiến cá biệt", "pattern", "ưu nhược điểm"]
+  },
+  {
+    "id": "analysis_006",
+    "category": "review_analysis",
+    "title": "Phân tích theo khía cạnh là gì?",
+    "question_variants": ["Aspect analysis là gì?", "RealView phân tích theo tiêu chí nào?", "Phân tích theo khía cạnh nghĩa là sao?"],
+    "answer": "Phân tích theo khía cạnh là cách tách review thành các chủ đề liên quan tới sản phẩm. Ví dụ tai nghe có thể được xem xét theo âm thanh, pin, microphone hoặc kết nối; quần áo có thể theo chất liệu, size, form hoặc màu sắc.",
+    "tags": ["khía cạnh", "aspect", "chủ đề"]
+  },
+  {
+    "id": "analysis_007",
+    "category": "review_analysis",
+    "title": "Độ bao phủ khía cạnh có ý nghĩa gì?",
+    "question_variants": ["Độ bao phủ aspect là gì?", "Vì sao cần nhiều khía cạnh sản phẩm?", "Review chỉ nói giao hàng có đủ không?"],
+    "answer": "Độ bao phủ cho biết tập review có cung cấp thông tin về đủ các mặt quan trọng của sản phẩm hay không. Nhiều review chỉ nói giao hàng nhanh vẫn chưa đủ để hiểu chất lượng sử dụng của sản phẩm.",
+    "tags": ["độ bao phủ", "khía cạnh", "chất lượng dữ liệu"]
+  },
+  {
+    "id": "analysis_008",
+    "category": "review_analysis",
+    "title": "Pattern lặp lại là gì?",
+    "question_variants": ["Pattern review là gì?", "Ý kiến lặp lại được hiểu thế nào?", "Vì sao nhiều người cùng nói một điều quan trọng?"],
+    "answer": "Pattern lặp lại là một chủ đề hoặc trải nghiệm được nhiều người mua cùng đề cập, dù họ không dùng chính xác cùng từ ngữ. Pattern này có giá trị hơn một nhận xét đơn lẻ khi tổng hợp kết quả.",
+    "tags": ["pattern", "lặp lại", "nhất quán"]
+  },
+  {
+    "id": "analysis_009",
+    "category": "review_analysis",
+    "title": "Review về giao hàng có phản ánh chất lượng sản phẩm không?",
+    "question_variants": ["Giao hàng nhanh có tính là sản phẩm tốt không?", "Review chỉ khen shop có hữu ích không?", "Nội dung vận chuyển được xử lý thế nào?"],
+    "answer": "Review chỉ nói về giao hàng, đóng gói hoặc thái độ của shop thường cung cấp ít thông tin về trải nghiệm sử dụng sản phẩm. Vì vậy chúng có thể bị giảm giá trị hoặc không được ưu tiên trong tập phân tích chính.",
+    "tags": ["giao hàng", "shop", "trải nghiệm sản phẩm"]
+  },
+  {
+    "id": "analysis_010",
+    "category": "review_analysis",
+    "title": "RealView có đưa ra kết luận tuyệt đối từ review không?",
+    "question_variants": ["Kết quả phân tích có chính xác tuyệt đối không?", "RealView có kết luận chắc chắn không?", "Tóm tắt review có thể sai không?"],
+    "answer": "Không. Kết quả phụ thuộc vào tập review khả dụng và chỉ mang tính hỗ trợ. RealView trình bày Confidence và các lý do ảnh hưởng độ tin cậy để người dùng hiểu giới hạn của kết quả.",
+    "tags": ["giới hạn", "kết luận", "Confidence"]
+  },
+  {
+    "id": "review_001",
+    "category": "review_quality",
+    "title": "Review hữu ích là gì?",
+    "question_variants": ["Review hữu ích là gì?", "Đánh giá nào đáng tham khảo?", "RealView ưu tiên loại review nào?"],
+    "answer": "Review hữu ích thường mô tả trải nghiệm sử dụng cụ thể, đề cập trực tiếp tới sản phẩm và cung cấp thông tin về một hoặc nhiều khía cạnh như ưu điểm, nhược điểm, độ bền hoặc cách sử dụng.",
+    "tags": ["review hữu ích", "trải nghiệm", "đáng tham khảo"]
+  },
+  {
+    "id": "review_002",
+    "category": "review_quality",
+    "title": "Ví dụ về review hữu ích",
+    "question_variants": ["Cho ví dụ review tốt", "Review đáng tham khảo trông như thế nào?", "Nội dung đánh giá nào có giá trị?"],
+    "answer": "Ví dụ: “Mình dùng tai nghe khoảng hai tuần. Âm thanh khá tốt nhưng microphone hơi nhỏ, pin dùng được khoảng bốn đến năm tiếng.” Review này có thời gian trải nghiệm và thông tin cụ thể về nhiều khía cạnh sản phẩm.",
+    "tags": ["ví dụ", "review hữu ích", "tai nghe"]
+  },
+  {
+    "id": "review_003",
+    "category": "review_quality",
+    "title": "Review quá ngắn được xử lý thế nào?",
+    "question_variants": ["Review chỉ ghi ok thì sao?", "Đánh giá quá ngắn có bị loại không?", "Một câu 5 sao có giá trị không?"],
+    "answer": "Review như “Ok” hoặc “5 sao” có quá ít thông tin về trải nghiệm sản phẩm nên có thể bị loại khỏi tập dữ liệu chính hoặc giảm ảnh hưởng trong phân tích.",
+    "tags": ["review ngắn", "ít thông tin", "review bị loại"]
+  },
+  {
+    "id": "review_004",
+    "category": "review_quality",
+    "title": "Review nhận xu được xử lý thế nào?",
+    "question_variants": ["Review nhận xu có bị loại không?", "Đánh giá để lấy thưởng có đáng tin không?", "Câu nhận xu nên xử lý thế nào?"],
+    "answer": "Review chỉ nói “nhận xu nên đánh giá” thường không cung cấp thông tin về sản phẩm nên có thể bị loại hoặc giảm giá trị. RealView không vì vậy mà khẳng định người viết cố ý tạo review giả.",
+    "tags": ["nhận xu", "ít thông tin", "review bị loại"]
+  },
+  {
+    "id": "review_005",
+    "category": "review_quality",
+    "title": "Review trùng lặp được xử lý thế nào?",
+    "question_variants": ["Nhiều review giống nhau thì sao?", "RealView có nhận ra nội dung trùng lặp không?", "Đánh giá copy có bị giảm giá trị không?"],
+    "answer": "Các review có nội dung giống nhau bất thường có thể được nhận diện để giảm ảnh hưởng hoặc loại khỏi tập dữ liệu chính. Đây là một dấu hiệu cần xem xét, không phải bằng chứng tuyệt đối rằng review là giả.",
+    "tags": ["trùng lặp", "bất thường", "review bị loại"]
+  },
+  {
+    "id": "review_006",
+    "category": "review_quality",
+    "title": "Review bị loại có phải review giả không?",
+    "question_variants": ["Bị loại nghĩa là fake à?", "Review không được dùng có chắc là giả không?", "Tại sao không nên gọi mọi review bị loại là giả?"],
+    "answer": "Không. Review có thể bị loại vì quá ngắn, không nói về sản phẩm, trùng lặp bất thường hoặc thiếu giá trị thông tin. RealView không khẳng định review đó là giả với độ chính xác 100%.",
+    "tags": ["review bị loại", "fake review", "không tuyệt đối"]
+  },
+  {
+    "id": "review_007",
+    "category": "review_quality",
+    "title": "RealView có phát hiện fake review 100% không?",
+    "question_variants": ["RealView phát hiện review giả chính xác 100% không?", "AI có biết chắc review nào fake không?", "Hệ thống có bắt được toàn bộ seeding không?"],
+    "answer": "Không. RealView không khẳng định có thể phát hiện review giả với độ chính xác 100%. Hệ thống chỉ nhận diện các dấu hiệu bất thường, trùng lặp hoặc ít giá trị thông tin để giảm ảnh hưởng của chúng đến kết quả.",
+    "tags": ["fake review", "AI", "seeding", "giới hạn"]
+  },
+  {
+    "id": "review_008",
+    "category": "review_quality",
+    "title": "Vì sao một review bị giảm giá trị?",
+    "question_variants": ["Tại sao review bị giảm trọng số?", "Những lý do nào khiến đánh giá ít giá trị?", "Review của tôi sao không được ưu tiên?"],
+    "answer": "Một review có thể bị giảm giá trị nếu quá ngắn, thiếu mô tả trải nghiệm sản phẩm, chỉ nói về giao hàng hoặc shop, mâu thuẫn rõ giữa rating và nội dung, hoặc có dấu hiệu trùng lặp bất thường.",
+    "tags": ["giảm giá trị", "review", "tiêu chí"]
+  },
+  {
+    "id": "review_009",
+    "category": "review_quality",
+    "title": "Review tiêu cực có bị loại không?",
+    "question_variants": ["RealView có loại review chê sản phẩm không?", "Đánh giá một sao có bị bỏ qua không?", "Review tiêu cực có được dùng không?"],
+    "answer": "Không bị loại chỉ vì tiêu cực. Review chê sản phẩm vẫn rất hữu ích nếu mô tả trải nghiệm cụ thể và liên quan trực tiếp tới sản phẩm.",
+    "tags": ["review tiêu cực", "một sao", "review hữu ích"]
+  },
+  {
+    "id": "review_010",
+    "category": "review_quality",
+    "title": "Review tích cực có luôn được ưu tiên không?",
+    "question_variants": ["Năm sao có luôn là review tốt không?", "Review khen có chắc hữu ích không?", "Đánh giá tích cực được ưu tiên thế nào?"],
+    "answer": "Không. Mức độ hữu ích phụ thuộc vào nội dung chứ không chỉ cảm xúc tích cực hay số sao. Một review 5 sao nhưng chỉ ghi “tốt” vẫn cung cấp rất ít thông tin.",
+    "tags": ["review tích cực", "năm sao", "chất lượng nội dung"]
+  },
+  {
+    "id": "review_011",
+    "category": "review_quality",
+    "title": "Review có cả ưu và nhược điểm có giá trị không?",
+    "question_variants": ["Review vừa khen vừa chê có tốt không?", "Đánh giá cân bằng có được ưu tiên không?", "Nêu cả điểm mạnh và yếu có hữu ích không?"],
+    "answer": "Có thể rất hữu ích nếu người viết nêu trải nghiệm cụ thể. Việc có cả ưu và nhược điểm giúp RealView hiểu rõ hơn từng khía cạnh của sản phẩm.",
+    "tags": ["ưu điểm", "nhược điểm", "review cân bằng"]
+  },
+  {
+    "id": "review_012",
+    "category": "review_quality",
+    "title": "Tại sao nên cho người dùng xem review bị loại?",
+    "question_variants": ["Vì sao vẫn hiển thị review bị loại?", "Có cần minh bạch đánh giá bị bỏ qua không?", "Xem review bị loại để làm gì?"],
+    "answer": "Việc cho phép mở xem review bị loại giúp người dùng hiểu dữ liệu nào không được ưu tiên và vì sao. Cách trình bày thu gọn giữ trang gọn nhưng vẫn hỗ trợ tính minh bạch của kết quả.",
+    "tags": ["minh bạch", "review bị loại", "trang kết quả"]
+  },
+  {
+    "id": "principle_001",
+    "category": "trust_principles",
+    "title": "RealView có bao nhiêu nguyên tắc tin cậy?",
+    "question_variants": ["RealView có mấy nguyên tắc tin cậy?", "Các tiêu chí nền tảng của RealView là gì?", "Hệ thống dựa trên bộ nguyên tắc nào?"],
+    "answer": "RealView sử dụng 7 nguyên tắc tin cậy: dữ liệu đủ lớn; review có thông tin hữu ích; giảm ảnh hưởng của review đáng ngờ; rating không phải yếu tố duy nhất; phân tích theo khía cạnh; ưu tiên pattern lặp lại; và kết quả có thể giải thích.",
+    "tags": ["7 nguyên tắc", "tin cậy", "tiêu chí"]
+  },
+  {
+    "id": "principle_002",
+    "category": "trust_principles",
+    "title": "Nguyên tắc 1: Dữ liệu đủ lớn",
+    "question_variants": ["Nguyên tắc dữ liệu đủ lớn là gì?", "Vì sao cần nhiều review?", "RealView có dựa vào vài ý kiến không?"],
+    "answer": "RealView ưu tiên kết luận từ một tập hợp review đủ lớn thay vì chỉ dựa vào vài ý kiến đơn lẻ. Tuy nhiên, số lượng cần đi cùng chất lượng dữ liệu.",
+    "tags": ["nguyên tắc 1", "dữ liệu đủ lớn", "số lượng review"]
+  },
+  {
+    "id": "principle_003",
+    "category": "trust_principles",
+    "title": "Nguyên tắc 2: Review có thông tin hữu ích",
+    "question_variants": ["Nguyên tắc review hữu ích là gì?", "RealView ưu tiên nội dung nào?", "Đánh giá chi tiết quan trọng ra sao?"],
+    "answer": "RealView ưu tiên các review mô tả trải nghiệm sử dụng cụ thể và cung cấp thông tin liên quan trực tiếp tới sản phẩm.",
+    "tags": ["nguyên tắc 2", "review hữu ích", "trải nghiệm"]
+  },
+  {
+    "id": "principle_004",
+    "category": "trust_principles",
+    "title": "Nguyên tắc 3: Giảm ảnh hưởng của review đáng ngờ",
+    "question_variants": ["Nguyên tắc giảm review đáng ngờ là gì?", "RealView xử lý đánh giá bất thường thế nào?", "Review trùng lặp có bị giảm ảnh hưởng không?"],
+    "answer": "Review quá ngắn, bất thường, trùng lặp hoặc ít giá trị thông tin có thể bị loại khỏi tập dữ liệu chính hoặc giảm ảnh hưởng. RealView không xem dấu hiệu này là kết luận chắc chắn về review giả.",
+    "tags": ["nguyên tắc 3", "review đáng ngờ", "trùng lặp"]
+  },
+  {
+    "id": "principle_005",
+    "category": "trust_principles",
+    "title": "Nguyên tắc 4: Rating không phải yếu tố duy nhất",
+    "question_variants": ["Vì sao không chỉ dùng rating?", "Nguyên tắc rating của RealView là gì?", "Số sao có quyết định kết quả không?"],
+    "answer": "RealView phân tích cả rating và nội dung người mua viết. Rating cao hoặc thấp không tự động quyết định TrustScore.",
+    "tags": ["nguyên tắc 4", "rating", "nội dung review"]
+  },
+  {
+    "id": "principle_006",
+    "category": "trust_principles",
+    "title": "Nguyên tắc 5: Phân tích theo khía cạnh",
+    "question_variants": ["Nguyên tắc phân tích theo khía cạnh là gì?", "RealView có hiểu từng loại sản phẩm không?", "Aspect sản phẩm được dùng thế nào?"],
+    "answer": "RealView phân tích các chủ đề phù hợp với từng loại sản phẩm, chẳng hạn pin và âm thanh với tai nghe hoặc chất liệu và size với quần áo.",
+    "tags": ["nguyên tắc 5", "khía cạnh", "aspect"]
+  },
+  {
+    "id": "principle_007",
+    "category": "trust_principles",
+    "title": "Nguyên tắc 6: Ưu tiên pattern lặp lại",
+    "question_variants": ["Nguyên tắc pattern lặp lại là gì?", "Vì sao ý kiến nhiều người quan trọng?", "RealView ưu tiên xu hướng chung thế nào?"],
+    "answer": "Một vấn đề hoặc ưu điểm được nhiều người mua độc lập cùng đề cập sẽ được chú ý hơn một ý kiến cá biệt.",
+    "tags": ["nguyên tắc 6", "pattern", "xu hướng chung"]
+  },
+  {
+    "id": "principle_008",
+    "category": "trust_principles",
+    "title": "Nguyên tắc 7: Kết quả có thể giải thích",
+    "question_variants": ["Nguyên tắc kết quả giải thích được là gì?", "RealView có nói vì sao chấm điểm không?", "Tính minh bạch của kết quả ra sao?"],
+    "answer": "RealView cho người dùng biết vì sao độ tin cậy được đánh giá cao hoặc thấp, thay vì chỉ hiển thị một điểm số không có ngữ cảnh.",
+    "tags": ["nguyên tắc 7", "giải thích", "minh bạch"]
+  },
+  {
+    "id": "error_001",
+    "category": "troubleshooting",
+    "title": "Link sản phẩm không phân tích được",
+    "question_variants": ["Tại sao link của tôi không phân tích được?", "Dán link nhưng hệ thống báo lỗi", "RealView không nhận đường dẫn sản phẩm"],
+    "answer": "Hãy kiểm tra xem link có mở được và có dẫn trực tiếp tới một sản phẩm trên Shopee hoặc TikTok Shop hay không. Nếu link thuộc nền tảng khác, là link trang chủ, danh mục, gian hàng hoặc đã hết hiệu lực, RealView có thể không xử lý được.",
+    "tags": ["lỗi link", "không phân tích được", "troubleshooting"]
+  },
+  {
+    "id": "error_002",
+    "category": "troubleshooting",
+    "title": "Sản phẩm không có kết quả",
+    "question_variants": ["Tại sao sản phẩm không có kết quả?", "Phân tích xong nhưng không thấy dữ liệu", "RealView không trả kết quả"],
+    "answer": "Có thể RealView chưa lấy được đủ review khả dụng để tạo kết quả, link không còn hợp lệ hoặc quá trình xử lý gặp lỗi. Bạn nên kiểm tra lại link và thử phân tích lại.",
+    "tags": ["không có kết quả", "thiếu review", "lỗi"]
+  },
+  {
+    "id": "error_003",
+    "category": "troubleshooting",
+    "title": "Sản phẩm có quá ít review",
+    "question_variants": ["Sản phẩm ít review có phân tích được không?", "Tại sao Confidence thấp khi ít đánh giá?", "Không đủ review thì RealView làm gì?"],
+    "answer": "Khi có quá ít review hợp lệ, kết quả có thể có Confidence thấp hoặc chưa đủ dữ liệu để tạo kết luận ổn định. RealView không nên tự bổ sung thông tin còn thiếu.",
+    "tags": ["ít review", "Confidence thấp", "thiếu dữ liệu"]
+  },
+  {
+    "id": "error_004",
+    "category": "troubleshooting",
+    "title": "Link thuộc nền tảng chưa được hỗ trợ",
+    "question_variants": ["Có dùng link Lazada được không?", "Tại sao link sàn khác bị từ chối?", "RealView có hỗ trợ nền tảng ngoài Shopee và TikTok Shop không?"],
+    "answer": "Phiên bản hiện tại tập trung vào Shopee và TikTok Shop. Với link từ nền tảng khác, Knowledge Base chưa xác nhận RealView có thể phân tích.",
+    "tags": ["nền tảng chưa hỗ trợ", "Shopee", "TikTok Shop"]
+  },
+  {
+    "id": "error_005",
+    "category": "troubleshooting",
+    "title": "Trang kết quả tải chậm",
+    "question_variants": ["Tại sao phân tích lâu?", "Trang kết quả tải chậm phải làm sao?", "RealView xử lý mãi chưa xong"],
+    "answer": "Bạn có thể kiểm tra kết nối mạng, chờ quá trình hiện tại hoàn tất rồi thử lại nếu cần. Knowledge Base chưa xác nhận thời gian xử lý tiêu chuẩn, vì vậy chatbot không nên hứa một mốc thời gian cụ thể.",
+    "tags": ["tải chậm", "thời gian xử lý", "kết nối mạng"]
+  },
+  {
+    "id": "error_006",
+    "category": "troubleshooting",
+    "title": "Không mở được phần review chi tiết",
+    "question_variants": ["Tôi bấm mà review không bung ra", "Không mở được review đáng tham khảo", "Mục review bị loại không phản hồi"],
+    "answer": "Hãy thử bấm lại vào tiêu đề hoặc nút mở rộng của mục, tải lại trang và kiểm tra trình duyệt. Nếu lỗi tiếp tục, hãy gửi mô tả sự cố cho đội ngũ RealView qua kênh liên hệ được công bố trên website.",
+    "tags": ["mở rộng", "review chi tiết", "lỗi giao diện"]
+  },
+  {
+    "id": "error_007",
+    "category": "troubleshooting",
+    "title": "Kết quả khác với rating trên sàn",
+    "question_variants": ["Tại sao TrustScore khác số sao?", "Rating cao mà kết quả RealView không cao", "RealView tính sai vì không giống rating à?"],
+    "answer": "TrustScore không phải rating quy đổi sang thang 100. RealView còn xem nội dung, độ nhất quán, trùng lặp, chất lượng thông tin và độ bao phủ nên kết quả có thể khác đáng kể với điểm sao trung bình.",
+    "tags": ["TrustScore", "rating", "khác biệt"]
+  },
+  {
+    "id": "error_008",
+    "category": "troubleshooting",
+    "title": "Chatbot không có đủ thông tin để trả lời",
+    "question_variants": ["Nếu bot không biết thì sao?", "Chatbot có được tự đoán không?", "Không có thông tin trong Knowledge Base thì trả lời thế nào?"],
+    "answer": "Chatbot không nên tự tạo số liệu, tính năng hoặc chính sách. Câu trả lời phù hợp là: “Hiện tại mình chưa có đủ thông tin về vấn đề này. Bạn có thể liên hệ đội ngũ RealView để được hỗ trợ.”",
+    "tags": ["chatbot", "không đủ thông tin", "không bịa"]
+  },
+  {
+    "id": "privacy_001",
+    "category": "privacy",
+    "title": "RealView có lưu link sản phẩm không?",
+    "question_variants": ["RealView có lưu link của tôi không?", "Link sản phẩm được giữ lại bao lâu?", "Đường dẫn tôi gửi có bị lưu không?"],
+    "answer": "Knowledge Base hiện chưa có thông tin được xác nhận về việc RealView có lưu link sản phẩm hay thời hạn lưu. Chatbot không nên tự suy đoán; người dùng nên xem thông báo quyền riêng tư hoặc hỏi đội ngũ RealView qua kênh liên hệ chính thức trên website.",
+    "tags": ["quyền riêng tư", "lưu link", "chưa xác nhận"]
+  },
+  {
+    "id": "privacy_002",
+    "category": "privacy",
+    "title": "RealView có thu thập dữ liệu cá nhân không?",
+    "question_variants": ["RealView có lấy thông tin cá nhân không?", "Website thu thập dữ liệu gì của tôi?", "RealView có theo dõi người dùng không?"],
+    "answer": "Knowledge Base hiện chưa xác nhận RealView thu thập những loại dữ liệu cá nhân nào. Chatbot không được tự tạo danh sách dữ liệu hoặc cam kết về việc thu thập; hãy tham khảo thông báo quyền riêng tư được công bố trên website khi có.",
+    "tags": ["dữ liệu cá nhân", "quyền riêng tư", "chưa xác nhận"]
+  },
+  {
+    "id": "privacy_003",
+    "category": "privacy",
+    "title": "RealView lấy review từ đâu?",
+    "question_variants": ["Nguồn review của RealView là gì?", "Dữ liệu đánh giá đến từ đâu?", "RealView tự tạo review hay lấy từ sàn?"],
+    "answer": "RealView phân tích các review khả dụng gắn với sản phẩm trên nền tảng được hỗ trợ là Shopee và TikTok Shop. Knowledge Base chưa xác nhận chi tiết kỹ thuật về phương thức thu thập, nên chatbot không nên mô tả thêm khi chưa có thông tin chính thức.",
+    "tags": ["nguồn dữ liệu", "review", "Shopee", "TikTok Shop"]
+  },
+  {
+    "id": "privacy_004",
+    "category": "privacy",
+    "title": "RealView có chia sẻ dữ liệu người dùng không?",
+    "question_variants": ["RealView có chia sẻ dữ liệu cho bên khác không?", "Thông tin của tôi có được chuyển cho bên thứ ba không?", "Dữ liệu người dùng được chia sẻ thế nào?"],
+    "answer": "Knowledge Base hiện chưa có chính sách được xác nhận về việc chia sẻ dữ liệu với bên thứ ba. Chatbot không nên khẳng định có hoặc không; người dùng cần tham khảo thông báo quyền riêng tư chính thức của RealView.",
+    "tags": ["chia sẻ dữ liệu", "bên thứ ba", "chưa xác nhận"]
+  },
+  {
+    "id": "privacy_005",
+    "category": "privacy",
+    "title": "Cách yêu cầu xóa dữ liệu",
+    "question_variants": ["Tôi muốn xóa dữ liệu thì làm sao?", "Có thể yêu cầu RealView xóa thông tin không?", "Quy trình xóa dữ liệu là gì?"],
+    "answer": "Knowledge Base hiện chưa có quy trình xóa dữ liệu được xác nhận. Người dùng nên liên hệ đội ngũ RealView qua kênh chính thức được công bố trên website để hỏi về trường hợp cụ thể.",
+    "tags": ["xóa dữ liệu", "quyền riêng tư", "liên hệ"]
+  },
+  {
+    "id": "contact_001",
+    "category": "contact",
+    "title": "Cách liên hệ RealView",
+    "question_variants": ["Tôi muốn liên hệ RealView", "Liên hệ đội ngũ ở đâu?", "RealView có email hỗ trợ không?"],
+    "answer": "Bạn hãy sử dụng kênh liên hệ chính thức được công bố trên website RealView. Knowledge Base hiện chưa cung cấp địa chỉ email, số điện thoại hoặc tài khoản mạng xã hội cụ thể, nên chatbot không được tự tạo các thông tin này.",
+    "tags": ["liên hệ", "hỗ trợ", "kênh chính thức"]
+  },
+  {
+    "id": "contact_002",
+    "category": "contact",
+    "title": "Thông tin cần gửi khi báo lỗi",
+    "question_variants": ["Báo lỗi cho RealView thế nào?", "Cần gửi gì khi website gặp lỗi?", "Tôi muốn phản hồi về kết quả phân tích"],
+    "answer": "Khi liên hệ, bạn nên mô tả thao tác đã thực hiện, link sản phẩm liên quan và lỗi nhìn thấy. Không gửi mật khẩu, mã xác thực hoặc thông tin nhạy cảm không cần thiết.",
+    "tags": ["báo lỗi", "phản hồi", "hỗ trợ"]
+  },
+  {
+    "id": "team_001",
+    "category": "project_team",
+    "title": "Ai tạo ra RealView?",
+    "question_variants": ["Ai phát triển RealView?", "Đội ngũ RealView là ai?", "RealView do ai làm?"],
+    "answer": "RealView được phát triển bởi nhóm 9 sinh viên ngành Thương mại điện tử tại UEH trong môn Digital Marketing.",
+    "tags": ["đội ngũ", "9 sinh viên", "UEH", "Digital Marketing"]
+  },
+  {
+    "id": "team_002",
+    "category": "project_team",
+    "title": "RealView có phải dự án sinh viên không?",
+    "question_variants": ["RealView là dự án môn học à?", "Đây có phải bài tập sinh viên UEH không?", "RealView có hướng tới sản phẩm thực tế không?"],
+    "answer": "Có. RealView là dự án của nhóm 9 sinh viên ngành Thương mại điện tử tại UEH trong môn Digital Marketing, đồng thời hướng tới khả năng phát triển thành một sản phẩm thực tế.",
+    "tags": ["dự án sinh viên", "UEH", "sản phẩm thực tế"]
+  }
+]
+
+

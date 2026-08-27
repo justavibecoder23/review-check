@@ -1,13 +1,31 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { answerWebsiteQuestion, OUT_OF_SCOPE_REPLY, siteKnowledge } from '../src/site-chatbot.mjs';
+import {
+  answerWebsiteQuestion,
+  knowledgeBase,
+  OUT_OF_SCOPE_REPLY,
+  retrieveKnowledge,
+  siteKnowledge
+} from '../src/site-chatbot.mjs';
 
 test('kho kiến thức chứa các nội dung cốt lõi của website', () => {
+  assert.equal(knowledgeBase.length, 90);
+  assert.equal(new Set(knowledgeBase.map((entry) => entry.id)).size, 90);
   assert.match(siteKnowledge, /TrustScore/);
   assert.match(siteKnowledge, /Shopee/);
   assert.match(siteKnowledge, /reviewcheckteam@gmail\.com/);
   assert.match(siteKnowledge, /không kết luận một review là giả hoặc thật/i);
   assert.match(siteKnowledge, /không lưu trữ liên kết sản phẩm hoặc dữ liệu cá nhân/i);
+});
+
+test('bộ tìm kiếm chọn đúng dữ liệu liên quan và ưu tiên thông tin website hiện tại', () => {
+  const trustScoreMatches = retrieveKnowledge('Vì sao TrustScore của sản phẩm có thể thấp?');
+  assert.equal(trustScoreMatches[0].id, 'trustscore_008');
+
+  const platformMatches = retrieveKnowledge('RealView hỗ trợ nền tảng nào?');
+  assert.equal(platformMatches[0].id, 'about_003');
+  assert.match(platformMatches[0].answer, /chỉ hỗ trợ liên kết sản phẩm Shopee/i);
+  assert.match(platformMatches[0].answer, /chưa hỗ trợ TikTok Shop/i);
 });
 
 test('chatbot dùng Gemini ở backend và chấp nhận câu hỏi thuộc phạm vi', async () => {
@@ -51,6 +69,18 @@ test('chatbot từ chối câu hỏi ngoài kho kiến thức', async () => {
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
     else delete process.env.GEMINI_API_KEY;
+  }
+});
+
+test('chatbot quy tắc không tư vấn sản phẩm khi Gemini chưa được cấu hình', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  try {
+    const result = await answerWebsiteQuestion([{ role: 'user', content: 'Nên mua điện thoại nào?' }]);
+    assert.equal(result.engine, 'rules');
+    assert.equal(result.answer, OUT_OF_SCOPE_REPLY);
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
   }
 });
 
