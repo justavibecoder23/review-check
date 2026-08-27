@@ -7,6 +7,7 @@ test('kho kiến thức chứa các nội dung cốt lõi của website', () => 
   assert.match(siteKnowledge, /Shopee/);
   assert.match(siteKnowledge, /reviewcheckteam@gmail\.com/);
   assert.match(siteKnowledge, /không kết luận một review là giả hoặc thật/i);
+  assert.match(siteKnowledge, /không lưu trữ liên kết sản phẩm hoặc dữ liệu cá nhân/i);
 });
 
 test('chatbot dùng Gemini ở backend và chấp nhận câu hỏi thuộc phạm vi', async () => {
@@ -59,7 +60,8 @@ test('chatbot có câu trả lời dự phòng khi Gemini chưa được cấu h
   try {
     const result = await answerWebsiteQuestion([{ role: 'user', content: 'Cách dùng RealView?' }]);
     assert.equal(result.engine, 'rules');
-    assert.match(result.answer, /sao chép link sản phẩm Shopee/i);
+    assert.match(result.answer, /dán liên kết sản phẩm Shopee/i);
+    assert.match(result.answer, /15–45 giây/);
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
   }
