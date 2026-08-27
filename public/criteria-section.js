@@ -94,7 +94,7 @@
         <p class="criteria-process-note">“AI độc quyền” là nội dung định hướng trong bản thiết kế; phiên bản thử nghiệm hiện dùng bộ quy tắc và mô hình phân tích đang được hoàn thiện.</p>
       </div>
 
-      <div class="criteria-library">
+      <div id="criteria-library" class="criteria-library">
         <div class="criteria-section-heading criteria-reveal">
           <p>Minh bạch tiêu chí</p>
           <h2>Bộ <span>tiêu chí</span> đánh giá</h2>
