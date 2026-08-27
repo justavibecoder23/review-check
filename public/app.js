@@ -15,7 +15,7 @@ const delayLines = [
   'Đang chuẩn bị kết quả dễ đọc...'
 ];
 
-const navLinks = [...document.querySelectorAll('.main-nav a[href^="#"]')];
+const navLinks = [...document.querySelectorAll('.main-nav .nav-parent[href^="#"]')];
 const navIndicator = document.querySelector('.nav-indicator');
 const siteHeader = document.querySelector('.site-header');
 const navToggle = document.querySelector('.nav-toggle');
