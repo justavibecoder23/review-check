@@ -219,6 +219,7 @@ function renderResult(data) {
 
   document.querySelector('#trust-card').dataset.tone = tone.id;
   document.querySelector('#trust-gauge').style.setProperty('--score', score);
+  document.querySelector('#trust-gauge').dataset.scoreLength = String(score).length;
   document.querySelector('#trust-gauge').setAttribute('aria-label', `TrustScore ${score} trên 100`);
   document.querySelector('#trust-score').textContent = score;
   document.querySelector('#action-score').textContent = score;
