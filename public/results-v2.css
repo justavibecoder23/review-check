@@ -423,6 +423,7 @@
   background: rgba(22, 22, 22, .93);
   box-shadow: 0 22px 55px rgba(22, 22, 22, .28);
   backdrop-filter: blur(18px);
+  transition: opacity .18s ease;
 }
 .action-bar-context { display: grid; place-content: center; border-right: 1px solid rgba(255, 255, 255, .11); text-align: center; }
 .action-bar-context span { color: var(--orange); font-size: 23px; font-weight: 950; line-height: .95; }
@@ -459,7 +460,7 @@
 }
 
 @media (max-width: 760px) {
-  .results-page { padding-bottom: 142px; }
+  .results-page { padding-bottom: calc(142px + env(safe-area-inset-bottom)); }
   .result-overview { padding: 18px 0 36px; }
   .overview-card { padding: 12px; border-radius: 25px; }
   .product-summary { padding: 4px; grid-template-columns: 108px minmax(0, 1fr); gap: 17px; }
@@ -475,7 +476,7 @@
   .trust-gauge-inner strong { font-size: 41px; letter-spacing: -3px; }
   .trust-gauge-inner small { font-size: 8px; }
   .trust-copy h2 { margin-top: 13px; font-size: 19px; }
-  .trust-copy > p { font-size: 9px; }
+  .trust-copy > p { font-size: 10.5px; }
   .overview-stats { gap: 6px 10px; }
   .overview-stats span { font-size: 7px; }
   .insight-section, .explanation-section, .evidence-section { padding: 68px 0; }
@@ -495,7 +496,7 @@
   .evidence-card { min-height: 230px; }
   .result-action-bar { bottom: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); border-radius: 19px; }
   .action-bar-context { display: none; }
-  .action-button { min-height: 58px; padding: 0 11px; grid-template-columns: 24px minmax(0, 1fr); gap: 8px; font-size: 9px; }
+  .action-button { min-height: 58px; padding: 0 11px; grid-template-columns: 24px minmax(0, 1fr); gap: 8px; font-size: 10px; }
   .action-button b { display: none; }
 }
 
@@ -507,6 +508,8 @@
   .product-inline-link { display: none; }
   .trust-card { grid-template-columns: 1fr; justify-items: center; text-align: center; }
   .trust-heading-row, .overview-stats { justify-content: center; }
+  .trust-status { font-size: 12px; }
+  .confidence-pill { font-size: 11px; }
   .trust-copy > p { margin-inline: auto; }
   .result-disclaimer { font-size: 8px; }
   .results-page .section-heading h2 { font-size: 38px; }
@@ -519,19 +522,27 @@
   .driver-impact { width: 44px; height: 44px; }
   .review-accordion summary { min-height: 92px; padding: 15px; }
   .accordion-copy strong { font-size: 15px; }
-  .accordion-copy small { font-size: 6px; }
+  .accordion-copy small { font-size: 7.5px; line-height: 1.35; }
   .review-carousel-toolbar { min-height: 58px; padding: 12px 14px 4px; }
   .review-carousel-button { width: 36px; height: 36px; }
   .review-grid { padding: 8px 14px 16px; }
+  .review-carousel-status { font-size: 10px; }
+  .evidence-person strong { font-size: 12px; }
+  .evidence-person small { font-size: 8px; }
+  .evidence-card > p { font-size: 12px; line-height: 1.55; }
+  .evidence-label, .exclusion-reason strong { font-size: 8.5px; }
+  .exclusion-reason small { font-size: 7.5px; }
   .excluded-intro { margin-inline: 14px; padding: 12px; }
   .excluded-intro img { width: 58px; height: 48px; flex-basis: 58px; }
-  .result-action-bar { width: calc(100% - 18px); }
+  .result-action-bar { right: 9px; bottom: max(10px, env(safe-area-inset-bottom)); left: 9px; width: auto; transform: none; }
   .action-button svg { width: 19px; height: 19px; }
   .action-button span { line-height: 1.25; }
   .results-empty { min-height: 0; padding-top: 58px; grid-template-columns: 1fr; gap: 35px; }
   .results-empty img { width: min(82%, 350px); max-height: 260px; }
   .results-empty h1 { font-size: 43px; letter-spacing: -2.2px; }
 }
+
+body.chatbot-open .result-action-bar { opacity: 0; pointer-events: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .action-button, .accordion-chevron { transition: none; }
