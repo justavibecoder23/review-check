@@ -200,7 +200,9 @@
 
 .trust-gauge-inner span { position: absolute; top: 29%; right: 0; left: 0; color: #6a6a64; font-size: 9px; font-weight: 900; letter-spacing: 1.1px; text-transform: uppercase; }
 .trust-gauge-inner strong { position: absolute; top: 56%; left: 50%; color: var(--trust-color); font-size: 58px; line-height: .9; letter-spacing: -4px; transform: translate(-50%, -50%); }
-.trust-gauge-inner small { position: absolute; top: 67%; right: 8%; color: #73736d; font-size: 11px; font-weight: 800; line-height: 1; }
+.trust-gauge-inner small { position: absolute; top: 67%; left: calc(50% + 36px); color: #73736d; font-size: 11px; font-weight: 800; line-height: 1; }
+.trust-gauge[data-score-length="1"] .trust-gauge-inner small { left: calc(50% + 22px); }
+.trust-gauge[data-score-length="3"] .trust-gauge-inner small { left: calc(50% + 50px); }
 
 .trust-copy { min-width: 0; }
 .trust-heading-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
