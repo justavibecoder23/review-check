@@ -138,7 +138,20 @@
                   <span class="accordion-count"><b id="kept-count">0</b> review</span>
                   <span class="accordion-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="m6 9 6 6 6-6" /></svg></span>
                 </summary>
-                <div id="kept-list" class="review-grid"></div>
+                <div class="review-carousel" data-review-carousel>
+                  <div class="review-carousel-toolbar">
+                    <span id="kept-carousel-status" class="review-carousel-status" aria-live="polite">Đang tải review</span>
+                    <div class="review-carousel-actions" aria-label="Điều hướng đánh giá đáng tham khảo">
+                      <button class="review-carousel-button review-carousel-prev" type="button" aria-label="Xem các đánh giá trước" aria-controls="kept-list">
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+                      </button>
+                      <button class="review-carousel-button review-carousel-next" type="button" aria-label="Xem các đánh giá tiếp theo" aria-controls="kept-list">
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div id="kept-list" class="review-grid" tabindex="0" aria-label="Danh sách đánh giá đáng tham khảo"></div>
+                </div>
               </details>
 
               <details id="excluded-reviews" class="review-accordion review-accordion--excluded">
@@ -149,7 +162,20 @@
                   <span class="accordion-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="m6 9 6 6 6-6" /></svg></span>
                 </summary>
                 <div class="excluded-intro"><img src="/assets/illustrations/results-review-cleanup.svg" alt="Minh họa thủ công về việc dọn dẹp review nhiễu" /><p>Các review này vẫn được công khai để bạn biết RealView đã loại nội dung nào và vì sao.</p></div>
-                <div id="excluded-list" class="review-grid"></div>
+                <div class="review-carousel" data-review-carousel>
+                  <div class="review-carousel-toolbar">
+                    <span id="excluded-carousel-status" class="review-carousel-status" aria-live="polite">Đang tải review</span>
+                    <div class="review-carousel-actions" aria-label="Điều hướng đánh giá đã bị loại">
+                      <button class="review-carousel-button review-carousel-prev" type="button" aria-label="Xem các đánh giá trước" aria-controls="excluded-list">
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+                      </button>
+                      <button class="review-carousel-button review-carousel-next" type="button" aria-label="Xem các đánh giá tiếp theo" aria-controls="excluded-list">
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div id="excluded-list" class="review-grid" tabindex="0" aria-label="Danh sách đánh giá đã bị loại"></div>
+                </div>
               </details>
             </div>
           </div>
@@ -174,3 +200,4 @@
     <script type="module" src="/results.js"></script>
   </body>
 </html>
+
