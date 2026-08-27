@@ -1,6 +1,9 @@
 (() => {
   const contactButton = document.querySelector('.header-contact');
   if (!contactButton || document.querySelector('[data-realview-chatbot]')) return;
+  const siteHeader = document.querySelector('.site-header');
+  const navToggle = document.querySelector('.nav-toggle');
+  const navToggleLabel = document.querySelector('.nav-toggle-label');
 
   const headerActions = document.createElement('div');
   headerActions.className = 'header-actions';
@@ -64,21 +67,26 @@
   const conversation = [];
   let isSending = false;
 
-  function setOpen(open) {
+  function setOpen(open, restoreFocus = true) {
     if (open) {
+      siteHeader?.classList.remove('is-menu-open');
+      navToggle?.setAttribute('aria-expanded', 'false');
+      if (navToggleLabel) navToggleLabel.textContent = 'Mở menu';
       panel.hidden = false;
       requestAnimationFrame(() => panel.classList.add('is-open'));
       trigger.setAttribute('aria-expanded', 'true');
       trigger.setAttribute('aria-label', 'Đóng Trợ lý RealView');
+      document.body.classList.add('chatbot-open');
       window.setTimeout(() => input.focus(), 180);
     } else {
       panel.classList.remove('is-open');
       trigger.setAttribute('aria-expanded', 'false');
       trigger.setAttribute('aria-label', 'Mở Trợ lý RealView');
+      document.body.classList.remove('chatbot-open');
       window.setTimeout(() => {
         if (!panel.classList.contains('is-open')) panel.hidden = true;
       }, 180);
-      trigger.focus();
+      if (restoreFocus) trigger.focus();
     }
   }
 
@@ -158,6 +166,9 @@
   }
 
   trigger.addEventListener('click', () => setOpen(trigger.getAttribute('aria-expanded') !== 'true'));
+  navToggle?.addEventListener('click', () => {
+    if (trigger.getAttribute('aria-expanded') === 'true') setOpen(false, false);
+  });
   closeButton.addEventListener('click', () => setOpen(false));
   form.addEventListener('submit', (event) => {
     event.preventDefault();
