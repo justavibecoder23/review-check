@@ -124,6 +124,59 @@ function driverIcon(impact) {
   return '→';
 }
 
+function setupReviewCarousel(root) {
+  const track = root?.querySelector('.review-grid');
+  const previous = root?.querySelector('.review-carousel-prev');
+  const next = root?.querySelector('.review-carousel-next');
+  const status = root?.querySelector('.review-carousel-status');
+  if (!track || !previous || !next || !status) return;
+
+  const cards = Array.from(track.querySelectorAll('.evidence-card'));
+  const cardCount = cards.length;
+
+  function metrics() {
+    const firstCard = cards[0];
+    const gap = Number.parseFloat(getComputedStyle(track).gap) || 0;
+    const cardWidth = firstCard?.getBoundingClientRect().width || track.clientWidth;
+    const visibleCards = Math.max(1, Math.round((track.clientWidth + gap) / (cardWidth + gap)));
+    return {
+      step: (cardWidth + gap) * visibleCards,
+      visibleCards,
+      maxScroll: Math.max(0, track.scrollWidth - track.clientWidth)
+    };
+  }
+
+  function updateControls() {
+    if (!cardCount) {
+      previous.disabled = true;
+      next.disabled = true;
+      status.textContent = 'Không có review để chuyển';
+      return;
+    }
+
+    const { visibleCards, maxScroll } = metrics();
+    const totalPages = Math.max(1, Math.ceil(cardCount / visibleCards));
+    const progress = maxScroll ? track.scrollLeft / maxScroll : 0;
+    const currentPage = Math.min(totalPages, Math.round(progress * (totalPages - 1)) + 1);
+    previous.disabled = track.scrollLeft <= 2;
+    next.disabled = maxScroll - track.scrollLeft <= 2;
+    status.textContent = `${cardCount} review · Trang ${currentPage}/${totalPages}`;
+  }
+
+  previous.addEventListener('click', () => {
+    const { step } = metrics();
+    track.scrollBy({ left: -step, behavior: 'smooth' });
+  });
+  next.addEventListener('click', () => {
+    const { step } = metrics();
+    track.scrollBy({ left: step, behavior: 'smooth' });
+  });
+  track.addEventListener('scroll', updateControls, { passive: true });
+  root.closest('details')?.addEventListener('toggle', () => requestAnimationFrame(updateControls));
+  window.addEventListener('resize', updateControls);
+  requestAnimationFrame(updateControls);
+}
+
 function renderResult(data) {
   const product = data.product || {};
   const stats = data.stats || {};
@@ -197,6 +250,7 @@ function renderResult(data) {
 
   document.querySelector('#kept-list').innerHTML = keptReviews.length ? keptReviews.map((review, index) => reviewCard(review, true, index)).join('') : emptyReviewState(true);
   document.querySelector('#excluded-list').innerHTML = excludedReviews.length ? excludedReviews.map((review, index) => reviewCard(review, false, index)).join('') : emptyReviewState(false);
+  document.querySelectorAll('[data-review-carousel]').forEach(setupReviewCarousel);
 
   content.classList.remove('hidden');
   document.querySelector('#result-action-bar').classList.remove('hidden');
@@ -211,3 +265,4 @@ try {
 
 if (data?.reviews && data?.product) renderResult(data);
 else emptyState.classList.remove('hidden');
+
