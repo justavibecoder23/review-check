@@ -9,8 +9,10 @@ REALVIEW LÀ GÌ
 
 PHẠM VI VÀ CÁCH SỬ DỤNG
 - Phiên bản hiện tại hỗ trợ link sản phẩm Shopee, không yêu cầu người dùng đăng nhập và sử dụng dữ liệu review công khai.
-- Cách dùng gồm: sao chép link sản phẩm Shopee; dán link vào ô phân tích ở đầu trang; hệ thống thu thập review từ nguồn được cấu hình; giảm ưu tiên tín hiệu nhiễu; nhóm và tóm tắt các ý kiến giống nhau; người dùng đối chiếu kết quả với nhu cầu trước khi quyết định.
+- Sau khi người dùng dán liên kết sản phẩm, RealView thu thập các đánh giá công khai từ Shopee và sàng lọc bằng thuật toán để chọn ra những phản hồi tiêu biểu, có giá trị tham khảo cao.
+- Cách dùng gồm: sao chép link sản phẩm Shopee; dán link vào ô phân tích ở đầu trang; hệ thống thu thập review; loại bỏ hoặc giảm ưu tiên nội dung quá ngắn, trùng lặp, ít thông tin hoặc có dấu hiệu seeding; AI tổng hợp các ý kiến; hệ thống tính điểm; người dùng đối chiếu kết quả với nhu cầu trước khi quyết định.
 - Quá trình phân tích thường được giao diện thông báo mất khoảng 15–45 giây.
+- RealView không lưu trữ liên kết sản phẩm hoặc dữ liệu cá nhân của người dùng.
 - Khi có lỗi, người dùng nên kiểm tra lại link sản phẩm Shopee hoặc liên hệ đội ngũ RealView.
 
 KẾT QUẢ PHÂN TÍCH
@@ -32,7 +34,7 @@ TIÊU CHÍ LỌC REVIEW
 - Dự án cam kết độc lập trong đánh giá và không nhận tài trợ.
 
 AI VÀ TÍNH MINH BẠCH
-- Khi được cấu hình, Gemini hỗ trợ tổng hợp ưu/nhược điểm và giải thích các yếu tố nâng hoặc hạ TrustScore. Nếu Gemini không phản hồi, website có thể dùng bộ chấm điểm quy tắc để người dùng không bị kẹt.
+- Khi được cấu hình, AI tổng hợp những ưu điểm và nhược điểm nổi bật, đồng thời tham gia trực tiếp vào quá trình chấm điểm theo bộ thuật toán và công thức đánh giá của RealView đang được tiếp tục hoàn thiện. Nếu Gemini không phản hồi, website có thể dùng bộ chấm điểm quy tắc để người dùng không bị kẹt.
 - Nguồn phân tích được hiển thị trên trang kết quả: “Gemini AI + bộ lọc RealView” hoặc “Bộ lọc minh bạch RealView”.
 - Một số chỉ số lớn xuất hiện trong phần thiết kế/tiêu chí là số liệu minh họa cho định hướng sản phẩm, không phải KPI vận hành thực tế.
 - Những tính năng được mô tả như gợi ý sản phẩm thay thế có thể là định hướng thiết kế; không khẳng định chúng đang hoạt động nếu website không thể hiện kết quả cụ thể.
@@ -68,7 +70,7 @@ function cleanMessages(messages) {
 function fallbackAnswer(question) {
   const text = question.toLocaleLowerCase('vi');
   if (/liên hệ|email|góp ý/.test(text)) return 'Bạn có thể liên hệ đội ngũ RealView qua email reviewcheckteam@gmail.com hoặc mở trang Liên hệ trên thanh điều hướng.';
-  if (/cách dùng|sử dụng|phân tích thế nào|bắt đầu/.test(text)) return 'Bạn sao chép link sản phẩm Shopee, dán vào ô phân tích ở đầu trang rồi chọn “Phân tích ngay”. RealView sẽ thu thập, lọc và tổng hợp review trước khi mở trang kết quả.';
+  if (/cách dùng|sử dụng|phân tích thế nào|hoạt động|bắt đầu/.test(text)) return 'Sau khi bạn dán liên kết sản phẩm Shopee, RealView sẽ thu thập các đánh giá công khai, sàng lọc nội dung quá ngắn, trùng lặp, ít thông tin hoặc có dấu hiệu seeding, rồi dùng AI để tổng hợp và chấm điểm. Quá trình thường mất khoảng 15–45 giây; kết quả gồm điểm số cùng các ưu, nhược điểm đáng chú ý nhằm hỗ trợ quyết định mua hàng. RealView không lưu trữ liên kết sản phẩm hoặc dữ liệu cá nhân của người dùng.';
   if (/trust\s?score|điểm tin cậy/.test(text)) return 'TrustScore là điểm trên thang 100, phản ánh mức hài lòng và chất lượng bằng chứng review. Mốc màu gồm: trên 80 xanh, 60–80 vàng, 50–59 cam và dưới 50 đỏ.';
   if (/confidence|độ chắc chắn/.test(text)) return 'Confidence thể hiện độ chắc chắn của kết luận dựa trên quy mô và chất lượng dữ liệu review; đây không phải điểm chất lượng sản phẩm.';
   if (/tiêu chí|lọc review|review bị loại|seeding|review ảo/.test(text)) return 'RealView ưu tiên review có trải nghiệm cụ thể và giảm nhiễu từ nội dung quá ngắn, trùng lặp, bất thường, mang tính quảng cáo, nhận xu hoặc chưa dùng sản phẩm. Kết quả chỉ mang tính tham khảo, không khẳng định review giả hoặc thật 100%.';
