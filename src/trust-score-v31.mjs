@@ -307,7 +307,7 @@ export function calculateTrustScoreV31(reviews = [], options = {}) {
   const defectPenalty = genuine.length
     ? issueCounts.reduce((sum, issue) => sum + issue.severity * issue.count, 0) / genuine.length
     : 0;
-  const defects = holmAdjust(issueCounts.map((issue) => {
+  const defectTests = issueCounts.map((issue) => {
     const p0 = Number(baseline.values?.[issue.id]);
     const hasBaseline = Number.isFinite(p0) && p0 >= 0 && p0 <= 1;
     const pValue = hasBaseline ? exactBinomialSurvival(genuine.length, issue.count, p0) : null;
@@ -321,7 +321,16 @@ export function calculateTrustScoreV31(reviews = [], options = {}) {
       significantBonferroni: pValue !== null && pValue <= ALPHA_FAMILY / ISSUE_DEFINITIONS.length,
       decisionEnabled: baseline.calibrated && hasBaseline
     };
-  }));
+  });
+  const completeDefectFamily = defectTests.every((item) => Number.isFinite(item.pValue));
+  const defects = (completeDefectFamily
+    ? holmAdjust(defectTests)
+    : defectTests.map((item) => ({ ...item, adjustedPValue: null, significantHolm: false })))
+    .map((item) => ({
+      ...item,
+      multipleTestingMethod: completeDefectFamily ? 'holm-bonferroni' : 'bonferroni-fixed',
+      significantAdjusted: completeDefectFamily ? item.significantHolm : item.significantBonferroni
+    }));
 
   const fisher = fisherComponent(signals, normalizedReviews);
   const components = componentScores(normalizedReviews, signals, genuine, defectPenalty);
@@ -361,6 +370,8 @@ export function calculateTrustScoreV31(reviews = [], options = {}) {
       tests: defects,
       alphaFamily: ALPHA_FAMILY,
       bonferroniAlpha: ALPHA_FAMILY / ISSUE_DEFINITIONS.length,
+      familyComplete: completeDefectFamily,
+      multipleTestingMethod: completeDefectFamily ? 'holm-bonferroni' : 'bonferroni-fixed',
       baseline: { category, calibrated: baseline.calibrated, source: baseline.source }
     },
     temporal,

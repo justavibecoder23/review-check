@@ -11,7 +11,7 @@ test('mỗi lượt local lưu đúng cặp file raw và labeled có chung runId
   const review = { rating: 2, text: 'Pin yếu và sạc không vào.', verified: true, labels: { has_defect: true }, labeling: { pipelineVersion: '2.0.0' } };
   const saved = await saveReviewDatasets({
     rawReviews: [review],
-    labeledReviews: [{ ...review, labelId: 'r0001' }],
+    labeledReviews: [{ ...review, labelId: 'r0001', included: false, exclusionReason: 'Dữ liệu kiểm thử' }],
     product: { platform: 'Shopee', itemId: '123', title: 'Sạc dự phòng' },
     source: { type: 'test' },
     labeling: { engine: 'layer1-only' }
@@ -24,6 +24,8 @@ test('mỗi lượt local lưu đúng cặp file raw và labeled có chung runId
   assert.equal(labeled.runId, 'test-run');
   assert.equal(raw.reviews[0].labels, undefined);
   assert.equal(labeled.reviews[0].labels.has_defect, true);
+  assert.equal(labeled.reviews[0].included, false);
+  assert.equal(labeled.reviews[0].exclusionReason, 'Dữ liệu kiểm thử');
 });
 
 test('Vercel không có Blob token phải báo không lưu thay vì ghi vào filesystem tạm', async () => {

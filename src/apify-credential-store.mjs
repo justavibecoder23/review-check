@@ -259,6 +259,17 @@ export async function saveApifyCredentialPool({ groups, maxUsesPerKey, mode = 'r
   if (!isRedisConfigured()) throw new Error('Chưa cấu hình Upstash Redis.');
   if (!['replace', 'append'].includes(mode)) throw new Error('mode chỉ nhận replace hoặc append.');
   const newGroups = buildEncryptedGroups(groups);
+  const [counterReply, usedReply] = await redisTransaction([
+    ['HGETALL', APIFY_POOL_COUNTERS_KEY],
+    ['HGETALL', APIFY_POOL_USED_KEY]
+  ], options);
+  const historicalCounters = parseHashReply(counterReply);
+  const historicalUsed = parseHashReply(usedReply);
+  const reusedCredentials = newGroups.flatMap((group) => group.credentials)
+    .filter((credential) => Number(historicalCounters[credential.id] || 0) > 0 || historicalUsed[credential.id]);
+  if (reusedCredentials.length) {
+    throw new Error(`Có ${reusedCredentials.length} Apify key đã có lịch sử sử dụng. Hãy nạp key mới để không làm sai bộ đếm.`);
+  }
   const existing = mode === 'append' ? await readPoolConfig(options) : null;
   const combinedGroups = [...(existing?.groups || []), ...newGroups];
   const credentialIds = new Set();

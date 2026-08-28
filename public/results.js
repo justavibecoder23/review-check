@@ -230,7 +230,7 @@ function renderResult(data) {
   document.querySelector('#analysis-source').textContent = trust.engine === 'gemini' ? 'Gemini AI + bộ lọc RealView' : 'Bộ lọc minh bạch RealView';
 
   const scanned = Number(stats.scanned ?? reviews.length) || 0;
-  const kept = Number(stats.genuine ?? keptReviews.length) || 0;
+  const kept = Number(stats.included ?? stats.genuine ?? keptReviews.length) || 0;
   const excluded = Number(stats.excluded ?? excludedReviews.length) || 0;
   document.querySelector('#scanned-count').textContent = scanned;
   document.querySelector('#kept-count-top').textContent = kept;

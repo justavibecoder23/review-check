@@ -65,9 +65,10 @@ export async function analyzeProductUrl(rawUrl) {
   const lowRatings = genuine.filter((review) => review.rating <= 3).length;
   const signal = issues.length === 0 ? 'Chưa thấy nhược điểm lặp lại rõ ràng' : issues[0].label;
   const processedReviews = checked.map(({ filter, ...review }) => ({ ...review, included: filter.keep, exclusionReason: filter.reason }));
+  const trustSample = processedReviews.filter((review) => !classifyReviewSignals(review).seeding).length;
   const dataset = await saveReviewDatasets({
     rawReviews: reviews,
-    labeledReviews: labeling.reviews,
+    labeledReviews: processedReviews,
     product,
     source,
     labeling: labeling.stats
@@ -83,12 +84,15 @@ export async function analyzeProductUrl(rawUrl) {
     dataset: { saved: dataset.saved, runId: dataset.runId, provider: dataset.provider },
     stats: {
       scanned: reviews.length,
+      included: genuine.length,
       genuine: genuine.length,
       excluded: excluded.length,
       lowRatings,
       confidence: trust.confidence.label,
       confidenceScore: trust.confidence.score,
-      algorithmSample: trust.method?.sample?.afterSeedingRemoval ?? genuine.length
+      trustSample: trust.method?.sample?.afterSeedingRemoval ?? trustSample,
+      algorithmSample: trust.method?.sample?.afterSeedingRemoval ?? trustSample,
+      seedingExcluded: trust.method?.sample?.seedingCount ?? (reviews.length - trustSample)
     },
     verdict: issues.some((issue) => issue.count >= 3)
       ? `Cần cân nhắc: nhiều phản hồi thật đề cập “${signal.toLowerCase()}”.`

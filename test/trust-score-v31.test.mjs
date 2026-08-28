@@ -61,3 +61,27 @@ test('điểm review tiêu cực dùng logistic, thưởng chi tiết lỗi và 
   assert.ok(vague < detailed);
   assert.ok(vague >= 0 && detailed <= 100);
 });
+
+test('chỉ báo Holm chỉ bật khi đủ p-value cho cả gia đình kiểm định', () => {
+  const reviews = [
+    { rating: 2, text: 'Vải mỏng và form nhỏ.', verified: true },
+    { rating: 4, text: 'Sản phẩm dùng ổn.', verified: true }
+  ];
+  const partial = calculateTrustScoreV31(reviews, {
+    category: 'general',
+    baselines: { calibrated: true, source: 'test', values: { general: { 'giao-hang': 0.04 } } }
+  });
+  assert.equal(partial.defects.familyComplete, false);
+  assert.equal(partial.defects.multipleTestingMethod, 'bonferroni-fixed');
+  assert.ok(partial.defects.tests.every((item) => item.significantHolm === false));
+  assert.ok(partial.defects.tests.every((item) => item.adjustedPValue === null));
+
+  const completeValues = Object.fromEntries(partial.defects.tests.map((item) => [item.id, 0.04]));
+  const complete = calculateTrustScoreV31(reviews, {
+    category: 'general',
+    baselines: { calibrated: true, source: 'test', values: { general: completeValues } }
+  });
+  assert.equal(complete.defects.familyComplete, true);
+  assert.equal(complete.defects.multipleTestingMethod, 'holm-bonferroni');
+  assert.ok(complete.defects.tests.every((item) => Number.isFinite(item.adjustedPValue)));
+});

@@ -133,6 +133,15 @@ test('pool mã hóa token, đếm nguyên tử và tự chuyển nhóm sau lư�
     assert.equal(status.usedHistory.length, 5);
     assert.ok(status.used[0].credentials.every((credential) => credential.usageCount === 10));
     assert.equal(JSON.stringify(status).includes('super_secret_token'), false);
+
+    await assert.rejects(
+      saveApifyCredentialPool({
+        maxUsesPerKey: 10,
+        mode: 'replace',
+        groups: [group('primary-reloaded', 'primary')]
+      }, { fetchImpl: redis.fetchImpl }),
+      /đã có lịch sử sử dụng/
+    );
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       const envKey = { url: 'UPSTASH_REDIS_REST_URL', token: 'UPSTASH_REDIS_REST_TOKEN', vault: 'APIFY_TOKEN_VAULT_KEY' }[key];

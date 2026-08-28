@@ -59,7 +59,9 @@ function classifiedReview(review) {
     ...rawReview(review),
     labelId: review.labelId || null,
     labels: review.labels || null,
-    labeling: review.labeling || null
+    labeling: review.labeling || null,
+    included: review.included !== false,
+    exclusionReason: review.exclusionReason || null
   };
 }
 

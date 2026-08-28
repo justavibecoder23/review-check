@@ -64,7 +64,7 @@ curl -X PUT 'https://<domain>/api/apify-config' \
   --data-binary @config/apify-pool.local.json
 ```
 
-`mode: "replace"` thay danh sách nhóm đang cấu hình. Để chỉ nối thêm nhóm dự phòng mà không chạm vào nhóm hiện có, gửi cùng cấu trúc với `mode: "append"`. Token đã dùng vẫn giữ nguyên bộ đếm theo fingerprint, nên thêm lại cùng token không làm bộ đếm về 0.
+`mode: "replace"` thay danh sách nhóm đang cấu hình. Để chỉ nối thêm nhóm dự phòng mà không chạm vào nhóm hiện có, gửi cùng cấu trúc với `mode: "append"`. Token đã có bộ đếm hoặc đã nằm trong lịch sử `used` sẽ bị từ chối khi nạp lại; hãy dùng token mới để không làm sai vòng đời 10 lượt.
 
 Xem nhãn `active`, các nhóm `reserve`, danh sách `used`, bộ đếm và số lượt còn lại; API không bao giờ trả lại token:
 
@@ -130,6 +130,8 @@ Mỗi lượt thu thập review chạy theo thứ tự:
 Mỗi lượt phân tích tạo đúng hai file có chung `runId`:
 
 - `reviews.raw.json`: dữ liệu vừa thu thập, chưa gắn nhãn;
-- `reviews.labeled.json`: dữ liệu kèm nhãn Layer 1, phản biện Layer 2, nhãn cuối, evidence và phiên bản pipeline.
+- `reviews.labeled.json`: dữ liệu kèm nhãn Layer 1, phản biện Layer 2, nhãn cuối, evidence, phiên bản pipeline, quyết định lọc cuối `included` và `exclusionReason`.
+
+API phân biệt rõ `stats.included` (review được giữ làm bằng chứng hiển thị) với `stats.trustSample` (mẫu `N_genuine` của TrustScore sau khi loại seeding theo tài liệu v3.1). Trường cũ `genuine` và `algorithmSample` vẫn được giữ để tương thích client cũ.
 
 Khi chạy local, file nằm trong `data/review-runs/YYYY/MM/DD/<product>/<runId>/`. Khi chạy trên Vercel, filesystem của Function không phải storage bền vững; ứng dụng lưu hai file vào **private Vercel Blob** tại `review-datasets/YYYY/MM/DD/<product>/<runId>/` nếu có `BLOB_READ_WRITE_TOKEN`. Kết nối một Blob Store trong Vercel Storage với project để Vercel cấp biến này, rồi redeploy. Nếu chưa nối Blob Store, lượt phân tích vẫn trả kết quả nhưng `dataset.saved=false` và có warning rõ ràng.
