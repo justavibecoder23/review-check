@@ -49,18 +49,6 @@ function toneForScore(score) {
   return { id: 'red', label: 'Độ tin cậy thấp' };
 }
 
-function fallbackConfidenceExplanation(score, confidenceScore, confidenceLabel, reviewCount) {
-  const scoreMeaning = score >= 80
-    ? 'các review hiện có đang khá nhất quán và ít dấu hiệu bất thường'
-    : score >= 60
-      ? 'phần lớn review hiện có đủ rõ để tham khảo'
-      : 'tập review hiện còn những tín hiệu cần được thận trọng';
-  const dataMeaning = confidenceScore < 55
-    ? `Confidence ${confidenceScore}% (${confidenceLabel}) cho biết lượng hoặc độ phủ dữ liệu vẫn còn hạn chế, hiện mới có ${reviewCount} review để đối chiếu.`
-    : `Confidence ${confidenceScore}% (${confidenceLabel}) cho biết lượng và độ phủ dữ liệu hiện tại ${confidenceScore >= 80 ? 'đã đủ tốt để củng cố kết luận' : 'khá hữu ích nhưng vẫn nên đọc cùng các review cụ thể'}.`;
-  return `TrustScore ${score}/100 phản ánh rằng ${scoreMeaning}. ${dataMeaning} Hai chỉ số đo hai khía cạnh khác nhau nên không mâu thuẫn với nhau.`;
-}
-
 function fallbackTrust(data, reviews) {
   const included = reviews.filter((review) => review.included !== false);
   const excluded = reviews.filter((review) => review.included === false);
@@ -70,12 +58,10 @@ function fallbackTrust(data, reviews) {
   const detailedRatio = included.length ? included.filter((review) => String(review.text || '').length >= 45).length / included.length : 0;
   const score = Math.round(clamp(average / 5 * 55 + usefulRatio * 15 + verifiedRatio * 15 + detailedRatio * 15, 0, 100));
   const tone = toneForScore(score);
-  const confidenceScore = Number(data?.stats?.confidenceScore) || Math.round(clamp(18 + Math.min(reviews.length, 30) / 30 * 32 + usefulRatio * 18 + verifiedRatio * 16 + detailedRatio * 16, 0, 97));
   return {
     score,
     tone: tone.id,
     label: tone.label,
-    confidence: { score: confidenceScore, label: confidenceScore >= 78 ? 'Cao' : confidenceScore >= 56 ? 'Trung bình' : 'Thấp' },
     summary: data?.verdict || 'Điểm số phản ánh mức hài lòng và chất lượng bằng chứng trong các review hữu ích.',
     pros: [{ title: 'Phản hồi tích cực', detail: `${included.filter((review) => Number(review.rating) >= 4).length} review hữu ích chấm từ 4 sao.`, mentions: included.filter((review) => Number(review.rating) >= 4).length }],
     cons: [{ title: 'Phản hồi cần cân nhắc', detail: `${included.filter((review) => Number(review.rating) <= 3).length} review hữu ích chấm từ 3 sao trở xuống.`, mentions: included.filter((review) => Number(review.rating) <= 3).length }],
@@ -198,8 +184,6 @@ function renderResult(data) {
   const trust = data.trust || fallbackTrust(data, reviews);
   const score = Math.round(clamp(trust.score, 0, 100));
   const tone = toneForScore(score);
-  const confidenceScore = Math.round(clamp(trust.confidence?.score ?? stats.confidenceScore, 0, 100));
-  const confidenceLabel = trust.confidence?.label || stats.confidence || (confidenceScore >= 78 ? 'Cao' : confidenceScore >= 56 ? 'Trung bình' : 'Thấp');
   const platform = String(product.platform || 'Shopee');
   const productUrl = safeUrl(product.url);
   const productTitle = String(product.title || `Sản phẩm đang phân tích trên ${platform}`);
@@ -236,10 +220,7 @@ function renderResult(data) {
   document.querySelector('#trust-score').textContent = score;
   document.querySelector('#action-score').textContent = score;
   document.querySelector('#trust-label').textContent = trust.label || tone.label;
-  document.querySelector('#confidence-score').textContent = `${confidenceScore}%`;
-  document.querySelector('#confidence-label').textContent = confidenceLabel;
   document.querySelector('#trust-summary').textContent = trust.summary || data.verdict;
-  document.querySelector('#confidence-explanation').textContent = trust.confidenceExplanation || fallbackConfidenceExplanation(score, confidenceScore, confidenceLabel, reviews.length);
   document.querySelector('#analysis-source').textContent = trust.engine === 'gemini' ? 'Gemini AI + bộ lọc RealView' : 'Bộ lọc minh bạch RealView';
 
   const scanned = Number(stats.scanned ?? reviews.length) || 0;
