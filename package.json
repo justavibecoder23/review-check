@@ -7,5 +7,8 @@
     "start": "node server.mjs",
     "dev": "node --watch server.mjs",
     "test": "node --test"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.8.0"
   }
 }

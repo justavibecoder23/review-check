@@ -21,11 +21,11 @@ test('TrustScore quy tắc luôn nằm trên thang 100 và có giải thích', (
 
 test('màu TrustScore tuân theo đúng các ngưỡng giao diện', () => {
   assert.equal(trustTone(81).id, 'green');
-  assert.equal(trustTone(80).id, 'yellow');
+  assert.equal(trustTone(80).id, 'green');
   assert.equal(trustTone(60).id, 'yellow');
   assert.equal(trustTone(59).id, 'orange');
-  assert.equal(trustTone(50).id, 'orange');
-  assert.equal(trustTone(49).id, 'red');
+  assert.equal(trustTone(40).id, 'orange');
+  assert.equal(trustTone(39).id, 'red');
 });
 
 test('tự dùng kết quả quy tắc khi Gemini không được cấu hình', async () => {
@@ -33,7 +33,8 @@ test('tự dùng kết quả quy tắc khi Gemini không được cấu hình', 
   delete process.env.GEMINI_API_KEY;
   try {
     const trust = await buildTrustAnalysis(reviews);
-    assert.equal(trust.engine, 'rules');
+    assert.equal(trust.engine, 'statistical-v3.1');
+    assert.equal(trust.method.version, '3.1');
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
   }
@@ -44,6 +45,7 @@ test('Gemini dùng khóa ở header backend và trả cấu trúc giao diện an
   process.env.GEMINI_API_KEY = 'test-only-key';
   let receivedHeader;
   try {
+    const statisticalScore = buildRuleBasedTrust(reviews).score;
     const trust = await buildTrustAnalysis(reviews, {
       fetchImpl: async (_url, options) => {
         receivedHeader = options.headers['x-goog-api-key'];
@@ -68,6 +70,7 @@ test('Gemini dùng khóa ở header backend và trả cấu trúc giao diện an
     });
     assert.equal(receivedHeader, 'test-only-key');
     assert.equal(trust.engine, 'gemini');
+    assert.equal(trust.score, statisticalScore, 'Gemini không được thay đổi điểm thống kê');
     assert.equal(trust.pros[0].title, 'Đúng mô tả');
     assert.equal(trust.drivers.length, 2);
   } finally {

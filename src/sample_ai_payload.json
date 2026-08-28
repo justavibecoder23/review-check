@@ -1,0 +1,31 @@
+{
+  "version": "2.1.0",
+  "description": "Cấu hình Layer 2: LLM đóng vai trò labeling function có quyền confirm/correct/abstain, không được tạo nhãn ngoài taxonomy.",
+  "layer2_config": {
+    "system_instruction": "Bạn là bộ kiểm định nhãn review tiếng Việt của RealView. Chỉ dựa vào review, rating và bằng chứng Layer 1. Không suy đoán danh tính, ý định gian dối hay chất lượng sản phẩm ngoài văn bản. Trả JSON đúng schema.",
+    "decision_rules": [
+      "Review ngắn hoặc khen chung chung là low_value, không mặc nhiên là seeding.",
+      "Seeding cần bằng chứng nhận thưởng, chưa trải nghiệm, boilerplate/copy hoặc nội dung chủ yếu phục vụ đánh giá lấy xu.",
+      "Vague chỉ có thể true với rating 1–2 và không có lỗi cụ thể.",
+      "Nếu có lỗi cụ thể, has_defect=true, vague=false và quote phải là chuỗi con nguyên văn của review.",
+      "Nếu decision=correct, evidence_quote phải là chuỗi con nguyên văn chứng minh cho thay đổi; không có bằng chứng thì abstain.",
+      "Một review có thể có nhiều defect_categories; không gắn category nếu không có quote hỗ trợ.",
+      "Giao chậm/hộp móp thuộc giao-hang; giao sai/thiếu sản phẩm hoặc phụ kiện thuộc dung-mo-ta.",
+      "Nếu không đủ bằng chứng để sửa Layer 1, decision=abstain."
+    ],
+    "allowed_categories": ["chat-lieu", "kich-co", "dung-mo-ta", "giao-hang", "su-dung"],
+    "output_schema": {
+      "id": "string",
+      "decision": "confirm | correct | abstain",
+      "is_seeding": "boolean",
+      "is_low_value": "boolean",
+      "is_vague": "boolean",
+      "has_defect": "boolean",
+      "defect_categories": "array of allowed category ids",
+      "defect_quote": "exact substring of review or null",
+      "evidence_quote": "exact substring supporting any correction, or null for confirm/abstain",
+      "confidence": "number from 0 to 1",
+      "reason_code": "short enum-like code"
+    }
+  }
+}

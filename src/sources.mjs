@@ -1,4 +1,5 @@
 import { extractMarketplaceUrl, isShopeeUrl, resolveShopeeProductUrl } from './shopee-url.mjs';
+import { collectShopeeReviewsParallel, SHOPEE_STAR_FILTERS } from './apify-review-scraper.mjs';
 
 const DEMO_REVIEWS = [
   { rating: 5, text: 'Nhận xu nên đánh giá cho shop 5 sao nha mọi người.', date: '12/08/2026', verified: false },
@@ -17,11 +18,19 @@ const DEMO_REVIEWS = [
 
 const DEFAULT_SHOPEE_REVIEW_LIMIT = 10;
 const MAX_SHOPEE_REVIEW_LIMIT = 100;
+const DEFAULT_SHOPEE_REVIEWS_PER_STAR = 20;
+const MAX_SHOPEE_REVIEWS_PER_STAR = 20;
 
 export function getShopeeReviewLimit(value = process.env.SHOPEE_REVIEW_LIMIT) {
   const parsed = Number.parseInt(String(value ?? ''), 10);
   if (!Number.isFinite(parsed)) return DEFAULT_SHOPEE_REVIEW_LIMIT;
   return Math.min(Math.max(parsed, 1), MAX_SHOPEE_REVIEW_LIMIT);
+}
+
+export function getShopeeReviewsPerStar(value = process.env.SHOPEE_REVIEWS_PER_STAR) {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  if (!Number.isFinite(parsed)) return DEFAULT_SHOPEE_REVIEWS_PER_STAR;
+  return Math.min(Math.max(parsed, 1), MAX_SHOPEE_REVIEWS_PER_STAR);
 }
 
 function platformFrom(url) {
@@ -76,45 +85,6 @@ function normaliseProductMeta(source = {}) {
   };
 }
 
-async function loadFromApify(url, reviewLimit) {
-  const token = process.env.APIFY_TOKEN;
-  if (!token) throw new Error('Chưa cấu hình APIFY_TOKEN trên máy chủ.');
-
-  const endpoint = 'https://api.apify.com/v2/acts/zen-studio~shopee-product-reviews-scraper/run-sync-get-dataset-items';
-  const upstream = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${token}`,
-      'content-type': 'application/json'
-    },
-    body: JSON.stringify({
-      startUrls: [{ url }],
-      contentFilter: 'with comments',
-      maxReviewsPerProduct: reviewLimit
-    }),
-    // Chừa thời gian cho bước mở link rút gọn và cho Vercel đóng gói phản hồi.
-    signal: AbortSignal.timeout(48_000)
-  });
-
-  if (!upstream.ok) {
-    const detail = (await upstream.text()).slice(0, 240);
-    throw new Error(`Apify trả về HTTP ${upstream.status}${detail ? `: ${detail}` : ''}`);
-  }
-  const items = await upstream.json();
-  if (!Array.isArray(items)) throw new Error('Apify không trả về danh sách review hợp lệ.');
-
-  return {
-    reviews: items.map((review) => ({
-      rating: Number(review.ratingStar) || 0,
-      text: String(review.comment || '').trim(),
-      date: review.createdAt ? new Date(review.createdAt).toLocaleDateString('vi-VN') : 'Không rõ ngày',
-      verified: true,
-      author: review.author || 'Khách đã mua'
-    })).filter((review) => review.text),
-    productMeta: normaliseProductMeta(items[0])
-  };
-}
-
 export async function getReviews(url) {
   let parsed;
   try { parsed = new URL(extractMarketplaceUrl(url)); } catch (error) {
@@ -126,7 +96,8 @@ export async function getReviews(url) {
     ? await resolveShopeeProductUrl(parsed.href)
     : null;
   const productUrl = shopeeProduct?.canonicalUrl || parsed.href;
-  const reviewLimit = platform === 'Shopee' ? getShopeeReviewLimit() : 50;
+  const perStarLimit = platform === 'Shopee' ? getShopeeReviewsPerStar() : null;
+  const reviewLimit = platform === 'Shopee' ? perStarLimit * SHOPEE_STAR_FILTERS.length : 50;
 
   if (shopeeProduct?.wasShortened) {
     warnings.push('Đã mở link chia sẻ Shopee và chuẩn hóa về đúng sản phẩm trước khi thu thập review.');
@@ -134,21 +105,29 @@ export async function getReviews(url) {
 
   try {
     const collected = platform === 'Shopee'
-      ? await loadFromApify(productUrl, reviewLimit)
+      ? await collectShopeeReviewsParallel(productUrl, { perStarLimit })
       : await loadFromConfiguredBot(productUrl, platform);
     const reviews = collected.reviews;
+    if (Array.isArray(collected.warnings)) warnings.push(...collected.warnings);
     return {
       reviews,
       source: {
         type: 'live',
         label: platform === 'Shopee' ? 'Apify · Shopee Product Reviews Scraper' : 'Bot thu thập đã cấu hình',
-        reviewLimit
+        reviewLimit,
+        ...(platform === 'Shopee' ? {
+          perStarLimit,
+          starFilters: SHOPEE_STAR_FILTERS,
+          collection: collected.collection,
+          credential: collected.credential,
+          usage: collected.usage
+        } : {})
       },
       product: {
         platform,
         url: productUrl,
         originalUrl: parsed.href,
-        ...collected.productMeta,
+        ...(collected.productMeta || normaliseProductMeta(collected.productMetaSource)),
         ...(shopeeProduct ? {
           shopId: shopeeProduct.shopId,
           itemId: shopeeProduct.itemId,

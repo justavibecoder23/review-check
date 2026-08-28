@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { analyzeProductUrl } from './src/analyze.mjs';
 import { answerWebsiteQuestion } from './src/site-chatbot.mjs';
+import { assertApifyAdmin, readApifyAdminStatus, updateApifyAdminPool } from './src/apify-admin.mjs';
 
 const port = Number(process.env.PORT || 3000);
 const host = process.env.HOST || '127.0.0.1';
@@ -24,7 +25,7 @@ async function getBody(request) {
   let raw = '';
   for await (const chunk of request) {
     raw += chunk;
-    if (raw.length > 20_000) throw new Error('Nội dung gửi lên quá lớn.');
+    if (raw.length > 512_000) throw new Error('Nội dung gửi lên quá lớn.');
   }
   return raw ? JSON.parse(raw) : {};
 }
@@ -43,6 +44,14 @@ const server = createServer(async (request, response) => {
       const body = await getBody(request);
       const result = await answerWebsiteQuestion(body.messages);
       return sendJson(response, 200, result);
+    }
+
+    if (['GET', 'PUT'].includes(request.method) && url.pathname === '/api/apify-config') {
+      assertApifyAdmin(request.headers.authorization);
+      if (request.method === 'GET') return sendJson(response, 200, await readApifyAdminStatus());
+      const body = await getBody(request);
+      const pool = await updateApifyAdminPool(body);
+      return sendJson(response, 200, { updated: true, pool });
     }
 
     if (request.method !== 'GET' && request.method !== 'HEAD') {

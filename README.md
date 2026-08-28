@@ -14,7 +14,9 @@ Mở `http://localhost:3000`, dán một link sản phẩm. Không cần cài pa
 
 ## Nguồn dữ liệu thực tế
 
-Với Shopee, ứng dụng gọi Actor Apify `zen-studio/shopee-product-reviews-scraper` từ API backend của Vercel. Số review tối đa cho mỗi sản phẩm được điều khiển bằng biến môi trường `SHOPEE_REVIEW_LIMIT`; giá trị mặc định là **10**, phạm vi an toàn từ **1–100**. Token và cấu hình này không được gửi xuống trình duyệt.
+Với Shopee, ứng dụng gọi Actor Apify `zen-studio/shopee-product-reviews-scraper` từ backend. Mỗi lượt phân tích cấp phát một **nhóm 5 tài khoản** rồi khởi động đồng thời năm Actor runs: key 5★ chỉ chạy `starFilter: 5`, key 4★ chỉ chạy `starFilter: 4`, tiếp tục đến key 1★. Cả năm đều dùng `contentFilter: "with comments"` và tối đa 20 review/mức sao. Kết quả được kiểm tra lại rating, chống trùng theo `reviewId` (hoặc fingerprint nội dung khi thiếu ID), rồi mới chuyển sang pipeline gắn nhãn và TrustScore.
+
+Thiết kế này trả tối đa **100 review**, không cam kết luôn đủ 100: sản phẩm có thể không có 20 review viết chữ ở từng mức sao. Năm run được khởi động trước khi chờ kết quả nên thời gian thường gần run chậm nhất, cộng thêm một round-trip Redis ngắn để cấp phát key. Concurrency thực tế vẫn phụ thuộc Apify plan của từng tài khoản.
 
 Backend chấp nhận cả link sản phẩm đầy đủ và link được chia sẻ/rút gọn từ Shopee, gồm `s.shopee.vn`, `vn.shp.ee` và `shope.ee`. Với link rút gọn, máy chủ sẽ:
 
@@ -25,14 +27,53 @@ Backend chấp nhận cả link sản phẩm đầy đủ và link được chia
 
 Nội dung sao chép từ ứng dụng có kèm mô tả và link cũng được hỗ trợ; backend tự tách URL trước khi xử lý.
 
+### Cấu hình thu thập
+
 Tại Vercel → **Settings → Environment Variables**, thêm biến:
 
 ```text
-APIFY_TOKEN=<token Apify mới>
-SHOPEE_REVIEW_LIMIT=10
+APIFY_ACTOR_ID=zen-studio/shopee-product-reviews-scraper
+SHOPEE_REVIEWS_PER_STAR=20
+APIFY_RUN_TIMEOUT_MS=70000
+APIFY_TOKEN_VAULT_KEY=<base64 32 byte>
+APIFY_ADMIN_KEY=<admin secret>
+UPSTASH_REDIS_REST_URL=<Upstash REST URL>
+UPSTASH_REDIS_REST_TOKEN=<Upstash REST token>
 ```
 
-Muốn đổi nhanh số lượng review, chỉ cần sửa giá trị `SHOPEE_REVIEW_LIMIT` trong Vercel rồi redeploy. Nếu bỏ trống hoặc nhập giá trị không hợp lệ, backend dùng 10; giá trị nhỏ hơn 1 hoặc lớn hơn 100 được tự động đưa về giới hạn gần nhất. Không đưa token vào mã nguồn, GitHub hay trình duyệt. Actor là dịch vụ bên thứ ba; chỉ sử dụng khi bạn có quyền phù hợp với dữ liệu và điều khoản của nguồn.
+`SHOPEE_REVIEWS_PER_STAR` được giới hạn từ 1–20. Các Apify token không nằm trong environment của Vercel: chúng được cập nhật tập trung qua API quản trị và mã hóa trong Redis. Không đưa file chứa token vào GitHub hoặc JavaScript trình duyệt.
+
+### Cấu hình và tự động xoay vòng 5 Apify key
+
+Pool được chia thành các nhóm, mỗi nhóm có đúng 5 key theo thứ tự 5★ → 1★. Trước mỗi lượt phân tích, Redis dùng một lệnh nguyên tử để chọn nhóm active và cộng **1** vào bộ đếm của từng key. Khi nhóm hoàn tất lượt thứ 10, cả 5 key được ghi vào `used`; lượt phân tích kế tiếp tự lấy nhóm dự phòng đầu tiên. Cách cấp phát nguyên tử ngăn hai request đồng thời cùng chiếm lượt cuối.
+
+1. Kết nối Upstash Redis từ Vercel Marketplace. Backend chấp nhận cả cặp `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` và cặp tương thích `KV_REST_API_URL` / `KV_REST_API_TOKEN` do integration cấp.
+2. Tạo hai secret một lần và redeploy:
+
+```bash
+openssl rand -base64 32  # dùng kết quả cho APIFY_TOKEN_VAULT_KEY
+openssl rand -hex 32     # dùng kết quả cho APIFY_ADMIN_KEY
+```
+
+3. Sao chép `config/apify-pool.example.json` thành `config/apify-pool.local.json`, điền token thật rồi cập nhật toàn bộ pool bằng một request, không redeploy:
+
+```bash
+curl -X PUT 'https://<domain>/api/apify-config' \
+  -H 'Authorization: Bearer <APIFY_ADMIN_KEY>' \
+  -H 'Content-Type: application/json' \
+  --data-binary @config/apify-pool.local.json
+```
+
+`mode: "replace"` thay danh sách nhóm đang cấu hình. Để chỉ nối thêm nhóm dự phòng mà không chạm vào nhóm hiện có, gửi cùng cấu trúc với `mode: "append"`. Token đã dùng vẫn giữ nguyên bộ đếm theo fingerprint, nên thêm lại cùng token không làm bộ đếm về 0.
+
+Xem nhãn `active`, các nhóm `reserve`, danh sách `used`, bộ đếm và số lượt còn lại; API không bao giờ trả lại token:
+
+```bash
+curl 'https://<domain>/api/apify-config' \
+  -H 'Authorization: Bearer <APIFY_ADMIN_KEY>'
+```
+
+Lượt sử dụng được cộng ngay khi cấp phát; vì vậy request đã gửi đi nhưng Apify lỗi vẫn được tính là một lượt dùng. Sau bước cấp phát, backend không chờ thêm lần ghi Redis nào mà phát ngay 5 request Apify song song để giữ độ trễ thấp.
 
 TikTok Shop hiện vẫn dùng collector độc lập nếu đã cấu hình:
 
@@ -53,7 +94,15 @@ TikTok Shop chưa có collector trong phiên bản này và sẽ báo rõ là ch
 
 ## TrustScore và phân tích Gemini
 
-RealView chấm TrustScore trên thang 100 từ mức hài lòng, tỷ lệ review hữu ích, tín hiệu mua đã xác minh và độ chi tiết của phản hồi. Khi có `GEMINI_API_KEY`, backend gọi Gemini để tổng hợp ưu/nhược điểm và giải thích các yếu tố nâng hoặc hạ điểm. Khóa chỉ được đặt trong biến môi trường máy chủ, tuyệt đối không đưa vào `public/` hoặc mã JavaScript chạy trên trình duyệt.
+RealView dùng bộ máy thống kê xác định trong `src/trust-score-v31.mjs`:
+
+- Fisher exact two-sided cho `seeding × 5 sao` và `khiếu nại mơ hồ × 1 sao`;
+- hiệu chỉnh Haldane–Anscombe `+0,5` chỉ cho odds ratio, không sửa bảng Fisher;
+- binomial exact cho 5 nhóm khuyết tật, cùng Bonferroni/Holm;
+- điểm khuyết tật có trọng số, 5 thành phần TrustScore và hard gatekeeping;
+- làm tròn đúng một lần sau khi áp dụng các giới hạn điểm.
+
+Gemini, nếu được cấu hình, chỉ diễn giải ưu/nhược điểm và nguyên nhân; mô hình không được phép thay đổi TrustScore. Khóa chỉ được đặt trong biến môi trường máy chủ, tuyệt đối không đưa vào `public/` hoặc mã JavaScript chạy trên trình duyệt.
 
 Tại Vercel → **Settings → Environment Variables**, thêm:
 
@@ -62,4 +111,25 @@ GEMINI_API_KEY=<khóa Gemini của bạn>
 GEMINI_MODEL=gemini-3.5-flash
 ```
 
-Nếu Gemini chưa được cấu hình hoặc tạm thời không phản hồi, website vẫn trả kết quả bằng bộ chấm điểm quy tắc để người dùng không bị kẹt. Giao diện hiển thị đúng nguồn phân tích của lượt chạy.
+Nếu Gemini chưa được cấu hình hoặc tạm thời không phản hồi, website vẫn trả đầy đủ TrustScore thống kê để người dùng không bị kẹt. Giao diện hiển thị đúng nguồn phân tích của lượt chạy.
+
+Các baseline `p0` mặc định là ví dụ trong tài liệu v3.1 nên giao diện ghi rõ “tham khảo”. Chỉ bật kết luận binomial khi `TRUST_BASELINES_JSON` chứa `calibrated: true` và baseline được xây dựng từ tập đối chứng phù hợp. Xem mẫu cấu hình trong `.env.example`.
+
+## Pipeline gắn nhãn hai lớp
+
+Mỗi lượt thu thập review chạy theo thứ tự:
+
+1. `src/review-labeler.mjs` áp dụng labeling functions trong `src/layer1_rules.json`. Rule có thể gắn `seeding`, `low_value`, `vague`, nhiều nhóm lỗi hoặc đánh dấu mơ hồ để Layer 2 kiểm tra.
+2. Nếu có `GEMINI_API_KEY`, Layer 2 kiểm tra review theo batch bằng schema trong `src/sample_ai_payload.json`. LLM chỉ được `confirm`, `correct` hoặc `abstain`; mọi lần sửa nhãn phải kèm trích dẫn nguyên văn. Kết quả sai ID, category lạ, quote không phải chuỗi con nguyên văn hoặc vi phạm bất biến sẽ bị backend từ chối.
+3. TrustScore v3.1 đọc nhãn cuối cùng. Nếu Layer 2 lỗi hoặc không có khóa, hệ thống vẫn chạy bằng Layer 1 và ghi rõ provenance.
+
+`LABELER_LLM_MODE=all` kiểm tra toàn bộ review; `uncertain` chỉ gửi các trường hợp xung đột/độ tin cậy thấp; `off` tắt Layer 2.
+
+## Lưu dataset
+
+Mỗi lượt phân tích tạo đúng hai file có chung `runId`:
+
+- `reviews.raw.json`: dữ liệu vừa thu thập, chưa gắn nhãn;
+- `reviews.labeled.json`: dữ liệu kèm nhãn Layer 1, phản biện Layer 2, nhãn cuối, evidence và phiên bản pipeline.
+
+Khi chạy local, file nằm trong `data/review-runs/YYYY/MM/DD/<product>/<runId>/`. Khi chạy trên Vercel, filesystem của Function không phải storage bền vững; ứng dụng lưu hai file vào **private Vercel Blob** tại `review-datasets/YYYY/MM/DD/<product>/<runId>/` nếu có `BLOB_READ_WRITE_TOKEN`. Kết nối một Blob Store trong Vercel Storage với project để Vercel cấp biến này, rồi redeploy. Nếu chưa nối Blob Store, lượt phân tích vẫn trả kết quả nhưng `dataset.saved=false` và có warning rõ ràng.

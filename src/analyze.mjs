@@ -1,40 +1,32 @@
 import { getReviews } from './sources.mjs';
 import { buildTrustAnalysis } from './trust-analysis.mjs';
+import { classifyReviewSignals, findReviewIssues, ISSUE_DEFINITIONS } from './trust-score-v31.mjs';
+import { labelReviewsTwoLayer } from './review-labeler.mjs';
+import { saveReviewDatasets } from './review-dataset-storage.mjs';
 
-const issueDefinitions = [
-  { id: 'chat-lieu', label: 'Chất liệu / độ bền', words: ['vải mỏng', 'mỏng', 'xù', 'bong', 'rách', 'sờn', 'mùi', 'cứng', 'thô', 'nhão', 'kém chất lượng', 'dễ hỏng'] },
-  { id: 'kich-co', label: 'Kích cỡ / form dáng', words: ['form nhỏ', 'chật', 'rộng', 'ngắn', 'bé', 'size nhỏ', 'size lớn', 'không đúng size', 'lệch size'] },
-  { id: 'dung-mo-ta', label: 'Khác mô tả / hình ảnh', words: ['khác hình', 'không giống', 'khác mô tả', 'sai màu', 'màu khác', 'thiếu', 'không đúng mẫu', 'lỗi'] },
-  { id: 'giao-hang', label: 'Giao hàng / đóng gói', words: ['giao chậm', 'lâu', 'móp', 'bể', 'vỡ', 'đóng gói sơ sài', 'giao thiếu', 'trễ'] },
-  { id: 'su-dung', label: 'Trải nghiệm sử dụng', words: ['không dùng được', 'không hoạt động', 'không bền', 'nóng', 'bí', 'khó chịu', 'rò', 'hết pin', 'yếu'] }
-];
-
-const seedingPatterns = [
-  /nhận\s*(xu|điểm|coin)/i,
-  /(review|đánh giá)\s*(lấy|để nhận)/i,
-  /cho\s*(shop|sản phẩm)?\s*5\s*sao/i,
-  /săn\s*sale|mã\s*giảm\s*giá|tích\s*xu/i,
-  /chưa\s*(dùng|sử dụng|trải nghiệm|mở)/i,
-  /giao hàng nhanh.*đóng gói.*(tốt|kỹ)/i,
-  /hàng đẹp.{0,20}(5 sao|ủng hộ)/i
-];
+const issueDefinitions = ISSUE_DEFINITIONS.map(({ id, label, words }) => ({ id, label, words }));
 const lowValuePatterns = [/^ok+([.! ]*)$/i, /tốt([.! ]*)$/i, /^đẹp([.! ]*)$/i, /^5\s*sao/i, /chưa.{0,12}(dùng|thử)/i];
 
 function normalise(text = '') {
   return text.toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
-function findIssues(text) {
-  const lower = normalise(text);
-  return issueDefinitions.filter((issue) => issue.words.some((word) => lower.includes(word)));
+function findIssues(review) {
+  const categoryIds = review?.labels?.defect_categories;
+  if (Array.isArray(categoryIds)) return ISSUE_DEFINITIONS.filter((issue) => categoryIds.includes(issue.id));
+  return findReviewIssues(typeof review === 'string' ? review : review?.text);
 }
 
 function shouldKeep(review) {
   const text = normalise(review.text);
-  const hasIssue = findIssues(text).length > 0;
+  const hasIssue = findIssues(review).length > 0;
   const generic = lowValuePatterns.some((pattern) => pattern.test(text));
-  const seeding = seedingPatterns.some((pattern) => pattern.test(text));
+  const signals = classifyReviewSignals(review);
+  const seeding = signals.seeding;
   if (seeding && !hasIssue) return { keep: false, reason: 'Có dấu hiệu nhận xu / seeding' };
+  if (seeding) return { keep: false, reason: 'Có bằng chứng seeding dù review có nhắc đến lỗi' };
+  if (review.labels?.is_vague) return { keep: false, reason: 'Phản hồi tiêu cực mơ hồ, chưa nêu lỗi cụ thể' };
+  if (review.labels?.is_low_value && !hasIssue) return { keep: false, reason: 'Nội dung ít thông tin, không đủ làm bằng chứng' };
   if ((text.length < 14 || generic) && !hasIssue) return { keep: false, reason: 'Quá ngắn hoặc không có trải nghiệm cụ thể' };
   if (review.rating >= 4 && !hasIssue && text.length < 38) return { keep: false, reason: 'Khen chung chung, ít thông tin kiểm chứng' };
   return { keep: true, reason: null };
@@ -48,13 +40,14 @@ export async function analyzeProductUrl(rawUrl) {
   }
 
   const { reviews, source, product, warnings } = await getReviews(rawUrl.trim());
-  const checked = reviews.map((review) => ({ ...review, filter: shouldKeep(review) }));
+  const labeling = await labelReviewsTwoLayer(reviews, { product });
+  const checked = labeling.reviews.map((review) => ({ ...review, filter: shouldKeep(review) }));
   const genuine = checked.filter((review) => review.filter.keep);
   const excluded = checked.filter((review) => !review.filter.keep);
   const grouped = new Map(issueDefinitions.map((issue) => [issue.id, { ...issue, count: 0, reviews: [] }]));
 
   for (const review of genuine) {
-    for (const issue of findIssues(review.text)) {
+    for (const issue of findIssues(review)) {
       const group = grouped.get(issue.id);
       group.count += 1;
       if (group.reviews.length < 2) group.reviews.push(review);
@@ -72,18 +65,30 @@ export async function analyzeProductUrl(rawUrl) {
   const lowRatings = genuine.filter((review) => review.rating <= 3).length;
   const signal = issues.length === 0 ? 'Chưa thấy nhược điểm lặp lại rõ ràng' : issues[0].label;
   const processedReviews = checked.map(({ filter, ...review }) => ({ ...review, included: filter.keep, exclusionReason: filter.reason }));
-  const trust = await buildTrustAnalysis(processedReviews);
+  const dataset = await saveReviewDatasets({
+    rawReviews: reviews,
+    labeledReviews: labeling.reviews,
+    product,
+    source,
+    labeling: labeling.stats
+  });
+  if (dataset.warning) warnings.push(dataset.warning);
+  warnings.push(...labeling.warnings);
+  const trust = await buildTrustAnalysis(processedReviews, { product });
   return {
     product,
     source,
     warnings,
+    labeling: labeling.stats,
+    dataset: { saved: dataset.saved, runId: dataset.runId, provider: dataset.provider },
     stats: {
       scanned: reviews.length,
       genuine: genuine.length,
       excluded: excluded.length,
       lowRatings,
       confidence: trust.confidence.label,
-      confidenceScore: trust.confidence.score
+      confidenceScore: trust.confidence.score,
+      algorithmSample: trust.method?.sample?.afterSeedingRemoval ?? genuine.length
     },
     verdict: issues.some((issue) => issue.count >= 3)
       ? `Cần cân nhắc: nhiều phản hồi thật đề cập “${signal.toLowerCase()}”.`

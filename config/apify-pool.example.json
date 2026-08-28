@@ -1,0 +1,26 @@
+{
+  "mode": "replace",
+  "maxUsesPerKey": 10,
+  "groups": [
+    {
+      "label": "primary-group",
+      "credentials": [
+        { "star": 5, "label": "primary-5-star", "token": "<APIFY_TOKEN_ACCOUNT_1>" },
+        { "star": 4, "label": "primary-4-star", "token": "<APIFY_TOKEN_ACCOUNT_2>" },
+        { "star": 3, "label": "primary-3-star", "token": "<APIFY_TOKEN_ACCOUNT_3>" },
+        { "star": 2, "label": "primary-2-star", "token": "<APIFY_TOKEN_ACCOUNT_4>" },
+        { "star": 1, "label": "primary-1-star", "token": "<APIFY_TOKEN_ACCOUNT_5>" }
+      ]
+    },
+    {
+      "label": "backup-group-1",
+      "credentials": [
+        { "star": 5, "label": "backup-1-5-star", "token": "<APIFY_TOKEN_ACCOUNT_6>" },
+        { "star": 4, "label": "backup-1-4-star", "token": "<APIFY_TOKEN_ACCOUNT_7>" },
+        { "star": 3, "label": "backup-1-3-star", "token": "<APIFY_TOKEN_ACCOUNT_8>" },
+        { "star": 2, "label": "backup-1-2-star", "token": "<APIFY_TOKEN_ACCOUNT_9>" },
+        { "star": 1, "label": "backup-1-1-star", "token": "<APIFY_TOKEN_ACCOUNT_10>" }
+      ]
+    }
+  ]
+}

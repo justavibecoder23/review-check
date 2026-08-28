@@ -80,78 +80,94 @@ function fallbackCopy(reviews, included, excluded) {
 }
 
 export function trustTone(score) {
-  if (score > 80) return { id: 'green', label: 'Độ tin cậy cao' };
-  if (score >= 60) return { id: 'yellow', label: 'Khá đáng tin' };
-  if (score >= 50) return { id: 'orange', label: 'Nên cân nhắc kỹ' };
-  return { id: 'red', label: 'Độ tin cậy thấp' };
+  if (score >= 80) return { id: 'green', label: 'Mức tin cậy rất cao' };
+  if (score >= 60) return { id: 'yellow', label: 'Mức tin cậy khá tốt' };
+  if (score >= 40) return { id: 'orange', label: 'Mức tin cậy trung bình' };
+  return { id: 'red', label: 'Mức tin cậy thấp' };
 }
 
-export function buildRuleBasedTrust(reviews = []) {
+function configuredBaselines() {
+  if (!process.env.TRUST_BASELINES_JSON) return undefined;
+  try {
+    return JSON.parse(process.env.TRUST_BASELINES_JSON);
+  } catch {
+    return undefined;
+  }
+}
+
+function formatPercent(value) {
+  return `${Math.round((Number(value) || 0) * 100)}%`;
+}
+
+function formatPValue(value) {
+  if (!Number.isFinite(value)) return 'chưa tính';
+  if (value < 0.0001) return '< 0,0001';
+  return value.toLocaleString('vi-VN', { maximumFractionDigits: 4 });
+}
+
+export function buildRuleBasedTrust(reviews = [], options = {}) {
   const included = reviews.filter((review) => review.included !== false);
   const excluded = reviews.filter((review) => review.included === false);
-  const ratings = included.map((review) => clamp(review.rating, 0, 5)).filter((rating) => rating > 0);
-  const averageRating = ratings.length ? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length : 0;
-  const usefulRatio = percentage(included.length, reviews.length);
-  const verifiedRatio = percentage(included.filter((review) => review.verified).length, included.length);
-  const detailedRatio = percentage(included.filter((review) => normalise(review.text).length >= 45).length, included.length);
-  const ratingComponent = averageRating / 5 * 55;
-  const score = Math.round(clamp(
-    ratingComponent + usefulRatio * .15 + verifiedRatio * .15 + detailedRatio * .15,
-    0,
-    100
-  ));
-  const confidenceScore = Math.round(clamp(
-    18 + Math.min(reviews.length, 30) / 30 * 32 + usefulRatio * .18 + verifiedRatio * .16 + detailedRatio * .16,
-    0,
-    97
-  ));
-  const confidenceLabel = confidenceScore >= 78 ? 'Cao' : confidenceScore >= 56 ? 'Trung bình' : 'Thấp';
-  const lowRatings = included.filter((review) => Number(review.rating) <= 3).length;
+  const method = calculateTrustScoreV31(reviews, {
+    product: options.product,
+    category: options.category,
+    baselines: options.baselines || configuredBaselines()
+  });
+  const score = method.score;
   const { pros, cons } = fallbackCopy(reviews, included, excluded);
   const tone = trustTone(score);
-  const drivers = [];
-
-  if (verifiedRatio >= 65) {
-    drivers.push({ impact: 'up', title: 'Nhiều lượt mua đã xác minh', detail: `${Math.round(verifiedRatio)}% review hữu ích đến từ người mua đã xác minh.` });
-  } else {
-    drivers.push({ impact: 'down', title: 'Tỷ lệ xác minh còn hạn chế', detail: `Chỉ ${Math.round(verifiedRatio)}% review hữu ích có tín hiệu mua hàng đã xác minh.` });
-  }
-  if (detailedRatio >= 55) {
-    drivers.push({ impact: 'up', title: 'Phản hồi có chi tiết trải nghiệm', detail: `${Math.round(detailedRatio)}% review giữ lại có mô tả đủ dài để đối chiếu.` });
-  } else {
-    drivers.push({ impact: 'down', title: 'Ít bằng chứng trải nghiệm', detail: `Chỉ ${Math.round(detailedRatio)}% review giữ lại mô tả trải nghiệm đủ chi tiết.` });
-  }
-  if (excluded.length) {
-    drivers.push({ impact: excluded.length > included.length ? 'down' : 'neutral', title: 'Đã giảm nhiễu trước khi chấm', detail: `${excluded.length}/${reviews.length} review bị loại vì quá ngắn, chung chung hoặc có dấu hiệu seeding.` });
-  }
-  if (lowRatings) {
-    drivers.push({ impact: 'down', title: 'Có phản hồi tiêu cực đáng tham khảo', detail: `${lowRatings} review giữ lại chấm từ 3 sao trở xuống.` });
-  } else if (included.length) {
-    drivers.push({ impact: 'up', title: 'Ít tín hiệu tiêu cực mạnh', detail: 'Không có review hữu ích nào chấm từ 3 sao trở xuống trong mẫu hiện tại.' });
-  }
-  if (reviews.length < 8) {
-    drivers.push({ impact: 'neutral', title: 'Mẫu review còn nhỏ', detail: `Kết luận hiện chỉ dựa trên ${reviews.length} review nên cần đọc thêm trước khi mua.` });
-  }
+  const mostFrequentDefect = [...method.defects.tests].sort((left, right) => right.count - left.count)[0];
+  const appliedCap = method.caps.applied[0];
+  const drivers = [
+    {
+      impact: method.fisher.score >= 60 ? 'up' : 'down',
+      title: 'Kiểm định Fisher cho review cực đoan',
+      detail: `Điểm Fisher ${method.fisher.score.toFixed(1)}/100. Seeding × 5 sao: p=${formatPValue(method.fisher.positive.pValue)}, OR*=${method.fisher.positive.oddsRatio.toFixed(2)}; khiếu nại mơ hồ × 1 sao: p=${formatPValue(method.fisher.negative.pValue)}, OR*=${method.fisher.negative.oddsRatio.toFixed(2)}.`
+    },
+    {
+      impact: method.defects.score >= 60 ? 'up' : 'down',
+      title: 'Rủi ro khuyết tật có trọng số',
+      detail: mostFrequentDefect?.count
+        ? `${mostFrequentDefect.count} review nhắc “${mostFrequentDefect.label.toLowerCase()}”. Điểm khuyết tật ${method.defects.score.toFixed(1)}/100 sau khi tách tín hiệu seeding.`
+        : `Chưa ghi nhận nhóm lỗi lặp lại trong ${method.sample.afterSeedingRemoval} review sau khi tách tín hiệu seeding.`
+    },
+    {
+      impact: method.components.text.score >= 60 ? 'up' : 'down',
+      title: 'Chất lượng bằng chứng văn bản',
+      detail: `Điểm nội dung ${method.components.text.score.toFixed(1)}/100, dựa trên độ dài, chi tiết vấn đề và trạng thái xác minh; review 1–2 sao được chấm thêm bằng hàm logistic trong tài liệu.`
+    },
+    appliedCap
+      ? {
+        impact: 'neutral',
+        title: `Hard cap đang giới hạn ở ${appliedCap.value}`,
+        detail: 'Điểm thô không được vượt qua ngưỡng an toàn khi Fisher hoặc rủi ro khuyết tật chưa đạt điều kiện bắt buộc.'
+      }
+      : {
+        impact: reviews.length >= 100 ? 'up' : 'neutral',
+        title: 'Mức đủ dữ liệu của mẫu',
+        detail: `${reviews.length}/100 review mục tiêu; dữ liệu ngày có ở ${formatPercent(method.adequacy.dateCoverage)} mẫu. Đây là mức đủ dữ liệu, không phải xác suất kết luận đúng.`
+      }
+  ];
 
   return {
     score,
     label: tone.label,
     tone: tone.id,
-    confidence: { score: confidenceScore, label: confidenceLabel },
+    confidence: { score: method.adequacy.score, label: method.adequacy.label },
     summary: included.length
-      ? `Điểm ${score}/100 phản ánh đồng thời mức hài lòng, độ chi tiết và khả năng kiểm chứng của ${included.length} review hữu ích.`
+      ? `TrustScore ${score}/100 được tính từ 5 thành phần thống kê; điểm thô ${method.rawScore.toFixed(1)}${method.caps.applied.length ? ` và bị giới hạn an toàn ở ${Math.min(...method.caps.applied.map((cap) => cap.value))}` : ''}.`
       : 'Chưa có đủ review hữu ích để đánh giá đáng tin cậy.',
     pros,
     cons,
-    drivers: drivers.slice(0, 4),
-    engine: 'rules'
+    drivers,
+    method,
+    engine: 'statistical-v3.1'
   };
 }
 
 const trustSchema = {
   type: 'object',
   properties: {
-    score: { type: 'integer', minimum: 0, maximum: 100 },
     summary: { type: 'string' },
     pros: {
       type: 'array', minItems: 1, maxItems: 3,
@@ -166,11 +182,11 @@ const trustSchema = {
       items: { type: 'object', properties: { impact: { type: 'string', enum: ['up', 'down', 'neutral'] }, title: { type: 'string' }, detail: { type: 'string' } }, required: ['impact', 'title', 'detail'] }
     }
   },
-  required: ['score', 'summary', 'pros', 'cons', 'drivers']
+  required: ['summary', 'pros', 'cons', 'drivers']
 };
 
 function compactReviews(reviews) {
-  return reviews.slice(0, 60).map((review, index) => ({
+  return reviews.slice(0, 100).map((review, index) => ({
     id: index + 1,
     rating: clamp(review.rating, 0, 5),
     verified: Boolean(review.verified),
@@ -191,8 +207,6 @@ function cleanItem(item, fallback) {
 
 function validateGeminiTrust(value, fallback) {
   if (!value || typeof value !== 'object') throw new Error('Gemini không trả về kết quả JSON hợp lệ.');
-  const score = Math.round(clamp(value.score, Math.max(0, fallback.score - 8), Math.min(100, fallback.score + 8)));
-  const tone = trustTone(score);
   const pros = Array.isArray(value.pros) ? value.pros.slice(0, 3).map((item, index) => cleanItem(item, fallback.pros[index] || fallback.pros[0])) : fallback.pros;
   const cons = Array.isArray(value.cons) ? value.cons.slice(0, 3).map((item, index) => cleanItem(item, fallback.cons[index] || fallback.cons[0])) : fallback.cons;
   const drivers = Array.isArray(value.drivers)
@@ -204,9 +218,6 @@ function validateGeminiTrust(value, fallback) {
     : fallback.drivers;
   return {
     ...fallback,
-    score,
-    label: tone.label,
-    tone: tone.id,
     summary: String(value.summary || fallback.summary).slice(0, 360),
     pros: pros.length ? pros : fallback.pros,
     cons: cons.length ? cons : fallback.cons,
@@ -221,12 +232,13 @@ async function analyzeWithGemini(reviews, fallback, fetchImpl) {
   const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
   const prompt = [
     'Bạn là hệ thống kiểm định review thương mại điện tử của RealView.',
-    'Hãy chấm TrustScore sản phẩm trên thang 0-100 và viết toàn bộ nội dung bằng tiếng Việt.',
+    'Viết phần diễn giải TrustScore bằng tiếng Việt. Tuyệt đối không chấm lại hoặc sửa điểm thống kê.',
     'Chỉ dùng dữ liệu review được cung cấp; không suy đoán đặc tính sản phẩm hoặc bịa số lượt đề cập.',
     'Review included=false đã bị giảm ưu tiên: dùng chúng để đánh giá chất lượng dữ liệu, không dùng làm bằng chứng ưu/nhược điểm sản phẩm.',
-    'Rubric: 55% mức hài lòng từ rating của review hữu ích; 15% tỷ lệ review hữu ích; 15% tỷ lệ mua đã xác minh; 15% độ chi tiết. Có thể điều chỉnh tối đa 8 điểm nếu nhiều review hữu ích nhất quán chỉ ra cùng một vấn đề hoặc ưu điểm.',
+    'Điểm đã được backend tính bằng thuật toán RealView v3.1 gồm Fisher exact, binomial exact, hiệu chỉnh đa kiểm định và hard cap.',
     'Pros/cons phải ngắn, cụ thể. Drivers phải giải thích rõ điều gì làm tăng hoặc giảm độ tin cậy.',
-    `Mốc tham chiếu từ hệ thống quy tắc: ${fallback.score}/100.`,
+    `Điểm cố định phải giữ nguyên: ${fallback.score}/100.`,
+    `Chi tiết phương pháp: ${JSON.stringify(fallback.method)}.`,
     `Dữ liệu: ${JSON.stringify(compactReviews(reviews))}`
   ].join('\n');
   const response = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
@@ -249,7 +261,7 @@ async function analyzeWithGemini(reviews, fallback, fetchImpl) {
 }
 
 export async function buildTrustAnalysis(reviews = [], options = {}) {
-  const fallback = buildRuleBasedTrust(reviews);
+  const fallback = buildRuleBasedTrust(reviews, options);
   try {
     return await analyzeWithGemini(reviews, fallback, options.fetchImpl || fetch);
   } catch (error) {
@@ -259,3 +271,4 @@ export async function buildTrustAnalysis(reviews = [], options = {}) {
     };
   }
 }
+import { calculateTrustScoreV31 } from './trust-score-v31.mjs';

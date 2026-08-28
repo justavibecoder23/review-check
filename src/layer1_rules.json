@@ -1,0 +1,120 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "version": "2.1.0",
+  "description": "Labeling functions cho review tiếng Việt. Rule có thể abstain; nhãn cuối phải giữ provenance và được Layer 2 kiểm tra khi mơ hồ.",
+  "policy": {
+    "allowed_defect_categories": ["chat-lieu", "kich-co", "dung-mo-ta", "giao-hang", "su-dung"],
+    "vague_only_for_ratings": [1, 2],
+    "defect_overrides_vague": true,
+    "generic_is_not_seeding": true,
+    "llm_review_confidence_below": 0.9,
+    "audit_sample_rate": 0.1
+  },
+  "layer1_rules": {
+    "seeding_detection": {
+      "description": "Chỉ gắn seeding khi có bằng chứng về động cơ nhận thưởng/chưa trải nghiệm/copy boilerplate; không suy ra seeding chỉ vì review ngắn hoặc tích cực.",
+      "strong_regex_patterns": [
+        "(nhan|lay|kiem|tich).{0,8}(xu|coin|diem).{0,24}(danh gia|review|cmt|comment|5 sao|nam sao)?",
+        "(danh gia|review|cmt|comment).{0,18}(de|lay|nhan|kiem).{0,8}(xu|coin|diem|thuong)",
+        "(hinh anh|video).{0,18}(mang tinh chat|chi de|de).{0,10}(nhan xu|lay xu|minh hoa)",
+        "chua.{0,18}(dung|su dung|mo|thu|xai|boc).{0,30}(5 sao|nam sao|cho shop)",
+        "nhan du hang.{0,22}chua.{0,10}(dung|thu|xai).{0,20}(5 sao|nam sao)",
+        "cho shop.{0,8}(5 sao|nam sao).{0,18}(nhan xu|lay xu|kiem xu)"
+      ],
+      "weak_regex_patterns": [
+        "giao hang nhanh.{0,24}dong goi.{0,18}(ky|can than|tot)",
+        "hang dep.{0,24}(5 sao|ung ho shop)",
+        "(ung ho|support) shop.{0,18}(dai dai|lan sau)"
+      ],
+      "exact_phrases": [
+        "hinh anh mang tinh chat nhan xu",
+        "hinh anh chi mang tinh chat nhan xu",
+        "video mang tinh chat nhan xu",
+        "cmt de nhan xu",
+        "comment nhan xu",
+        "danh gia kiem xu",
+        "chua dung cho 5 sao"
+      ]
+    },
+    "spam_and_low_value": {
+      "description": "Low-value là nhãn riêng, không đồng nghĩa với seeding. Một câu ngắn vẫn được giữ nếu có bằng chứng lỗi cụ thể.",
+      "min_character_length": 12,
+      "min_token_count": 3,
+      "max_repeated_chars_allowed": 5,
+      "generic_short_phrases": [
+        "ok", "oke", "okey", "oki", "tot", "hang tot", "dep", "hang dep",
+        "tks", "thanks", "thank shop", "cam on shop", "cam on", "giao nhanh",
+        "nhanh", "duoc", "ung y", "chat luong", "qua dep", "da nhan hang",
+        "tam on", "5 sao", "five star"
+      ],
+      "icon_only_regex": "^[\\p{Extended_Pictographic}\\p{Emoji_Presentation}\\s.,!?:;\\-_+*#@~]+$"
+    },
+    "vague_rant_detection": {
+      "description": "Chỉ áp dụng cho 1–2 sao và chỉ khi không có lỗi cụ thể. Rant là tín hiệu, không tự động là phá hoại.",
+      "trigger_ratings": [1, 2],
+      "max_length_without_defect": 35,
+      "rant_keywords": [
+        "lua dao", "treo dau de ban thit cho", "tay chay", "dung ai mua", "lam an nhu",
+        "nhu hach", "nhu lua", "qua that vong", "phi tien", "tiec tien", "vut sot rac",
+        "vut thung rac", "ne gap", "mat tien oan", "buc minh", "tuc dien", "coi thuong khach",
+        "chan shop", "cach mat"
+      ]
+    },
+    "negation_filter": {
+      "description": "Chỉ phủ định keyword trong cửa sổ gần; không phủ định các cụm lỗi vốn bắt đầu bằng 'không' như 'không hoạt động'.",
+      "window_characters": 28,
+      "negation_words": ["khong", "k", "ko", "chang", "cha", "dau co"],
+      "bridge_words": ["he", "co", "bi", "qua", "thay", "con"]
+    },
+    "defect_categories": {
+      "chat-lieu": {
+        "label": "Chất liệu & độ bền",
+        "severity_weight": 1.5,
+        "keywords": [
+          "vai mong", "mong dinh", "mong tanh", "xu long", "do long", "vai bi son", "soi vai bi son", "rach", "bung chi",
+          "dut chi", "tuot chi", "bong troc", "no da", "da bong", "nhao", "bai dao", "tho rap",
+          "duong may tho", "vai kha bi", "vai bi khi mac", "bi khi mac",
+          "cung ngac", "ngua", "cham chich", "mui hoi", "nhua gion", "op ep", "long leo", "gi set",
+          "hoen gi", "kem chat luong", "de hong"
+        ]
+      },
+      "kich-co": {
+        "label": "Kích cỡ & form dáng",
+        "severity_weight": 1.0,
+        "keywords": [
+          "form nho", "form to", "form be", "kich nach", "chat eo", "mac chat", "kha chat", "hoi chat", "rat chat", "qua chat", "bo sat", "rong thung thinh",
+          "qua rong", "qua chat", "ngan", "dai qua", "be ti", "nho hon bang size", "lech size",
+          "khong dung size", "nham size", "bang size khong chuan", "bang size sai", "mac khong vua", "chat nich"
+        ]
+      },
+      "dung-mo-ta": {
+        "label": "Sai lệch so với mô tả / hình ảnh",
+        "severity_weight": 1.2,
+        "keywords": [
+          "khac hinh", "khong giong hinh", "khong giong mau", "mau khong giong", "khac xa quang cao", "sai mau", "mau khac", "mau toi hon", "toi hon hinh",
+          "mau nhat hon", "lech mau", "giao thieu", "thieu phu kien", "thieu hang", "thieu qua",
+          "khong dung mau", "khong dung mau ma", "khong dung mo ta", "khong dung mau", "sai mau",
+          "giao nham", "hang gia", "hang nhai", "fake"
+        ]
+      },
+      "giao-hang": {
+        "label": "Vận chuyển & đóng gói",
+        "severity_weight": 0.5,
+        "keywords": [
+          "giao cham", "giao lau", "mai moi nhan duoc", "ngam don", "om hang", "hop mop", "mop meo",
+          "hop bep", "rach hop", "be vo", "nut vo", "be nap", "dong goi so sai", "khong boc chong soc",
+          "hop nat", "shipper thai do", "shipper chui", "giao tre"
+        ]
+      },
+      "su-dung": {
+        "label": "Công năng & trải nghiệm sử dụng",
+        "severity_weight": 1.5,
+        "keywords": [
+          "khong dung duoc", "khong hoat dong", "khong len nguon", "bat khong len", "chap chon", "liet phim",
+          "ket nut", "hong nguon", "chay nguon", "pin yeu", "pin tut nhanh", "chai pin", "sac khong vao",
+          "khong nhan sac", "nong ran", "tieng re", "mat am", "keu to", "ro ri nuoc", "chay nuoc", "kho dung"
+        ]
+      }
+    }
+  }
+}
