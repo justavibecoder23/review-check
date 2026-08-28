@@ -24,6 +24,7 @@ export async function readApifyAdminStatus(options = {}) {
 export async function updateApifyAdminPool(body, options = {}) {
   return saveApifyCredentialPool({
     groups: body?.groups,
+    pendingCredentials: body?.pendingCredentials,
     maxUsesPerKey: body?.maxUsesPerKey,
     mode: body?.mode || 'replace'
   }, options);

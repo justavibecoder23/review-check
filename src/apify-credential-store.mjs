@@ -21,6 +21,7 @@ local selected = nil
 
 for _, group in ipairs(pool.groups or {}) do
   local eligible = true
+  if #(group.credentials or {}) ~= 5 then eligible = false end
   for _, credential in ipairs(group.credentials or {}) do
     local count = tonumber(redis.call('HGET', KEYS[2], credential.id) or '0')
     if count >= limit then
@@ -157,8 +158,8 @@ function normalizeInputCredentials(group, groupIndex) {
 }
 
 function buildEncryptedGroups(groups) {
-  if (!Array.isArray(groups) || !groups.length || groups.length > 50) {
-    throw new Error('Cần cấu hình từ 1 đến 50 nhóm Apify; mỗi nhóm có đúng 5 key.');
+  if (!Array.isArray(groups) || groups.length > 50) {
+    throw new Error('Pool không được vượt quá 50 nhóm Apify; mỗi nhóm có đúng 5 key.');
   }
   const seenCredentialIds = new Set();
   const seenGroupIds = new Set();
@@ -177,6 +178,51 @@ function buildEncryptedGroups(groups) {
       credentials: credentials.map(({ token, ...credential }) => ({ ...credential, ...encryptToken(token) }))
     };
   });
+}
+
+function buildEncryptedPending(pendingCredentials = []) {
+  if (!Array.isArray(pendingCredentials) || pendingCredentials.length > 4) {
+    throw new Error('Danh sách pending chỉ được có từ 0 đến 4 Apify key.');
+  }
+  const seen = new Set();
+  return pendingCredentials.map((item, index) => {
+    const token = String(typeof item === 'string' ? item : item?.token || '').trim();
+    if (token.length < 16 || token.length > 500) throw new Error(`Apify token pending ${index + 1} không hợp lệ.`);
+    const id = apifyCredentialId(token);
+    if (seen.has(id)) throw new Error('Mỗi Apify token pending chỉ được xuất hiện một lần.');
+    seen.add(id);
+    return {
+      id,
+      label: cleanLabel(typeof item === 'string' ? null : item?.label, `pending-${index + 1}`),
+      ...encryptToken(token)
+    };
+  });
+}
+
+function completePendingGroups(existingPending, incomingGroups, incomingPending) {
+  if (!existingPending.length) return { groups: incomingGroups, pendingCredentials: incomingPending };
+  const queue = [
+    ...existingPending,
+    ...incomingGroups.flatMap((group) => group.credentials),
+    ...incomingPending
+  ];
+  const groups = [];
+  const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
+  while (queue.length >= APIFY_STARS.length) {
+    const credentials = queue.splice(0, APIFY_STARS.length).map((credential, index) => ({
+      ...credential,
+      star: APIFY_STARS[index]
+    }));
+    groups.push({
+      id: groupId(credentials),
+      label: `completed-pending-${stamp}-${groups.length + 1}`,
+      credentials
+    });
+  }
+  return {
+    groups,
+    pendingCredentials: queue.map(({ star: _star, ...credential }) => credential)
+  };
 }
 
 function parseHashReply(value) {
@@ -208,7 +254,10 @@ function emptyPoolStatus(provider = 'none') {
     reserve: [],
     used: [],
     usedHistory: [],
-    totals: { groups: 0, active: 0, reserve: 0, used: 0, credentials: 0 }
+    pending: [],
+    pendingCount: 0,
+    neededForNextGroup: 5,
+    totals: { groups: 0, active: 0, reserve: 0, used: 0, credentials: 0, pending: 0 }
   };
 }
 
@@ -230,6 +279,7 @@ function buildPoolStatus(config, counterReply, usedReply) {
   const usedHistory = Object.values(parseHashReply(usedReply)).flatMap((value) => {
     try { return [typeof value === 'string' ? JSON.parse(value) : value]; } catch { return []; }
   }).sort((left, right) => String(right.usedAt || '').localeCompare(String(left.usedAt || '')));
+  const pending = (config.pendingCredentials || []).map(({ id, label }) => ({ id, label, status: 'pending' }));
   return {
     version: config.version || 2,
     provider: 'upstash-redis',
@@ -239,12 +289,16 @@ function buildPoolStatus(config, counterReply, usedReply) {
     reserve,
     used,
     usedHistory,
+    pending,
+    pendingCount: pending.length,
+    neededForNextGroup: pending.length ? APIFY_STARS.length - pending.length : APIFY_STARS.length,
     totals: {
       groups: groups.length,
       active: active ? 1 : 0,
       reserve: reserve.length,
       used: used.length,
-      credentials: groups.length * APIFY_STARS.length
+      credentials: groups.length * APIFY_STARS.length + pending.length,
+      pending: pending.length
     }
   };
 }
@@ -255,23 +309,31 @@ async function readPoolConfig(options = {}) {
   return typeof value === 'string' ? JSON.parse(value) : value;
 }
 
-export async function saveApifyCredentialPool({ groups, maxUsesPerKey, mode = 'replace' }, options = {}) {
+export async function saveApifyCredentialPool({ groups = [], pendingCredentials = [], maxUsesPerKey, mode = 'replace' }, options = {}) {
   if (!isRedisConfigured()) throw new Error('Chưa cấu hình Upstash Redis.');
   if (!['replace', 'append'].includes(mode)) throw new Error('mode chỉ nhận replace hoặc append.');
   const newGroups = buildEncryptedGroups(groups);
+  const newPending = buildEncryptedPending(pendingCredentials);
+  if (!newGroups.length && !newPending.length) throw new Error('Cần ít nhất một Apify key để cập nhật pool.');
+  const incomingCredentials = [...newGroups.flatMap((group) => group.credentials), ...newPending];
+  if (new Set(incomingCredentials.map((credential) => credential.id)).size !== incomingCredentials.length) {
+    throw new Error('Mỗi Apify token chỉ được xuất hiện một lần trong dữ liệu cập nhật.');
+  }
   const [counterReply, usedReply] = await redisTransaction([
     ['HGETALL', APIFY_POOL_COUNTERS_KEY],
     ['HGETALL', APIFY_POOL_USED_KEY]
   ], options);
   const historicalCounters = parseHashReply(counterReply);
   const historicalUsed = parseHashReply(usedReply);
-  const reusedCredentials = newGroups.flatMap((group) => group.credentials)
+  const reusedCredentials = incomingCredentials
     .filter((credential) => Number(historicalCounters[credential.id] || 0) > 0 || historicalUsed[credential.id]);
   if (reusedCredentials.length) {
     throw new Error(`Có ${reusedCredentials.length} Apify key đã có lịch sử sử dụng. Hãy nạp key mới để không làm sai bộ đếm.`);
   }
   const existing = mode === 'append' ? await readPoolConfig(options) : null;
-  const combinedGroups = [...(existing?.groups || []), ...newGroups];
+  const completed = completePendingGroups(existing?.pendingCredentials || [], newGroups, newPending);
+  const combinedGroups = [...(existing?.groups || []), ...completed.groups];
+  const combinedPending = completed.pendingCredentials;
   const credentialIds = new Set();
   for (const group of combinedGroups) {
     for (const credential of group.credentials) {
@@ -279,12 +341,17 @@ export async function saveApifyCredentialPool({ groups, maxUsesPerKey, mode = 'r
       credentialIds.add(credential.id);
     }
   }
+  for (const credential of combinedPending) {
+    if (credentialIds.has(credential.id)) throw new Error('Token pending đã tồn tại trong pool.');
+    credentialIds.add(credential.id);
+  }
   if (combinedGroups.length > 50) throw new Error('Pool không được vượt quá 50 nhóm.');
   const config = {
     version: 2,
     maxUsesPerKey: cleanMaxUses(maxUsesPerKey, existing?.maxUsesPerKey),
     updatedAt: new Date().toISOString(),
-    groups: combinedGroups
+    groups: combinedGroups,
+    pendingCredentials: combinedPending
   };
   await redisCommand(['SET', APIFY_POOL_KEY, JSON.stringify(config)], options);
   return getApifyCredentialPoolStatus(options);

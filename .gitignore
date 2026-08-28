@@ -7,3 +7,4 @@ bot/node_modules/
 .vercel/
 data/review-runs/**/*.json
 config/apify-pool.local.json
+config/apify-pool*.local.json

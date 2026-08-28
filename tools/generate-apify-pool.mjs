@@ -65,7 +65,10 @@ async function main() {
     await mkdir(dirname(outputPath), { recursive: true });
     await writeFile(outputPath, `${JSON.stringify(payload, null, 2)}\n`, { mode: 0o600 });
     stdout.write(`\nĐã tạo ${outputPath}\n`);
-    stdout.write(`Tổng: ${tokens.length} key · ${payload.groups.length} nhóm · ${payload.groups.length * payload.maxUsesPerKey} lượt phân tích.\n`);
+    stdout.write(`Tổng: ${tokens.length} key · ${payload.groups.length} nhóm đủ · ${payload.groups.length * payload.maxUsesPerKey} lượt phân tích.\n`);
+    if (payload.pendingCredentials.length) {
+      stdout.write(`${payload.pendingCredentials.length} key dư sẽ được lưu ở trạng thái pending và chưa được sử dụng cho đến khi đủ nhóm 5.\n`);
+    }
   } catch (error) {
     process.exitCode = 1;
     stdout.write(`\nKhông thể tạo file: ${error.message}\n`);

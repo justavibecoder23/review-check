@@ -105,13 +105,33 @@ test('pool mã hóa token, đếm nguyên tử và tự chuyển nhóm sau lư�
   try {
     const initial = await saveApifyCredentialPool({
       maxUsesPerKey: 10,
-      groups: [group('primary', 'primary'), group('backup', 'backup')]
+      groups: [group('primary', 'primary'), group('backup', 'backup')],
+      pendingCredentials: [
+        { label: 'pending-one', token: 'apify_api_pending_1_super_secret_token' },
+        { label: 'pending-two', token: 'apify_api_pending_2_super_secret_token' }
+      ]
     }, { fetchImpl: redis.fetchImpl });
     assert.equal(initial.active.label, 'primary');
     assert.equal(initial.reserve[0].label, 'backup');
+    assert.equal(initial.pendingCount, 2);
+    assert.equal(initial.neededForNextGroup, 3);
     const stored = redis.values.get(APIFY_POOL_KEY);
     assert.ok(stored);
     assert.equal(stored.includes('super_secret_token'), false);
+
+    const completedPending = await saveApifyCredentialPool({
+      maxUsesPerKey: 10,
+      mode: 'append',
+      groups: [],
+      pendingCredentials: [
+        { label: 'pending-three', token: 'apify_api_pending_3_super_secret_token' },
+        { label: 'pending-four', token: 'apify_api_pending_4_super_secret_token' },
+        { label: 'pending-five', token: 'apify_api_pending_5_super_secret_token' }
+      ]
+    }, { fetchImpl: redis.fetchImpl });
+    assert.equal(completedPending.pendingCount, 0);
+    assert.equal(completedPending.totals.groups, 3);
+    assert.equal(completedPending.reserve.length, 2);
 
     let allocation;
     for (let use = 1; use <= 10; use += 1) {

@@ -9,6 +9,7 @@ test('tự chia danh sách key thành nhiều nhóm 5★ đến 1★', () => {
   assert.equal(pool.mode, 'replace');
   assert.equal(pool.maxUsesPerKey, 10);
   assert.equal(pool.groups.length, 3);
+  assert.equal(pool.pendingCredentials.length, 0);
   assert.equal(pool.groups[0].label, 'group-01');
   assert.deepEqual(pool.groups[0].credentials.map((item) => item.star), [5, 4, 3, 2, 1]);
   assert.equal(pool.groups[2].credentials[4].token, 'apify-key-15');
@@ -18,8 +19,10 @@ test('loại dòng trống và khoảng trắng quanh key', () => {
   assert.deepEqual(normalizeApifyTokens([' key-1 ', '', '  ', 'key-2']), ['key-1', 'key-2']);
 });
 
-test('từ chối số lượng key không chia hết cho 5', () => {
-  assert.throws(() => buildApifyPoolFile(['1', '2', '3']), /chia hết cho 5/);
+test('giữ số key dư ở pending thay vì từ chối', () => {
+  const pool = buildApifyPoolFile(['1', '2', '3', '4', '5', '6', '7']);
+  assert.equal(pool.groups.length, 1);
+  assert.deepEqual(pool.pendingCredentials.map((item) => item.token), ['6', '7']);
 });
 
 test('từ chối API key trùng', () => {
