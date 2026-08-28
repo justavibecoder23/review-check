@@ -97,8 +97,6 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
       genuine: genuine.length,
       excluded: excluded.length,
       lowRatings,
-      confidence: trust.confidence.label,
-      confidenceScore: trust.confidence.score,
       trustSample: trust.method?.sample?.afterSeedingRemoval ?? trustSample,
       algorithmSample: trust.method?.sample?.afterSeedingRemoval ?? trustSample,
       seedingExcluded: trust.method?.sample?.seedingCount ?? (reviews.length - trustSample)
@@ -115,3 +113,4 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   progress('complete', 100, 'Phân tích hoàn tất.');
   return result;
 }
+
