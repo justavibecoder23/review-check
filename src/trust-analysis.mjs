@@ -126,6 +126,7 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
   const appliedCap = method.caps.applied[0];
   const detailedCount = included.filter((review) => normalise(review.text).length >= 45).length;
   const verifiedCount = included.filter((review) => review.verified).length;
+  const excludedRate = reviews.length ? Math.round(excluded.length / reviews.length * 100) : 0;
   const drivers = [
     {
       impact: method.fisher.score >= 60 ? 'up' : 'down',
@@ -148,19 +149,39 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
       title: method.components.text.score >= 60 ? 'Review có nội dung đủ rõ để đối chiếu' : 'Nhiều review còn thiếu chi tiết trải nghiệm',
       detail: `Trong ${included.length} review được giữ lại, ${detailedCount} review mô tả trải nghiệm đủ chi tiết và ${verifiedCount} review có tín hiệu đã mua hàng. ${method.components.text.score >= 60 ? 'Những thông tin này giúp người mua hiểu rõ lý do khen hoặc chê thay vì chỉ nhìn số sao.' : 'Khi review quá ngắn hoặc khó kiểm chứng, kết luận cần được đọc thận trọng hơn.'}`
     },
-    appliedCap
-      ? {
-        impact: 'neutral',
-        title: 'Điểm đang được giới hạn để tránh kết luận quá mức',
-        detail: `Dù một số tín hiệu đang tích cực, vẫn có điều kiện kiểm tra quan trọng chưa đủ mạnh nên hệ thống tạm không cho TrustScore vượt ${appliedCap.value}/100. Giới hạn này giúp tránh tạo cảm giác chắc chắn hơn mức dữ liệu thực sự cho phép.`
-      }
-      : {
-        impact: reviews.length >= 100 ? 'up' : 'neutral',
-        title: reviews.length >= method.adequacy.targetSample ? 'Dữ liệu đã đủ rộng để củng cố kết luận' : 'Số review hiện có còn ít so với mốc tham chiếu',
-        detail: reviews.length >= method.adequacy.targetSample
-          ? `Hệ thống đã phân tích ${reviews.length} review, đạt mốc tham chiếu ${method.adequacy.targetSample} review. Vì vậy kết luận có cơ sở dữ liệu rộng hơn để đối chiếu.`
-          : `Hệ thống mới phân tích ${reviews.length}/${method.adequacy.targetSample} review so với mốc dữ liệu mục tiêu. Số review còn ít không trực tiếp làm TrustScore thấp đi, nhưng người mua vẫn nên đọc thêm các review cụ thể trước khi quyết định.`
-      }
+    {
+      impact: method.components.distribution.score >= 70 ? 'up' : 'down',
+      title: method.components.distribution.score >= 70 ? 'Phân bố số sao không quá dồn về một phía' : 'Số sao đang nghiêng mạnh về một phía',
+      detail: method.components.distribution.score >= 70
+        ? 'Các mức đánh giá không bị dồn bất thường vào chỉ 5 sao hoặc chỉ 1 sao. Sự đa dạng này giúp kết quả phản ánh nhiều trải nghiệm hơn thay vì chỉ một luồng ý kiến.'
+        : 'Khi phần lớn review cùng tập trung ở một mức sao, hệ thống sẽ thận trọng hơn vì một nhóm đánh giá có thể đang lấn át các trải nghiệm khác.'
+    },
+    {
+      impact: method.temporal.score >= 70 ? 'up' : 'neutral',
+      title: method.temporal.score >= 70 ? 'Tín hiệu review khá ổn định theo thời gian' : 'Ngày đăng review chưa đủ để củng cố kết luận',
+      detail: method.temporal.coverage >= 0.7
+        ? `Có thể đối chiếu ngày đăng của khoảng ${Math.round(method.temporal.coverage * 100)}% review được giữ lại. Các ý kiến không chỉ xuất hiện dồn vào một thời điểm, nên kết quả có cơ sở ổn định hơn.`
+        : `Chỉ khoảng ${Math.round(method.temporal.coverage * 100)}% review có ngày đăng đủ rõ để kiểm tra. Vì vậy yếu tố thời gian chưa thể củng cố mạnh cho TrustScore và người mua nên đọc thêm review cụ thể.`
+    },
+    {
+      impact: excludedRate > 0 && excludedRate <= 35 ? 'up' : 'neutral',
+      title: excluded.length ? 'Đã lọc review ngắn, trùng hoặc có dấu hiệu seeding' : 'Không phát hiện nhiều review cần loại khỏi bằng chứng chính',
+      detail: excluded.length
+        ? `Hệ thống đã giữ lại ${included.length}/${reviews.length} review và loại ${excluded.length} review (${excludedRate}%) vì thiếu thông tin, trùng lặp hoặc có dấu hiệu seeding. Việc công khai bước lọc giúp phần kết luận không bị dẫn dắt bởi những phản hồi kém giá trị.`
+        : `Toàn bộ ${reviews.length} review hiện đủ điều kiện làm bằng chứng chính. Đây là tín hiệu tốt, nhưng TrustScore vẫn chỉ nói về độ tin cậy của review chứ không thay thế việc kiểm tra sản phẩm.`
+    },
+    {
+      impact: reviews.length >= method.adequacy.targetSample ? 'up' : 'neutral',
+      title: reviews.length >= method.adequacy.targetSample ? 'Dữ liệu đã đủ rộng để củng cố kết luận' : 'Số review hiện có còn ít so với mốc tham chiếu',
+      detail: reviews.length >= method.adequacy.targetSample
+        ? `Hệ thống đã phân tích ${reviews.length} review, đạt mốc tham chiếu ${method.adequacy.targetSample} review. Vì vậy kết luận có cơ sở dữ liệu rộng hơn để đối chiếu.`
+        : `Hệ thống mới phân tích ${reviews.length}/${method.adequacy.targetSample} review so với mốc dữ liệu mục tiêu. Số review còn ít không trực tiếp làm TrustScore thấp đi, nhưng người mua vẫn nên đọc thêm các review cụ thể trước khi quyết định.`
+    },
+    ...(appliedCap ? [{
+      impact: 'neutral',
+      title: 'Điểm đang được giới hạn để tránh kết luận quá mức',
+      detail: `Dù một số tín hiệu đang tích cực, vẫn có điều kiện kiểm tra quan trọng chưa đủ mạnh nên hệ thống tạm không cho TrustScore vượt ${appliedCap.value}/100. Giới hạn này giúp tránh tạo cảm giác chắc chắn hơn mức dữ liệu thực sự cho phép.`
+    }] : [])
   ];
 
   return {
@@ -189,7 +210,7 @@ const trustSchema = {
       items: { type: 'object', properties: { title: { type: 'string' }, detail: { type: 'string' }, mentions: { type: 'integer', minimum: 0 } }, required: ['title', 'detail', 'mentions'] }
     },
     drivers: {
-      type: 'array', minItems: 2, maxItems: 4,
+      type: 'array', minItems: 6, maxItems: 8,
       items: { type: 'object', properties: { impact: { type: 'string', enum: ['up', 'down', 'neutral'] }, title: { type: 'string' }, detail: { type: 'string' } }, required: ['impact', 'title', 'detail'] }
     }
   },
@@ -232,8 +253,8 @@ function validateGeminiTrust(value, fallback) {
   if (!value || typeof value !== 'object') throw new Error('Gemini không trả về kết quả JSON hợp lệ.');
   const pros = Array.isArray(value.pros) ? value.pros.slice(0, 3).map((item, index) => cleanItem(item, fallback.pros[index] || fallback.pros[0])) : fallback.pros;
   const cons = Array.isArray(value.cons) ? value.cons.slice(0, 3).map((item, index) => cleanItem(item, fallback.cons[index] || fallback.cons[0])) : fallback.cons;
-  const drivers = Array.isArray(value.drivers)
-    ? value.drivers.slice(0, 4).map((item, index) => cleanDriver(item, fallback.drivers[index] || fallback.drivers[0]))
+  const drivers = Array.isArray(value.drivers) && value.drivers.length >= 6
+    ? value.drivers.slice(0, 8).map((item, index) => cleanDriver(item, fallback.drivers[index] || fallback.drivers[0]))
     : fallback.drivers;
   const summary = String(value.summary || fallback.summary).slice(0, 420);
   return {
@@ -259,7 +280,7 @@ async function analyzeWithGemini(reviews, fallback, fetchImpl) {
     'Nội dung hiển thị cho người dùng tuyệt đối không được nhắc Fisher, p-value, odds ratio, binomial, logistic, Bonferroni, hard cap, điểm thành phần hoặc công thức.',
     'Summary cần giải thích ý nghĩa kết quả bằng lời trong 2 câu và nhắc rõ TrustScore đo độ đáng tin của tập review, không phải điểm chất lượng tuyệt đối của sản phẩm.',
     'Mỗi ưu/nhược điểm phải nêu rõ người mua thích hoặc chưa hài lòng điều gì, ảnh hưởng thực tế ra sao và có bao nhiêu review cùng đề cập; tránh câu chung chung như “ghi nhận tín hiệu tích cực”.',
-    'Mỗi driver phải dịch tín hiệu kỹ thuật thành ngôn ngữ đời thường: điều gì được quan sát thấy trong review, vì sao điều đó làm kết quả đáng tin hơn hoặc cần thận trọng hơn.',
+    'Trả về 6 đến 8 driver khác nhau. Mỗi driver phải dịch tín hiệu kỹ thuật thành ngôn ngữ đời thường: điều gì được quan sát thấy trong review, vì sao điều đó làm kết quả đáng tin hơn hoặc cần thận trọng hơn.',
     `Điểm cố định phải giữ nguyên: ${fallback.score}/100.`,
     `Chi tiết phương pháp: ${JSON.stringify(fallback.method)}.`,
     `Dữ liệu: ${JSON.stringify(compactReviews(reviews))}`
