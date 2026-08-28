@@ -17,7 +17,7 @@ test('TrustScore quy tắc luôn nằm trên thang 100 và có giải thích', (
   assert.equal('confidence' in trust, false);
   assert.equal(trust.pros.length > 0, true);
   assert.equal(trust.cons.length > 0, true);
-  assert.equal(trust.drivers.length >= 2, true);
+  assert.equal(trust.drivers.length >= 6, true);
   assert.match(trust.summary, /không phải điểm chất lượng tuyệt đối của sản phẩm/i);
   assert.match(trust.pros[0].detail, /Dẫn chứng:/);
   assert.doesNotMatch(trust.drivers.map((driver) => `${driver.title} ${driver.detail}`).join(' '), /Fisher|p\s*=|OR\*|logistic|hard cap|Bonferroni/i);
@@ -84,7 +84,7 @@ test('Gemini dùng khóa ở header backend và trả cấu trúc giao diện an
     assert.equal(trust.engine, 'gemini');
     assert.equal(trust.score, statisticalScore, 'Gemini không được thay đổi điểm thống kê');
     assert.equal(trust.pros[0].title, 'Đúng mô tả');
-    assert.equal(trust.drivers.length, 2);
+    assert.equal(trust.drivers.length >= 6, true);
     assert.doesNotMatch(`${trust.drivers[0].title} ${trust.drivers[0].detail}`, /Fisher|p\s*=|OR\*/i);
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
