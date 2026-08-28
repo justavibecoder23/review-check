@@ -101,10 +101,6 @@ function configuredBaselines() {
   }
 }
 
-function formatPercent(value) {
-  return `${Math.round((Number(value) || 0) * 100)}%`;
-}
-
 function plainTrustSummary(score, includedCount) {
   if (!includedCount) return 'Chưa có đủ review hữu ích để đánh giá đáng tin cậy.';
   const meaning = score >= 80
@@ -113,26 +109,6 @@ function plainTrustSummary(score, includedCount) {
       ? 'Phần lớn review đủ điều kiện có thể tham khảo, nhưng vẫn còn một vài tín hiệu cần đọc kỹ.'
       : 'Tập review hiện còn những điểm thiếu nhất quán hoặc khó kiểm chứng nên cần được xem thận trọng.';
   return `${meaning} Vì vậy, tập review đạt TrustScore ${score}/100. Đây là điểm về độ đáng tin của thông tin review, không phải điểm chất lượng tuyệt đối của sản phẩm.`;
-}
-
-export function explainScoreAndConfidence(method, score) {
-  const total = method.sample.total;
-  const target = method.adequacy.targetSample;
-  const confidence = method.adequacy.score;
-  const trustMeaning = score >= 80
-    ? 'những review được giữ lại đang cho tín hiệu khá nhất quán và ít dấu hiệu bất thường'
-    : score >= 60
-      ? 'phần lớn review được giữ lại có thể đối chiếu, dù vẫn còn tín hiệu cần thận trọng'
-      : 'tập review còn nhiều tín hiệu chưa nhất quán hoặc khó kiểm chứng';
-
-  if (confidence < 55) {
-    const dateNote = method.adequacy.dateCoverage < .6
-      ? ` Ngoài ra, chỉ ${formatPercent(method.adequacy.dateCoverage)} review có đủ mốc thời gian để kiểm tra độ ổn định theo thời gian.`
-      : '';
-    return `TrustScore ${score}/100 phản ánh rằng ${trustMeaning}. Confidence chỉ ${confidence}% (${method.adequacy.label}) vì hệ thống mới có ${total}/${target} review so với mốc dữ liệu mục tiêu.${dateNote} Hai chỉ số không mâu thuẫn: tín hiệu hiện tại có thể rất tốt, nhưng vẫn cần thêm dữ liệu để kết luận chắc chắn hơn.`;
-  }
-
-  return `TrustScore ${score}/100 phản ánh rằng ${trustMeaning}. Confidence ${confidence}% (${method.adequacy.label}) cho biết lượng và độ phủ dữ liệu hiện tại đã ${confidence >= 80 ? 'đủ tốt để củng cố kết luận này' : 'khá hữu ích nhưng vẫn nên được đọc cùng các review cụ thể'}.`;
 }
 
 export function buildRuleBasedTrust(reviews = [], options = {}) {
@@ -182,8 +158,8 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
         impact: reviews.length >= 100 ? 'up' : 'neutral',
         title: reviews.length >= method.adequacy.targetSample ? 'Dữ liệu đã đủ rộng để củng cố kết luận' : 'Số review hiện có còn ít so với mốc tham chiếu',
         detail: reviews.length >= method.adequacy.targetSample
-          ? `Hệ thống đã phân tích ${reviews.length} review, đạt mốc tham chiếu ${method.adequacy.targetSample} review. Vì vậy kết luận có cơ sở rộng hơn và Confidence được củng cố.`
-          : `Hệ thống mới phân tích ${reviews.length}/${method.adequacy.targetSample} review so với mốc dữ liệu mục tiêu. Điều này không trực tiếp làm TrustScore thấp đi, nhưng khiến Confidence bị giới hạn vì chưa biết tín hiệu hiện tại có còn ổn định khi có thêm review hay không.`
+          ? `Hệ thống đã phân tích ${reviews.length} review, đạt mốc tham chiếu ${method.adequacy.targetSample} review. Vì vậy kết luận có cơ sở dữ liệu rộng hơn để đối chiếu.`
+          : `Hệ thống mới phân tích ${reviews.length}/${method.adequacy.targetSample} review so với mốc dữ liệu mục tiêu. Số review còn ít không trực tiếp làm TrustScore thấp đi, nhưng người mua vẫn nên đọc thêm các review cụ thể trước khi quyết định.`
       }
   ];
 
@@ -191,9 +167,7 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
     score,
     label: tone.label,
     tone: tone.id,
-    confidence: { score: method.adequacy.score, label: method.adequacy.label },
     summary: plainTrustSummary(score, included.length),
-    confidenceExplanation: explainScoreAndConfidence(method, score),
     pros,
     cons,
     drivers,
@@ -287,7 +261,6 @@ async function analyzeWithGemini(reviews, fallback, fetchImpl) {
     'Mỗi ưu/nhược điểm phải nêu rõ người mua thích hoặc chưa hài lòng điều gì, ảnh hưởng thực tế ra sao và có bao nhiêu review cùng đề cập; tránh câu chung chung như “ghi nhận tín hiệu tích cực”.',
     'Mỗi driver phải dịch tín hiệu kỹ thuật thành ngôn ngữ đời thường: điều gì được quan sát thấy trong review, vì sao điều đó làm kết quả đáng tin hơn hoặc cần thận trọng hơn.',
     `Điểm cố định phải giữ nguyên: ${fallback.score}/100.`,
-    `Giải thích cố định về Confidence để tham chiếu, không viết lại: ${fallback.confidenceExplanation}`,
     `Chi tiết phương pháp: ${JSON.stringify(fallback.method)}.`,
     `Dữ liệu: ${JSON.stringify(compactReviews(reviews))}`
   ].join('\n');
