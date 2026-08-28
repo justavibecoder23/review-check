@@ -38,7 +38,7 @@
     <div class="chatbot-messages" role="log" aria-live="polite" aria-relevant="additions">
       <article class="chatbot-message chatbot-message--assistant">
         <span class="chatbot-message-avatar" aria-hidden="true">R</span>
-        <div><p>Xin chào! Mình có thể giải thích cách dùng RealView, TrustScore, Confidence và tiêu chí lọc review.</p><time>Trợ lý RealView</time></div>
+        <div><p>Xin chào! Mình có thể giải thích cách dùng RealView, ý nghĩa của TrustScore và tiêu chí lọc review.</p><time>Trợ lý RealView</time></div>
       </article>
       <div class="chatbot-suggestions" aria-label="Câu hỏi gợi ý">
         <button type="button">RealView hoạt động thế nào?</button>
