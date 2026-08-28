@@ -6,7 +6,6 @@ const result = document.querySelector('#result');
 const errorBox = document.querySelector('#form-error');
 const sourceNotice = document.querySelector('#source-notice');
 const loadingCopy = document.querySelector('#loading-copy');
-const loadingProgress = document.querySelector('.loading-progress');
 const backToTop = document.querySelector('.back-to-top');
 const defaultButtonContent = button?.innerHTML;
 const delayLines = [
@@ -16,7 +15,7 @@ const delayLines = [
   'Đang chuẩn bị kết quả dễ đọc...'
 ];
 
-const navLinks = [...document.querySelectorAll('.main-nav .nav-parent[href^="#"]')];
+const navLinks = [...document.querySelectorAll('.main-nav a[href^="#"]')];
 const navIndicator = document.querySelector('.nav-indicator');
 const siteHeader = document.querySelector('.site-header');
 const navToggle = document.querySelector('.nav-toggle');
@@ -173,7 +172,7 @@ function render(data) {
   document.querySelector('#platform-tag').textContent = product.platform;
   document.querySelector('#verdict').textContent = verdict;
   document.querySelector('#original-link').href = product.url;
-  for (const key of ['scanned', 'genuine', 'excluded', 'confidence']) document.querySelector(`#${key}`).textContent = stats[key];
+  for (const key of ['scanned', 'genuine', 'excluded']) document.querySelector(`#${key}`).textContent = stats[key];
   renderIssues(issues);
   renderReviews(reviews);
 
@@ -198,52 +197,6 @@ function openResultsPage(data) {
   }
 }
 
-async function analyzeWithSse(url, onProgress) {
-  const response = await fetch('/api/analyze-stream', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', accept: 'text/event-stream' },
-    body: JSON.stringify({ url })
-  });
-  const contentType = response.headers.get('content-type') || '';
-  if (!response.ok || !contentType.includes('text/event-stream')) {
-    let message = 'Không thể mở luồng phân tích.';
-    try { message = (await response.json()).error || message; } catch { /* Phản hồi không phải JSON. */ }
-    throw new Error(message);
-  }
-  if (!response.body) throw new Error('Trình duyệt không hỗ trợ đọc tiến độ trực tiếp.');
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let finalResult;
-
-  const handleBlock = (block) => {
-    let event = 'message';
-    const dataLines = [];
-    for (const line of block.replace(/\r/g, '').split('\n')) {
-      if (line.startsWith('event:')) event = line.slice(6).trim();
-      if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart());
-    }
-    if (!dataLines.length) return;
-    const data = JSON.parse(dataLines.join('\n'));
-    if (event === 'progress') onProgress(data);
-    if (event === 'result') finalResult = data;
-    if (event === 'error') throw new Error(data.error || 'Không thể phân tích link này.');
-  };
-
-  while (true) {
-    const { value, done } = await reader.read();
-    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-    const blocks = buffer.split(/\r?\n\r?\n/);
-    buffer = blocks.pop() || '';
-    for (const block of blocks) handleBlock(block);
-    if (done) break;
-  }
-  if (buffer.trim()) handleBlock(buffer);
-  if (!finalResult) throw new Error('Luồng phân tích kết thúc trước khi có kết quả.');
-  return finalResult;
-}
-
 if (form) form.addEventListener('submit', async (event) => {
   event.preventDefault();
   errorBox.classList.add('hidden');
@@ -254,29 +207,29 @@ if (form) form.addEventListener('submit', async (event) => {
   button.innerHTML = 'Đang phân tích <span aria-hidden="true">•••</span>';
   form.setAttribute('aria-busy', 'true');
   if (loadingCopy) loadingCopy.textContent = delayLines[0];
-  loadingProgress?.classList.add('is-live');
-  loadingProgress?.style.setProperty('--analysis-progress', '0%');
-  loadingProgress?.setAttribute('aria-valuenow', '0');
   requestAnimationFrame(() => {
     loading.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   });
+  let index = 0;
+  const interval = setInterval(() => {
+    index = (index + 1) % delayLines.length;
+    if (loadingCopy) loadingCopy.textContent = delayLines[index];
+  }, 1900);
   try {
-    const data = await analyzeWithSse(input.value.trim(), (progress) => {
-      if (loadingCopy && progress.message) loadingCopy.textContent = progress.message;
-      const percent = Math.min(100, Math.max(0, Number(progress.percent) || 0));
-      loadingProgress?.style.setProperty('--analysis-progress', `${percent}%`);
-      loadingProgress?.setAttribute('aria-valuenow', String(percent));
-    });
+    const response = await fetch('/api/analyze', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: input.value.trim() }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Không thể phân tích link này.');
     openResultsPage(data);
   } catch (error) {
     errorBox.textContent = error.message;
     errorBox.classList.remove('hidden');
   } finally {
+    clearInterval(interval);
     loading.classList.add('hidden');
-    loadingProgress?.classList.remove('is-live');
     button.disabled = false;
     button.removeAttribute('aria-busy');
     form.removeAttribute('aria-busy');
     if (defaultButtonContent) button.innerHTML = defaultButtonContent;
   }
 });
+
