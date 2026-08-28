@@ -80,6 +80,10 @@
                   </div>
                   <h2>Kết luận nhanh</h2>
                   <p id="trust-summary">RealView đang tổng hợp chất lượng và độ tin cậy của các review.</p>
+                  <div class="confidence-explanation">
+                    <span class="confidence-explanation-icon" aria-hidden="true">i</span>
+                    <p><strong>Vì sao TrustScore và Confidence có thể khác nhau?</strong><span id="confidence-explanation">TrustScore cho biết độ đáng tin của tập review hiện có; Confidence cho biết lượng dữ liệu đã đủ mạnh để chắc chắn về kết quả hay chưa.</span></p>
+                  </div>
                   <div class="overview-stats" aria-label="Thống kê review">
                     <span><strong id="scanned-count">0</strong> đã quét</span>
                     <span><strong id="kept-count-top">0</strong> đáng tham khảo</span>
@@ -95,16 +99,16 @@
         <section class="insight-section" aria-labelledby="summary-title">
           <div class="container">
             <div class="section-heading compact-heading">
-              <div><p class="section-kicker">01 · Tóm tắt review</p><h2 id="summary-title">Điều người mua thực sự nói</h2><p>Ưu và nhược điểm chỉ được tổng hợp từ những review đủ thông tin để tham khảo.</p></div>
+              <div><p class="section-kicker">01 · Tóm tắt review</p><h2 id="summary-title">Điều người mua thực sự nói</h2><p>Mỗi ý dưới đây cho biết người mua thích hoặc chưa hài lòng điều gì, ảnh hưởng thực tế ra sao và có bao nhiêu review cùng đề cập.</p></div>
               <span class="source-chip"><i aria-hidden="true"></i><b id="analysis-source">AI + bộ lọc RealView</b></span>
             </div>
             <div class="sentiment-layout">
               <article class="sentiment-card sentiment-card--positive">
-                <header><span class="sentiment-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M7 10v11H3V10h4Zm0 9 4 2h6.2a2 2 0 0 0 1.9-1.4l1.8-6A2 2 0 0 0 19 11h-5l1-4.3A2.2 2.2 0 0 0 12.9 4L7 10Z" /></svg></span><div><small>Điểm cộng</small><h3>Ưu điểm nổi bật</h3></div></header>
+                <header><span class="sentiment-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M7 10v11H3V10h4Zm0 9 4 2h6.2a2 2 0 0 0 1.9-1.4l1.8-6A2 2 0 0 0 19 11h-5l1-4.3A2.2 2.2 0 0 0 12.9 4L7 10Z" /></svg></span><div><small>Điểm cộng</small><h3>Người mua đánh giá tốt điều gì?</h3></div></header>
                 <div id="pros-list" class="sentiment-list"></div>
               </article>
               <article class="sentiment-card sentiment-card--negative">
-                <header><span class="sentiment-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M7 14V3H3v11h4Zm0-9 4-2h6.2a2 2 0 0 1 1.9 1.4l1.8 6A2 2 0 0 1 19 13h-5l1 4.3a2.2 2.2 0 0 1-2.1 2.7L7 14Z" /></svg></span><div><small>Điểm trừ</small><h3>Nhược điểm cần cân nhắc</h3></div></header>
+                <header><span class="sentiment-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M7 14V3H3v11h4Zm0-9 4-2h6.2a2 2 0 0 1 1.9 1.4l1.8 6A2 2 0 0 1 19 13h-5l1 4.3a2.2 2.2 0 0 1-2.1 2.7L7 14Z" /></svg></span><div><small>Điểm trừ</small><h3>Điều gì khiến người mua chưa hài lòng?</h3></div></header>
                 <div id="cons-list" class="sentiment-list"></div>
               </article>
               <figure class="insight-illustration">
@@ -118,7 +122,7 @@
         <section class="explanation-section" aria-labelledby="explanation-title">
           <div class="container">
             <div class="section-heading">
-              <div><p class="section-kicker">02 · Giải thích điểm số</p><h2 id="explanation-title">Vì sao TrustScore ở mức này?</h2><p>Mỗi lý do bên dưới cho biết tín hiệu nào đang nâng, hạ hoặc giới hạn độ chắc chắn của kết luận.</p></div>
+              <div><p class="section-kicker">02 · Giải thích điểm số</p><h2 id="explanation-title">Vì sao TrustScore ở mức này?</h2><p>Các lý do được viết bằng ngôn ngữ dễ hiểu: RealView đã thấy gì trong review và vì sao điều đó làm kết quả đáng tin hơn hoặc cần thận trọng hơn.</p></div>
               <div class="score-legend" aria-label="Mốc màu TrustScore"><span class="legend-green">&gt;80</span><span class="legend-yellow">60–80</span><span class="legend-orange">50–59</span><span class="legend-red">&lt;50</span></div>
             </div>
             <div id="trust-drivers" class="trust-drivers"></div>

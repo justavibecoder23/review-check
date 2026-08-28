@@ -49,6 +49,18 @@ function toneForScore(score) {
   return { id: 'red', label: 'Độ tin cậy thấp' };
 }
 
+function fallbackConfidenceExplanation(score, confidenceScore, confidenceLabel, reviewCount) {
+  const scoreMeaning = score >= 80
+    ? 'các review hiện có đang khá nhất quán và ít dấu hiệu bất thường'
+    : score >= 60
+      ? 'phần lớn review hiện có đủ rõ để tham khảo'
+      : 'tập review hiện còn những tín hiệu cần được thận trọng';
+  const dataMeaning = confidenceScore < 55
+    ? `Confidence ${confidenceScore}% (${confidenceLabel}) cho biết lượng hoặc độ phủ dữ liệu vẫn còn hạn chế, hiện mới có ${reviewCount} review để đối chiếu.`
+    : `Confidence ${confidenceScore}% (${confidenceLabel}) cho biết lượng và độ phủ dữ liệu hiện tại ${confidenceScore >= 80 ? 'đã đủ tốt để củng cố kết luận' : 'khá hữu ích nhưng vẫn nên đọc cùng các review cụ thể'}.`;
+  return `TrustScore ${score}/100 phản ánh rằng ${scoreMeaning}. ${dataMeaning} Hai chỉ số đo hai khía cạnh khác nhau nên không mâu thuẫn với nhau.`;
+}
+
 function fallbackTrust(data, reviews) {
   const included = reviews.filter((review) => review.included !== false);
   const excluded = reviews.filter((review) => review.included === false);
@@ -227,6 +239,7 @@ function renderResult(data) {
   document.querySelector('#confidence-score').textContent = `${confidenceScore}%`;
   document.querySelector('#confidence-label').textContent = confidenceLabel;
   document.querySelector('#trust-summary').textContent = trust.summary || data.verdict;
+  document.querySelector('#confidence-explanation').textContent = trust.confidenceExplanation || fallbackConfidenceExplanation(score, confidenceScore, confidenceLabel, reviews.length);
   document.querySelector('#analysis-source').textContent = trust.engine === 'gemini' ? 'Gemini AI + bộ lọc RealView' : 'Bộ lọc minh bạch RealView';
 
   const scanned = Number(stats.scanned ?? reviews.length) || 0;
@@ -246,7 +259,7 @@ function renderResult(data) {
     <article class="driver-card" data-impact="${['up', 'down', 'neutral'].includes(driver.impact) ? driver.impact : 'neutral'}">
       <span class="driver-number">0${index + 1}</span>
       <span class="driver-impact" aria-hidden="true">${driverIcon(driver.impact)}</span>
-      <div><small>${driver.impact === 'up' ? 'Nâng điểm' : driver.impact === 'down' ? 'Hạ điểm' : 'Giới hạn kết luận'}</small><h3>${escapeHtml(driver.title)}</h3><p>${escapeHtml(driver.detail)}</p></div>
+      <div><small>${driver.impact === 'up' ? 'Tín hiệu củng cố kết quả' : driver.impact === 'down' ? 'Tín hiệu cần thận trọng' : 'Giới hạn độ chắc chắn'}</small><h3>${escapeHtml(driver.title)}</h3><p>${escapeHtml(driver.detail)}</p></div>
     </article>`).join('');
 
   document.querySelector('#kept-list').innerHTML = keptReviews.length ? keptReviews.map((review, index) => reviewCard(review, true, index)).join('') : emptyReviewState(true);

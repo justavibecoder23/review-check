@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildRuleBasedTrust, buildTrustAnalysis, trustTone } from '../src/trust-analysis.mjs';
+import { buildRuleBasedTrust, buildTrustAnalysis, explainScoreAndConfidence, trustTone } from '../src/trust-analysis.mjs';
 
 const reviews = [
   { rating: 5, text: 'Sản phẩm đúng mô tả, chất lượng tốt và đóng gói kỹ, mình đã dùng một tuần.', verified: true, included: true },
@@ -17,6 +17,25 @@ test('TrustScore quy tắc luôn nằm trên thang 100 và có giải thích', (
   assert.equal(trust.pros.length > 0, true);
   assert.equal(trust.cons.length > 0, true);
   assert.equal(trust.drivers.length >= 2, true);
+  assert.match(trust.confidenceExplanation, /TrustScore/);
+  assert.match(trust.confidenceExplanation, /Confidence/);
+  assert.doesNotMatch(trust.drivers.map((driver) => `${driver.title} ${driver.detail}`).join(' '), /Fisher|p\s*=|OR\*|logistic|hard cap|Bonferroni/i);
+});
+
+test('giải thích rõ trường hợp TrustScore cao nhưng Confidence hạn chế', () => {
+  const limitedPositiveSample = Array.from({ length: 23 }, (_, index) => ({
+    rating: 5,
+    text: `Sản phẩm đúng mô tả, chất lượng tốt, dùng ổn và đóng gói kỹ sau lần mua thứ ${index + 1}.`,
+    verified: true,
+    included: true
+  }));
+  const trust = buildRuleBasedTrust(limitedPositiveSample);
+  assert.equal(trust.confidence.score < 55, true);
+  const explanation = explainScoreAndConfidence(trust.method, 98);
+  assert.match(explanation, /TrustScore 98\/100/);
+  assert.match(explanation, /23\/100 review/);
+  assert.match(explanation, /không mâu thuẫn/i);
+  assert.match(trust.pros[0].detail, /Dẫn chứng:/);
 });
 
 test('màu TrustScore tuân theo đúng các ngưỡng giao diện', () => {
@@ -59,7 +78,7 @@ test('Gemini dùng khóa ở header backend và trả cấu trúc giao diện an
                 pros: [{ title: 'Đúng mô tả', detail: 'Một số người mua xác nhận sản phẩm đúng mô tả.', mentions: 1 }],
                 cons: [{ title: 'Chất liệu mỏng', detail: 'Có review chi tiết cho biết vải mỏng.', mentions: 1 }],
                 drivers: [
-                  { impact: 'up', title: 'Review đã xác minh', detail: 'Phần lớn bằng chứng đến từ người mua đã xác minh.' },
+                  { impact: 'up', title: 'Kiểm định Fisher', detail: 'Điểm Fisher 90/100, p=0.01 và OR*=2.4.' },
                   { impact: 'down', title: 'Có phản hồi tiêu cực', detail: 'Review chi tiết nêu vấn đề chất liệu và kích cỡ.' }
                 ]
               }) }] } }]
@@ -73,8 +92,10 @@ test('Gemini dùng khóa ở header backend và trả cấu trúc giao diện an
     assert.equal(trust.score, statisticalScore, 'Gemini không được thay đổi điểm thống kê');
     assert.equal(trust.pros[0].title, 'Đúng mô tả');
     assert.equal(trust.drivers.length, 2);
+    assert.doesNotMatch(`${trust.drivers[0].title} ${trust.drivers[0].detail}`, /Fisher|p\s*=|OR\*/i);
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
     else delete process.env.GEMINI_API_KEY;
   }
 });
+
