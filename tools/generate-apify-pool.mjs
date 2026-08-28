@@ -5,6 +5,7 @@ import { dirname, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { buildApifyPoolFile, normalizeApifyTokens } from '../src/apify-pool-file.mjs';
+import { DEFAULT_APIFY_CONFIG_URL, uploadApifyPool } from '../src/apify-pool-upload.mjs';
 
 function promptSession() {
   return createInterface({ input: stdin, output: stdout });
@@ -35,6 +36,51 @@ async function ask(question, fallback = '') {
   }
 }
 
+async function askSecret(question) {
+  const fromEnvironment = process.env.REALVIEW_APIFY_ADMIN_KEY || process.env.APIFY_ADMIN_KEY;
+  if (fromEnvironment) return fromEnvironment;
+  if (!stdin.isTTY || typeof stdin.setRawMode !== 'function') return ask(question);
+
+  stdout.write(question);
+  stdin.setRawMode(true);
+  stdin.resume();
+  stdin.setEncoding('utf8');
+  return new Promise((resolve, reject) => {
+    let secret = '';
+    const finish = (error) => {
+      stdin.removeListener('data', onData);
+      stdin.setRawMode(false);
+      stdin.pause();
+      stdout.write('\n');
+      if (error) reject(error);
+      else resolve(secret);
+    };
+    const onData = (chunk) => {
+      for (const character of chunk) {
+        if (character === '\u0003') return finish(new Error('Đã hủy nhập APIFY_ADMIN_KEY.'));
+        if (character === '\r' || character === '\n') return finish();
+        if (character === '\u007f' || character === '\b') {
+          secret = secret.slice(0, -1);
+          continue;
+        }
+        if (character >= ' ' && character !== '\u007f') secret += character;
+      }
+    };
+    stdin.on('data', onData);
+  });
+}
+
+function normalizeMode(answer) {
+  const value = String(answer || '').trim().toLowerCase();
+  if (['1', 'append', 'bo sung', 'bổ sung', 'bosung'].includes(value)) return 'append';
+  if (['2', 'replace', 'thay thế', 'thay the'].includes(value)) return 'replace';
+  throw new Error('Hãy chọn 1 (Bổ sung) hoặc 2 (Replace).');
+}
+
+function wantsPush(answer) {
+  return ['1', 'y', 'yes', 'có', 'co', 'push'].includes(String(answer || '').trim().toLowerCase());
+}
+
 async function fileExists(path) {
   try {
     await access(path, constants.F_OK);
@@ -47,8 +93,9 @@ async function fileExists(path) {
 async function main() {
   try {
     const tokens = await collectTokens();
-    const modeAnswer = await ask('Chế độ [replace/append] (mặc định replace): ', 'replace');
-    if (!['replace', 'append'].includes(modeAnswer)) throw new Error('Chế độ chỉ được là replace hoặc append.');
+    stdout.write('\n1. Bổ sung — giữ pool Redis hiện tại và nối key mới.\n');
+    stdout.write('2. Replace — thay toàn bộ pool Redis bằng danh sách mới.\n');
+    const modeAnswer = normalizeMode(await ask('Chọn chế độ [1/2] (mặc định 1 - Bổ sung): ', '1'));
     const timestamp = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
     const defaultFilename = modeAnswer === 'append'
       ? `config/apify-pool-append-${timestamp}.local.json`
@@ -76,6 +123,24 @@ async function main() {
     if (duplicateCount) stdout.write(`Đã tự bỏ ${duplicateCount} API key bị trùng, giữ lần xuất hiện đầu tiên.\n`);
     if (payload.pendingCredentials.length) {
       stdout.write(`${payload.pendingCredentials.length} key dư sẽ được lưu ở trạng thái pending và chưa được sử dụng cho đến khi đủ nhóm 5.\n`);
+    }
+
+    stdout.write('\n1. Push Redis ngay\n2. Không push, chỉ giữ file JSON\n');
+    const pushAnswer = await ask('Chọn [1/2] (mặc định 2 - Không push): ', '2');
+    if (!wantsPush(pushAnswer)) {
+      stdout.write('Đã tạo file nhưng chưa thay đổi Redis.\n');
+      return;
+    }
+
+    const endpoint = await ask(`URL API cấu hình (mặc định ${DEFAULT_APIFY_CONFIG_URL}): `, DEFAULT_APIFY_CONFIG_URL);
+    const adminKey = await askSecret('Nhập APIFY_ADMIN_KEY (được ẩn): ');
+    try {
+      const pool = await uploadApifyPool(payload, { endpoint, adminKey });
+      stdout.write(`Đã ${modeAnswer === 'append' ? 'bổ sung vào' : 'replace'} Redis thành công.\n`);
+      stdout.write(`Pool: ${pool.totals?.groups || 0} nhóm · ${pool.reserve?.length || 0} dự phòng · ${pool.pendingCount || 0} key pending.\n`);
+    } catch (error) {
+      process.exitCode = 1;
+      stdout.write(`Push Redis thất bại: ${error.message}\nFile JSON vẫn an toàn tại ${outputPath}\n`);
     }
   } catch (error) {
     process.exitCode = 1;

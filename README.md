@@ -49,6 +49,8 @@ Pool được chia thành các nhóm, mỗi nhóm có đúng 5 key theo thứ t�
 
 Để tạo nhanh file pool từ một danh sách dài API key, chạy `npm run generate:apify-pool`. Dán mỗi key trên một dòng, nhấn Enter ở dòng trống, chọn `replace` hoặc `append`, rồi nhập vị trí muốn lưu. Công cụ tự loại key trùng (giữ lần xuất hiện đầu tiên) và chia key thành từng nhóm 5★ → 1★. Nếu còn dư 1–4 key, backend mã hóa và lưu chúng ở trạng thái `pending`; chúng không được cấp phát cho đến khi một lần `append` sau bổ sung đủ nhóm 5. Chế độ `replace` mặc định dùng `config/apify-pool.local.json`; chế độ `append` luôn đề xuất một file mới có timestamp để không ghi đè file ban đầu. Các file này được tạo với quyền chỉ tài khoản hiện tại đọc/ghi và đã nằm trong `.gitignore`.
 
+Sau khi tạo file, tool cho chọn **Push Redis** hoặc **Không push**. Nếu push, chế độ **Bổ sung** gửi `mode: "append"` để giữ pool cũ và nối key mới; chế độ **Replace** gửi `mode: "replace"` để thay pool hiện tại. Tool yêu cầu `APIFY_ADMIN_KEY` bằng trường nhập ẩn, chỉ báo thống kê không chứa token và vẫn giữ file JSON nếu upload thất bại.
+
 1. Kết nối Upstash Redis từ Vercel Marketplace. Backend chấp nhận cả cặp `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` và cặp tương thích `KV_REST_API_URL` / `KV_REST_API_TOKEN` do integration cấp.
 2. Tạo hai secret một lần và redeploy:
 
