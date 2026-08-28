@@ -3,6 +3,7 @@ import { buildTrustAnalysis } from './trust-analysis.mjs';
 import { classifyReviewSignals, findReviewIssues, ISSUE_DEFINITIONS } from './trust-score-v31.mjs';
 import { labelReviewsTwoLayer } from './review-labeler.mjs';
 import { saveReviewDatasets } from './review-dataset-storage.mjs';
+import { createProgressReporter } from './sse.mjs';
 
 const issueDefinitions = ISSUE_DEFINITIONS.map(({ id, label, words }) => ({ id, label, words }));
 const lowValuePatterns = [/^ok+([.! ]*)$/i, /tốt([.! ]*)$/i, /^đẹp([.! ]*)$/i, /^5\s*sao/i, /chưa.{0,12}(dùng|thử)/i];
@@ -32,15 +33,21 @@ function shouldKeep(review) {
   return { keep: true, reason: null };
 }
 
-export async function analyzeProductUrl(rawUrl) {
+export async function analyzeProductUrl(rawUrl, options = {}) {
+  const progress = createProgressReporter(options.onProgress);
   if (typeof rawUrl !== 'string' || !rawUrl.trim()) {
     const error = new Error('Hãy dán link sản phẩm Shopee hoặc TikTok Shop.');
     error.statusCode = 400;
     throw error;
   }
 
-  const { reviews, source, product, warnings } = await getReviews(rawUrl.trim());
+  progress('validating', 3, 'Đang xác thực liên kết sản phẩm...');
+  const { reviews, source, product, warnings } = await getReviews(rawUrl.trim(), {
+    onProgress: options.onProgress
+  });
+  progress('labeling', 66, `Đã lấy ${reviews.length} review. Đang gắn nhãn dữ liệu...`);
   const labeling = await labelReviewsTwoLayer(reviews, { product });
+  progress('filtering', 76, 'Đang lọc nhiễu và xác định review được sử dụng...');
   const checked = labeling.reviews.map((review) => ({ ...review, filter: shouldKeep(review) }));
   const genuine = checked.filter((review) => review.filter.keep);
   const excluded = checked.filter((review) => !review.filter.keep);
@@ -66,6 +73,7 @@ export async function analyzeProductUrl(rawUrl) {
   const signal = issues.length === 0 ? 'Chưa thấy nhược điểm lặp lại rõ ràng' : issues[0].label;
   const processedReviews = checked.map(({ filter, ...review }) => ({ ...review, included: filter.keep, exclusionReason: filter.reason }));
   const trustSample = processedReviews.filter((review) => !classifyReviewSignals(review).seeding).length;
+  progress('saving', 84, 'Đang lưu dữ liệu raw, labeled và quyết định lọc...');
   const dataset = await saveReviewDatasets({
     rawReviews: reviews,
     labeledReviews: processedReviews,
@@ -75,8 +83,9 @@ export async function analyzeProductUrl(rawUrl) {
   });
   if (dataset.warning) warnings.push(dataset.warning);
   warnings.push(...labeling.warnings);
+  progress('scoring', 91, 'Đang tính Trust Score và kiểm tra thống kê...');
   const trust = await buildTrustAnalysis(processedReviews, { product });
-  return {
+  const result = {
     product,
     source,
     warnings,
@@ -103,4 +112,6 @@ export async function analyzeProductUrl(rawUrl) {
     trust,
     reviews: processedReviews
   };
+  progress('complete', 100, 'Phân tích hoàn tất.');
+  return result;
 }

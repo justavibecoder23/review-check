@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { reserveApifyCredentialSet } from './apify-credential-store.mjs';
+import { createProgressReporter } from './sse.mjs';
 
 export const SHOPEE_STAR_FILTERS = Object.freeze(['5', '4', '3', '2', '1']);
 const DEFAULT_ACTOR_ID = 'zen-studio/shopee-product-reviews-scraper';
@@ -116,6 +117,7 @@ function validateCredentialSet(credentialSet) {
 }
 
 export async function collectShopeeReviewsParallel(url, options = {}) {
+  const progress = createProgressReporter(options.onProgress);
   const perStarLimit = Math.min(20, Math.max(1, Number.parseInt(String(options.perStarLimit ?? process.env.SHOPEE_REVIEWS_PER_STAR ?? 20), 10) || 20));
   const credentialSet = validateCredentialSet(options.credentialSet
     || (options.credential ? legacyCredentialSet(options.credential) : await reserveApifyCredentialSet({ fetchImpl: options.redisFetchImpl })));
@@ -128,9 +130,22 @@ export async function collectShopeeReviewsParallel(url, options = {}) {
   const startedAt = performance.now();
 
   // Cả năm run được khởi động trước khi await để latency gần với run chậm nhất.
-  const runs = await Promise.all(credentialSet.credentials.map((credential) => runStarFilter({
-    url, star: String(credential.star), perStarLimit, credential, fetchImpl, actorId, timeoutMs
-  })));
+  let completedRuns = 0;
+  const runs = await Promise.all(credentialSet.credentials.map(async (credential) => {
+    const run = await runStarFilter({
+      url, star: String(credential.star), perStarLimit, credential, fetchImpl, actorId, timeoutMs
+    });
+    completedRuns += 1;
+    progress('collecting', 14 + completedRuns * 9, `${run.star}★: ${run.ok ? `đã lấy ${run.reviewCount} review` : 'thu thập thất bại'} (${completedRuns}/5 tài khoản hoàn tất).`, {
+      star: Number(run.star),
+      completedRuns,
+      totalRuns: SHOPEE_STAR_FILTERS.length,
+      reviewCount: run.reviewCount,
+      ok: run.ok,
+      latencyMs: run.latencyMs
+    });
+    return run;
+  }));
   const successful = runs.filter((run) => run.ok);
   const usage = {
     provider: credentialSet.source,

@@ -4,12 +4,16 @@
     "api/analyze.mjs": {
       "maxDuration": 180
     },
+    "api/analyze-stream.mjs": {
+      "maxDuration": 180
+    },
     "api/apify-config.mjs": {
       "maxDuration": 10
     }
   },
   "rewrites": [
     { "source": "/api/analyze", "destination": "/api/analyze.mjs" },
+    { "source": "/api/analyze-stream", "destination": "/api/analyze-stream.mjs" },
     { "source": "/api/apify-config", "destination": "/api/apify-config.mjs" },
     { "source": "/(.*)", "destination": "/public/$1" }
   ]

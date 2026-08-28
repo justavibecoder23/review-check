@@ -4,6 +4,7 @@ import { extname, join, normalize } from 'node:path';
 import { analyzeProductUrl } from './src/analyze.mjs';
 import { answerWebsiteQuestion } from './src/site-chatbot.mjs';
 import { assertApifyAdmin, readApifyAdminStatus, updateApifyAdminPool } from './src/apify-admin.mjs';
+import { openSse } from './src/sse.mjs';
 
 const port = Number(process.env.PORT || 3000);
 const host = process.env.HOST || '127.0.0.1';
@@ -38,6 +39,25 @@ const server = createServer(async (request, response) => {
       const body = await getBody(request);
       const result = await analyzeProductUrl(body.url);
       return sendJson(response, 200, result);
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/analyze-stream') {
+      const body = await getBody(request);
+      const stream = openSse(response);
+      const heartbeat = setInterval(() => stream.send('heartbeat', { at: Date.now() }), 15_000);
+      stream.send('ready', { message: 'Đã mở luồng cập nhật tiến độ.' });
+      try {
+        const result = await analyzeProductUrl(body.url, {
+          onProgress: (progress) => stream.send('progress', progress)
+        });
+        stream.send('result', result);
+      } catch (error) {
+        stream.send('error', { error: error?.message || 'Có lỗi khi phân tích sản phẩm.', statusCode: error?.statusCode || 500 });
+      } finally {
+        clearInterval(heartbeat);
+        stream.close();
+      }
+      return;
     }
 
     if (request.method === 'POST' && url.pathname === '/api/chat') {

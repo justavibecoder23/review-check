@@ -1,5 +1,6 @@
 import { extractMarketplaceUrl, isShopeeUrl, resolveShopeeProductUrl } from './shopee-url.mjs';
 import { collectShopeeReviewsParallel, SHOPEE_STAR_FILTERS } from './apify-review-scraper.mjs';
+import { createProgressReporter } from './sse.mjs';
 
 const DEMO_REVIEWS = [
   { rating: 5, text: 'Nhận xu nên đánh giá cho shop 5 sao nha mọi người.', date: '12/08/2026', verified: false },
@@ -85,12 +86,14 @@ function normaliseProductMeta(source = {}) {
   };
 }
 
-export async function getReviews(url) {
+export async function getReviews(url, options = {}) {
+  const progress = createProgressReporter(options.onProgress);
   let parsed;
   try { parsed = new URL(extractMarketplaceUrl(url)); } catch (error) {
     throw Object.assign(new Error(error?.message || 'Link không hợp lệ.'), { statusCode: error?.statusCode || 400 });
   }
   const platform = platformFrom(parsed.href);
+  progress('resolving', 8, `Đã nhận diện nguồn ${platform}. Đang chuẩn hóa liên kết...`);
   const warnings = [];
   const shopeeProduct = platform === 'Shopee'
     ? await resolveShopeeProductUrl(parsed.href)
@@ -104,8 +107,11 @@ export async function getReviews(url) {
   }
 
   try {
+    progress('collecting', 14, platform === 'Shopee'
+      ? 'Đang khởi chạy song song 5 tài khoản Apify...'
+      : 'Đang lấy các đánh giá công khai...');
     const collected = platform === 'Shopee'
-      ? await collectShopeeReviewsParallel(productUrl, { perStarLimit })
+      ? await collectShopeeReviewsParallel(productUrl, { perStarLimit, onProgress: options.onProgress })
       : await loadFromConfiguredBot(productUrl, platform);
     const reviews = collected.reviews;
     if (Array.isArray(collected.warnings)) warnings.push(...collected.warnings);

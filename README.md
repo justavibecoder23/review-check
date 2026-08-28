@@ -79,6 +79,18 @@ TikTok Shop hiện vẫn dùng collector độc lập nếu đã cấu hình:
 
 Bot nhận `POST /reviews` với JSON `{ "url": "...", "platform": "Shopee", "limit": 50 }` và trả `{ "reviews": [{ "rating": 1-5, "text": "...", "date": "...", "verified": true, "author": "..." }] }`.
 
+## Cập nhật tiến độ bằng Server-Sent Events
+
+Frontend gọi `POST /api/analyze-stream` và nhận luồng `text/event-stream`. Backend gửi các event:
+
+- `ready`: kết nối streaming đã sẵn sàng.
+- `progress`: bước xử lý thật, phần trăm và chi tiết từng run Apify.
+- `heartbeat`: giữ kết nối qua proxy trong lúc Apify đang chạy.
+- `result`: kết quả phân tích hoàn chỉnh.
+- `error`: lỗi có thông báo và mã trạng thái tương ứng.
+
+Endpoint JSON `POST /api/analyze` vẫn được giữ để tương thích với client cũ.
+
 ### Triển khai bot
 
 Deploy riêng thư mục `bot/` lên một dịch vụ hỗ trợ Docker. Thiết lập biến môi trường `REVIEWS_BOT_TOKEN` là một chuỗi bí mật mạnh. Sau đó tại Vercel, thêm:
