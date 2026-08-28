@@ -5,10 +5,9 @@ export function normalizeApifyTokens(lines) {
 }
 
 export function buildApifyPoolFile(tokens, options = {}) {
-  const normalized = normalizeApifyTokens(tokens);
+  const cleaned = normalizeApifyTokens(tokens);
+  const normalized = [...new Set(cleaned)];
   if (!normalized.length) throw new Error('Chưa có API key nào được nhập.');
-  const duplicateCount = normalized.length - new Set(normalized).size;
-  if (duplicateCount) throw new Error(`Phát hiện ${duplicateCount} API key bị trùng.`);
 
   const mode = options.mode === 'append' ? 'append' : 'replace';
   const maxUsesPerKey = Number.parseInt(String(options.maxUsesPerKey ?? 10), 10);

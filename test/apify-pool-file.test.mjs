@@ -25,6 +25,8 @@ test('giữ số key dư ở pending thay vì từ chối', () => {
   assert.deepEqual(pool.pendingCredentials.map((item) => item.token), ['6', '7']);
 });
 
-test('từ chối API key trùng', () => {
-  assert.throws(() => buildApifyPoolFile(['same', '2', '3', '4', 'same']), /bị trùng/);
+test('tự loại API key trùng và giữ thứ tự lần xuất hiện đầu tiên', () => {
+  const pool = buildApifyPoolFile(['same', '2', '3', '4', 'same', '5']);
+  assert.equal(pool.groups.length, 1);
+  assert.deepEqual(pool.groups[0].credentials.map((item) => item.token), ['same', '2', '3', '4', '5']);
 });
