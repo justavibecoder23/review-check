@@ -173,7 +173,7 @@ function render(data) {
   document.querySelector('#platform-tag').textContent = product.platform;
   document.querySelector('#verdict').textContent = verdict;
   document.querySelector('#original-link').href = product.url;
-  for (const key of ['scanned', 'genuine', 'excluded', 'confidence']) document.querySelector(`#${key}`).textContent = stats[key];
+  for (const key of ['scanned', 'genuine', 'excluded']) document.querySelector(`#${key}`).textContent = stats[key];
   renderIssues(issues);
   renderReviews(reviews);
 
