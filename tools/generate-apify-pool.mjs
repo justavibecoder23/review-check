@@ -49,7 +49,11 @@ async function main() {
     const tokens = await collectTokens();
     const modeAnswer = await ask('Chế độ [replace/append] (mặc định replace): ', 'replace');
     if (!['replace', 'append'].includes(modeAnswer)) throw new Error('Chế độ chỉ được là replace hoặc append.');
-    const defaultPath = resolve('config/apify-pool.local.json');
+    const timestamp = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
+    const defaultFilename = modeAnswer === 'append'
+      ? `config/apify-pool-append-${timestamp}.local.json`
+      : 'config/apify-pool.local.json';
+    const defaultPath = resolve(defaultFilename);
     const outputAnswer = await ask(`Đường dẫn file đầu ra (mặc định ${defaultPath}): `, defaultPath);
     const outputPath = resolve(outputAnswer);
     const cleanedTokens = normalizeApifyTokens(tokens);
