@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildRuleBasedTrust, buildTrustAnalysis, explainScoreAndConfidence, trustTone } from '../src/trust-analysis.mjs';
+import { readFileSync } from 'node:fs';
+import { buildRuleBasedTrust, buildTrustAnalysis, trustTone } from '../src/trust-analysis.mjs';
 
 const reviews = [
   { rating: 5, text: 'Sản phẩm đúng mô tả, chất lượng tốt và đóng gói kỹ, mình đã dùng một tuần.', verified: true, included: true },
@@ -13,29 +14,21 @@ test('TrustScore quy tắc luôn nằm trên thang 100 và có giải thích', (
   const trust = buildRuleBasedTrust(reviews);
   assert.equal(Number.isInteger(trust.score), true);
   assert.equal(trust.score >= 0 && trust.score <= 100, true);
-  assert.equal(trust.confidence.score >= 0 && trust.confidence.score <= 100, true);
+  assert.equal('confidence' in trust, false);
   assert.equal(trust.pros.length > 0, true);
   assert.equal(trust.cons.length > 0, true);
   assert.equal(trust.drivers.length >= 2, true);
-  assert.match(trust.confidenceExplanation, /TrustScore/);
-  assert.match(trust.confidenceExplanation, /Confidence/);
+  assert.match(trust.summary, /không phải điểm chất lượng tuyệt đối của sản phẩm/i);
+  assert.match(trust.pros[0].detail, /Dẫn chứng:/);
   assert.doesNotMatch(trust.drivers.map((driver) => `${driver.title} ${driver.detail}`).join(' '), /Fisher|p\s*=|OR\*|logistic|hard cap|Bonferroni/i);
 });
 
-test('giải thích rõ trường hợp TrustScore cao nhưng Confidence hạn chế', () => {
-  const limitedPositiveSample = Array.from({ length: 23 }, (_, index) => ({
-    rating: 5,
-    text: `Sản phẩm đúng mô tả, chất lượng tốt, dùng ổn và đóng gói kỹ sau lần mua thứ ${index + 1}.`,
-    verified: true,
-    included: true
-  }));
-  const trust = buildRuleBasedTrust(limitedPositiveSample);
-  assert.equal(trust.confidence.score < 55, true);
-  const explanation = explainScoreAndConfidence(trust.method, 98);
-  assert.match(explanation, /TrustScore 98\/100/);
-  assert.match(explanation, /23\/100 review/);
-  assert.match(explanation, /không mâu thuẫn/i);
-  assert.match(trust.pros[0].detail, /Dẫn chứng:/);
+test('giao diện bỏ Confidence và làm nổi bật ý nghĩa đúng của TrustScore', () => {
+  const html = readFileSync(new URL('../public/results.html', import.meta.url), 'utf8');
+  const clientScript = readFileSync(new URL('../public/results.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(`${html} ${clientScript}`, /Confidence/i);
+  assert.match(html, /TrustScore đánh giá độ tin cậy của review/i);
+  assert.match(html, /không phải điểm chất lượng sản phẩm/i);
 });
 
 test('màu TrustScore tuân theo đúng các ngưỡng giao diện', () => {
