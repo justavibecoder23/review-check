@@ -17,6 +17,8 @@ const negativeDefinitions = [
   { id: 'su-dung', title: 'Trải nghiệm sử dụng', description: 'Sản phẩm có thể gây khó chịu, hoạt động yếu hoặc không đáp ứng tốt khi sử dụng thực tế.', words: ['không dùng được', 'không hoạt động', 'không bền', 'nóng', 'bí', 'khó chịu', 'rò', 'hết pin', 'yếu'] }
 ];
 
+const MAX_NARRATIVE_EVIDENCE = 18;
+
 function normalise(value = '') {
   return String(value).toLocaleLowerCase('vi').replace(/\s+/g, ' ').trim();
 }
@@ -242,15 +244,135 @@ const trustSchema = {
   required: ['summary', 'pros', 'cons', 'drivers']
 };
 
-function compactReviews(reviews) {
-  return reviews.slice(0, 100).map((review, index) => ({
+function finalLabels(review) {
+  return review?.labeling?.final || review?.labels || {};
+}
+
+function ratingLevel(review) {
+  const value = Math.round(clamp(review?.rating, 0, 5));
+  return value >= 1 && value <= 5 ? value : 0;
+}
+
+function defectCategories(review) {
+  const categories = finalLabels(review)?.defect_categories;
+  return Array.isArray(categories)
+    ? [...new Set(categories.filter((category) => typeof category === 'string' && category))]
+    : [];
+}
+
+function representativePriority(left, right) {
+  const leftDefects = defectCategories(left.review).length > 0;
+  const rightDefects = defectCategories(right.review).length > 0;
+  if (leftDefects !== rightDefects) return Number(rightDefects) - Number(leftDefects);
+  const leftRating = ratingLevel(left.review) || 6;
+  const rightRating = ratingLevel(right.review) || 6;
+  if (leftRating !== rightRating) return leftRating - rightRating;
+  const leftIncluded = left.review.included !== false;
+  const rightIncluded = right.review.included !== false;
+  if (leftIncluded !== rightIncluded) return Number(rightIncluded) - Number(leftIncluded);
+  if (Boolean(left.review.verified) !== Boolean(right.review.verified)) {
+    return Number(Boolean(right.review.verified)) - Number(Boolean(left.review.verified));
+  }
+  const lengthDifference = String(right.review.text || '').length - String(left.review.text || '').length;
+  return lengthDifference || left.index - right.index;
+}
+
+function compactEvidence(review, index) {
+  const labels = finalLabels(review);
+  return {
     id: index + 1,
-    rating: clamp(review.rating, 0, 5),
+    rating: ratingLevel(review),
     verified: Boolean(review.verified),
     included: review.included !== false,
     exclusionReason: review.exclusionReason || null,
-    text: String(review.text || '').slice(0, 520)
-  }));
+    defectCategories: defectCategories(review),
+    reviewedBy: labels.reviewed_by || null,
+    text: String(review.text || '').replace(/\s+/g, ' ').trim().slice(0, 360)
+  };
+}
+
+function selectRepresentativeEvidence(reviews) {
+  const candidates = reviews.map((review, index) => ({ review, index }));
+  const ranked = [...candidates].sort(representativePriority);
+  const selected = [];
+  const selectedIndexes = new Set();
+  const addBest = (predicate) => {
+    if (selected.length >= MAX_NARRATIVE_EVIDENCE) return;
+    const candidate = ranked.find((item) => !selectedIndexes.has(item.index) && predicate(item.review));
+    if (!candidate) return;
+    selected.push(candidate);
+    selectedIndexes.add(candidate.index);
+  };
+
+  const categories = [...new Set(candidates.flatMap(({ review }) => defectCategories(review)))].sort();
+  for (const category of categories) addBest((review) => defectCategories(review).includes(category));
+
+  const ratings = [...new Set(candidates.map(({ review }) => ratingLevel(review)).filter(Boolean))].sort((left, right) => left - right);
+  for (const rating of ratings) addBest((review) => ratingLevel(review) === rating);
+
+  const exclusionReasons = [...new Set(candidates
+    .filter(({ review }) => review.included === false && review.exclusionReason)
+    .map(({ review }) => String(review.exclusionReason)))].sort();
+  for (const reason of exclusionReasons) addBest((review) => review.included === false && String(review.exclusionReason) === reason);
+
+  for (const candidate of ranked) {
+    if (selected.length >= MAX_NARRATIVE_EVIDENCE) break;
+    if (!selectedIndexes.has(candidate.index)) {
+      selected.push(candidate);
+      selectedIndexes.add(candidate.index);
+    }
+  }
+  return selected.map(({ review, index }) => compactEvidence(review, index));
+}
+
+function countRatings(reviews) {
+  const counts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, unknown: 0 };
+  for (const review of reviews) {
+    const rating = ratingLevel(review);
+    if (rating) counts[rating] += 1;
+    else counts.unknown += 1;
+  }
+  return counts;
+}
+
+function countExclusionReasons(reviews) {
+  const counts = {};
+  for (const review of reviews) {
+    if (review.included !== false) continue;
+    const reason = String(review.exclusionReason || 'Không nêu lý do');
+    counts[reason] = (counts[reason] || 0) + 1;
+  }
+  return counts;
+}
+
+export function buildGeminiNarrativePayload(reviews = [], fallback) {
+  const included = reviews.filter((review) => review.included !== false);
+  const excluded = reviews.filter((review) => review.included === false);
+  const method = fallback?.method || {};
+  return {
+    fixedBackendDraft: {
+      score: fallback.score,
+      label: fallback.label,
+      summary: fallback.summary,
+      pros: fallback.pros,
+      cons: fallback.cons,
+      drivers: fallback.drivers
+    },
+    fullSampleStatistics: {
+      total: reviews.length,
+      included: included.length,
+      excluded: excluded.length,
+      verified: reviews.filter((review) => review.verified).length,
+      detailed: reviews.filter((review) => normalise(review.text).length >= 45).length,
+      ratings: countRatings(reviews),
+      includedRatings: countRatings(included),
+      exclusionReasons: countExclusionReasons(reviews),
+      defects: (method.defects?.tests || []).map(({ id, label, count }) => ({ id, label, count })),
+      sampling: method.sampling || null,
+      adequacy: method.adequacy || null
+    },
+    representativeEvidence: selectRepresentativeEvidence(reviews)
+  };
 }
 
 function cleanItem(item, fallback) {
@@ -258,7 +380,7 @@ function cleanItem(item, fallback) {
   return {
     title: String(item.title || fallback?.title || '').slice(0, 90),
     detail: String(item.detail || fallback?.detail || '').slice(0, 420),
-    mentions: Math.max(0, Math.round(Number(item.mentions) || 0))
+    mentions: Math.max(0, Math.round(Number(fallback?.mentions) || 0))
   };
 }
 
@@ -296,10 +418,15 @@ async function analyzeWithGemini(reviews, fallback, fetchImpl) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return fallback;
   const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+  const narrativePayload = buildGeminiNarrativePayload(reviews, fallback);
   const prompt = [
     'Bạn là hệ thống kiểm định review thương mại điện tử của RealView.',
+    'Backend đã xử lý toàn bộ review, chạy đủ hai lớp nhãn và tính xong TrustScore. Bạn chỉ viết lại phần diễn giải cho dễ hiểu.',
     'Viết phần diễn giải TrustScore bằng tiếng Việt cho người mua phổ thông. Tuyệt đối không chấm lại hoặc sửa điểm thống kê.',
-    'Chỉ dùng dữ liệu review được cung cấp; không suy đoán đặc tính sản phẩm hoặc bịa số lượt đề cập.',
+    'Giữ nguyên thứ tự, chủ đề và số lượt mentions của từng pros/cons trong fixedBackendDraft; không thêm, bớt hoặc tự đếm lại.',
+    'fullSampleStatistics là số liệu chính xác của toàn bộ mẫu. Luôn dùng các tổng số này khi nói về số lượng hoặc tỷ lệ.',
+    'representativeEvidence chỉ là các ví dụ minh họa được chọn từ toàn bộ mẫu. Không suy ra số lượt đề cập hoặc tỷ lệ từ tập ví dụ này.',
+    'Chỉ dùng dữ liệu được cung cấp; không suy đoán đặc tính sản phẩm hoặc bịa số lượt đề cập.',
     'Review included=false đã bị giảm ưu tiên: dùng chúng để đánh giá chất lượng dữ liệu, không dùng làm bằng chứng ưu/nhược điểm sản phẩm.',
     'Điểm đã được backend tính bằng thuật toán RealView v3.1 gồm Fisher exact, binomial exact, hiệu chỉnh đa kiểm định và hard cap.',
     'Nội dung hiển thị cho người dùng tuyệt đối không được nhắc Fisher, p-value, odds ratio, binomial, logistic, Bonferroni, hard cap, điểm thành phần hoặc công thức.',
@@ -307,8 +434,7 @@ async function analyzeWithGemini(reviews, fallback, fetchImpl) {
     'Mỗi ưu/nhược điểm phải nêu rõ người mua thích hoặc chưa hài lòng điều gì, ảnh hưởng thực tế ra sao và có bao nhiêu review cùng đề cập; tránh câu chung chung như “ghi nhận tín hiệu tích cực”.',
     'Trả về 6 đến 8 driver khác nhau. Mỗi driver phải dịch tín hiệu kỹ thuật thành ngôn ngữ đời thường: điều gì được quan sát thấy trong review, vì sao điều đó làm kết quả đáng tin hơn hoặc cần thận trọng hơn.',
     `Điểm cố định phải giữ nguyên: ${fallback.score}/100.`,
-    `Chi tiết phương pháp: ${JSON.stringify(fallback.method)}.`,
-    `Dữ liệu: ${JSON.stringify(compactReviews(reviews))}`
+    `Dữ liệu diễn giải: ${JSON.stringify(narrativePayload)}`
   ].join('\n');
   const response = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: 'POST',

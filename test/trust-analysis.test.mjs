@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { buildRuleBasedTrust, buildTrustAnalysis, trustTone } from '../src/trust-analysis.mjs';
+import { buildGeminiNarrativePayload, buildRuleBasedTrust, buildTrustAnalysis, trustTone } from '../src/trust-analysis.mjs';
 
 const reviews = [
   { rating: 5, text: 'Sản phẩm đúng mô tả, chất lượng tốt và đóng gói kỹ, mình đã dùng một tuần.', verified: true, included: true },
@@ -73,7 +73,8 @@ test('Gemini dùng khóa ở header backend và trả cấu trúc giao diện an
   let receivedHeader;
   let requestPayload;
   try {
-    const statisticalScore = buildRuleBasedTrust(reviews).score;
+    const statisticalFallback = buildRuleBasedTrust(reviews);
+    const statisticalScore = statisticalFallback.score;
     const trust = await buildTrustAnalysis(reviews, {
       fetchImpl: async (_url, options) => {
         receivedHeader = options.headers['x-goog-api-key'];
@@ -85,8 +86,8 @@ test('Gemini dùng khóa ở header backend và trả cấu trúc giao diện an
               candidates: [{ content: { parts: [{ text: JSON.stringify({
                 score: 76,
                 summary: 'Phần lớn review hữu ích tích cực nhưng vẫn có vấn đề về chất liệu và form.',
-                pros: [{ title: 'Đúng mô tả', detail: 'Một số người mua xác nhận sản phẩm đúng mô tả.', mentions: 1 }],
-                cons: [{ title: 'Chất liệu mỏng', detail: 'Có review chi tiết cho biết vải mỏng.', mentions: 1 }],
+                pros: [{ title: 'Đúng mô tả', detail: 'Một số người mua xác nhận sản phẩm đúng mô tả.', mentions: 999 }],
+                cons: [{ title: 'Chất liệu mỏng', detail: 'Có review chi tiết cho biết vải mỏng.', mentions: 999 }],
                 drivers: [
                   { impact: 'up', title: 'Kiểm định Fisher', detail: 'Điểm Fisher 90/100, p=0.01 và OR*=2.4.' },
                   { impact: 'down', title: 'Có phản hồi tiêu cực', detail: 'Review chi tiết nêu vấn đề chất liệu và kích cỡ.' }
@@ -104,11 +105,70 @@ test('Gemini dùng khóa ở header backend và trả cấu trúc giao diện an
     assert.equal(trust.engine, 'gemini');
     assert.equal(trust.score, statisticalScore, 'Gemini không được thay đổi điểm thống kê');
     assert.equal(trust.pros[0].title, 'Đúng mô tả');
+    assert.equal(trust.pros[0].mentions, statisticalFallback.pros[0].mentions, 'Gemini không được thay đổi bộ đếm backend');
+    assert.equal(trust.cons[0].mentions, statisticalFallback.cons[0].mentions, 'Gemini không được thay đổi bộ đếm backend');
     assert.equal(trust.drivers.length >= 6, true);
     assert.doesNotMatch(`${trust.drivers[0].title} ${trust.drivers[0].detail}`, /Fisher|p\s*=|OR\*/i);
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
     else delete process.env.GEMINI_API_KEY;
   }
+});
+
+test('payload diễn giải giữ thống kê đủ 100 review nhưng chỉ gửi tối đa 18 dẫn chứng đại diện', () => {
+  const defectIds = ['chat-lieu', 'kich-co', 'dung-mo-ta', 'giao-hang', 'su-dung'];
+  const exclusionReasons = ['Quá ngắn', 'Trùng nội dung', 'Có dấu hiệu seeding'];
+  const syntheticReviews = Array.from({ length: 100 }, (_value, index) => {
+    const rating = index % 5 + 1;
+    const included = index % 7 !== 0;
+    const defect = defectIds[index % defectIds.length];
+    return {
+      rating,
+      verified: index % 3 !== 0,
+      included,
+      exclusionReason: included ? null : exclusionReasons[index % exclusionReasons.length],
+      text: `Review ${index + 1} mô tả trải nghiệm thực tế đủ chi tiết về sản phẩm, độ bền, cách sử dụng và vấn đề quan sát được. ${'Chi tiết bổ sung. '.repeat(30)}`,
+      labels: {
+        is_seeding: false,
+        is_vague: false,
+        is_low_value: false,
+        defect_categories: [defect],
+        reviewed_by: index % 2 ? 'gemini-layer2' : 'layer1'
+      }
+    };
+  });
+  const before = JSON.stringify(syntheticReviews);
+  const fallback = buildRuleBasedTrust(syntheticReviews, {
+    sampling: { strategy: 'parallel-star-filters', perStarLimit: 20 }
+  });
+  const payload = buildGeminiNarrativePayload(syntheticReviews, fallback);
+
+  assert.equal(payload.fixedBackendDraft.score, fallback.score, 'payload không tính lại hoặc sửa TrustScore');
+  assert.equal(payload.fullSampleStatistics.total, 100);
+  assert.deepEqual(payload.fullSampleStatistics.ratings, { 1: 20, 2: 20, 3: 20, 4: 20, 5: 20, unknown: 0 });
+  assert.equal(payload.representativeEvidence.length, 18);
+  for (const rating of [1, 2, 3, 4, 5]) {
+    assert.ok(payload.representativeEvidence.some((review) => review.rating === rating), `thiếu dẫn chứng ${rating} sao`);
+  }
+  for (const defect of defectIds) {
+    assert.ok(payload.representativeEvidence.some((review) => review.defectCategories.includes(defect)), `thiếu dẫn chứng lỗi ${defect}`);
+  }
+  assert.equal(JSON.stringify(syntheticReviews), before, 'không được sửa dữ liệu review đầu vào');
+
+  const oldPayload = {
+    method: fallback.method,
+    reviews: syntheticReviews.slice(0, 100).map((review, index) => ({
+      id: index + 1,
+      rating: review.rating,
+      verified: review.verified,
+      included: review.included !== false,
+      exclusionReason: review.exclusionReason || null,
+      text: String(review.text || '').slice(0, 520)
+    }))
+  };
+  assert.ok(
+    JSON.stringify(payload).length < JSON.stringify(oldPayload).length * 0.55,
+    'payload mới phải nhỏ hơn ít nhất 45% so với cách gửi toàn bộ review'
+  );
 });
 
