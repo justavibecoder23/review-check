@@ -208,13 +208,18 @@ function temporalScore(reviews) {
   };
 }
 
-function componentScores(reviews, signals, genuine, defectPenalty) {
+function componentScores(reviews, signals, genuine, defectPenalty, options = {}) {
   const seedingRate = ratio(signals.filter((item) => item.seeding).length, reviews.length);
   const fiveStarRate = ratio(reviews.filter((review) => Number(review.rating) === 5).length, reviews.length);
   const oneStarRate = ratio(reviews.filter((review) => Number(review.rating) === 1).length, reviews.length);
   const saturationPenalty = clamp((fiveStarRate - 0.85) / 0.15, 0, 1);
   const attackPenalty = clamp((oneStarRate - 0.5) / 0.5, 0, 1);
-  const distribution = clamp(100 * (1 - 0.5 * seedingRate - 0.3 * saturationPenalty - 0.2 * attackPenalty));
+  // Năm Apify run chủ động lấy gần bằng nhau ở từng mức sao. Phân bố đó là
+  // thiết kế lấy mẫu, không phải phân bố rating tự nhiên của sản phẩm.
+  const controlledStarStrata = options.controlledStarStrata === true;
+  const distribution = controlledStarStrata
+    ? 50
+    : clamp(100 * (1 - 0.5 * seedingRate - 0.3 * saturationPenalty - 0.2 * attackPenalty));
 
   const textValues = genuine.map((review) => {
     const reviewSignals = classifyReviewSignals(review);
@@ -228,6 +233,7 @@ function componentScores(reviews, signals, genuine, defectPenalty) {
   const text = textValues.length ? textValues.reduce((sum, value) => sum + value, 0) / textValues.length : 0;
   return {
     distribution,
+    distributionStatus: controlledStarStrata ? 'neutral-controlled-sample' : 'observed-distribution',
     text,
     defect: clamp(100 * (1 - 2.5 * defectPenalty))
   };
@@ -252,8 +258,10 @@ function fisherComponent(signals, reviews) {
   const positive = build((signal) => signal.seeding, (_signal, review) => Number(review.rating) === 5);
   const negative = build((signal) => signal.vague, (_signal, review) => Number(review.rating) === 1);
   const seedingRate = ratio(signals.filter((signal) => signal.seeding).length, reviews.length);
-  const positiveScore = 100 * (1 - seedingRate) / (1 + positive.penalty);
-  const negativeScore = 100 / (1 + negative.penalty);
+  // Không bác bỏ H0 không phải bằng chứng rằng dữ liệu tốt. Vì vậy 50 là
+  // trung tính; chỉ một liên hệ bất thường có ý nghĩa và OR > 1 mới phạt.
+  const positiveScore = 50 * (1 - seedingRate) / (1 + positive.penalty);
+  const negativeScore = 50 / (1 + negative.penalty);
   return {
     score: clamp(0.6 * positiveScore + 0.4 * negativeScore),
     positive: { ...positive, score: positiveScore },
@@ -270,7 +278,12 @@ function resolveBaselines(options, category) {
 
 export function combineTrustComponents(componentScores) {
   const weighted = {
-    distribution: { score: clamp(componentScores.distribution), weight: 0.15, label: 'Phân bố rating' },
+    distribution: {
+      score: clamp(componentScores.distribution),
+      weight: 0.15,
+      label: 'Phân bố rating',
+      status: componentScores.distributionStatus || 'observed-distribution'
+    },
     text: { score: clamp(componentScores.text), weight: 0.20, label: 'Chất lượng nội dung' },
     fisher: { score: clamp(componentScores.fisher), weight: 0.20, label: 'Fisher 2×2' },
     defect: { score: clamp(componentScores.defect), weight: 0.30, label: 'Rủi ro khuyết tật' },
@@ -332,11 +345,13 @@ export function calculateTrustScoreV31(reviews = [], options = {}) {
       significantAdjusted: completeDefectFamily ? item.significantHolm : item.significantBonferroni
     }));
 
+  const controlledStarStrata = options.sampling?.strategy === 'parallel-star-filters';
   const fisher = fisherComponent(signals, normalizedReviews);
-  const components = componentScores(normalizedReviews, signals, genuine, defectPenalty);
+  const components = componentScores(normalizedReviews, signals, genuine, defectPenalty, { controlledStarStrata });
   const temporal = temporalScore(genuine);
   const combined = combineTrustComponents({
     distribution: components.distribution,
+    distributionStatus: components.distributionStatus,
     text: components.text,
     fisher: fisher.score,
     defect: components.defect,
@@ -357,6 +372,11 @@ export function calculateTrustScoreV31(reviews = [], options = {}) {
     components: combined.components,
     caps: combined.caps,
     sample: { total: normalizedReviews.length, afterSeedingRemoval: genuine.length, seedingCount: normalizedReviews.length - genuine.length },
+    sampling: {
+      strategy: options.sampling?.strategy || 'unknown',
+      controlledStarStrata,
+      perStarLimit: Number(options.sampling?.perStarLimit) || null
+    },
     adequacy: {
       score: adequacyScore,
       label: adequacyScore >= 80 ? 'Tốt' : adequacyScore >= 55 ? 'Khá' : 'Hạn chế',

@@ -84,7 +84,10 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   if (dataset.warning) warnings.push(dataset.warning);
   warnings.push(...labeling.warnings);
   progress('scoring', 91, 'Đang tính Trust Score và kiểm tra thống kê...');
-  const trust = await buildTrustAnalysis(processedReviews, { product });
+  const trust = await buildTrustAnalysis(processedReviews, {
+    product,
+    sampling: source?.collection
+  });
   const result = {
     product,
     source,

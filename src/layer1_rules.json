@@ -75,7 +75,10 @@
           "dut chi", "tuot chi", "bong troc", "no da", "da bong", "nhao", "bai dao", "tho rap",
           "duong may tho", "vai kha bi", "vai bi khi mac", "bi khi mac",
           "cung ngac", "ngua", "cham chich", "mui hoi", "nhua gion", "op ep", "long leo", "gi set",
-          "hoen gi", "kem chat luong", "de hong"
+          "hoen gi", "kem chat luong", "de hong", "khong dinh", "k dinh chac", "ko dinh chac", "khong dinh chac",
+          "dan khong dinh", "dan k dinh", "dan ko dinh", "dinh k vao", "dinh ko vao", "dinh khong vao",
+          "khong dan duoc", "dan khong duoc", "ko dan dc", "k dan dc", "roi mat", "roi ra", "rot ra",
+          "de roi", "de bong", "de rot", "do ben duoc 2 ngay", "do ben kem"
         ]
       },
       "kich-co": {

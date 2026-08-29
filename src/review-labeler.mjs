@@ -265,7 +265,17 @@ async function classifyBatchWithGemini(batch, product, fetchImpl) {
     }),
     signal: AbortSignal.timeout(18_000)
   });
-  if (!response.ok) throw new Error(`Gemini labeler trả về HTTP ${response.status}`);
+  if (!response.ok) {
+    let detail = '';
+    try {
+      const bodyText = typeof response.text === 'function' ? await response.text() : '';
+      const parsedError = bodyText ? JSON.parse(bodyText) : null;
+      detail = String(parsedError?.error?.status || parsedError?.error?.message || '').replace(/\s+/g, ' ').slice(0, 160);
+    } catch {
+      // Chỉ mã HTTP cũng đủ để fallback; tuyệt đối không log request/key.
+    }
+    throw new Error(`Gemini labeler trả về HTTP ${response.status}${detail ? ` (${detail})` : ''}`);
+  }
   const body = await response.json();
   const text = body?.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('') || '';
   const parsed = JSON.parse(text);
@@ -285,12 +295,29 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
   const batchSize = Math.min(30, Math.max(5, Number.parseInt(process.env.LABELER_LLM_BATCH_SIZE || '25', 10) || 25));
   const warnings = [];
   const layer2ById = new Map();
+  const model = process.env.LABELER_GEMINI_MODEL || process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+  const batches = chunks(selected, batchSize);
+  let succeededBatches = 0;
+  let failedBatches = 0;
   if (selected.length && process.env.GEMINI_API_KEY) {
-    const results = await Promise.all(chunks(selected, batchSize).map(async (batch) => {
+    const results = await Promise.all(batches.map(async (batch, batchIndex) => {
       try {
-        return await classifyBatchWithGemini(batch, options.product, options.fetchImpl || fetch);
+        const result = await classifyBatchWithGemini(batch, options.product, options.fetchImpl || fetch);
+        succeededBatches += 1;
+        return result;
       } catch (error) {
-        return { labels: [], warning: error?.message || 'Layer 2 không phản hồi.' };
+        failedBatches += 1;
+        const warning = error?.message || 'Layer 2 không phản hồi.';
+        if (process.env.VERCEL || options.logLayer2Errors) {
+          (options.logger || console).error('[review-labeler] Layer 2 batch failed', {
+            batch: batchIndex + 1,
+            totalBatches: batches.length,
+            reviewCount: batch.length,
+            model,
+            error: warning
+          });
+        }
+        return { labels: [], warning };
       }
     }));
     for (const result of results) {
@@ -300,6 +327,14 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
   } else if (selected.length) {
     warnings.push('Layer 2 chưa chạy vì GEMINI_API_KEY chưa được cấu hình; nhãn Layer 1 vẫn được lưu đầy đủ.');
   }
+
+  const layer2Status = selected.length === 0
+    ? 'disabled'
+    : failedBatches === 0 && layer2ById.size === selected.length
+      ? 'complete'
+      : layer2ById.size > 0
+        ? 'partial'
+        : 'failed';
 
   let corrected = 0;
   let abstained = 0;
@@ -334,6 +369,9 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
       total: reviews.length,
       layer2Requested: selected.length,
       layer2Returned: layer2ById.size,
+      layer2Status,
+      layer2Model: model,
+      layer2Batches: { total: batches.length, succeeded: succeededBatches, failed: failedBatches },
       corrected,
       abstained,
       engine: layer2ById.size ? 'layer1+gemini-layer2' : 'layer1-only',

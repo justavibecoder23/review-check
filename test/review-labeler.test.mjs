@@ -56,6 +56,23 @@ test('vague chỉ áp dụng cho 1–2 sao khi không có lỗi cụ thể', () 
   assert.equal(labelReviewLayer1({ rating: 1, text: 'Quá thất vọng vì pin yếu và sạc không vào.' }).is_vague, false);
 });
 
+test('lỗi keo dán, bong rơi và độ bền ngắn là khuyết tật cụ thể, không phải rant mơ hồ', () => {
+  const samples = [
+    'Chất lượng sản phẩm::( Dán k dính',
+    'Kính bảo vệ cam k dính chắc được, chỉ cần chạm nhẹ là rơi',
+    'Ship về không dính, lắp vào rớt ra quá tệ',
+    'Đặt 3 cái thì 2 cái dán được còn 1 cái ko dán dc, phí tiền',
+    'Độ bền được 2 ngày, ngày đầu rơi mất 1 mắt, phần lấp lánh cực kỳ dễ rơi'
+  ];
+  for (const text of samples) {
+    const label = labelReviewLayer1({ rating: 1, text });
+    assert.equal(label.has_defect, true, text);
+    assert.equal(label.is_vague, false, text);
+    assert.equal(label.is_low_value, false, text);
+    assert.ok(label.defect_categories.includes('chat-lieu'), text);
+  }
+});
+
 test('Layer 2 có thể sửa nhãn nhưng không được thay quote không có trong review', async () => {
   const previousKey = process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY = 'test-key';
@@ -98,6 +115,9 @@ test('Layer 2 lỗi thì pipeline fail-safe về Layer 1', async () => {
     assert.equal(result.reviews[0].labels.reviewed_by, 'layer1');
     assert.equal(result.reviews[0].labels.is_low_value, true);
     assert.ok(result.warnings.some((warning) => warning.includes('503')));
+    assert.equal(result.stats.layer2Status, 'failed');
+    assert.equal(result.stats.layer2Batches.failed, 1);
+    assert.equal(result.stats.layer2Batches.succeeded, 0);
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
     else delete process.env.GEMINI_API_KEY;

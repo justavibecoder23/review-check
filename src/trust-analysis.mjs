@@ -39,6 +39,21 @@ function countThemes(reviews, definitions) {
     .sort((left, right) => right.count - left.count);
 }
 
+function countDefectThemes(reviews) {
+  return negativeDefinitions
+    .map((definition) => {
+      const matching = reviews.filter((review) => {
+        const categories = review?.labels?.defect_categories;
+        if (Array.isArray(categories)) return categories.includes(definition.id);
+        const text = normalise(review.text);
+        return definition.words.some((word) => text.includes(word));
+      });
+      return { ...definition, count: matching.length, example: matching[0]?.text || '' };
+    })
+    .filter((theme) => theme.count > 0)
+    .sort((left, right) => right.count - left.count);
+}
+
 function reviewExcerpt(value, maximum = 105) {
   const text = String(value || '').replace(/\s+/g, ' ').trim();
   if (!text) return '';
@@ -53,7 +68,9 @@ function fallbackCopy(reviews, included, excluded) {
       detail: `${theme.count} review đáng tham khảo cùng đề cập. ${theme.description}${theme.example ? ` Dẫn chứng: “${reviewExcerpt(theme.example)}”` : ''}`,
       mentions: theme.count
     }));
-  const cons = countThemes(included, negativeDefinitions)
+  // Dùng đúng nhãn cuối của pipeline, cùng nguồn dữ liệu với công thức điểm.
+  // Tránh UI đếm bằng keyword khác với số khuyết tật ở backend.
+  const cons = countDefectThemes(included)
     .slice(0, 3)
     .map((theme) => ({
       title: theme.title,
@@ -117,7 +134,8 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
   const method = calculateTrustScoreV31(reviews, {
     product: options.product,
     category: options.category,
-    baselines: options.baselines || configuredBaselines()
+    baselines: options.baselines || configuredBaselines(),
+    sampling: options.sampling
   });
   const score = method.score;
   const { pros, cons } = fallbackCopy(reviews, included, excluded);
@@ -150,9 +168,13 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
       detail: `Trong ${included.length} review được giữ lại, ${detailedCount} review mô tả trải nghiệm đủ chi tiết và ${verifiedCount} review có tín hiệu đã mua hàng. ${method.components.text.score >= 60 ? 'Những thông tin này giúp người mua hiểu rõ lý do khen hoặc chê thay vì chỉ nhìn số sao.' : 'Khi review quá ngắn hoặc khó kiểm chứng, kết luận cần được đọc thận trọng hơn.'}`
     },
     {
-      impact: method.components.distribution.score >= 70 ? 'up' : 'down',
-      title: method.components.distribution.score >= 70 ? 'Phân bố số sao không quá dồn về một phía' : 'Số sao đang nghiêng mạnh về một phía',
-      detail: method.components.distribution.score >= 70
+      impact: method.sampling.controlledStarStrata ? 'neutral' : method.components.distribution.score >= 70 ? 'up' : 'down',
+      title: method.sampling.controlledStarStrata
+        ? 'Phân bố số sao là do thiết kế lấy mẫu'
+        : method.components.distribution.score >= 70 ? 'Phân bố số sao không quá dồn về một phía' : 'Số sao đang nghiêng mạnh về một phía',
+      detail: method.sampling.controlledStarStrata
+        ? 'Hệ thống chủ động lấy tối đa cùng số review ở mỗi mức từ 5 sao đến 1 sao để tránh trùng và giữ độ trễ thấp. Vì đây không phải phân bố tự nhiên của toàn bộ review sản phẩm, thành phần này được giữ trung tính và không được dùng để nâng TrustScore.'
+        : method.components.distribution.score >= 70
         ? 'Các mức đánh giá không bị dồn bất thường vào chỉ 5 sao hoặc chỉ 1 sao. Sự đa dạng này giúp kết quả phản ánh nhiều trải nghiệm hơn thay vì chỉ một luồng ý kiến.'
         : 'Khi phần lớn review cùng tập trung ở một mức sao, hệ thống sẽ thận trọng hơn vì một nhóm đánh giá có thể đang lấn át các trải nghiệm khác.'
     },

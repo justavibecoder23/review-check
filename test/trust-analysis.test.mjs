@@ -23,6 +23,21 @@ test('TrustScore quy tắc luôn nằm trên thang 100 và có giải thích', (
   assert.doesNotMatch(trust.drivers.map((driver) => `${driver.title} ${driver.detail}`).join(' '), /Fisher|p\s*=|OR\*|logistic|hard cap|Bonferroni/i);
 });
 
+test('nhược điểm hiển thị dùng cùng nhãn cuối với bộ đếm TrustScore', () => {
+  const labeled = [
+    {
+      rating: 1,
+      text: 'Keo không bám chắc vào camera.',
+      verified: true,
+      included: true,
+      labels: { is_seeding: false, is_vague: false, is_low_value: false, defect_categories: ['chat-lieu'], reviewed_by: 'layer1' }
+    }
+  ];
+  const trust = buildRuleBasedTrust(labeled);
+  assert.equal(trust.method.defects.tests.find((item) => item.id === 'chat-lieu').count, 1);
+  assert.equal(trust.cons.find((item) => item.title === 'Chất liệu / độ bền').mentions, 1);
+});
+
 test('giao diện bỏ Confidence và làm nổi bật ý nghĩa đúng của TrustScore', () => {
   const html = readFileSync(new URL('../public/results.html', import.meta.url), 'utf8');
   const clientScript = readFileSync(new URL('../public/results.js', import.meta.url), 'utf8');

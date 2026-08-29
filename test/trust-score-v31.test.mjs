@@ -62,6 +62,34 @@ test('điểm review tiêu cực dùng logistic, thưởng chi tiết lỗi và 
   assert.ok(vague >= 0 && detailed <= 100);
 });
 
+test('mẫu lấy đều 5 mức sao không được xem là phân bố rating tự nhiên để nâng điểm', () => {
+  const reviews = [5, 4, 3, 2, 1].flatMap((rating) => Array.from({ length: 20 }, (_, index) => ({
+    rating,
+    text: `Trải nghiệm đủ chi tiết ở mức ${rating} sao, mẫu ${index + 1}.`,
+    verified: true,
+    labels: { is_seeding: false, is_vague: false, is_low_value: false, defect_categories: [], reviewed_by: 'layer1' }
+  })));
+  const result = calculateTrustScoreV31(reviews, {
+    sampling: { strategy: 'parallel-star-filters', perStarLimit: 20 }
+  });
+  assert.equal(result.sampling.controlledStarStrata, true);
+  assert.equal(result.components.distribution.score, 50);
+  assert.equal(result.components.distribution.status, 'neutral-controlled-sample');
+  assert.equal(result.fisher.positive.score <= 50, true);
+  assert.equal(result.fisher.negative.score <= 50, true);
+});
+
+test('không đủ ý nghĩa Fisher là trung tính, không được tự động xem là tín hiệu tốt', () => {
+  const result = calculateTrustScoreV31([
+    { rating: 5, text: 'Nội dung chi tiết và bình thường.', labels: { is_seeding: false, is_vague: false, defect_categories: [] } },
+    { rating: 1, text: 'Không dính và rơi ra.', labels: { is_seeding: false, is_vague: false, defect_categories: ['chat-lieu'] } }
+  ]);
+  assert.equal(result.fisher.positive.significant, false);
+  assert.equal(result.fisher.negative.significant, false);
+  assert.equal(result.fisher.positive.score, 50);
+  assert.equal(result.fisher.negative.score, 50);
+});
+
 test('chỉ báo Holm chỉ bật khi đủ p-value cho cả gia đình kiểm định', () => {
   const reviews = [
     { rating: 2, text: 'Vải mỏng và form nhỏ.', verified: true },
