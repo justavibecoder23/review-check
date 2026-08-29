@@ -9,14 +9,14 @@ const loadingCopy = document.querySelector('#loading-copy');
 const loadingProgress = document.querySelector('.loading-progress');
 
 function publicProgressMessage(progress = {}) {
-  if (progress.phase === 'complete') return 'Phân tích hoàn tất.';
-  if (progress.phase === 'collecting') {
+  if (progress.stage === 'complete') return 'Phân tích hoàn tất.';
+  if (progress.stage === 'collecting') {
     return Number(progress.percent) <= 14
       ? 'Đang khởi tạo hệ thống lấy reviews...'
       : 'Đang lấy reviews...';
   }
-  if (['labeling', 'filtering'].includes(progress.phase)) return 'Đang phân tích reviews...';
-  if (['saving', 'scoring'].includes(progress.phase)) return 'Đang hoàn thiện kết quả...';
+  if (['labeling', 'filtering'].includes(progress.stage)) return 'Đang phân tích reviews...';
+  if (['saving', 'scoring'].includes(progress.stage)) return 'Đang hoàn thiện kết quả...';
   return 'Đang khởi tạo hệ thống...';
 }
 const backToTop = document.querySelector('.back-to-top');

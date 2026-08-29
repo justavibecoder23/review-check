@@ -32,5 +32,7 @@ test('spinner chỉ hiển thị thông tin chung, không lộ số account ho�
   const appSource = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
   assert.match(appSource, /Đang khởi tạo hệ thống lấy reviews/);
   assert.match(appSource, /Đang lấy reviews/);
+  assert.match(appSource, /progress\.stage/);
+  assert.doesNotMatch(appSource, /progress\.phase/);
   assert.doesNotMatch(appSource, /5 tài khoản|20\/20|Apify/i);
 });
