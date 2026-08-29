@@ -32,10 +32,12 @@ test('chatbot dùng Gemini ở backend và chấp nhận câu hỏi thuộc ph�
   const previousKey = process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY = 'test-only-key';
   let receivedKey;
+  let requestPayload;
   try {
     const result = await answerWebsiteQuestion([{ role: 'user', content: 'TrustScore là gì?' }], {
       fetchImpl: async (_url, options) => {
         receivedKey = options.headers['x-goog-api-key'];
+        requestPayload = JSON.parse(options.body);
         return {
           ok: true,
           async json() {
@@ -45,8 +47,36 @@ test('chatbot dùng Gemini ở backend và chấp nhận câu hỏi thuộc ph�
       }
     });
     assert.equal(receivedKey, 'test-only-key');
+    assert.equal(requestPayload.generationConfig.temperature, undefined);
+    assert.equal(requestPayload.generationConfig.thinkingConfig.thinkingLevel, 'minimal');
+    assert.ok(requestPayload.generationConfig.maxOutputTokens >= 1024);
     assert.equal(result.engine, 'gemini');
     assert.equal(result.answer, 'TrustScore là điểm trên thang 100.');
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
+test('chatbot log lỗi Gemini an toàn rồi fallback khi response bị cắt', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-only-key';
+  const logged = [];
+  try {
+    const result = await answerWebsiteQuestion([{ role: 'user', content: 'TrustScore là gì?' }], {
+      logGeminiErrors: true,
+      logger: { error: (...args) => logged.push(args) },
+      fetchImpl: async () => ({
+        ok: true,
+        async json() {
+          return { candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [] } }] };
+        }
+      })
+    });
+    assert.equal(result.engine, 'rules');
+    assert.equal(logged.length, 1);
+    assert.match(logged[0][1].error, /MAX_TOKENS/);
+    assert.doesNotMatch(JSON.stringify(logged), /test-only-key/);
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
     else delete process.env.GEMINI_API_KEY;

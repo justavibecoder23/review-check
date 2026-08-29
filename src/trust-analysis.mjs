@@ -1,3 +1,6 @@
+import { geminiHttpError, geminiThinkingConfig, parseGeminiJson } from './gemini-response.mjs';
+import { calculateTrustScoreV31 } from './trust-score-v31.mjs';
+
 const positiveDefinitions = [
   { id: 'chat-luong', title: 'Chất lượng sản phẩm', description: 'Người mua mô tả sản phẩm chắc chắn, hoàn thiện ổn hoặc có độ bền tốt.', words: ['chất lượng tốt', 'chất tốt', 'xịn', 'chắc chắn', 'bền', 'đường may đẹp', 'hoàn thiện tốt'] },
   { id: 'dung-mo-ta', title: 'Đúng mô tả và hình ảnh', description: 'Sản phẩm nhận được nhìn chung đúng mẫu, màu sắc hoặc hình ảnh mà shop đăng.', words: ['đúng mô tả', 'đúng hình', 'giống hình', 'đúng màu', 'đúng mẫu'] },
@@ -313,17 +316,17 @@ async function analyzeWithGemini(reviews, fallback, fetchImpl) {
     body: JSON.stringify({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: {
-        temperature: 0.15,
+        maxOutputTokens: 4096,
+        thinkingConfig: geminiThinkingConfig('minimal'),
         responseMimeType: 'application/json',
         responseSchema: trustSchema
       }
     }),
-    signal: AbortSignal.timeout(22_000)
+    signal: AbortSignal.timeout(28_000)
   });
-  if (!response.ok) throw new Error(`Gemini trả về HTTP ${response.status}`);
+  if (!response.ok) throw await geminiHttpError(response, 'Gemini TrustScore');
   const body = await response.json();
-  const text = body?.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('') || '';
-  return validateGeminiTrust(JSON.parse(text), fallback);
+  return validateGeminiTrust(parseGeminiJson(body, 'Gemini TrustScore'), fallback);
 }
 
 export async function buildTrustAnalysis(reviews = [], options = {}) {
@@ -331,11 +334,16 @@ export async function buildTrustAnalysis(reviews = [], options = {}) {
   try {
     return await analyzeWithGemini(reviews, fallback, options.fetchImpl || fetch);
   } catch (error) {
+    if (process.env.VERCEL || options.logGeminiErrors) {
+      (options.logger || console).error('[trust-analysis] Gemini request failed', {
+        model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+        error: error?.message || 'Lỗi Gemini không xác định.'
+      });
+    }
     return {
       ...fallback,
       fallbackReason: error?.message || 'Không thể kết nối Gemini trong lượt phân tích này.'
     };
   }
 }
-import { calculateTrustScoreV31 } from './trust-score-v31.mjs';
 

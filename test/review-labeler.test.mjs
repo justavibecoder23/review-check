@@ -76,26 +76,33 @@ test('lỗi keo dán, bong rơi và độ bền ngắn là khuyết tật cụ t
 test('Layer 2 có thể sửa nhãn nhưng không được thay quote không có trong review', async () => {
   const previousKey = process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY = 'test-key';
+  let requestPayload;
   try {
     const result = await labelReviewsTwoLayer([
       { rating: 2, text: 'Màu đen nhưng shop giao màu xám, còn thiếu dây đeo.', verified: true }
     ], {
       product: { title: 'Túi đeo vai' },
-      fetchImpl: async () => ({
-        ok: true,
-        async json() {
-          return {
-            candidates: [{ content: { parts: [{ text: JSON.stringify({ labels: [{
-              id: 'r0001', decision: 'correct', is_seeding: false, is_low_value: false,
-              is_vague: false, has_defect: true, defect_categories: ['dung-mo-ta'],
-              defect_quote: 'shop giao màu xám, còn thiếu dây đeo', confidence: 0.97,
-              evidence_quote: 'shop giao màu xám, còn thiếu dây đeo',
-              reason_code: 'MISMATCH_AND_MISSING_ACCESSORY'
-            }] }) }] } }]
-          };
-        }
-      })
+      fetchImpl: async (_url, options) => {
+        requestPayload = JSON.parse(options.body);
+        return {
+          ok: true,
+          async json() {
+            return {
+              candidates: [{ content: { parts: [{ text: JSON.stringify({ labels: [{
+                id: 'r0001', decision: 'correct', is_seeding: false, is_low_value: false,
+                is_vague: false, has_defect: true, defect_categories: ['dung-mo-ta'],
+                defect_quote: 'shop giao màu xám, còn thiếu dây đeo', confidence: 0.97,
+                evidence_quote: 'shop giao màu xám, còn thiếu dây đeo',
+                reason_code: 'MISMATCH_AND_MISSING_ACCESSORY'
+              }] }) }] } }]
+            };
+          }
+        };
+      }
     });
+    assert.equal(requestPayload.generationConfig.temperature, undefined);
+    assert.equal(requestPayload.generationConfig.thinkingConfig.thinkingLevel, 'minimal');
+    assert.equal(requestPayload.generationConfig.maxOutputTokens, 8192);
     assert.equal(result.stats.engine, 'layer1+gemini-layer2');
     assert.equal(result.reviews[0].labels.reviewed_by, 'gemini-layer2');
     assert.deepEqual(result.reviews[0].labels.defect_categories, ['dung-mo-ta']);

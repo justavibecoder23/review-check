@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { geminiHttpError, geminiThinkingConfig, parseGeminiJson } from './gemini-response.mjs';
 
 const OUT_OF_SCOPE_REPLY = 'Mình chưa có thông tin này trong kho dữ liệu RealView. Bạn có thể liên hệ đội ngũ để được hỗ trợ.';
 
@@ -200,22 +201,27 @@ ${conversation}
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 420,
+          maxOutputTokens: 1024,
+          thinkingConfig: geminiThinkingConfig('minimal'),
           responseMimeType: 'application/json',
           responseSchema
         }
       }),
       signal: AbortSignal.timeout(18_000)
     });
-    if (!response.ok) throw new Error(`Gemini trả về HTTP ${response.status}`);
+    if (!response.ok) throw await geminiHttpError(response, 'Gemini chatbot');
     const payload = await response.json();
-    const text = payload?.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('') || '';
-    const parsed = JSON.parse(text);
+    const parsed = parseGeminiJson(payload, 'Gemini chatbot');
     if (parsed?.supported !== true) return { answer: OUT_OF_SCOPE_REPLY, engine: 'gemini' };
     const answer = String(parsed.answer || '').trim().slice(0, 1200);
     return { answer: answer || OUT_OF_SCOPE_REPLY, engine: 'gemini' };
-  } catch {
+  } catch (error) {
+    if (process.env.VERCEL || options.logGeminiErrors) {
+      (options.logger || console).error('[site-chatbot] Gemini request failed', {
+        model,
+        error: error?.message || 'Lỗi Gemini không xác định.'
+      });
+    }
     return { answer: fallbackAnswer(matches), engine: 'rules' };
   }
 }

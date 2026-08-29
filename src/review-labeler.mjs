@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module';
+import { geminiHttpError, geminiThinkingConfig, parseGeminiJson } from './gemini-response.mjs';
 
 const require = createRequire(import.meta.url);
 const rulesDocument = require('./layer1_rules.json');
@@ -261,24 +262,18 @@ async function classifyBatchWithGemini(batch, product, fetchImpl) {
     headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
     body: JSON.stringify({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: layer2ResponseSchema }
+      generationConfig: {
+        maxOutputTokens: 8192,
+        thinkingConfig: geminiThinkingConfig('minimal'),
+        responseMimeType: 'application/json',
+        responseSchema: layer2ResponseSchema
+      }
     }),
-    signal: AbortSignal.timeout(18_000)
+    signal: AbortSignal.timeout(28_000)
   });
-  if (!response.ok) {
-    let detail = '';
-    try {
-      const bodyText = typeof response.text === 'function' ? await response.text() : '';
-      const parsedError = bodyText ? JSON.parse(bodyText) : null;
-      detail = String(parsedError?.error?.status || parsedError?.error?.message || '').replace(/\s+/g, ' ').slice(0, 160);
-    } catch {
-      // Chỉ mã HTTP cũng đủ để fallback; tuyệt đối không log request/key.
-    }
-    throw new Error(`Gemini labeler trả về HTTP ${response.status}${detail ? ` (${detail})` : ''}`);
-  }
+  if (!response.ok) throw await geminiHttpError(response, 'Gemini labeler');
   const body = await response.json();
-  const text = body?.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('') || '';
-  const parsed = JSON.parse(text);
+  const parsed = parseGeminiJson(body, 'Gemini labeler');
   return { labels: Array.isArray(parsed.labels) ? parsed.labels : [] };
 }
 
