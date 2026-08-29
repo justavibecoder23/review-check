@@ -18,6 +18,7 @@ const delayLines = [
 
 const navLinks = [...document.querySelectorAll('.main-nav .nav-parent[href^="#"]')];
 const navIndicator = document.querySelector('.nav-indicator');
+const mainNav = document.querySelector('.main-nav');
 const siteHeader = document.querySelector('.site-header');
 const navToggle = document.querySelector('.nav-toggle');
 const navToggleLabel = document.querySelector('.nav-toggle-label');
@@ -58,9 +59,9 @@ if (navToggle) {
 }
 
 function moveNavIndicator(targetLink, shouldAnimate = true) {
-  if (!navIndicator || !targetLink || targetLink.offsetParent === null) return;
+  if (!navIndicator || !mainNav || !targetLink || targetLink.offsetParent === null) return;
 
-  const targetX = targetLink.offsetLeft;
+  const targetX = targetLink.getBoundingClientRect().left - mainNav.getBoundingClientRect().left;
   const targetWidth = targetLink.offsetWidth;
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const canAnimate = shouldAnimate && navIndicator.dataset.ready && !reduceMotion && navIndicator.animate;
