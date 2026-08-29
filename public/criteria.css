@@ -23,7 +23,7 @@ html { scroll-behavior: smooth; }
 .criteria-hero-copy { text-align: center; }
 .criteria-purpose { width: fit-content; margin: 0 auto 22px; padding: 10px 18px; display: flex; align-items: center; gap: 9px; border: 1px solid rgba(252,120,31,.25); border-radius: 999px; color: #c94c00; background: rgba(252,120,31,.06); font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .criteria-purpose span { color: var(--criteria-orange); font-size: 16px; }
-.criteria-hero h1 { margin: 0; font-size: clamp(44px, 5vw, 76px); line-height: .98; letter-spacing: -.055em; text-transform: capitalize; text-wrap: balance; }
+.criteria-hero h1 { margin: 0; font-size: clamp(44px, 5vw, 76px); line-height: 1.08; letter-spacing: -.055em; text-transform: capitalize; text-wrap: balance; }
 .criteria-hero h1 span { color: var(--criteria-orange); }
 .criteria-mission { margin: 26px auto 0; color: #4f4f4b; font-size: clamp(17px, 1.5vw, 21px); line-height: 1.5; }
 .criteria-disclaimer { max-width: 670px; margin: 18px auto 0; color: #777771; font-size: 13px; line-height: 1.55; }
@@ -105,7 +105,7 @@ html { scroll-behavior: smooth; }
   .criteria-hero, .criteria-metrics, .criteria-process, .criteria-library { padding-left: 20px; padding-right: 20px; }
   .criteria-hero { padding-top: 34px; padding-bottom: 44px; gap: 18px; }
   .criteria-purpose { max-width: 100%; justify-content: center; text-align: center; line-height: 1.35; }
-  .criteria-hero h1 { font-size: clamp(38px, 11.5vw, 52px); }
+  .criteria-hero h1 { font-size: clamp(38px, 11.5vw, 52px); line-height: 1.12; }
   .criteria-mission { font-size: 16px; }
   .criteria-mission br { display: none; }
   .criteria-hero-art { min-height: 300px; }
