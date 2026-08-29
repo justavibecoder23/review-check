@@ -6,53 +6,6 @@
 
   const isCriteria = document.body.classList.contains('criteria-page');
   const isContact = document.body.classList.contains('contact-page');
-  if (isContact) {
-    const homeItems = [
-      ['/#about', 'Về RealView'],
-      ['/#how-it-works', 'Cách dùng RealView'],
-      ['/#realview-benefits', 'Vì sao nên chọn RealView?'],
-      ['/#featured', 'Tính năng nổi bật'],
-    ];
-    const criteriaItems = [
-      ['/criteria.html#evaluation-process', 'Quy trình đánh giá'],
-      ['/criteria.html#criteria-library', 'Bộ tiêu chí đánh giá'],
-    ];
-    const dropdownMarkup = (items) => `<span class="nav-dropdown" role="menu">${items.map(([href, label]) => `<a href="${href}" role="menuitem">${label}</a>`).join('')}</span>`;
-    nav.innerHTML = `
-      <span class="nav-indicator" aria-hidden="true"></span>
-      <span class="nav-parent-wrap"><a class="nav-parent" data-nav-parent="home" href="/#home">Trang chủ</a>${dropdownMarkup(homeItems)}</span>
-      <span class="nav-parent-wrap"><a class="nav-parent" data-nav-parent="criteria" href="/criteria.html">Tiêu chí lọc</a>${dropdownMarkup(criteriaItems)}</span>`;
-    nav.querySelectorAll('.nav-parent-wrap').forEach((parent) => {
-      parent.addEventListener('mouseenter', () => {
-        nav.querySelectorAll('.nav-parent-wrap').forEach((item) => item.classList.remove('is-dropdown-open'));
-        parent.classList.add('is-dropdown-open');
-      });
-      parent.addEventListener('focus', () => {
-        nav.querySelectorAll('.nav-parent-wrap').forEach((item) => item.classList.remove('is-dropdown-open'));
-        parent.classList.add('is-dropdown-open');
-      });
-    });
-    nav.addEventListener('mouseleave', () => {
-      nav.querySelectorAll('.nav-parent-wrap').forEach((item) => item.classList.remove('is-dropdown-open'));
-    });
-    nav.addEventListener('click', (event) => {
-      if (event.target.closest('.nav-dropdown a')) {
-        header?.classList.remove('is-menu-open');
-        toggle?.setAttribute('aria-expanded', 'false');
-      }
-    });
-    document.addEventListener('click', (event) => {
-      if (header?.classList.contains('is-menu-open') && !header.contains(event.target)) {
-        header.classList.remove('is-menu-open');
-        toggle?.setAttribute('aria-expanded', 'false');
-      }
-    });
-    return;
-  }
-  const pageHref = (href, group) => {
-    if (group === 'criteria') return isCriteria ? href : `/criteria.html${href}`;
-    return isCriteria || isContact ? `/${href}` : href;
-  };
   const homeItems = [
     ['#about', 'Về RealView'],
     ['#how-it-works', 'Cách dùng RealView'],
@@ -63,77 +16,58 @@
     ['#evaluation-process', 'Quy trình đánh giá'],
     ['#criteria-library', 'Bộ tiêu chí đánh giá'],
   ];
-  const activeGroup = isCriteria ? 'criteria' : 'home';
-  const homeHref = isCriteria ? '/#home' : '#home';
-  const criteriaHref = '/criteria.html';
-  const activeClass = (group) => group === activeGroup ? ' is-active' : '';
-  const activeCurrent = (group) => group === activeGroup ? ' aria-current="page"' : '';
-
+  const activeGroup = isContact ? '' : isCriteria ? 'criteria' : 'home';
+  const pageHref = (href, group) => {
+    if (group === 'criteria') return isCriteria ? href : `/criteria.html${href}`;
+    return isCriteria || isContact ? `/${href}` : href;
+  };
+  const dropdownMarkup = (items, group) => `<span class="nav-dropdown" role="menu">${items.map(([href, label]) => `<a href="${pageHref(href, group)}" role="menuitem">${label}</a>`).join('')}</span>`;
+  const navItem = (group, label, href, items) => {
+    const active = group === activeGroup;
+    return `<span class="nav-parent-wrap"><a class="nav-parent${active ? ' is-active' : ''}" data-nav-parent="${group}" href="${href}"${active ? ' aria-current="page"' : ''}>${label}</a>${dropdownMarkup(items, group)}</span>`;
+  };
+  
   nav.innerHTML = `
     <span class="nav-indicator" aria-hidden="true"></span>
-    <a class="nav-parent${activeClass('home')}" data-nav-parent="home" href="${homeHref}"${activeCurrent('home')}>Trang chủ</a>
-    <a class="nav-cloud" href="${isCriteria ? '#evaluation-process' : '#about'}" aria-label="Mở các mục con">K<span class="nav-dropdown" role="menu"></span></a>
-    <a class="nav-parent${activeClass('criteria')}" data-nav-parent="criteria" href="${criteriaHref}"${activeCurrent('criteria')}>Tiêu chí lọc</a>`;
+  ${navItem('home', 'Trang chủ', isCriteria || isContact ? '/#home' : '#home', homeItems)}
+    ${navItem('criteria', 'Tiêu chí lọc', '/criteria.html', criteriaItems)}
+    <span class="nav-link nav-blog" aria-disabled="true">Blog</span>`;
 
-  const cloud = nav.querySelector('.nav-cloud');
-  const dropdown = nav.querySelector('.nav-dropdown');
   const closeMenu = () => {
     header?.classList.remove('is-menu-open');
     toggle?.setAttribute('aria-expanded', 'false');
   };
 
-  const renderDropdown = (items) => {
-    const group = items === criteriaItems ? 'criteria' : 'home';
-    dropdown.innerHTML = items.map(([href, label]) => `<a href="${pageHref(href, group)}" role="menuitem">${label}</a>`).join('');
-    cloud.dataset.dropdownGroup = items === criteriaItems ? 'criteria' : 'home';
-  };
-  renderDropdown(isCriteria ? criteriaItems : homeItems);
-
-  const scrollItems = isCriteria
-    ? [['review-criteria', 'Tiêu chí lọc'], ['evaluation-process', 'Quy trình đánh giá'], ['criteria-library', 'Bộ tiêu chí đánh giá']]
-    : [['home', 'Trang chủ'], ...homeItems.map(([href, label]) => [href.slice(1), label])];
-  const scrollSections = scrollItems
-    .map(([id]) => document.getElementById(id))
-    .filter(Boolean);
-  const setCloudLabel = (sectionId) => {
-    const item = scrollItems.find(([id]) => id === sectionId);
-    if (!item) return;
-    cloud.firstChild.textContent = item[1];
-    cloud.href = `#${item[0]}`;
-  };
-  setCloudLabel(scrollSections[0]?.id);
-  if (scrollSections.length) {
-    let lastSectionId = scrollSections[0].id;
-    const updateCloudFromScroll = () => {
-      const activationLine = window.innerHeight * 0.3;
-      const currentSection = scrollSections.reduce((current, section) => {
-        const currentTop = current.getBoundingClientRect().top;
-        const sectionTop = section.getBoundingClientRect().top;
-        return sectionTop <= activationLine && sectionTop >= currentTop ? section : current;
-      }, scrollSections[0]);
-      if (currentSection.id !== lastSectionId) {
-        lastSectionId = currentSection.id;
-        setCloudLabel(lastSectionId);
-      }
-    };
-    updateCloudFromScroll();
-    window.addEventListener('scroll', updateCloudFromScroll, { passive: true });
-    window.addEventListener('resize', updateCloudFromScroll);
-  }
 
   nav.querySelectorAll('.nav-parent').forEach((parent) => {
+    const parentWrap = parent.closest('.nav-parent-wrap');
     parent.addEventListener('mouseenter', () => {
-      renderDropdown(parent.dataset.navParent === 'criteria' ? criteriaItems : homeItems);
+      nav.querySelectorAll('.nav-parent-wrap').forEach((item) => item.classList.remove('is-dropdown-open'));
+      nav.querySelectorAll('.nav-parent').forEach((item) => item.style.removeProperty('background-color'));
+      nav.querySelectorAll('.nav-parent-wrap').forEach((item) => item.classList.remove('is-hovered'));
+      parentWrap?.classList.add('is-dropdown-open', 'is-hovered');
+      if (!parent.classList.contains('is-active') && !parent.hasAttribute('aria-current')) {
+        parent.style.setProperty('background-color', 'rgba(252,120,31,.14)', 'important');
+      }
       nav.classList.add('is-dropdown-open');
       nav.dataset.hoveredParent = parent.dataset.navParent;
     });
     parent.addEventListener('focus', () => {
-      renderDropdown(parent.dataset.navParent === 'criteria' ? criteriaItems : homeItems);
+      nav.querySelectorAll('.nav-parent-wrap').forEach((item) => item.classList.remove('is-dropdown-open'));
+      nav.querySelectorAll('.nav-parent').forEach((item) => item.style.removeProperty('background-color'));
+      nav.querySelectorAll('.nav-parent-wrap').forEach((item) => item.classList.remove('is-hovered'));
+      parentWrap?.classList.add('is-dropdown-open', 'is-hovered');
+      if (!parent.classList.contains('is-active') && !parent.hasAttribute('aria-current')) {
+        parent.style.setProperty('background-color', 'rgba(252,120,31,.14)', 'important');
+      }
       nav.classList.add('is-dropdown-open');
       nav.dataset.hoveredParent = parent.dataset.navParent;
     });
   });
   nav.addEventListener('mouseleave', () => {
+    nav.querySelectorAll('.nav-parent').forEach((item) => item.style.removeProperty('background-color'));
+    nav.querySelectorAll('.nav-parent-wrap').forEach((item) => item.classList.remove('is-dropdown-open'));
+    nav.querySelectorAll('.nav-parent-wrap').forEach((item) => item.classList.remove('is-hovered'));
     nav.classList.remove('is-dropdown-open');
     delete nav.dataset.hoveredParent;
   });
