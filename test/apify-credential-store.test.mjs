@@ -71,32 +71,58 @@ function createRedisFake() {
           reservedAt: command.at(-1)
         });
       }
-      const selected = config.groups.find((group) => group.credentials.every((credential) => Number(counters[credential.id] || 0) < config.maxUsesPerKey));
-      if (!selected) return JSON.stringify({ ok: false, code: 'POOL_EXHAUSTED' });
-      const credentials = selected.credentials.map((credential) => {
+      const activeGroupIndex = config.groups.findIndex((group) => group.credentials.some((credential) => Number(counters[credential.id] || 0) < config.maxUsesPerKey));
+      if (activeGroupIndex < 0) return JSON.stringify({ ok: false, code: 'POOL_EXHAUSTED' });
+      const activeGroup = config.groups[activeGroupIndex];
+      const selected = activeGroup.credentials
+        .filter((credential) => Number(counters[credential.id] || 0) < config.maxUsesPerKey)
+        .map((credential, index) => ({ credential, group: activeGroup, order: index }));
+      const reserveCandidates = config.groups.slice(activeGroupIndex + 1).flatMap((group, groupOffset) => group.credentials
+        .filter((credential) => Number(counters[credential.id] || 0) < config.maxUsesPerKey)
+        .map((credential, credentialIndex) => ({
+          credential,
+          group,
+          count: Number(counters[credential.id] || 0),
+          order: (groupOffset + 1) * 5 + credentialIndex
+        })))
+        .sort((left, right) => left.count - right.count || left.order - right.order);
+      while (selected.length < 5 && reserveCandidates.length) selected.push(reserveCandidates.shift());
+      if (selected.length < 5) return JSON.stringify({ ok: false, code: 'POOL_EXHAUSTED' });
+      const stars = [5, 4, 3, 2, 1];
+      const credentials = selected.map(({ credential, group }, index) => {
         const usageCount = Number(counters[credential.id] || 0) + 1;
         counters[credential.id] = String(usageCount);
-        return { ...credential, usageCount };
+        return {
+          ...credential,
+          poolStar: credential.star,
+          star: stars[index],
+          poolGroupId: group.id,
+          poolGroupLabel: group.label,
+          usageCount
+        };
       });
       const retiresAfterReservation = credentials.some((credential) => credential.usageCount >= config.maxUsesPerKey);
       if (retiresAfterReservation) {
         for (const credential of credentials) {
+          if (credential.usageCount < config.maxUsesPerKey) continue;
           used[credential.id] = JSON.stringify({
             id: credential.id,
             label: credential.label,
             star: credential.star,
-            groupId: selected.id,
-            groupLabel: selected.label,
+            poolStar: credential.poolStar,
+            groupId: credential.poolGroupId,
+            groupLabel: credential.poolGroupLabel,
             usageCount: credential.usageCount,
             usedAt: command.at(-1)
           });
         }
       }
+      const mixedGroups = new Set(selected.map(({ group }) => group.id)).size > 1;
       return JSON.stringify({
         ok: true,
         source: 'redis-vault',
-        groupId: selected.id,
-        groupLabel: selected.label,
+        groupId: mixedGroups ? 'mixed-available-keys' : activeGroup.id,
+        groupLabel: mixedGroups ? 'mixed-available-keys' : activeGroup.label,
         maxUsesPerKey: config.maxUsesPerKey,
         credentials,
         retiresAfterReservation,
@@ -245,6 +271,60 @@ test('chế độ test chỉ tăng một key và giữ bốn key còn lại làm
     assert.ok(status.active.credentials.slice(2).every((credential) => credential.status === 'reserve'));
     assert.equal(status.usedHistory.length, 1);
     assert.equal(status.reserve[0].label, 'backup');
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      const envKey = { url: 'UPSTASH_REDIS_REST_URL', token: 'UPSTASH_REDIS_REST_TOKEN', vault: 'APIFY_TOKEN_VAULT_KEY' }[key];
+      if (value === undefined) delete process.env[envKey];
+      else process.env[envKey] = value;
+    }
+  }
+});
+
+test('chế độ 5 key tận dụng key còn lượt xuyên nhóm mà không sửa cấu hình pool hay reset bộ đếm', async () => {
+  const previous = {
+    url: process.env.UPSTASH_REDIS_REST_URL,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    vault: process.env.APIFY_TOKEN_VAULT_KEY
+  };
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.example.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'redis-test-token';
+  process.env.APIFY_TOKEN_VAULT_KEY = Buffer.alloc(32, 7).toString('base64');
+  const redis = createRedisFake();
+  try {
+    await saveApifyCredentialPool({
+      maxUsesPerKey: 10,
+      groups: [group('primary', 'primary'), group('backup', 'backup')],
+      pendingCredentials: [
+        { label: 'pending-one', token: 'apify_api_pending_1_super_secret_token' },
+        { label: 'pending-two', token: 'apify_api_pending_2_super_secret_token' }
+      ]
+    }, { fetchImpl: redis.fetchImpl });
+    const storedPoolBefore = redis.values.get(APIFY_POOL_KEY);
+
+    for (let use = 1; use <= 10; use += 1) {
+      await reserveApifyCredential({ fetchImpl: redis.fetchImpl });
+    }
+
+    let mixedAllocation;
+    for (let use = 1; use <= 10; use += 1) {
+      mixedAllocation = await reserveApifyCredentialSet({ fetchImpl: redis.fetchImpl });
+      assert.equal(mixedAllocation.groupLabel, 'mixed-available-keys');
+      assert.deepEqual(mixedAllocation.credentials.map((credential) => credential.star), [5, 4, 3, 2, 1]);
+      assert.equal(mixedAllocation.credentials.filter((credential) => credential.label.startsWith('primary-')).length, 4);
+      assert.equal(mixedAllocation.credentials.filter((credential) => credential.label.startsWith('backup-')).length, 1);
+    }
+
+    const status = await getApifyCredentialPoolStatus({ fetchImpl: redis.fetchImpl });
+    assert.equal(status.used[0].label, 'primary');
+    assert.ok(status.used[0].credentials.every((credential) => credential.usageCount === 10));
+    assert.equal(status.active.label, 'backup');
+    assert.ok(status.active.credentials.every((credential) => credential.usageCount === 2));
+    assert.equal(status.pendingCount, 2);
+    assert.equal(redis.values.get(APIFY_POOL_KEY), storedPoolBefore, 'cấu trúc active/reserve/pending trong pool không bị ghi lại');
+
+    const backupAllocation = await reserveApifyCredentialSet({ fetchImpl: redis.fetchImpl });
+    assert.equal(backupAllocation.groupLabel, 'backup');
+    assert.ok(backupAllocation.credentials.every((credential) => credential.usageCount === 3));
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       const envKey = { url: 'UPSTASH_REDIS_REST_URL', token: 'UPSTASH_REDIS_REST_TOKEN', vault: 'APIFY_TOKEN_VAULT_KEY' }[key];

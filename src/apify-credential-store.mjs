@@ -7,8 +7,10 @@ export const APIFY_POOL_USED_KEY = 'realview:apify:credential-pool:v2:used';
 export const DEFAULT_MAX_USES_PER_KEY = 10;
 export const APIFY_STARS = Object.freeze([5, 4, 3, 2, 1]);
 
-// Chọn một nhóm còn hạn mức và cộng bộ đếm cho cả 5 key trong cùng một lệnh Redis.
-// Nhờ vậy hai request đồng thời không thể cùng lấy lượt thứ 10 của một nhóm.
+// Chọn 5 key còn hạn mức và cộng bộ đếm trong cùng một lệnh Redis.
+// Ưu tiên mọi key còn lượt trong nhóm active; nếu nhóm thiếu key thì bù bằng
+// key ít được dùng nhất từ các nhóm reserve. Pool gốc không bị gom nhóm lại,
+// nên active/reserve/pending và lịch sử bộ đếm vẫn được giữ nguyên.
 const RESERVE_POOL_SCRIPT = String.raw`
 local raw = redis.call('GET', KEYS[1])
 if not raw then
@@ -17,39 +19,76 @@ end
 
 local pool = cjson.decode(raw)
 local limit = tonumber(pool.maxUsesPerKey) or 10
-local selected = nil
+local selected = {}
+local reserveCandidates = {}
+local activeGroupIndex = nil
+local order = 0
 
-for _, group in ipairs(pool.groups or {}) do
-  local eligible = true
-  if #(group.credentials or {}) ~= 5 then eligible = false end
+for groupIndex, group in ipairs(pool.groups or {}) do
+  local available = {}
   for _, credential in ipairs(group.credentials or {}) do
+    order = order + 1
     local count = tonumber(redis.call('HGET', KEYS[2], credential.id) or '0')
-    if count >= limit then
-      eligible = false
-      break
+    if count < limit then
+      table.insert(available, {
+        credential=credential,
+        count=count,
+        order=order,
+        groupId=group.id,
+        groupLabel=group.label
+      })
     end
   end
-  if eligible and not selected then selected = group end
+  if #available > 0 and not activeGroupIndex then
+    activeGroupIndex = groupIndex
+    for _, candidate in ipairs(available) do table.insert(selected, candidate) end
+  elseif activeGroupIndex and groupIndex > activeGroupIndex then
+    for _, candidate in ipairs(available) do table.insert(reserveCandidates, candidate) end
+  end
 end
 
-if not selected then
+table.sort(reserveCandidates, function(left, right)
+  if left.count == right.count then return left.order < right.order end
+  return left.count < right.count
+end)
+
+local reserveIndex = 1
+while #selected < 5 and reserveCandidates[reserveIndex] do
+  table.insert(selected, reserveCandidates[reserveIndex])
+  reserveIndex = reserveIndex + 1
+end
+
+if #selected < 5 then
   return cjson.encode({ok=false, code='POOL_EXHAUSTED', maxUsesPerKey=limit})
 end
+
+local mixedGroups = false
+for index = 2, #selected do
+  if selected[index].groupId ~= selected[1].groupId then mixedGroups = true end
+end
+local allocationGroupId = mixedGroups and 'mixed-available-keys' or selected[1].groupId
+local allocationGroupLabel = mixedGroups and 'mixed-available-keys' or selected[1].groupLabel
+local stars = {5, 4, 3, 2, 1}
 
 local allocation = {
   ok=true,
   source='redis-vault',
-  groupId=selected.id,
-  groupLabel=selected.label,
+  groupId=allocationGroupId,
+  groupLabel=allocationGroupLabel,
   maxUsesPerKey=limit,
   credentials={}
 }
 local retiresAfterReservation = false
 
-for _, credential in ipairs(selected.credentials) do
+for index, candidate in ipairs(selected) do
+  local credential = candidate.credential
   local count = tonumber(redis.call('HINCRBY', KEYS[2], credential.id, 1))
   local allocated = {}
   for key, value in pairs(credential) do allocated[key] = value end
+  allocated.poolStar = credential.star
+  allocated.star = stars[index]
+  allocated.poolGroupId = candidate.groupId
+  allocated.poolGroupLabel = candidate.groupLabel
   allocated.usageCount = count
   table.insert(allocation.credentials, allocated)
   if count >= limit then retiresAfterReservation = true end
@@ -60,16 +99,19 @@ allocation.reservedAt = ARGV[1]
 
 if retiresAfterReservation then
   for _, credential in ipairs(allocation.credentials) do
-    local used = {
-      id=credential.id,
-      label=credential.label,
-      star=credential.star,
-      groupId=selected.id,
-      groupLabel=selected.label,
-      usageCount=credential.usageCount,
-      usedAt=ARGV[1]
-    }
-    redis.call('HSET', KEYS[3], credential.id, cjson.encode(used))
+    if credential.usageCount >= limit then
+      local used = {
+        id=credential.id,
+        label=credential.label,
+        star=credential.star,
+        poolStar=credential.poolStar,
+        groupId=credential.poolGroupId,
+        groupLabel=credential.poolGroupLabel,
+        usageCount=credential.usageCount,
+        usedAt=ARGV[1]
+      }
+      redis.call('HSET', KEYS[3], credential.id, cjson.encode(used))
+    end
   end
 end
 
