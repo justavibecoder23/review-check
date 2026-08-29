@@ -76,6 +76,68 @@ end
 return cjson.encode(allocation)
 `;
 
+// SINGLE_CREDENTIAL_RESERVATION: chọn đúng một key còn lượt, tăng riêng bộ đếm
+// của key đó và giữ nguyên toàn bộ key dự phòng.
+const RESERVE_SINGLE_CREDENTIAL_SCRIPT = String.raw`
+-- SINGLE_CREDENTIAL_RESERVATION
+local raw = redis.call('GET', KEYS[1])
+if not raw then
+  return cjson.encode({ok=false, code='POOL_NOT_CONFIGURED'})
+end
+
+local pool = cjson.decode(raw)
+local limit = tonumber(pool.maxUsesPerKey) or 10
+local selectedGroup = nil
+local selectedCredential = nil
+
+for _, group in ipairs(pool.groups or {}) do
+  for _, credential in ipairs(group.credentials or {}) do
+    local count = tonumber(redis.call('HGET', KEYS[2], credential.id) or '0')
+    if count < limit then
+      selectedGroup = group
+      selectedCredential = credential
+      break
+    end
+  end
+  if selectedCredential then break end
+end
+
+if not selectedCredential then
+  return cjson.encode({ok=false, code='POOL_EXHAUSTED', maxUsesPerKey=limit})
+end
+
+local count = tonumber(redis.call('HINCRBY', KEYS[2], selectedCredential.id, 1))
+local allocated = {}
+for key, value in pairs(selectedCredential) do allocated[key] = value end
+allocated.usageCount = count
+
+local allocation = {
+  ok=true,
+  source='redis-vault',
+  groupId=selectedGroup.id,
+  groupLabel=selectedGroup.label,
+  maxUsesPerKey=limit,
+  credential=allocated,
+  retiresAfterReservation=(count >= limit),
+  reservedAt=ARGV[1]
+}
+
+if count >= limit then
+  local used = {
+    id=allocated.id,
+    label=allocated.label,
+    star=allocated.star,
+    groupId=selectedGroup.id,
+    groupLabel=selectedGroup.label,
+    usageCount=count,
+    usedAt=ARGV[1]
+  }
+  redis.call('HSET', KEYS[3], allocated.id, cjson.encode(used))
+end
+
+return cjson.encode(allocation)
+`;
+
 function vaultKey() {
   const encoded = String(process.env.APIFY_TOKEN_VAULT_KEY || '');
   if (!encoded) throw new Error('Chưa cấu hình APIFY_TOKEN_VAULT_KEY.');
@@ -265,12 +327,20 @@ function buildPoolStatus(config, counterReply, usedReply) {
   const counters = parseHashReply(counterReply);
   const maxUsesPerKey = cleanMaxUses(config.maxUsesPerKey);
   let activeAssigned = false;
+  let activeCredentialAssigned = false;
   const groups = (config.groups || []).map((group) => {
     const credentialStatuses = group.credentials.map((credential) => publicCredential(credential, counters, maxUsesPerKey));
-    const exhausted = credentialStatuses.some((credential) => credential.usageCount >= maxUsesPerKey);
+    const exhausted = credentialStatuses.every((credential) => credential.usageCount >= maxUsesPerKey);
     const status = exhausted ? 'used' : activeAssigned ? 'reserve' : 'active';
     if (status === 'active') activeAssigned = true;
-    const credentials = credentialStatuses.map((credential) => ({ ...credential, status }));
+    const credentials = credentialStatuses.map((credential) => {
+      if (credential.usageCount >= maxUsesPerKey) return { ...credential, status: 'used' };
+      if (status === 'active' && !activeCredentialAssigned) {
+        activeCredentialAssigned = true;
+        return { ...credential, status: 'active' };
+      }
+      return { ...credential, status: 'reserve' };
+    });
     return { id: group.id, label: group.label, status, credentials };
   });
   const active = groups.find((group) => group.status === 'active') || null;
@@ -386,6 +456,37 @@ export async function reserveApifyCredentialSet(options = {}) {
       usageCount: Number(credential.usageCount),
       token: decryptToken(credential)
     }))
+  };
+}
+
+export async function reserveApifyCredential(options = {}) {
+  if (!isRedisConfigured()) throw new Error('Cần cấu hình Upstash Redis để cấp phát và xoay vòng Apify key an toàn.');
+  if (!process.env.APIFY_TOKEN_VAULT_KEY) throw new Error('Chưa cấu hình APIFY_TOKEN_VAULT_KEY.');
+  const raw = await redisCommand([
+    'EVAL', RESERVE_SINGLE_CREDENTIAL_SCRIPT, '3', APIFY_POOL_KEY, APIFY_POOL_COUNTERS_KEY, APIFY_POOL_USED_KEY,
+    new Date().toISOString()
+  ], options);
+  const allocation = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  if (!allocation?.ok) {
+    const error = new Error(allocation?.code === 'POOL_EXHAUSTED'
+      ? 'Tất cả Apify key đã dùng đủ số lượt. Hãy bổ sung key dự phòng trong /api/apify-config.'
+      : 'Chưa cấu hình Apify key trong /api/apify-config.');
+    error.statusCode = 503;
+    throw error;
+  }
+  return {
+    groupId: allocation.groupId,
+    groupLabel: allocation.groupLabel,
+    source: allocation.source,
+    maxUsesPerKey: Number(allocation.maxUsesPerKey),
+    retiresAfterReservation: Boolean(allocation.retiresAfterReservation),
+    reservedAt: allocation.reservedAt,
+    credential: {
+      id: allocation.credential.id,
+      label: allocation.credential.label,
+      usageCount: Number(allocation.credential.usageCount),
+      token: decryptToken(allocation.credential)
+    }
   };
 }
 

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 
 import { createProgressReporter, encodeSseEvent } from '../src/sse.mjs';
 
@@ -25,4 +26,11 @@ test('progress reporter chuẩn hóa phần trăm và giữ details', () => {
 test('lỗi ở consumer tiến độ không làm vỡ tiến trình backend', () => {
   const report = createProgressReporter(() => { throw new Error('client disconnected'); });
   assert.doesNotThrow(() => report('saving', 80, 'Đang lưu'));
+});
+
+test('spinner chỉ hiển thị thông tin chung, không lộ số account hoặc tiến trình backend', async () => {
+  const appSource = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
+  assert.match(appSource, /Đang khởi tạo hệ thống lấy reviews/);
+  assert.match(appSource, /Đang lấy reviews/);
+  assert.doesNotMatch(appSource, /5 tài khoản|20\/20|Apify/i);
 });

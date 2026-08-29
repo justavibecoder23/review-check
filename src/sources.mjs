@@ -1,5 +1,5 @@
 import { extractMarketplaceUrl, isShopeeUrl, resolveShopeeProductUrl } from './shopee-url.mjs';
-import { collectShopeeReviewsParallel, SHOPEE_STAR_FILTERS } from './apify-review-scraper.mjs';
+import { collectShopeeReviews } from './apify-review-scraper.mjs';
 import { createProgressReporter } from './sse.mjs';
 
 const DEMO_REVIEWS = [
@@ -93,25 +93,23 @@ export async function getReviews(url, options = {}) {
     throw Object.assign(new Error(error?.message || 'Link không hợp lệ.'), { statusCode: error?.statusCode || 400 });
   }
   const platform = platformFrom(parsed.href);
-  progress('resolving', 8, `Đã nhận diện nguồn ${platform}. Đang chuẩn hóa liên kết...`);
+  progress('resolving', 8, 'Đang kiểm tra liên kết...');
   const warnings = [];
   const shopeeProduct = platform === 'Shopee'
     ? await resolveShopeeProductUrl(parsed.href)
     : null;
   const productUrl = shopeeProduct?.canonicalUrl || parsed.href;
   const perStarLimit = platform === 'Shopee' ? getShopeeReviewsPerStar() : null;
-  const reviewLimit = platform === 'Shopee' ? perStarLimit * SHOPEE_STAR_FILTERS.length : 50;
+  const reviewLimit = platform === 'Shopee' ? perStarLimit : 50;
 
   if (shopeeProduct?.wasShortened) {
     warnings.push('Đã mở link chia sẻ Shopee và chuẩn hóa về đúng sản phẩm trước khi thu thập review.');
   }
 
   try {
-    progress('collecting', 14, platform === 'Shopee'
-      ? 'Đang khởi chạy song song 5 tài khoản Apify...'
-      : 'Đang lấy các đánh giá công khai...');
+    progress('collecting', 14, 'Đang khởi tạo hệ thống lấy reviews...');
     const collected = platform === 'Shopee'
-      ? await collectShopeeReviewsParallel(productUrl, { perStarLimit, onProgress: options.onProgress })
+      ? await collectShopeeReviews(productUrl, { reviewLimit: perStarLimit, onProgress: options.onProgress })
       : await loadFromConfiguredBot(productUrl, platform);
     const reviews = collected.reviews;
     if (Array.isArray(collected.warnings)) warnings.push(...collected.warnings);
@@ -122,8 +120,6 @@ export async function getReviews(url, options = {}) {
         label: platform === 'Shopee' ? 'Apify · Shopee Product Reviews Scraper' : 'Bot thu thập đã cấu hình',
         reviewLimit,
         ...(platform === 'Shopee' ? {
-          perStarLimit,
-          starFilters: SHOPEE_STAR_FILTERS,
           collection: collected.collection,
           credential: collected.credential,
           usage: collected.usage

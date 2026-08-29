@@ -5,6 +5,7 @@ import {
   APIFY_POOL_KEY,
   APIFY_POOL_USED_KEY,
   getApifyCredentialPoolStatus,
+  reserveApifyCredential,
   reserveApifyCredentialSet,
   saveApifyCredentialPool
 } from '../src/apify-credential-store.mjs';
@@ -33,6 +34,43 @@ function createRedisFake() {
       const config = JSON.parse(values.get(APIFY_POOL_KEY));
       const counters = hash(APIFY_POOL_COUNTERS_KEY);
       const used = hash(APIFY_POOL_USED_KEY);
+      if (String(command[1]).includes('SINGLE_CREDENTIAL_RESERVATION')) {
+        let selected;
+        let credential;
+        for (const group of config.groups) {
+          credential = group.credentials.find((item) => Number(counters[item.id] || 0) < config.maxUsesPerKey);
+          if (credential) {
+            selected = group;
+            break;
+          }
+        }
+        if (!credential) return JSON.stringify({ ok: false, code: 'POOL_EXHAUSTED' });
+        const usageCount = Number(counters[credential.id] || 0) + 1;
+        counters[credential.id] = String(usageCount);
+        const allocated = { ...credential, usageCount };
+        const retiresAfterReservation = usageCount >= config.maxUsesPerKey;
+        if (retiresAfterReservation) {
+          used[credential.id] = JSON.stringify({
+            id: credential.id,
+            label: credential.label,
+            star: credential.star,
+            groupId: selected.id,
+            groupLabel: selected.label,
+            usageCount,
+            usedAt: command.at(-1)
+          });
+        }
+        return JSON.stringify({
+          ok: true,
+          source: 'redis-vault',
+          groupId: selected.id,
+          groupLabel: selected.label,
+          maxUsesPerKey: config.maxUsesPerKey,
+          credential: allocated,
+          retiresAfterReservation,
+          reservedAt: command.at(-1)
+        });
+      }
       const selected = config.groups.find((group) => group.credentials.every((credential) => Number(counters[credential.id] || 0) < config.maxUsesPerKey));
       if (!selected) return JSON.stringify({ ok: false, code: 'POOL_EXHAUSTED' });
       const credentials = selected.credentials.map((credential) => {
@@ -162,6 +200,51 @@ test('pool mã hóa token, đếm nguyên tử và tự chuyển nhóm sau lư�
       }, { fetchImpl: redis.fetchImpl }),
       /đã có lịch sử sử dụng/
     );
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      const envKey = { url: 'UPSTASH_REDIS_REST_URL', token: 'UPSTASH_REDIS_REST_TOKEN', vault: 'APIFY_TOKEN_VAULT_KEY' }[key];
+      if (value === undefined) delete process.env[envKey];
+      else process.env[envKey] = value;
+    }
+  }
+});
+
+test('chế độ test chỉ tăng một key và giữ bốn key còn lại làm backup', async () => {
+  const previous = {
+    url: process.env.UPSTASH_REDIS_REST_URL,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    vault: process.env.APIFY_TOKEN_VAULT_KEY
+  };
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.example.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'redis-test-token';
+  process.env.APIFY_TOKEN_VAULT_KEY = Buffer.alloc(32, 7).toString('base64');
+  const redis = createRedisFake();
+  try {
+    await saveApifyCredentialPool({
+      maxUsesPerKey: 10,
+      groups: [group('primary', 'primary'), group('backup', 'backup')]
+    }, { fetchImpl: redis.fetchImpl });
+
+    let allocation;
+    for (let use = 1; use <= 10; use += 1) {
+      allocation = await reserveApifyCredential({ fetchImpl: redis.fetchImpl });
+      assert.equal(allocation.groupLabel, 'primary');
+      assert.equal(allocation.credential.label, 'primary-5-star');
+      assert.equal(allocation.credential.usageCount, use);
+    }
+    assert.equal(allocation.retiresAfterReservation, true);
+
+    const rotated = await reserveApifyCredential({ fetchImpl: redis.fetchImpl });
+    assert.equal(rotated.credential.label, 'primary-4-star');
+    assert.equal(rotated.credential.usageCount, 1);
+
+    const status = await getApifyCredentialPoolStatus({ fetchImpl: redis.fetchImpl });
+    assert.equal(status.active.label, 'primary');
+    assert.equal(status.active.credentials[0].status, 'used');
+    assert.equal(status.active.credentials[1].status, 'active');
+    assert.ok(status.active.credentials.slice(2).every((credential) => credential.status === 'reserve'));
+    assert.equal(status.usedHistory.length, 1);
+    assert.equal(status.reserve[0].label, 'backup');
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       const envKey = { url: 'UPSTASH_REDIS_REST_URL', token: 'UPSTASH_REDIS_REST_TOKEN', vault: 'APIFY_TOKEN_VAULT_KEY' }[key];

@@ -1,8 +1,7 @@
 import { createHash } from 'node:crypto';
-import { reserveApifyCredentialSet } from './apify-credential-store.mjs';
+import { reserveApifyCredential } from './apify-credential-store.mjs';
 import { createProgressReporter } from './sse.mjs';
 
-export const SHOPEE_STAR_FILTERS = Object.freeze(['5', '4', '3', '2', '1']);
 const DEFAULT_ACTOR_ID = 'zen-studio/shopee-product-reviews-scraper';
 
 function actorPath(actorId) {
@@ -37,7 +36,7 @@ function normalizeReview(review) {
   };
 }
 
-async function runStarFilter({ url, star, perStarLimit, credential, fetchImpl, actorId, timeoutMs }) {
+async function runUnfiltered({ url, reviewLimit, credential, fetchImpl, actorId, timeoutMs }) {
   const startedAt = performance.now();
   const endpoint = `https://api.apify.com/v2/acts/${actorPath(actorId)}/run-sync-get-dataset-items`;
   try {
@@ -49,52 +48,46 @@ async function runStarFilter({ url, star, perStarLimit, credential, fetchImpl, a
       },
       body: JSON.stringify({
         startUrls: [{ url }],
-        starFilter: star,
         contentFilter: 'with comments',
-        maxReviewsPerProduct: perStarLimit
+        maxReviewsPerProduct: reviewLimit
       }),
       signal: AbortSignal.timeout(timeoutMs)
     });
     if (!response.ok) {
       const detail = compactErrorDetail(await response.text());
       throw Object.assign(
-        new Error(`Apify ${star} sao trả về HTTP ${response.status}${detail ? `: ${detail}` : ''}`),
+        new Error(`Apify trả về HTTP ${response.status}${detail ? `: ${detail}` : ''}`),
         { statusCode: response.status }
       );
     }
     const items = await response.json();
-    if (!Array.isArray(items)) throw new Error(`Apify ${star} sao không trả về danh sách review hợp lệ.`);
+    if (!Array.isArray(items)) throw new Error('Apify không trả về danh sách review hợp lệ.');
     const written = items.filter((item) => String(item?.comment || '').trim());
-    const matching = written.filter((item) => Number(item.ratingStar) === Number(star));
     return {
       ok: true,
-      star,
       credentialId: credential.id,
       credentialLabel: credential.label,
       usageCount: credential.usageCount ?? null,
-      reviewCount: matching.length,
-      droppedWrongRating: written.length - matching.length,
+      reviewCount: written.length,
       latencyMs: Math.round(performance.now() - startedAt),
-      items: matching
+      items: written
     };
   } catch (error) {
     return {
       ok: false,
-      star,
       credentialId: credential.id,
       credentialLabel: credential.label,
       usageCount: credential.usageCount ?? null,
       reviewCount: 0,
-      droppedWrongRating: 0,
       latencyMs: Math.round(performance.now() - startedAt),
       statusCode: error?.statusCode || null,
-      error: error?.message || `Không cào được review ${star} sao.`,
+      error: error?.message || 'Không lấy được reviews.',
       items: []
     };
   }
 }
 
-function legacyCredentialSet(credential) {
+function legacyAllocation(credential) {
   return {
     groupId: credential.id || 'legacy-single-token',
     groupLabel: credential.label || 'legacy-single-token',
@@ -103,24 +96,21 @@ function legacyCredentialSet(credential) {
     retiresAfterReservation: false,
     reservedAt: null,
     warnings: credential.warnings || [],
-    credentials: SHOPEE_STAR_FILTERS.map((star) => ({ ...credential, star: Number(star), usageCount: null }))
+    credential: { ...credential, usageCount: credential.usageCount ?? null }
   };
 }
 
-function validateCredentialSet(credentialSet) {
-  const credentials = Array.isArray(credentialSet?.credentials) ? credentialSet.credentials : [];
-  const byStar = new Map(credentials.map((credential) => [String(credential.star), credential]));
-  if (credentials.length !== SHOPEE_STAR_FILTERS.length || SHOPEE_STAR_FILTERS.some((star) => !byStar.get(star)?.token)) {
-    throw new Error('Nhóm Apify được cấp phát không có đủ 5 key cho 5★, 4★, 3★, 2★ và 1★.');
-  }
-  return { ...credentialSet, credentials: SHOPEE_STAR_FILTERS.map((star) => byStar.get(star)) };
+function validateAllocation(allocation) {
+  if (!allocation?.credential?.token) throw new Error('Không có Apify key khả dụng.');
+  return allocation;
 }
 
-export async function collectShopeeReviewsParallel(url, options = {}) {
+export async function collectShopeeReviews(url, options = {}) {
   const progress = createProgressReporter(options.onProgress);
-  const perStarLimit = Math.min(20, Math.max(1, Number.parseInt(String(options.perStarLimit ?? process.env.SHOPEE_REVIEWS_PER_STAR ?? 20), 10) || 20));
-  const credentialSet = validateCredentialSet(options.credentialSet
-    || (options.credential ? legacyCredentialSet(options.credential) : await reserveApifyCredentialSet({ fetchImpl: options.redisFetchImpl })));
+  const reviewLimit = Math.min(20, Math.max(1, Number.parseInt(String(options.reviewLimit ?? process.env.SHOPEE_REVIEW_LIMIT ?? 20), 10) || 20));
+  const allocation = validateAllocation(options.allocation
+    || (options.credential ? legacyAllocation(options.credential) : await reserveApifyCredential({ fetchImpl: options.redisFetchImpl })));
+  const credential = allocation.credential;
   const fetchImpl = options.fetchImpl || fetch;
   const actorId = options.actorId || process.env.APIFY_ACTOR_ID || DEFAULT_ACTOR_ID;
   const configuredTimeout = Number(options.timeoutMs ?? process.env.APIFY_RUN_TIMEOUT_MS ?? 70_000);
@@ -129,37 +119,23 @@ export async function collectShopeeReviewsParallel(url, options = {}) {
     : 70_000;
   const startedAt = performance.now();
 
-  // Cả năm run được khởi động trước khi await để latency gần với run chậm nhất.
-  let completedRuns = 0;
-  const runs = await Promise.all(credentialSet.credentials.map(async (credential) => {
-    const run = await runStarFilter({
-      url, star: String(credential.star), perStarLimit, credential, fetchImpl, actorId, timeoutMs
-    });
-    completedRuns += 1;
-    progress('collecting', 14 + completedRuns * 9, `${run.star}★: ${run.ok ? `đã lấy ${run.reviewCount} review` : 'thu thập thất bại'} (${completedRuns}/5 tài khoản hoàn tất).`, {
-      star: Number(run.star),
-      completedRuns,
-      totalRuns: SHOPEE_STAR_FILTERS.length,
-      reviewCount: run.reviewCount,
-      ok: run.ok,
-      latencyMs: run.latencyMs
-    });
-    return run;
-  }));
+  const run = await runUnfiltered({ url, reviewLimit, credential, fetchImpl, actorId, timeoutMs });
+  progress('collecting', 58, 'Đang lấy reviews...');
+  const runs = [run];
   const successful = runs.filter((run) => run.ok);
   const usage = {
-    provider: credentialSet.source,
-    tracked: credentialSet.source === 'redis-vault',
-    groupId: credentialSet.groupId,
-    maxUsesPerKey: credentialSet.maxUsesPerKey,
-    credentials: credentialSet.credentials.map(({ id, label, star, usageCount }) => ({ id, label, star, usageCount }))
+    provider: allocation.source,
+    tracked: allocation.source === 'redis-vault',
+    groupId: allocation.groupId,
+    maxUsesPerKey: allocation.maxUsesPerKey,
+    credentials: [{ id: credential.id, label: credential.label, usageCount: credential.usageCount }]
   };
   if (!successful.length) {
     const quotaFailure = runs.find((run) => [402, 403, 429].includes(run.statusCode));
-    const detail = runs.map((run) => `${run.star}★: ${run.error}`).join(' | ');
+    const detail = run.error;
     const error = new Error(quotaFailure
-      ? `Một hoặc nhiều key trong nhóm Apify “${credentialSet.groupLabel}” không còn quyền/hạn mức hoặc đang bị giới hạn. ${detail}`
-      : `Cả 5 Apify runs đều thất bại. ${detail}`);
+      ? `Apify key đang dùng không còn quyền/hạn mức hoặc đang bị giới hạn. ${detail}`
+      : `Không lấy được reviews từ Apify. ${detail}`);
     error.statusCode = 502;
     throw error;
   }
@@ -179,14 +155,12 @@ export async function collectShopeeReviewsParallel(url, options = {}) {
     }
   }
 
-  const warnings = [...(credentialSet.warnings || [])];
-  if (credentialSet.retiresAfterReservation) {
-    warnings.push(`Nhóm Apify “${credentialSet.groupLabel}” vừa hoàn tất lượt ${credentialSet.maxUsesPerKey} và đã được đưa vào danh sách used; lượt kế tiếp sẽ dùng nhóm dự phòng.`);
+  const warnings = [...(allocation.warnings || [])];
+  if (allocation.retiresAfterReservation) {
+    warnings.push(`Apify key đang dùng vừa hoàn tất lượt ${allocation.maxUsesPerKey}; lượt kế tiếp sẽ tự chuyển sang key dự phòng.`);
   }
   for (const run of runs.filter((item) => !item.ok)) warnings.push(run.error);
-  const wrongRatingCount = runs.reduce((sum, run) => sum + run.droppedWrongRating, 0);
-  if (wrongRatingCount) warnings.push(`Đã bỏ ${wrongRatingCount} review không khớp starFilter do upstream trả sai nhóm.`);
-  if (duplicateCount) warnings.push(`Đã loại ${duplicateCount} review trùng giữa các Apify runs.`);
+  if (duplicateCount) warnings.push(`Đã loại ${duplicateCount} review trùng trong dữ liệu trả về.`);
 
   const firstItem = successful.find((run) => run.items.length)?.items[0] || null;
   return {
@@ -194,18 +168,18 @@ export async function collectShopeeReviewsParallel(url, options = {}) {
     productMetaSource: firstItem,
     warnings,
     credential: {
-      groupId: credentialSet.groupId,
-      label: credentialSet.groupLabel,
-      source: credentialSet.source,
-      retiresAfterReservation: credentialSet.retiresAfterReservation,
-      keys: credentialSet.credentials.map(({ id, label, star, usageCount }) => ({ id, label, star, usageCount }))
+      groupId: allocation.groupId,
+      label: allocation.groupLabel,
+      source: allocation.source,
+      retiresAfterReservation: allocation.retiresAfterReservation,
+      keys: [{ id: credential.id, label: credential.label, usageCount: credential.usageCount }]
     },
     usage,
     collection: {
-      strategy: 'parallel-star-filters',
+      strategy: 'single-unfiltered',
       contentFilter: 'with comments',
-      perStarLimit,
-      targetMaximum: perStarLimit * SHOPEE_STAR_FILTERS.length,
+      reviewLimit,
+      targetMaximum: reviewLimit,
       returned: deduplicated.length,
       duplicateCount,
       latencyMs: Math.round(performance.now() - startedAt),

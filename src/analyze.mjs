@@ -41,13 +41,13 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
     throw error;
   }
 
-  progress('validating', 3, 'Đang xác thực liên kết sản phẩm...');
+  progress('validating', 3, 'Đang khởi tạo hệ thống...');
   const { reviews, source, product, warnings } = await getReviews(rawUrl.trim(), {
     onProgress: options.onProgress
   });
-  progress('labeling', 66, `Đã lấy ${reviews.length} review. Đang gắn nhãn dữ liệu...`);
+  progress('labeling', 66, 'Đang phân tích reviews...');
   const labeling = await labelReviewsTwoLayer(reviews, { product });
-  progress('filtering', 76, 'Đang lọc nhiễu và xác định review được sử dụng...');
+  progress('filtering', 76, 'Đang phân tích reviews...');
   const checked = labeling.reviews.map((review) => ({ ...review, filter: shouldKeep(review) }));
   const genuine = checked.filter((review) => review.filter.keep);
   const excluded = checked.filter((review) => !review.filter.keep);
@@ -73,7 +73,7 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   const signal = issues.length === 0 ? 'Chưa thấy nhược điểm lặp lại rõ ràng' : issues[0].label;
   const processedReviews = checked.map(({ filter, ...review }) => ({ ...review, included: filter.keep, exclusionReason: filter.reason }));
   const trustSample = processedReviews.filter((review) => !classifyReviewSignals(review).seeding).length;
-  progress('saving', 84, 'Đang lưu dữ liệu raw, labeled và quyết định lọc...');
+  progress('saving', 84, 'Đang hoàn thiện kết quả...');
   const dataset = await saveReviewDatasets({
     rawReviews: reviews,
     labeledReviews: processedReviews,
@@ -83,7 +83,7 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   });
   if (dataset.warning) warnings.push(dataset.warning);
   warnings.push(...labeling.warnings);
-  progress('scoring', 91, 'Đang tính Trust Score và kiểm tra thống kê...');
+  progress('scoring', 91, 'Đang hoàn thiện kết quả...');
   const trust = await buildTrustAnalysis(processedReviews, {
     product,
     sampling: source?.collection

@@ -14,9 +14,9 @@ Mở `http://localhost:3000`, dán một link sản phẩm. Không cần cài pa
 
 ## Nguồn dữ liệu thực tế
 
-Với Shopee, ứng dụng gọi Actor Apify `zen-studio/shopee-product-reviews-scraper` từ backend. Mỗi lượt phân tích cấp phát một **nhóm 5 tài khoản** rồi khởi động đồng thời năm Actor runs: key 5★ chỉ chạy `starFilter: 5`, key 4★ chỉ chạy `starFilter: 4`, tiếp tục đến key 1★. Cả năm đều dùng `contentFilter: "with comments"` và tối đa 20 review/mức sao. Kết quả được kiểm tra lại rating, chống trùng theo `reviewId` (hoặc fingerprint nội dung khi thiếu ID), rồi mới chuyển sang pipeline gắn nhãn và TrustScore.
+Với Shopee, ứng dụng gọi Actor Apify `zen-studio/shopee-product-reviews-scraper` từ backend. Ở chế độ test hiện tại, mỗi lượt phân tích chỉ cấp phát **một tài khoản** và khởi động một Actor run, không gửi `starFilter`. Request vẫn dùng `contentFilter: "with comments"` và lấy tối đa 20 review có nội dung viết. Kết quả được chống trùng theo `reviewId` (hoặc fingerprint nội dung khi thiếu ID), rồi mới chuyển sang pipeline gắn nhãn và TrustScore.
 
-Thiết kế này trả tối đa **100 review**, không cam kết luôn đủ 100: sản phẩm có thể không có 20 review viết chữ ở từng mức sao. Năm run được khởi động trước khi chờ kết quả nên thời gian thường gần run chậm nhất, cộng thêm một round-trip Redis ngắn để cấp phát key. Concurrency thực tế vẫn phụ thuộc Apify plan của từng tài khoản.
+Thiết kế này trả tối đa **20 review** từ phân bố tự nhiên mà Apify trả về. Vì mẫu test nhỏ hơn mục tiêu thống kê 100 review, chỉ số adequacy tiếp tục phản ánh mức độ thận trọng tương ứng; hệ thống không giả định đây là mẫu lấy đều theo mức sao.
 
 Backend chấp nhận cả link sản phẩm đầy đủ và link được chia sẻ/rút gọn từ Shopee, gồm `s.shopee.vn`, `vn.shp.ee` và `shope.ee`. Với link rút gọn, máy chủ sẽ:
 
@@ -41,11 +41,11 @@ UPSTASH_REDIS_REST_URL=<Upstash REST URL>
 UPSTASH_REDIS_REST_TOKEN=<Upstash REST token>
 ```
 
-`SHOPEE_REVIEWS_PER_STAR` được giới hạn từ 1–20. Các Apify token không nằm trong environment của Vercel: chúng được cập nhật tập trung qua API quản trị và mã hóa trong Redis. Không đưa file chứa token vào GitHub hoặc JavaScript trình duyệt.
+Trong chế độ test một tài khoản, `SHOPEE_REVIEWS_PER_STAR` đóng vai trò giới hạn review cho một run và được giới hạn từ 1–20. Các Apify token không nằm trong environment của Vercel: chúng được cập nhật tập trung qua API quản trị và mã hóa trong Redis. Không đưa file chứa token vào GitHub hoặc JavaScript trình duyệt.
 
-### Cấu hình và tự động xoay vòng 5 Apify key
+### Cấu hình và tự động xoay vòng Apify key
 
-Pool được chia thành các nhóm, mỗi nhóm có đúng 5 key theo thứ tự 5★ → 1★. Trước mỗi lượt phân tích, Redis dùng một lệnh nguyên tử để chọn nhóm active và cộng **1** vào bộ đếm của từng key. Khi nhóm hoàn tất lượt thứ 10, cả 5 key được ghi vào `used`; lượt phân tích kế tiếp tự lấy nhóm dự phòng đầu tiên. Cách cấp phát nguyên tử ngăn hai request đồng thời cùng chiếm lượt cuối.
+Pool vẫn được lưu theo nhóm 5 key để tương thích với file quản trị hiện có. Trước mỗi lượt phân tích, Redis dùng một lệnh nguyên tử để chọn đúng **một key active** và chỉ cộng **1** vào bộ đếm của key đó; bốn key còn lại giữ nguyên counter và ở trạng thái dự phòng. Khi key active hoàn tất lượt thứ 10, riêng key đó được ghi vào `used`; lượt phân tích kế tiếp tự chuyển sang key dự phòng kế tiếp. Cách cấp phát nguyên tử ngăn hai request đồng thời cùng chiếm lượt cuối.
 
 Để tạo nhanh file pool từ một danh sách dài API key, chạy `npm run generate:apify-pool`. Dán mỗi key trên một dòng, nhấn Enter ở dòng trống, chọn `replace` hoặc `append`, rồi nhập vị trí muốn lưu. Công cụ tự loại key trùng (giữ lần xuất hiện đầu tiên) và chia key thành từng nhóm 5★ → 1★. Nếu còn dư 1–4 key, backend mã hóa và lưu chúng ở trạng thái `pending`; chúng không được cấp phát cho đến khi một lần `append` sau bổ sung đủ nhóm 5. Chế độ `replace` mặc định dùng `config/apify-pool.local.json`; chế độ `append` luôn đề xuất một file mới có timestamp để không ghi đè file ban đầu. Các file này được tạo với quyền chỉ tài khoản hiện tại đọc/ghi và đã nằm trong `.gitignore`.
 
@@ -77,7 +77,7 @@ curl 'https://<domain>/api/apify-config' \
   -H 'Authorization: Bearer <APIFY_ADMIN_KEY>'
 ```
 
-Lượt sử dụng được cộng ngay khi cấp phát; vì vậy request đã gửi đi nhưng Apify lỗi vẫn được tính là một lượt dùng. Sau bước cấp phát, backend không chờ thêm lần ghi Redis nào mà phát ngay 5 request Apify song song để giữ độ trễ thấp.
+Lượt sử dụng được cộng ngay khi cấp phát; vì vậy request đã gửi đi nhưng Apify lỗi vẫn được tính là một lượt dùng. Sau bước cấp phát, backend không chờ thêm lần ghi Redis nào mà phát ngay một request Apify để giữ độ trễ thấp.
 
 TikTok Shop hiện vẫn dùng collector độc lập nếu đã cấu hình:
 

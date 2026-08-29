@@ -7,13 +7,25 @@ const errorBox = document.querySelector('#form-error');
 const sourceNotice = document.querySelector('#source-notice');
 const loadingCopy = document.querySelector('#loading-copy');
 const loadingProgress = document.querySelector('.loading-progress');
+
+function publicProgressMessage(progress = {}) {
+  if (progress.phase === 'complete') return 'Phân tích hoàn tất.';
+  if (progress.phase === 'collecting') {
+    return Number(progress.percent) <= 14
+      ? 'Đang khởi tạo hệ thống lấy reviews...'
+      : 'Đang lấy reviews...';
+  }
+  if (['labeling', 'filtering'].includes(progress.phase)) return 'Đang phân tích reviews...';
+  if (['saving', 'scoring'].includes(progress.phase)) return 'Đang hoàn thiện kết quả...';
+  return 'Đang khởi tạo hệ thống...';
+}
 const backToTop = document.querySelector('.back-to-top');
 const defaultButtonContent = button?.innerHTML;
 const delayLines = [
-  'Đang xác thực liên kết sản phẩm...',
-  'Đang lấy các đánh giá công khai...',
-  'Đang giảm nhiễu và sắp xếp phản hồi...',
-  'Đang chuẩn bị kết quả dễ đọc...'
+  'Đang khởi tạo hệ thống...',
+  'Đang khởi tạo hệ thống lấy reviews...',
+  'Đang lấy reviews...',
+  'Đang hoàn thiện kết quả...'
 ];
 
 const navLinks = [...document.querySelectorAll('.main-nav .nav-parent[href^="#"]')];
@@ -263,7 +275,7 @@ if (form) form.addEventListener('submit', async (event) => {
   });
   try {
     const data = await analyzeWithSse(input.value.trim(), (progress) => {
-      if (loadingCopy && progress.message) loadingCopy.textContent = progress.message;
+      if (loadingCopy) loadingCopy.textContent = publicProgressMessage(progress);
       const percent = Math.min(100, Math.max(0, Number(progress.percent) || 0));
       loadingProgress?.style.setProperty('--analysis-progress', `${percent}%`);
       loadingProgress?.setAttribute('aria-valuenow', String(percent));
