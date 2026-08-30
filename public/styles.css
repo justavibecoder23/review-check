@@ -805,9 +805,9 @@ blockquote footer { margin-top: 7px; color: #9a4507; font-size: 10px; }
   .loading small { margin-top: 6px; font-size: 8.5px; }
   .loading-progress { margin-top: 8px; }
   .supported { gap: 7px 14px; margin-inline: 4px; }
-  .hero-visual { min-height: 370px; overflow: visible; }
-  .hero-visual > .hero-illustration { top: 58px; right: 1%; width: 110%; }
-  .orange-blob { top: 35px; right: 4%; bottom: 25px; left: -7%; }
+  .hero-visual { min-height: 370px; overflow: hidden; }
+  .hero-visual > .hero-illustration { top: 52px; right: 2.5%; width: 100%; }
+  .orange-blob { top: 30px; right: 1%; bottom: 18px; left: -4%; }
   .proof-strip { margin-top: 56px; grid-template-columns: 1fr; gap: 30px; padding-bottom: 48px; }
   .proof-value { min-height: 104px; border-radius: 24px; font-size: clamp(30px, 10vw, 42px); }
   .proof-strip p { margin-top: 16px; font-size: 13px; }
@@ -900,6 +900,8 @@ blockquote footer { margin-top: 7px; color: #9a4507; font-size: 10px; }
   .results-preview-trust-copy { width: 100%; }
   .results-preview-stats { justify-content: flex-start; }
   .hero-visual { min-height: 325px; }
+  .hero-visual > .hero-illustration { top: 48px; right: 3%; width: 94%; }
+  .orange-blob { top: 24px; right: 1%; bottom: 14px; left: -2%; }
   .workflow-visual { min-height: 305px; }
   .workflow-visual img { max-height: 265px; }
   .step-card { grid-template-columns: 42px 44px minmax(0, 1fr); gap: 10px; }
