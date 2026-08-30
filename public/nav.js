@@ -5,7 +5,7 @@
   if (!nav) return;
 
   const isMobileNav = () => window.matchMedia('(max-width: 900px)').matches;
-  const setDropdownOpen = (wrap, open) => {
+  const setDropdownState = (wrap, open) => {
     nav.querySelectorAll('.nav-parent-wrap').forEach((item) => {
       if (item !== wrap) item.classList.remove('is-dropdown-open');
     });
@@ -50,16 +50,16 @@
 
   nav.querySelectorAll('.nav-parent').forEach((parent) => {
     const parentWrap = parent.closest('.nav-parent-wrap');
-    if (isMobileNav()) {
+    
       parent.addEventListener('click', (event) => {
-        const wrap = parent.closest('.nav-parent-wrap');
-        if (!wrap) return;
-        const shouldOpen = !wrap.classList.contains('is-dropdown-open');
+        if (!isMobileNav()) return;
         event.preventDefault();
         event.stopPropagation();
-        setDropdownOpen(shouldOpen ? wrap : null, shouldOpen);
+        const isOpen = parentWrap?.classList.contains('is-dropdown-open');
+      nav.querySelectorAll('.nav-parent-wrap').forEach((item) => item.classList.remove('is-dropdown-open'));
+      if (!isOpen) parentWrap?.classList.add('is-dropdown-open');
       });
-    }
+    
     parent.addEventListener('mouseenter', () => {
       if (isMobileNav()) return;
       nav.querySelectorAll('.nav-parent-wrap').forEach((item) => item.classList.remove('is-dropdown-open'));
