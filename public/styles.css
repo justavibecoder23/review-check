@@ -731,7 +731,7 @@ blockquote footer { margin-top: 7px; color: #9a4507; font-size: 10px; }
   .nav-parent-row > .nav-parent[aria-current="page"] + .nav-dropdown-toggle { background: var(--orange); color: var(--ink); }
   .nav-parent-wrap.is-dropdown-open .nav-dropdown-toggle svg { transform: rotate(180deg); }
   .nav-parent-wrap > .nav-dropdown { position: static; width: 100%; min-width: 0; margin: 0; padding: 2px 4px 4px; display: none; opacity: 1; visibility: visible; transform: none; border: 0; border-radius: 0; background: transparent; box-shadow: none; gap: 2px; }
-  .nav-parent-wrap.is-dropdown-open > .nav-dropdown { display: grid; }
+  .main-nav .nav-parent-wrap.is-dropdown-open > .nav-dropdown { display: grid; opacity: 1; visibility: visible; transform: none; }
   .nav-parent-wrap .nav-dropdown::before { display: none; }
   .nav-parent-wrap .nav-dropdown a { min-height: 38px; padding: 0 10px 0 20px; border-radius: 8px; font-size: 12px; white-space: normal; overflow-wrap: anywhere; word-break: break-word; line-height: 1.3; }
   .nav-cloud, .nav-other-parent { white-space: normal; overflow-wrap: anywhere; word-break: break-word; line-height: 1.3; }
