@@ -4,6 +4,15 @@
   const toggle = document.querySelector('.nav-toggle');
   if (!nav) return;
 
+  const isMobileNav = () => window.matchMedia('(max-width: 900px)').matches;
+  const setDropdownOpen = (wrap, open) => {
+    nav.querySelectorAll('.nav-parent-wrap').forEach((item) => {
+      if (item !== wrap) item.classList.remove('is-dropdown-open');
+    });
+    if (wrap) wrap.classList.toggle('is-dropdown-open', open);
+    nav.classList.toggle('is-dropdown-open', !!(wrap && open));
+  };
+  
   const isCriteria = document.body.classList.contains('criteria-page');
   const isContact = document.body.classList.contains('contact-page');
   const homeItems = [
@@ -41,7 +50,18 @@
 
   nav.querySelectorAll('.nav-parent').forEach((parent) => {
     const parentWrap = parent.closest('.nav-parent-wrap');
+    if (isMobileNav()) {
+      parent.addEventListener('click', (event) => {
+        const wrap = parent.closest('.nav-parent-wrap');
+        if (!wrap) return;
+        const shouldOpen = !wrap.classList.contains('is-dropdown-open');
+        event.preventDefault();
+        event.stopPropagation();
+        setDropdownOpen(shouldOpen ? wrap : null, shouldOpen);
+      });
+    }
     parent.addEventListener('mouseenter', () => {
+      if (isMobileNav()) return;
       nav.querySelectorAll('.nav-parent-wrap').forEach((item) => item.classList.remove('is-dropdown-open'));
       nav.querySelectorAll('.nav-parent').forEach((item) => item.style.removeProperty('background-color'));
       nav.querySelectorAll('.nav-parent-wrap').forEach((item) => item.classList.remove('is-hovered'));
@@ -53,6 +73,7 @@
       nav.dataset.hoveredParent = parent.dataset.navParent;
     });
     parent.addEventListener('focus', () => {
+      if (isMobileNav()) return;
       nav.querySelectorAll('.nav-parent-wrap').forEach((item) => item.classList.remove('is-dropdown-open'));
       nav.querySelectorAll('.nav-parent').forEach((item) => item.style.removeProperty('background-color'));
       nav.querySelectorAll('.nav-parent-wrap').forEach((item) => item.classList.remove('is-hovered'));
