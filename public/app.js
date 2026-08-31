@@ -42,7 +42,7 @@ let activeNavId;
 
 function updateBackToTop() {
   if (!backToTop) return;
-  backToTop.classList.toggle('is-visible', window.scrollY > window.innerHeight);
+  backToTop.classList.toggle('is-visible', window.scrollY > 400);
 }
 
 backToTop?.addEventListener('click', () => {
