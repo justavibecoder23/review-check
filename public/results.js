@@ -261,3 +261,16 @@ try {
 if (data?.reviews && data?.product) renderResult(data);
 else emptyState.classList.remove('hidden');
 
+// Setup scroll to top button
+const backToTop = document.querySelector('.back-to-top');
+if (backToTop) {
+  function updateBackToTop() {
+    backToTop.classList.toggle('is-visible', window.scrollY > 400);
+  }
+
+  backToTop.addEventListener('click', () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+  window.addEventListener('scroll', updateBackToTop, { passive: true });
+  updateBackToTop();
+}
