@@ -15,7 +15,7 @@
   trigger.setAttribute('aria-expanded', 'false');
   trigger.setAttribute('aria-controls', 'realview-chatbot');
   trigger.setAttribute('aria-label', 'Mở Trợ lý RealView');
-  trigger.innerHTML = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3a8 8 0 0 0-8 8v5a3 3 0 0 0 3 3h1v-6H5v-2a7 7 0 0 1 14 0v2h-3v6h1a3 3 0 0 0 3-3v-5a8 8 0 0 0-8-8Z"/><path d="M9 21h6"/></svg><span>Trợ lý</span><i aria-hidden="true"></i>';
+  trigger.innerHTML = '<img class="chatbot-logo" src="/assets/realview-rv.png" alt="" aria-hidden="true"><span>Trợ lý</span><i aria-hidden="true"></i>';
   headerActions.append(trigger, contactButton);
 
   const panel = document.createElement('section');
@@ -28,7 +28,7 @@
   panel.innerHTML = `
     <header class="chatbot-header">
       <span class="chatbot-avatar" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M5 11a7 7 0 0 1 14 0v5a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3v-5Z"/><path d="M9 14h.01M15 14h.01M9 17h6M12 4V2"/></svg>
+        <img src="/assets/realview-rv.png" alt="" />
       </span>
       <div><h2 id="chatbot-title">Trợ lý RealView</h2><p><i aria-hidden="true"></i> Hỗ trợ thông tin về website</p></div>
       <button class="chatbot-close" type="button" aria-label="Đóng Trợ lý RealView">

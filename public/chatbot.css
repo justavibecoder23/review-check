@@ -22,7 +22,7 @@
 }
 .chatbot-trigger:hover, .chatbot-trigger[aria-expanded="true"] { transform: translateY(-2px); border-color: rgba(252, 120, 31, .62); background: white; }
 .chatbot-trigger:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
-.chatbot-trigger svg { width: 19px; height: 19px; flex: 0 0 19px; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.chatbot-trigger .chatbot-logo { width: 24px; height: 24px; flex: 0 0 24px; border-radius: 8px; object-fit: cover; }
 .chatbot-trigger i { position: absolute; top: 7px; left: 30px; width: 7px; height: 7px; border: 2px solid white; border-radius: 50%; background: #20865a; }
 
 .chatbot-panel {
@@ -49,8 +49,8 @@
 .chatbot-panel[hidden] { display: none; }
 
 .chatbot-header { min-height: 84px; padding: 15px 16px; display: grid; grid-template-columns: 48px minmax(0, 1fr) 38px; gap: 12px; align-items: center; background: var(--ink); color: white; }
-.chatbot-avatar { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 16px 18px 15px 19px; background: var(--orange); color: var(--ink); transform: rotate(-3deg); }
-.chatbot-avatar svg { width: 27px; height: 27px; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; transform: rotate(3deg); }
+.chatbot-avatar { width: 48px; height: 48px; display: grid; place-items: center; overflow: hidden; border-radius: 16px 18px 15px 19px; background: #050505; transform: rotate(-3deg); }
+.chatbot-avatar img { width: 100%; height: 100%; display: block; object-fit: cover; transform: rotate(3deg) scale(1.08); }
 .chatbot-header h2 { margin: 0; font-size: 16px; letter-spacing: -.25px; }
 .chatbot-header p { margin: 5px 0 0; display: flex; gap: 7px; align-items: center; color: #bdbdb6; font-size: 9px; }
 .chatbot-header p i { width: 7px; height: 7px; border-radius: 50%; background: #54c18b; box-shadow: 0 0 0 3px rgba(84, 193, 139, .14); }
@@ -116,7 +116,7 @@
 @media (max-width: 380px) {
   .header-actions { gap: 4px; }
   .chatbot-trigger { width: 40px; min-height: 40px; }
-  .chatbot-trigger svg { width: 18px; height: 18px; }
+  .chatbot-trigger .chatbot-logo { width: 22px; height: 22px; flex-basis: 22px; }
   .chatbot-trigger i { top: 5px; left: 24px; }
   .chatbot-panel { top: 72px; right: 8px; left: 8px; height: calc(100dvh - 80px - env(safe-area-inset-bottom)); border-radius: 20px; }
   .chatbot-header { min-height: 68px; padding: 10px; grid-template-columns: 40px minmax(0, 1fr) 34px; gap: 8px; }
