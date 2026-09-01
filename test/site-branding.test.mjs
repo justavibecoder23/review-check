@@ -1,12 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { access, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 
 const pages = ['index.html', 'results.html', 'criteria.html', 'contact.html'];
 const oldHeadsetPath = 'M4 14v-2a8 8 0 0 1 16 0v2';
 
 test('các trang dùng logo RV thay cho biểu tượng tai nghe', async () => {
-  await access(new URL('../public/assets/realview-rv.png', import.meta.url));
+  const logo = await readFile(new URL('../public/assets/realview-rv.png', import.meta.url));
+  assert.equal(logo.subarray(1, 4).toString(), 'PNG');
+  assert.equal(logo.readUInt32BE(16), 1400);
+  assert.equal(logo.readUInt32BE(20), 823);
+  assert.equal(logo[25], 6, 'logo phải là PNG RGBA có kênh alpha');
 
   for (const page of pages) {
     const html = await readFile(new URL(`../public/${page}`, import.meta.url), 'utf8');
