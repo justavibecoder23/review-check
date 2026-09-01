@@ -198,7 +198,7 @@
   box-shadow: inset 0 0 0 1px rgba(22, 22, 22, .06);
 }
 
-.trust-gauge-inner span { position: absolute; top: 29%; right: 0; left: 0; color: #6a6a64; font-size: 9px; font-weight: 900; letter-spacing: 1.1px; text-transform: uppercase; }
+.trust-gauge-label { position: absolute; top: 29%; right: 0; left: 0; color: #6a6a64; font-size: 9px; font-weight: 900; letter-spacing: 1.1px; text-transform: uppercase; }
 .trust-gauge-value {
   position: absolute;
   top: 56%;
@@ -500,7 +500,7 @@
   .trust-card { padding: 22px 18px; grid-template-columns: 136px minmax(0, 1fr); gap: 18px; }
   .trust-gauge { width: 132px; flex-basis: 132px; }
   .trust-gauge-inner { width: 103px; }
-  .trust-gauge-inner span { font-size: 7px; }
+  .trust-gauge-label { font-size: 7px; }
   .trust-gauge-inner strong { font-size: 41px; letter-spacing: -3px; }
   .trust-gauge-inner small { bottom: 3px; margin-left: 3px; font-size: 8px; }
   .trust-copy h2 { margin-top: 13px; font-size: 19px; }
