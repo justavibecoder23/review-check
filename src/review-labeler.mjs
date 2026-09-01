@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import { geminiThinkingConfig, parseGeminiJson, requestGeminiWithFallback } from './gemini-response.mjs';
+import { isRedisConfigured } from './redis-rest.mjs';
 
 const require = createRequire(import.meta.url);
 const rulesDocument = require('./layer1_rules.json');
@@ -240,7 +241,6 @@ function normalizeLayer2Label(candidate, review, layer1) {
 
 async function classifyBatchWithGemini(batch, product, fetchImpl) {
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return { labels: [], warning: 'GEMINI_API_KEY chưa được cấu hình; sử dụng nhãn Layer 1.' };
   const model = process.env.LABELER_GEMINI_MODEL || process.env.GEMINI_MODEL || 'gemini-3.5-flash';
   const payload = batch.map(({ review, layer1 }) => ({
     id: layer1.id,
@@ -259,17 +259,18 @@ async function classifyBatchWithGemini(batch, product, fetchImpl) {
   ].join('\n');
   const { response } = await requestGeminiWithFallback({
     fetchImpl,
+    apiKey,
     primaryModel: model,
     fallbackModels: process.env.LABELER_GEMINI_FALLBACK_MODELS || process.env.GEMINI_FALLBACK_MODELS,
     context: 'Gemini labeler',
-    buildRequest: () => ({
+    buildRequest: (selectedModel, selectedApiKey) => ({
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': selectedApiKey },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: {
           maxOutputTokens: 8192,
-          thinkingConfig: geminiThinkingConfig('minimal'),
+          thinkingConfig: geminiThinkingConfig('minimal', selectedModel),
           responseMimeType: 'application/json',
           responseSchema: layer2ResponseSchema
         }
@@ -299,7 +300,7 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
   const batches = chunks(selected, batchSize);
   let succeededBatches = 0;
   let failedBatches = 0;
-  if (selected.length && process.env.GEMINI_API_KEY) {
+  if (selected.length && (process.env.GEMINI_API_KEY || isRedisConfigured())) {
     const results = await Promise.all(batches.map(async (batch, batchIndex) => {
       try {
         const result = await classifyBatchWithGemini(batch, options.product, options.fetchImpl || fetch);

@@ -125,6 +125,16 @@ Tại Vercel → **Settings → Environment Variables**, thêm:
 ```text
 GEMINI_API_KEY=<khóa Gemini của bạn>
 GEMINI_MODEL=gemini-3.5-flash
+GEMINI_API_KEY_VAULT_KEY=<kết quả openssl rand -base64 32>
+GEMINI_ADMIN_KEY=<khóa quản trị; có thể bỏ trống để dùng APIFY_ADMIN_KEY>
+```
+
+Gemini pool được lưu mã hóa trong Upstash Redis và dùng theo thứ tự `3.5 Flash → 3.6 Flash → 3.7 Flash → 3.5 Flash-Lite` trên cùng một API key. Chỉ sau khi cả bốn model hết quota ngày, backend mới chuyển sang key dự phòng tiếp theo. Trạng thái `used` tự hết hiệu lực sau 00:00 `America/Los_Angeles`, không cần cron. Các key phải thuộc Google Cloud project khác nhau nếu muốn có quota độc lập; nhiều key trong cùng project vẫn chia sẻ một quota.
+
+Nạp hoặc bổ sung key bằng:
+
+```bash
+npm run generate:gemini-pool
 ```
 
 Nếu Gemini chưa được cấu hình hoặc tạm thời không phản hồi, website vẫn trả đầy đủ TrustScore thống kê để người dùng không bị kẹt. Giao diện hiển thị đúng nguồn phân tích của lượt chạy.

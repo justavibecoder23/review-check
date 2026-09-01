@@ -416,7 +416,6 @@ function validateGeminiTrust(value, fallback) {
 
 async function analyzeWithGemini(reviews, fallback, fetchImpl) {
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return fallback;
   const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
   const narrativePayload = buildGeminiNarrativePayload(reviews, fallback);
   const prompt = [
@@ -438,16 +437,17 @@ async function analyzeWithGemini(reviews, fallback, fetchImpl) {
   ].join('\n');
   const { response } = await requestGeminiWithFallback({
     fetchImpl,
+    apiKey,
     primaryModel: model,
     context: 'Gemini TrustScore',
-    buildRequest: () => ({
+    buildRequest: (selectedModel, selectedApiKey) => ({
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': selectedApiKey },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: {
           maxOutputTokens: 4096,
-          thinkingConfig: geminiThinkingConfig('minimal'),
+          thinkingConfig: geminiThinkingConfig('minimal', selectedModel),
           responseMimeType: 'application/json',
           responseSchema: trustSchema
         }

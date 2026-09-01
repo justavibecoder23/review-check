@@ -168,8 +168,6 @@ export async function answerWebsiteQuestion(messages, options = {}) {
   if (!matches.length) return { answer: OUT_OF_SCOPE_REPLY, engine: 'rules' };
 
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return { answer: fallbackAnswer(matches), engine: 'rules' };
-
   const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
   const conversation = cleaned.map((message) => `${message.role === 'user' ? 'Người dùng' : 'Trợ lý'}: ${message.content}`).join('\n');
   const prompt = `
@@ -197,16 +195,17 @@ ${conversation}
   try {
     const { response } = await requestGeminiWithFallback({
       fetchImpl: options.fetchImpl || fetch,
+      apiKey,
       primaryModel: model,
       context: 'Gemini chatbot',
-      buildRequest: () => ({
+      buildRequest: (selectedModel, selectedApiKey) => ({
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': selectedApiKey },
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           generationConfig: {
             maxOutputTokens: 1024,
-            thinkingConfig: geminiThinkingConfig('minimal'),
+            thinkingConfig: geminiThinkingConfig('minimal', selectedModel),
             responseMimeType: 'application/json',
             responseSchema
           }

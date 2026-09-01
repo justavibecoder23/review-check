@@ -4,6 +4,7 @@ import { extname, join, normalize } from 'node:path';
 import { analyzeProductUrl } from './src/analyze.mjs';
 import { answerWebsiteQuestion } from './src/site-chatbot.mjs';
 import { assertApifyAdmin, readApifyAdminStatus, updateApifyAdminPool } from './src/apify-admin.mjs';
+import { assertGeminiAdmin, readGeminiAdminStatus, updateGeminiAdminPool } from './src/gemini-admin.mjs';
 import { openSse } from './src/sse.mjs';
 
 const port = Number(process.env.PORT || 3000);
@@ -71,6 +72,14 @@ const server = createServer(async (request, response) => {
       if (request.method === 'GET') return sendJson(response, 200, await readApifyAdminStatus());
       const body = await getBody(request);
       const pool = await updateApifyAdminPool(body);
+      return sendJson(response, 200, { updated: true, pool });
+    }
+
+    if (['GET', 'PUT'].includes(request.method) && url.pathname === '/api/gemini-config') {
+      assertGeminiAdmin(request.headers.authorization);
+      if (request.method === 'GET') return sendJson(response, 200, await readGeminiAdminStatus());
+      const body = await getBody(request);
+      const pool = await updateGeminiAdminPool(body);
       return sendJson(response, 200, { updated: true, pool });
     }
 

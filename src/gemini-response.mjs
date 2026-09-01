@@ -1,9 +1,11 @@
+import { markGeminiModelExhausted, reserveGeminiCredential } from './gemini-credential-store.mjs';
+
 function truncate(value, maxLength = 240) {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, maxLength);
 }
 
 const DEFAULT_MODEL = 'gemini-3.5-flash';
-const DEFAULT_FALLBACK_MODELS = Object.freeze(['gemini-3.6-flash', 'gemini-3.7-flash']);
+const DEFAULT_FALLBACK_MODELS = Object.freeze(['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-3.5-flash-lite']);
 
 function configuredFallbackModels(value) {
   if (value === undefined || value === null || String(value).trim() === '') return DEFAULT_FALLBACK_MODELS;
@@ -11,7 +13,11 @@ function configuredFallbackModels(value) {
 }
 
 export function geminiModelChain(primaryModel = DEFAULT_MODEL, fallbackModels = process.env.GEMINI_FALLBACK_MODELS) {
-  return [...new Set([String(primaryModel || DEFAULT_MODEL).trim(), ...configuredFallbackModels(fallbackModels)])];
+  return [...new Set([
+    String(primaryModel || DEFAULT_MODEL).trim(),
+    ...configuredFallbackModels(fallbackModels),
+    ...DEFAULT_FALLBACK_MODELS
+  ])];
 }
 
 export async function geminiHttpError(response, context = 'Gemini') {
@@ -45,24 +51,78 @@ export async function geminiHttpError(response, context = 'Gemini') {
 
 export async function requestGeminiWithFallback({
   fetchImpl = fetch,
+  redisFetchImpl,
+  apiKey,
   primaryModel = DEFAULT_MODEL,
   fallbackModels,
   context = 'Gemini',
-  buildRequest
+  buildRequest,
+  reserveCredentialImpl = reserveGeminiCredential,
+  markModelExhaustedImpl = markGeminiModelExhausted
 }) {
   const models = geminiModelChain(primaryModel, fallbackModels);
   let lastError;
-  for (let index = 0; index < models.length; index += 1) {
-    const model = models[index];
-    const response = await fetchImpl(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-      buildRequest(model)
-    );
-    if (response.ok) return { response, model, attemptedModels: models.slice(0, index + 1) };
-    lastError = await geminiHttpError(response, context);
-    lastError.model = model;
-    lastError.attemptedModels = models.slice(0, index + 1);
-    if (!lastError.quotaExhausted || index === models.length - 1) throw lastError;
+  let credential = null;
+  try {
+    credential = await reserveCredentialImpl({ fetchImpl: redisFetchImpl });
+  } catch (error) {
+    if (error?.code !== 'POOL_NOT_CONFIGURED') throw error;
+  }
+
+  if (!credential) {
+    if (!apiKey) {
+      const error = new Error('GEMINI_API_KEY chưa được cấu hình và Gemini pool chưa có key.');
+      error.code = 'GEMINI_NOT_CONFIGURED';
+      error.statusCode = 503;
+      throw error;
+    }
+    for (let index = 0; index < models.length; index += 1) {
+      const model = models[index];
+      const response = await fetchImpl(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+        buildRequest(model, apiKey)
+      );
+      if (response.ok) return { response, model, attemptedModels: models.slice(0, index + 1), credentialId: null };
+      lastError = await geminiHttpError(response, context);
+      lastError.model = model;
+      lastError.attemptedModels = models.slice(0, index + 1);
+      if (!lastError.quotaExhausted || index === models.length - 1) throw lastError;
+    }
+    throw lastError || new Error(`${context} không có model khả dụng.`);
+  }
+
+  const attemptedModels = [];
+  const attemptedCredentialIds = [];
+  while (credential) {
+    attemptedCredentialIds.push(credential.id);
+    const exhausted = new Set(credential.exhaustedModels || []);
+    const availableModels = models.filter((model) => !exhausted.has(model));
+    let credentialUsed = false;
+    let temporaryQuotaFailure = false;
+    for (const model of availableModels) {
+      attemptedModels.push(model);
+      const response = await fetchImpl(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+        buildRequest(model, credential.apiKey)
+      );
+      if (response.ok) {
+        return { response, model, attemptedModels, credentialId: credential.id, attemptedCredentialIds };
+      }
+      lastError = await geminiHttpError(response, context);
+      lastError.model = model;
+      lastError.credentialId = credential.id;
+      lastError.attemptedModels = [...attemptedModels];
+      lastError.attemptedCredentialIds = [...attemptedCredentialIds];
+      if (!lastError.quotaExhausted) throw lastError;
+      if (lastError.quotaScope === 'minute') {
+        temporaryQuotaFailure = true;
+        continue;
+      }
+      const state = await markModelExhaustedImpl(credential, model, { fetchImpl: redisFetchImpl });
+      credentialUsed = Boolean(state.used);
+    }
+    if (!credentialUsed || temporaryQuotaFailure) throw lastError;
+    credential = await reserveCredentialImpl({ fetchImpl: redisFetchImpl });
   }
   throw lastError || new Error(`${context} không có model khả dụng.`);
 }
@@ -89,6 +149,7 @@ export function parseGeminiJson(payload, context = 'Gemini') {
   }
 }
 
-export function geminiThinkingConfig(level = 'minimal') {
-  return { thinkingLevel: level };
+export function geminiThinkingConfig(level = 'minimal', model = '') {
+  const normalizedModel = String(model).trim().toLowerCase();
+  return { thinkingLevel: level === 'minimal' && normalizedModel.startsWith('gemini-3.7-') ? 'low' : level };
 }
