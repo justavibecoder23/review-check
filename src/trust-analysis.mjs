@@ -1,4 +1,4 @@
-import { geminiHttpError, geminiThinkingConfig, parseGeminiJson } from './gemini-response.mjs';
+import { geminiThinkingConfig, parseGeminiJson, requestGeminiWithFallback } from './gemini-response.mjs';
 import { calculateTrustScoreV31 } from './trust-score-v31.mjs';
 
 const positiveDefinitions = [
@@ -436,21 +436,25 @@ async function analyzeWithGemini(reviews, fallback, fetchImpl) {
     `Điểm cố định phải giữ nguyên: ${fallback.score}/100.`,
     `Dữ liệu diễn giải: ${JSON.stringify(narrativePayload)}`
   ].join('\n');
-  const response = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: {
-        maxOutputTokens: 4096,
-        thinkingConfig: geminiThinkingConfig('minimal'),
-        responseMimeType: 'application/json',
-        responseSchema: trustSchema
-      }
-    }),
-    signal: AbortSignal.timeout(28_000)
+  const { response } = await requestGeminiWithFallback({
+    fetchImpl,
+    primaryModel: model,
+    context: 'Gemini TrustScore',
+    buildRequest: () => ({
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          maxOutputTokens: 4096,
+          thinkingConfig: geminiThinkingConfig('minimal'),
+          responseMimeType: 'application/json',
+          responseSchema: trustSchema
+        }
+      }),
+      signal: AbortSignal.timeout(28_000)
+    })
   });
-  if (!response.ok) throw await geminiHttpError(response, 'Gemini TrustScore');
   const body = await response.json();
   return validateGeminiTrust(parseGeminiJson(body, 'Gemini TrustScore'), fallback);
 }

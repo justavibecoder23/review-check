@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { geminiHttpError, geminiThinkingConfig, parseGeminiJson } from './gemini-response.mjs';
+import { geminiThinkingConfig, parseGeminiJson, requestGeminiWithFallback } from './gemini-response.mjs';
 
 const OUT_OF_SCOPE_REPLY = 'Mình chưa có thông tin này trong kho dữ liệu RealView. Bạn có thể liên hệ đội ngũ để được hỗ trợ.';
 
@@ -195,21 +195,25 @@ ${conversation}
 `.trim();
 
   try {
-    const response = await (options.fetchImpl || fetch)(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          maxOutputTokens: 1024,
-          thinkingConfig: geminiThinkingConfig('minimal'),
-          responseMimeType: 'application/json',
-          responseSchema
-        }
-      }),
-      signal: AbortSignal.timeout(18_000)
+    const { response } = await requestGeminiWithFallback({
+      fetchImpl: options.fetchImpl || fetch,
+      primaryModel: model,
+      context: 'Gemini chatbot',
+      buildRequest: () => ({
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: {
+            maxOutputTokens: 1024,
+            thinkingConfig: geminiThinkingConfig('minimal'),
+            responseMimeType: 'application/json',
+            responseSchema
+          }
+        }),
+        signal: AbortSignal.timeout(18_000)
+      })
     });
-    if (!response.ok) throw await geminiHttpError(response, 'Gemini chatbot');
     const payload = await response.json();
     const parsed = parseGeminiJson(payload, 'Gemini chatbot');
     if (parsed?.supported !== true) return { answer: OUT_OF_SCOPE_REPLY, engine: 'gemini' };

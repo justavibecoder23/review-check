@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { geminiHttpError, geminiThinkingConfig, parseGeminiJson } from './gemini-response.mjs';
+import { geminiThinkingConfig, parseGeminiJson, requestGeminiWithFallback } from './gemini-response.mjs';
 
 const require = createRequire(import.meta.url);
 const rulesDocument = require('./layer1_rules.json');
@@ -257,21 +257,26 @@ async function classifyBatchWithGemini(batch, product, fetchImpl) {
     `Ngữ cảnh sản phẩm: ${JSON.stringify({ title: product?.title || null, category: product?.category || null, platform: product?.platform || null })}`,
     `Dữ liệu cần kiểm định: ${JSON.stringify(payload)}`
   ].join('\n');
-  const response = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: {
-        maxOutputTokens: 8192,
-        thinkingConfig: geminiThinkingConfig('minimal'),
-        responseMimeType: 'application/json',
-        responseSchema: layer2ResponseSchema
-      }
-    }),
-    signal: AbortSignal.timeout(28_000)
+  const { response } = await requestGeminiWithFallback({
+    fetchImpl,
+    primaryModel: model,
+    fallbackModels: process.env.LABELER_GEMINI_FALLBACK_MODELS || process.env.GEMINI_FALLBACK_MODELS,
+    context: 'Gemini labeler',
+    buildRequest: () => ({
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          maxOutputTokens: 8192,
+          thinkingConfig: geminiThinkingConfig('minimal'),
+          responseMimeType: 'application/json',
+          responseSchema: layer2ResponseSchema
+        }
+      }),
+      signal: AbortSignal.timeout(28_000)
+    })
   });
-  if (!response.ok) throw await geminiHttpError(response, 'Gemini labeler');
   const body = await response.json();
   const parsed = parseGeminiJson(body, 'Gemini labeler');
   return { labels: Array.isArray(parsed.labels) ? parsed.labels : [] };
