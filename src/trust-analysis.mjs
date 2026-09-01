@@ -440,6 +440,8 @@ async function analyzeWithGemini(reviews, fallback, fetchImpl) {
     apiKey,
     primaryModel: model,
     context: 'Gemini TrustScore',
+    transientModelsPerKey: 2,
+    transientBackupKeyRetries: 0,
     buildRequest: (selectedModel, selectedApiKey) => ({
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': selectedApiKey },
@@ -452,7 +454,7 @@ async function analyzeWithGemini(reviews, fallback, fetchImpl) {
           responseSchema: trustSchema
         }
       }),
-      signal: AbortSignal.timeout(28_000)
+      signal: AbortSignal.timeout(20_000)
     })
   });
   const body = await response.json();

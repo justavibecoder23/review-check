@@ -16,8 +16,13 @@ local raw = redis.call('GET', KEYS[1])
 if not raw then return cjson.encode({ok=false, code='POOL_NOT_CONFIGURED'}) end
 local pool = cjson.decode(raw)
 local nowMs = tonumber(ARGV[1]) or 0
+local excluded = {}
+if ARGV[3] and ARGV[3] ~= '' then
+  for _, id in ipairs(cjson.decode(ARGV[3])) do excluded[id] = true end
+end
 
 for _, credential in ipairs(pool.credentials or {}) do
+  if not excluded[credential.id] then
   local stateRaw = redis.call('HGET', KEYS[2], credential.id)
   local state = stateRaw and cjson.decode(stateRaw) or nil
   if state and tonumber(state.resetAtMs or 0) <= nowMs then
@@ -39,8 +44,12 @@ for _, credential in ipairs(pool.credentials or {}) do
       resetAt=state and state.resetAt or ARGV[2]
     })
   end
+  end
 end
 
+if next(excluded) then
+  return cjson.encode({ok=false, code='POOL_RETRY_EXHAUSTED', resetAt=ARGV[2]})
+end
 return cjson.encode({ok=false, code='POOL_EXHAUSTED', resetAt=ARGV[2]})
 `;
 
@@ -206,15 +215,18 @@ export async function reserveGeminiCredential(options = {}) {
   }
   const now = options.now ? new Date(options.now) : new Date();
   const resetAt = nextPacificResetAt(now);
+  const excludedIds = [...new Set((options.excludeCredentialIds || []).map(String).filter(Boolean))];
   const raw = await redisCommand([
     'EVAL', RESERVE_GEMINI_CREDENTIAL_SCRIPT, '2', GEMINI_POOL_KEY, GEMINI_POOL_STATES_KEY,
-    String(now.getTime()), resetAt
+    String(now.getTime()), resetAt, JSON.stringify(excludedIds)
   ], options);
   const allocation = typeof raw === 'string' ? JSON.parse(raw) : raw;
   if (!allocation?.ok) {
     const error = new Error(allocation?.code === 'POOL_EXHAUSTED'
       ? `Tất cả Gemini API key đã dùng hết quota ngày. Pool sẽ tự mở lại sau ${allocation.resetAt || resetAt}.`
-      : 'Chưa cấu hình Gemini API key pool.');
+      : allocation?.code === 'POOL_RETRY_EXHAUSTED'
+        ? 'Không còn Gemini API key dự phòng khác để retry.'
+        : 'Chưa cấu hình Gemini API key pool.');
     error.code = allocation?.code || 'POOL_NOT_CONFIGURED';
     error.statusCode = allocation?.code === 'POOL_EXHAUSTED' ? 429 : 503;
     error.resetAt = allocation?.resetAt || resetAt;

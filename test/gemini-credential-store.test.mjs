@@ -36,7 +36,9 @@ function createRedisFake() {
     const states = hash(GEMINI_POOL_STATES_KEY);
     if (String(command[1]).includes('GEMINI_CREDENTIAL_RESERVATION')) {
       const nowMs = Number(command[5]);
+      const excludedIds = new Set(JSON.parse(command[7] || '[]'));
       for (const credential of config.credentials) {
+        if (excludedIds.has(credential.id)) continue;
         let state = states[credential.id] ? JSON.parse(states[credential.id]) : null;
         if (state && Number(state.resetAtMs) <= nowMs) {
           delete states[credential.id];
@@ -51,7 +53,11 @@ function createRedisFake() {
           });
         }
       }
-      return JSON.stringify({ ok: false, code: 'POOL_EXHAUSTED', resetAt: command[6] });
+      return JSON.stringify({
+        ok: false,
+        code: excludedIds.size ? 'POOL_RETRY_EXHAUSTED' : 'POOL_EXHAUSTED',
+        resetAt: command[6]
+      });
     }
     if (String(command[1]).includes('GEMINI_MODEL_EXHAUSTION')) {
       const id = command[5];
@@ -134,4 +140,41 @@ test('Gemini pool mã hóa key, dùng đủ bốn model rồi chuyển key và r
 test('mốc reset Gemini là 00:00 America/Los_Angeles kể cả khi DST', () => {
   assert.equal(nextPacificResetAt('2026-09-01T12:00:00.000Z'), '2026-09-02T07:00:00.000Z');
   assert.equal(nextPacificResetAt('2026-12-01T12:00:00.000Z'), '2026-12-02T08:00:00.000Z');
+});
+
+test('reserve retry bỏ qua credential vừa timeout mà không đánh dấu used', async () => {
+  const redis = createRedisFake();
+  const now = '2026-09-01T12:00:00.000Z';
+  const previousRedisUrl = process.env.UPSTASH_REDIS_REST_URL;
+  const previousRedisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const previousVault = process.env.GEMINI_API_KEY_VAULT_KEY;
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'test-token';
+  process.env.GEMINI_API_KEY_VAULT_KEY = Buffer.alloc(32, 7).toString('base64');
+  try {
+    await saveGeminiCredentialPool({
+      mode: 'replace',
+      credentials: [
+        { label: 'first-key', apiKey: 'gemini-secret-key-number-one' },
+        { label: 'second-key', apiKey: 'gemini-secret-key-number-two' }
+      ]
+    }, { fetchImpl: redis.fetchImpl });
+    const first = await reserveGeminiCredential({ fetchImpl: redis.fetchImpl, now });
+    const second = await reserveGeminiCredential({
+      fetchImpl: redis.fetchImpl,
+      now,
+      excludeCredentialIds: [first.id]
+    });
+    assert.notEqual(second.id, first.id);
+    assert.equal(second.label, 'second-key');
+    const status = await getGeminiCredentialPoolStatus({ fetchImpl: redis.fetchImpl, now });
+    assert.equal(status.totals.used, 0);
+  } finally {
+    if (previousRedisUrl) process.env.UPSTASH_REDIS_REST_URL = previousRedisUrl;
+    else delete process.env.UPSTASH_REDIS_REST_URL;
+    if (previousRedisToken) process.env.UPSTASH_REDIS_REST_TOKEN = previousRedisToken;
+    else delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    if (previousVault) process.env.GEMINI_API_KEY_VAULT_KEY = previousVault;
+    else delete process.env.GEMINI_API_KEY_VAULT_KEY;
+  }
 });

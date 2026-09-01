@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Labeling functions cho review tiếng Việt. Rule có thể abstain; nhãn cuối phải giữ provenance và được Layer 2 kiểm tra khi mơ hồ.",
   "policy": {
     "allowed_defect_categories": ["chat-lieu", "kich-co", "dung-mo-ta", "giao-hang", "su-dung"],

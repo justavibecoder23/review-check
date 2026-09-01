@@ -151,6 +151,14 @@ Mỗi lượt thu thập review chạy theo thứ tự:
 
 `LABELER_LLM_MODE=all` kiểm tra toàn bộ review; `uncertain` chỉ gửi các trường hợp xung đột/độ tin cậy thấp; `off` tắt Layer 2.
 
+Layer 2 chia tối đa 20 review mỗi batch và chạy các batch song song. Nếu Gemini
+timeout, lỗi mạng hoặc HTTP 5xx, mỗi batch thử model kế tiếp; sau hai model vẫn
+lỗi, hệ thống chuyển sang một API key dự phòng khác trong Redis. Việc retry do
+timeout không đánh dấu key là hết quota. `GEMINI_TRANSIENT_KEY_RETRIES` giới hạn
+số key dự phòng (mặc định 1, tối đa 2) để toàn bộ request không vượt giới hạn
+thời gian của Vercel. Kết quả trả `layer2Retry` gồm số retry, số lần đổi key và
+model hoàn tất để đối chiếu với runtime log.
+
 ## Lưu dataset
 
 Mỗi lượt phân tích tạo đúng hai file có chung `runId`:

@@ -87,11 +87,64 @@ function repeatedCharacterSpam(text) {
   return new RegExp(`(.)\\1{${maximum},}`, 'u').test(text);
 }
 
+function gibberishSpam(text) {
+  const tokens = String(text).match(/[a-z0-9]+/gu) || [];
+  return tokens.some((token) => {
+    if (token.length >= 24) return true;
+    if (token.length < 14) return false;
+    if (/\d/u.test(token) && /[a-z]/u.test(token)) return true;
+    if (/[bcdfghjklmnpqrstvwxyz]{7,}/u.test(token)) return true;
+    const bigrams = new Map();
+    for (let index = 0; index < token.length - 1; index += 1) {
+      const pair = token.slice(index, index + 2);
+      bigrams.set(pair, (bigrams.get(pair) || 0) + 1);
+    }
+    return Math.max(0, ...bigrams.values()) >= 4;
+  });
+}
+
+const logisticsCuePattern = /\b(?:giao|ship|van chuyen|dong goi|goi ky|goi ki|nhan hang|shop)\b/u;
+const productExperiencePattern = /\b(?:san pham|chat luong|chat lieu|dung|su dung|xai|mac|uong|giu nhiet|ben|sac|pin|mau|size|form|mui|vi|cong nang|hoat dong)\b/u;
+
+function logisticsOnlyReview(text) {
+  if (!logisticsCuePattern.test(text) || productExperiencePattern.test(text)) return false;
+  const stripped = text
+    .replace(/\b(?:giao|hang|nhanh|ship|van chuyen|dong goi|goi|ky|ki|can than|dep|tot|ok|oke|oki|shop|nhan|duoc|sai|sài|xai)\b/gu, ' ')
+    .replace(/[^a-z0-9]+/gu, ' ')
+    .trim();
+  return stripped.split(/\s+/u).filter(Boolean).length <= 3;
+}
+
+const productFamilies = Object.freeze({
+  drinkware: ["binh nuoc", "binh giu nhiet", "ly giu nhiet", "ly nuoc", "coc nuoc", "chai nuoc"],
+  grooming: ["dao cao rau", "may cao rau", "cao rau"],
+  audio: ["tai nghe", "loa bluetooth", "headphone", "earphone"],
+  clothing: ["ao thun", "ao khoac", "quan jean", "quan ao", "vay dam"],
+  footwear: ["giay", "dep", "sandal"],
+  phoneAccessory: ["op lung", "kinh cuong luc", "cap sac", "sac du phong"]
+});
+
+function matchingProductFamilies(text) {
+  return Object.entries(productFamilies)
+    .filter(([, phrases]) => phrases.some((phrase) => text.includes(phrase)))
+    .map(([family]) => family);
+}
+
+function offTopicProductMismatch(reviewText, product = {}) {
+  const title = normalizeVietnamese(product?.title || '');
+  if (!title || /san pham dang phan tich/u.test(title)) return false;
+  const titleFamilies = matchingProductFamilies(title);
+  const reviewFamilies = matchingProductFamilies(reviewText);
+  if (!titleFamilies.length || !reviewFamilies.length) return false;
+  return !reviewFamilies.some((family) => titleFamilies.includes(family));
+}
+
 function baseLabels(layer1) {
   return {
     is_seeding: layer1.is_seeding,
     is_low_value: layer1.is_low_value,
     is_vague: layer1.is_vague,
+    is_off_topic: layer1.is_off_topic,
     has_defect: layer1.has_defect,
     defect_categories: [...layer1.defect_categories],
     defect_quote: layer1.defect_quote,
@@ -100,7 +153,7 @@ function baseLabels(layer1) {
   };
 }
 
-export function labelReviewLayer1(review = {}, index = 0) {
+export function labelReviewLayer1(review = {}, index = 0, product = {}) {
   const originalText = String(review.text || '').trim();
   const text = normalizeVietnamese(originalText);
   const defects = defectMatches(originalText);
@@ -111,9 +164,13 @@ export function labelReviewLayer1(review = {}, index = 0) {
   const tokens = text ? text.split(/\s+/u) : [];
   const generic = rules.spam_and_low_value.generic_short_phrases.some((phrase) => text === normalizeVietnamese(phrase));
   const iconOnly = Boolean(originalText && iconOnlyPattern.test(originalText));
+  const gibberish = gibberishSpam(text);
+  const logisticsOnly = logisticsOnlyReview(text);
+  const isOffTopic = offTopicProductMismatch(text, product);
   const tooShort = text.length < Number(rules.spam_and_low_value.min_character_length)
     || tokens.length < Number(rules.spam_and_low_value.min_token_count);
-  const lowValueCandidate = !text || generic || iconOnly || repeatedCharacterSpam(text) || tooShort;
+  const repeated = repeatedCharacterSpam(text);
+  const lowValueCandidate = !text || generic || iconOnly || repeated || gibberish || logisticsOnly || tooShort;
   const isLowValue = defects.length === 0 && lowValueCandidate;
   const rating = Number(review.rating) || 0;
   const rantKeyword = rules.vague_rant_detection.rant_keywords.find((keyword) => text.includes(normalizeVietnamese(keyword)));
@@ -131,7 +188,11 @@ export function labelReviewLayer1(review = {}, index = 0) {
     reasonCodes.push('SEEDING_WEAK_CUE');
     evidence.push({ label: 'seeding_candidate', rule: weakSeeding, quote: originalText.slice(0, 180) });
   }
-  if (isLowValue) reasonCodes.push(generic ? 'LOW_VALUE_GENERIC' : iconOnly ? 'LOW_VALUE_ICON_ONLY' : repeatedCharacterSpam(text) ? 'LOW_VALUE_REPETITION' : 'LOW_VALUE_SHORT');
+  if (isLowValue) reasonCodes.push(gibberish ? 'LOW_VALUE_GIBBERISH' : logisticsOnly ? 'LOW_VALUE_LOGISTICS_ONLY' : generic ? 'LOW_VALUE_GENERIC' : iconOnly ? 'LOW_VALUE_ICON_ONLY' : repeated ? 'LOW_VALUE_REPETITION' : 'LOW_VALUE_SHORT');
+  if (isOffTopic) {
+    reasonCodes.push('OFF_TOPIC_PRODUCT_MISMATCH');
+    evidence.push({ label: 'off_topic', rule: 'product_family_mismatch', quote: originalText.slice(0, 180) });
+  }
   if (isVague) reasonCodes.push(rantKeyword ? 'VAGUE_RANT' : 'VAGUE_WITHOUT_DEFECT');
   for (const defect of defects) {
     reasonCodes.push(`DEFECT_${defect.id.toUpperCase().replaceAll('-', '_')}`);
@@ -141,7 +202,8 @@ export function labelReviewLayer1(review = {}, index = 0) {
   const conflicts = [];
   if (isSeeding && defects.length) conflicts.push('SEEDING_WITH_CONCRETE_DEFECT');
   if (weakSeeding && !isSeeding) conflicts.push('WEAK_SEEDING_CUE_ONLY');
-  const signalConfidence = exactSeeding ? 0.99
+  const signalConfidence = isOffTopic || gibberish ? 0.97
+    : exactSeeding ? 0.99
     : strongSeeding ? 0.94
       : defects.length ? 0.92
         : rantKeyword ? 0.88
@@ -155,6 +217,7 @@ export function labelReviewLayer1(review = {}, index = 0) {
     is_seeding: isSeeding,
     is_low_value: isLowValue,
     is_vague: isVague,
+    is_off_topic: isOffTopic,
     has_defect: defects.length > 0,
     defect_categories: defects.map((defect) => defect.id),
     defect_quote: defects[0]?.evidence?.[0]?.quote || null,
@@ -180,6 +243,7 @@ const layer2ResponseSchema = {
           is_seeding: { type: 'boolean' },
           is_low_value: { type: 'boolean' },
           is_vague: { type: 'boolean' },
+          is_off_topic: { type: 'boolean' },
           has_defect: { type: 'boolean' },
           defect_categories: { type: 'array', items: { type: 'string', enum: [...allowedCategories] }, maxItems: 5 },
           defect_quote: { anyOf: [{ type: 'string' }, { type: 'null' }] },
@@ -187,7 +251,7 @@ const layer2ResponseSchema = {
           confidence: { type: 'number', minimum: 0, maximum: 1 },
           reason_code: { type: 'string' }
         },
-        required: ['id', 'decision', 'is_seeding', 'is_low_value', 'is_vague', 'has_defect', 'defect_categories', 'defect_quote', 'evidence_quote', 'confidence', 'reason_code']
+        required: ['id', 'decision', 'is_seeding', 'is_low_value', 'is_vague', 'is_off_topic', 'has_defect', 'defect_categories', 'defect_quote', 'evidence_quote', 'confidence', 'reason_code']
       }
     }
   },
@@ -215,10 +279,19 @@ function normalizeLayer2Label(candidate, review, layer1) {
       reason_code: !categories.length ? 'INVALID_DEFECT_CATEGORY' : 'DEFECT_QUOTE_NOT_VERBATIM'
     };
   }
-  const hasDefect = Boolean(candidate.has_defect && categories.length && quote);
+  const lockedLowValue = layer1.reason_codes.some((code) => ['LOW_VALUE_GIBBERISH', 'LOW_VALUE_LOGISTICS_ONLY', 'LOW_VALUE_REPETITION'].includes(code));
+  const lockedOffTopic = layer1.reason_codes.includes('OFF_TOPIC_PRODUCT_MISMATCH');
+  // Các tín hiệu deterministic này không được để LLM mở khóa bằng một category
+  // defect được suy diễn. Review lỗi thật đã được Layer 1 ưu tiên defect và sẽ
+  // không mang lockedLowValue ngay từ đầu.
+  const hasDefect = Boolean(!lockedLowValue && !lockedOffTopic && candidate.has_defect && categories.length && quote);
   const ratingAllowsVague = policy.vague_only_for_ratings.includes(Number(review.rating));
   const isVague = Boolean(candidate.is_vague && ratingAllowsVague && !hasDefect);
-  const changed = ['is_seeding', 'is_low_value', 'is_vague', 'has_defect'].some((key) => Boolean(candidate[key]) !== Boolean(layer1[key]))
+  const isLowValue = Boolean(lockedLowValue || (candidate.is_low_value && !hasDefect));
+  const isOffTopic = Boolean(candidate.is_off_topic || lockedOffTopic);
+  const changed = ['is_seeding', 'is_vague', 'has_defect'].some((key) => Boolean(candidate[key]) !== Boolean(layer1[key]))
+    || isLowValue !== Boolean(layer1.is_low_value)
+    || isOffTopic !== Boolean(layer1.is_off_topic)
     || JSON.stringify(categories) !== JSON.stringify(layer1.defect_categories);
   const decision = candidate.decision === 'confirm' && changed ? 'correct' : candidate.decision;
   if (decision === 'correct' && !evidenceQuote) {
@@ -227,8 +300,9 @@ function normalizeLayer2Label(candidate, review, layer1) {
   return {
     decision,
     is_seeding: Boolean(candidate.is_seeding),
-    is_low_value: Boolean(candidate.is_low_value && !hasDefect),
+    is_low_value: isLowValue,
     is_vague: isVague,
+    is_off_topic: isOffTopic,
     has_defect: hasDefect,
     defect_categories: hasDefect ? categories : [],
     defect_quote: hasDefect ? quote : null,
@@ -257,7 +331,7 @@ async function classifyBatchWithGemini(batch, product, fetchImpl) {
     `Ngữ cảnh sản phẩm: ${JSON.stringify({ title: product?.title || null, category: product?.category || null, platform: product?.platform || null })}`,
     `Dữ liệu cần kiểm định: ${JSON.stringify(payload)}`
   ].join('\n');
-  const { response } = await requestGeminiWithFallback({
+  const geminiResult = await requestGeminiWithFallback({
     fetchImpl,
     apiKey,
     primaryModel: model,
@@ -275,12 +349,20 @@ async function classifyBatchWithGemini(batch, product, fetchImpl) {
           responseSchema: layer2ResponseSchema
         }
       }),
-      signal: AbortSignal.timeout(28_000)
+      signal: AbortSignal.timeout(20_000)
     })
   });
+  const { response } = geminiResult;
   const body = await response.json();
   const parsed = parseGeminiJson(body, 'Gemini labeler');
-  return { labels: Array.isArray(parsed.labels) ? parsed.labels : [] };
+  return {
+    labels: Array.isArray(parsed.labels) ? parsed.labels : [],
+    retry: {
+      model: geminiResult.model,
+      attemptedModels: geminiResult.attemptedModels || [],
+      credentialAttempts: geminiResult.attemptedCredentialIds?.length || (geminiResult.credentialId ? 1 : 0)
+    }
+  };
 }
 
 function chunks(items, size) {
@@ -290,21 +372,37 @@ function chunks(items, size) {
 }
 
 export async function labelReviewsTwoLayer(reviews = [], options = {}) {
-  const prepared = reviews.map((review, index) => ({ review, layer1: labelReviewLayer1(review, index) }));
+  const prepared = reviews.map((review, index) => ({ review, layer1: labelReviewLayer1(review, index, options.product) }));
   const mode = options.mode || process.env.LABELER_LLM_MODE || 'all';
   const selected = mode === 'off' ? [] : mode === 'uncertain' ? prepared.filter((item) => item.layer1.requires_llm) : prepared;
-  const batchSize = Math.min(30, Math.max(5, Number.parseInt(process.env.LABELER_LLM_BATCH_SIZE || '25', 10) || 25));
+  const batchSize = Math.min(20, Math.max(5, Number.parseInt(process.env.LABELER_LLM_BATCH_SIZE || '20', 10) || 20));
   const warnings = [];
   const layer2ById = new Map();
   const model = process.env.LABELER_GEMINI_MODEL || process.env.GEMINI_MODEL || 'gemini-3.5-flash';
   const batches = chunks(selected, batchSize);
   let succeededBatches = 0;
   let failedBatches = 0;
+  let retryAttempts = 0;
+  let credentialSwitches = 0;
+  const modelsUsed = new Set();
   if (selected.length && (process.env.GEMINI_API_KEY || isRedisConfigured())) {
     const results = await Promise.all(batches.map(async (batch, batchIndex) => {
       try {
         const result = await classifyBatchWithGemini(batch, options.product, options.fetchImpl || fetch);
         succeededBatches += 1;
+        const attemptedCount = result.retry?.attemptedModels?.length || 1;
+        retryAttempts += Math.max(0, attemptedCount - 1);
+        credentialSwitches += Math.max(0, (result.retry?.credentialAttempts || 1) - 1);
+        if (result.retry?.model) modelsUsed.add(result.retry.model);
+        if ((attemptedCount > 1 || result.retry?.credentialAttempts > 1) && (process.env.VERCEL || options.logLayer2Errors)) {
+          (options.logger || console).warn('[review-labeler] Layer 2 recovered after retry', {
+            batch: batchIndex + 1,
+            totalBatches: batches.length,
+            attemptedModels: result.retry.attemptedModels,
+            credentialAttempts: result.retry.credentialAttempts,
+            finalModel: result.retry.model
+          });
+        }
         return result;
       } catch (error) {
         failedBatches += 1;
@@ -315,6 +413,8 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
             totalBatches: batches.length,
             reviewCount: batch.length,
             model,
+            attemptedModels: error?.attemptedModels || [],
+            credentialAttempts: error?.attemptedCredentialIds?.length || 0,
             error: warning
           });
         }
@@ -345,22 +445,25 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
     if (layer2?.decision === 'abstain') abstained += 1;
     if (layer2?.changed) corrected += 1;
     const accepted = layer2 && layer2.decision !== 'abstain';
+    const layer2Unavailable = Boolean(layer1.requires_llm && !accepted);
     const final = accepted ? {
       is_seeding: layer2.is_seeding,
       is_low_value: layer2.is_low_value,
       is_vague: layer2.is_vague,
+      is_off_topic: layer2.is_off_topic,
       has_defect: layer2.has_defect,
       defect_categories: layer2.defect_categories,
       defect_quote: layer2.defect_quote,
       confidence: layer2.confidence,
       reason_code: layer2.reason_code,
+      layer2_unavailable: false,
       reviewed_by: 'gemini-layer2'
-    } : { ...baseLabels(layer1), reviewed_by: 'layer1' };
+    } : { ...baseLabels(layer1), layer2_unavailable: layer2Unavailable, reviewed_by: 'layer1' };
     return {
       ...review,
       labelId: layer1.id,
       labels: final,
-      labeling: { layer1, layer2, final, pipelineVersion: '2.1.0' }
+      labeling: { layer1, layer2, final, pipelineVersion: '2.2.0' }
     };
   });
 
@@ -373,6 +476,7 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
       layer2Status,
       layer2Model: model,
       layer2Batches: { total: batches.length, succeeded: succeededBatches, failed: failedBatches },
+      layer2Retry: { retryAttempts, credentialSwitches, modelsUsed: [...modelsUsed] },
       corrected,
       abstained,
       engine: layer2ById.size ? 'layer1+gemini-layer2' : 'layer1-only',

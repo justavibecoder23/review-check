@@ -89,3 +89,34 @@ test('Gemini dùng đủ bốn model trên một key rồi mới chuyển sang k
     'secret-2:gemini-3.5-flash'
   ]);
 });
+
+test('Gemini timeout thì retry model khác rồi chuyển sang API key dự phòng', async () => {
+  const credentials = [
+    { id: 'key-1', apiKey: 'secret-1', exhaustedModels: [] },
+    { id: 'key-2', apiKey: 'secret-2', exhaustedModels: [] }
+  ];
+  const requests = [];
+  const result = await requestGeminiWithFallback({
+    primaryModel: 'gemini-3.5-flash',
+    reserveCredentialImpl: async ({ excludeCredentialIds = [] } = {}) => {
+      const credential = credentials.find((item) => !excludeCredentialIds.includes(item.id));
+      if (!credential) throw Object.assign(new Error('Không còn key retry'), { code: 'POOL_RETRY_EXHAUSTED' });
+      return credential;
+    },
+    fetchImpl: async (url, init) => {
+      const model = decodeURIComponent(url).match(/models\/(.+):generateContent/)[1];
+      const key = init.headers['x-goog-api-key'];
+      requests.push(`${key}:${model}`);
+      if (key === 'secret-2') return { ok: true };
+      throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'AbortError' });
+    },
+    buildRequest: (_model, selectedApiKey) => ({ headers: { 'x-goog-api-key': selectedApiKey } })
+  });
+  assert.equal(result.credentialId, 'key-2');
+  assert.deepEqual(requests, [
+    'secret-1:gemini-3.5-flash',
+    'secret-1:gemini-3.6-flash',
+    'secret-2:gemini-3.5-flash'
+  ]);
+  assert.deepEqual(result.attemptedCredentialIds, ['key-1', 'key-2']);
+});

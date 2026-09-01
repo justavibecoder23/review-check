@@ -9,6 +9,34 @@ test('review generic ngắn là low_value nhưng không bị suy diễn thành s
   assert.equal(label.has_defect, false);
 });
 
+test('Layer 1 loại chuỗi rác dài thay vì để NO_RULE_MATCH', () => {
+  const label = labelReviewLayer1({
+    rating: 5,
+    text: 'Loại da: Hoi hoihhsjehejiwj21jqjwbwbwbwbwbbbwbwbwbebebe bbwn'
+  });
+  assert.equal(label.is_low_value, true);
+  assert.equal(label.reason_codes.includes('LOW_VALUE_GIBBERISH'), true);
+});
+
+test('Layer 1 loại lời khen chỉ nói giao hàng và đóng gói', () => {
+  const label = labelReviewLayer1({
+    rating: 5,
+    text: '5 ⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐ giao nhanh đẹp gói kỹ Sài Ok'
+  });
+  assert.equal(label.is_low_value, true);
+  assert.equal(label.reason_codes.some((code) => ['LOW_VALUE_REPETITION', 'LOW_VALUE_LOGISTICS_ONLY'].includes(code)), true);
+});
+
+test('Layer 1 nhận diện review mô tả sai nhóm sản phẩm khi có title TikTok', () => {
+  const label = labelReviewLayer1(
+    { rating: 5, text: 'Dao cạo râu ok, sắc, bền và giá hạt dẻ' },
+    0,
+    { title: 'Bình nước Lucky 1000ml hình chó và mèo giữ nhiệt 4–6 tiếng' }
+  );
+  assert.equal(label.is_off_topic, true);
+  assert.equal(label.reason_codes.includes('OFF_TOPIC_PRODUCT_MISMATCH'), true);
+});
+
 test('rule nhận xu tạo nhãn seeding có evidence', () => {
   const label = labelReviewLayer1({ rating: 5, text: 'Hình ảnh mang tính chất nhận xu, chưa dùng sản phẩm.' });
   assert.equal(label.is_seeding, true);
@@ -157,6 +185,36 @@ test('Layer 2 phải abstain khi bằng chứng lỗi không phải trích dẫn
     assert.deepEqual(result.reviews[0].labels.defect_categories, ['su-dung']);
     assert.equal(result.reviews[0].labeling.layer2.decision, 'abstain');
     assert.equal(result.reviews[0].labeling.layer2.reason_code, 'DEFECT_QUOTE_NOT_VERBATIM');
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
+test('Layer 2 không được mở khóa review logistics-only bằng defect suy diễn', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  try {
+    const text = 'Giao nhanh đóng gói kỹ đẹp ok';
+    const result = await labelReviewsTwoLayer([{ rating: 5, text }], {
+      fetchImpl: async () => ({
+        ok: true,
+        async json() {
+          return {
+            candidates: [{ content: { parts: [{ text: JSON.stringify({ labels: [{
+              id: 'r0001', decision: 'correct', is_seeding: false, is_low_value: false,
+              is_vague: false, is_off_topic: false, has_defect: true,
+              defect_categories: ['giao-hang'], defect_quote: 'Giao nhanh',
+              evidence_quote: 'Giao nhanh', confidence: 0.99,
+              reason_code: 'DELIVERY_MENTION'
+            }] }) }] } }]
+          };
+        }
+      })
+    });
+    assert.equal(result.reviews[0].labels.is_low_value, true);
+    assert.equal(result.reviews[0].labels.has_defect, false);
+    assert.deepEqual(result.reviews[0].labels.defect_categories, []);
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
     else delete process.env.GEMINI_API_KEY;

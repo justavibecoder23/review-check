@@ -12,6 +12,30 @@ function configuredFallbackModels(value) {
   return String(value).split(',').map((model) => model.trim()).filter(Boolean);
 }
 
+function transientGeminiError(error) {
+  const status = Number(error?.statusCode) || 0;
+  return error?.name === 'AbortError'
+    || /abort|timeout|timed out|network|fetch failed/i.test(String(error?.message || ''))
+    || [408, 425, 500, 502, 503, 504].includes(status);
+}
+
+async function fetchGemini(fetchImpl, url, init, context, model) {
+  try {
+    const response = await fetchImpl(url, init);
+    if (response.ok) return { response };
+    const error = await geminiHttpError(response, context);
+    error.model = model;
+    return { error };
+  } catch (cause) {
+    const error = new Error(`${context} tạm thời không phản hồi: ${truncate(cause?.message || cause || 'lỗi mạng')}`);
+    error.name = cause?.name || 'GeminiNetworkError';
+    error.statusCode = Number(cause?.statusCode) || null;
+    error.model = model;
+    error.transient = true;
+    return { error };
+  }
+}
+
 export function geminiModelChain(primaryModel = DEFAULT_MODEL, fallbackModels = process.env.GEMINI_FALLBACK_MODELS) {
   return [...new Set([
     String(primaryModel || DEFAULT_MODEL).trim(),
@@ -58,9 +82,13 @@ export async function requestGeminiWithFallback({
   context = 'Gemini',
   buildRequest,
   reserveCredentialImpl = reserveGeminiCredential,
-  markModelExhaustedImpl = markGeminiModelExhausted
+  markModelExhaustedImpl = markGeminiModelExhausted,
+  transientModelsPerKey = 2,
+  transientBackupKeyRetries = process.env.GEMINI_TRANSIENT_KEY_RETRIES || '1'
 }) {
   const models = geminiModelChain(primaryModel, fallbackModels);
+  const maxTransientModelsPerKey = Math.min(models.length, Math.max(1, Number.parseInt(transientModelsPerKey, 10) || 1));
+  const maxTransientBackupKeys = Math.min(2, Math.max(0, Number.parseInt(transientBackupKeyRetries, 10) || 0));
   let lastError;
   let credential = null;
   try {
@@ -76,16 +104,22 @@ export async function requestGeminiWithFallback({
       error.statusCode = 503;
       throw error;
     }
+    let transientAttempts = 0;
     for (let index = 0; index < models.length; index += 1) {
       const model = models[index];
-      const response = await fetchImpl(
+      const attempt = await fetchGemini(fetchImpl,
         `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-        buildRequest(model, apiKey)
+        buildRequest(model, apiKey), context, model
       );
-      if (response.ok) return { response, model, attemptedModels: models.slice(0, index + 1), credentialId: null };
-      lastError = await geminiHttpError(response, context);
+      if (attempt.response) return { response: attempt.response, model, attemptedModels: models.slice(0, index + 1), credentialId: null };
+      lastError = attempt.error;
       lastError.model = model;
       lastError.attemptedModels = models.slice(0, index + 1);
+      if (transientGeminiError(lastError)) {
+        transientAttempts += 1;
+        if (transientAttempts < maxTransientModelsPerKey && index < models.length - 1) continue;
+        throw lastError;
+      }
       if (!lastError.quotaExhausted || index === models.length - 1) throw lastError;
     }
     throw lastError || new Error(`${context} không có model khả dụng.`);
@@ -93,26 +127,38 @@ export async function requestGeminiWithFallback({
 
   const attemptedModels = [];
   const attemptedCredentialIds = [];
+  const excludedCredentialIds = new Set();
+  let transientBackupKeysUsed = 0;
   while (credential) {
+    if (excludedCredentialIds.has(credential.id)) throw lastError || new Error(`${context} không còn API key khác để retry.`);
     attemptedCredentialIds.push(credential.id);
+    excludedCredentialIds.add(credential.id);
     const exhausted = new Set(credential.exhaustedModels || []);
     const availableModels = models.filter((model) => !exhausted.has(model));
     let credentialUsed = false;
     let temporaryQuotaFailure = false;
+    let transientAttempts = 0;
+    let rotateAfterTransientFailure = false;
     for (const model of availableModels) {
       attemptedModels.push(model);
-      const response = await fetchImpl(
+      const attempt = await fetchGemini(fetchImpl,
         `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-        buildRequest(model, credential.apiKey)
+        buildRequest(model, credential.apiKey), context, model
       );
-      if (response.ok) {
-        return { response, model, attemptedModels, credentialId: credential.id, attemptedCredentialIds };
+      if (attempt.response) {
+        return { response: attempt.response, model, attemptedModels, credentialId: credential.id, attemptedCredentialIds };
       }
-      lastError = await geminiHttpError(response, context);
+      lastError = attempt.error;
       lastError.model = model;
       lastError.credentialId = credential.id;
       lastError.attemptedModels = [...attemptedModels];
       lastError.attemptedCredentialIds = [...attemptedCredentialIds];
+      if (transientGeminiError(lastError)) {
+        transientAttempts += 1;
+        if (transientAttempts < maxTransientModelsPerKey) continue;
+        rotateAfterTransientFailure = true;
+        break;
+      }
       if (!lastError.quotaExhausted) throw lastError;
       if (lastError.quotaScope === 'minute') {
         temporaryQuotaFailure = true;
@@ -121,8 +167,22 @@ export async function requestGeminiWithFallback({
       const state = await markModelExhaustedImpl(credential, model, { fetchImpl: redisFetchImpl });
       credentialUsed = Boolean(state.used);
     }
-    if (!credentialUsed || temporaryQuotaFailure) throw lastError;
-    credential = await reserveCredentialImpl({ fetchImpl: redisFetchImpl });
+    if (rotateAfterTransientFailure || temporaryQuotaFailure) {
+      if (transientBackupKeysUsed >= maxTransientBackupKeys) throw lastError;
+      transientBackupKeysUsed += 1;
+      try {
+        credential = await reserveCredentialImpl({
+          fetchImpl: redisFetchImpl,
+          excludeCredentialIds: [...excludedCredentialIds]
+        });
+      } catch (error) {
+        if (error?.code === 'POOL_RETRY_EXHAUSTED') throw lastError;
+        throw error;
+      }
+      continue;
+    }
+    if (!credentialUsed) throw lastError;
+    credential = await reserveCredentialImpl({ fetchImpl: redisFetchImpl, excludeCredentialIds: [...excludedCredentialIds] });
   }
   throw lastError || new Error(`${context} không có model khả dụng.`);
 }

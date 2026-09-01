@@ -18,16 +18,18 @@ function findIssues(review) {
   return findReviewIssues(typeof review === 'string' ? review : review?.text);
 }
 
-function shouldKeep(review) {
+export function shouldKeep(review) {
   const text = normalise(review.text);
   const hasIssue = findIssues(review).length > 0;
   const generic = lowValuePatterns.some((pattern) => pattern.test(text));
   const signals = classifyReviewSignals(review);
   const seeding = signals.seeding;
+  if (review.labels?.is_off_topic) return { keep: false, reason: 'Nội dung không liên quan đến sản phẩm đang phân tích' };
   if (seeding && !hasIssue) return { keep: false, reason: 'Có dấu hiệu nhận xu / seeding' };
   if (seeding) return { keep: false, reason: 'Có bằng chứng seeding dù review có nhắc đến lỗi' };
   if (review.labels?.is_vague) return { keep: false, reason: 'Phản hồi tiêu cực mơ hồ, chưa nêu lỗi cụ thể' };
   if (review.labels?.is_low_value && !hasIssue) return { keep: false, reason: 'Nội dung ít thông tin, không đủ làm bằng chứng' };
+  if (review.labels?.layer2_unavailable && !hasIssue) return { keep: false, reason: 'Chưa đủ dữ liệu để kiểm định nội dung review' };
   if ((text.length < 14 || generic) && !hasIssue) return { keep: false, reason: 'Quá ngắn hoặc không có trải nghiệm cụ thể' };
   if (review.rating >= 4 && !hasIssue && text.length < 38) return { keep: false, reason: 'Khen chung chung, ít thông tin kiểm chứng' };
   return { keep: true, reason: null };
