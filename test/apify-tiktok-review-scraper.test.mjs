@@ -12,12 +12,12 @@ function allocation(count = 5) {
       token: `apify_api_test_token_${index + 1}`,
       runCount: 1,
       reviewCount: 0,
-      plannedReviews: count === 5 ? 40 : 200
+      plannedReviews: count === 5 ? 20 : 100
     }))
   };
 }
 
-test('TikTok chia 200 review thành 5 star filter chạy song song và không lộ token', async () => {
+test('TikTok chia 100 review thành 5 star filter chạy song song và không lộ token', async () => {
   const inputs = [];
   const result = await collectTikTokReviews('1729384756102938475', {
     allocation: allocation(),
@@ -28,7 +28,7 @@ test('TikTok chia 200 review thành 5 star filter chạy song song và không l�
       return {
         ok: true,
         async json() {
-          return Array.from({ length: 40 }, (_, index) => ({
+          return Array.from({ length: 20 }, (_, index) => ({
             review_id: `${star}-${index}`,
             product_id: '1729384756102938475',
             review_rating: star,
@@ -44,11 +44,11 @@ test('TikTok chia 200 review thành 5 star filter chạy song song và không l�
 
   assert.equal(inputs.length, 5);
   assert.deepEqual(inputs.map((input) => input.reviews_filter), ['5_star', '4_star', '3_star', '2_star', '1_star']);
-  assert.ok(inputs.every((input) => input.reviews_limit === 40));
+  assert.ok(inputs.every((input) => input.reviews_limit === 20));
   assert.ok(inputs.every((input) => input.region === 'VN'));
-  assert.equal(result.reviews.length, 200);
+  assert.equal(result.reviews.length, 100);
   assert.equal(result.collection.strategy, 'parallel-star-filters');
-  assert.equal(result.collection.perStarLimit, 40);
+  assert.equal(result.collection.perStarLimit, 20);
   assert.equal(result.productMeta.title, 'Tai nghe thử nghiệm');
   assert.equal(result.reviews[0].createdAt, '2026-08-30T00:00:00.000Z');
   assert.equal(JSON.stringify(result).includes('apify_api_test_token'), false);
@@ -88,6 +88,6 @@ test('TikTok dùng một account unfiltered khi allocation chỉ có một key',
   });
   assert.equal(inputs.length, 1);
   assert.equal(inputs[0].reviews_filter, 'all');
-  assert.equal(inputs[0].reviews_limit, 200);
+  assert.equal(inputs[0].reviews_limit, 100);
   assert.equal(result.collection.strategy, 'single-unfiltered');
 });

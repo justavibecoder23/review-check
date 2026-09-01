@@ -3,8 +3,9 @@ import { finalizeTikTokCredential, reserveTikTokCredentials } from './apify-cred
 import { createProgressReporter } from './sse.mjs';
 
 const DEFAULT_ACTOR_ID = 'web_wanderer/tiktok-reviews-scraper';
-const MAX_REVIEWS = 200;
+const MAX_REVIEWS = 100;
 const STAR_FILTERS = Object.freeze(['5_star', '4_star', '3_star', '2_star', '1_star']);
+const REVIEWS_PER_STAR = MAX_REVIEWS / STAR_FILTERS.length;
 
 function actorPath(actorId) {
   return encodeURIComponent(String(actorId || DEFAULT_ACTOR_ID).trim().replace('/', '~'));
@@ -112,7 +113,7 @@ async function allocate(options) {
     return {
       allocation: await reserveTikTokCredentials({
         count: 5,
-        reviewsPerCredential: 40,
+        reviewsPerCredential: REVIEWS_PER_STAR,
         fetchImpl: options.redisFetchImpl,
         maxReviewsPerKey: options.maxReviewsPerKey
       }),
@@ -144,7 +145,7 @@ export async function collectTikTokReviews(productId, options = {}) {
   const startedAt = performance.now();
   const runs = await Promise.all(allocation.credentials.map((credential, index) => runActor({
     productId,
-    reviewLimit: Math.min(credential.plannedReviews || (strategy === 'parallel-star-filters' ? 40 : MAX_REVIEWS), MAX_REVIEWS),
+    reviewLimit: Math.min(credential.plannedReviews || (strategy === 'parallel-star-filters' ? REVIEWS_PER_STAR : MAX_REVIEWS), MAX_REVIEWS),
     reviewFilter: strategy === 'parallel-star-filters' ? STAR_FILTERS[index] : 'all',
     credential,
     fetchImpl,
@@ -226,7 +227,7 @@ export async function collectTikTokReviews(productId, options = {}) {
       strategy,
       filters: strategy === 'parallel-star-filters' ? STAR_FILTERS : ['all'],
       writtenCommentsOnly: true,
-      perStarLimit: strategy === 'parallel-star-filters' ? 40 : null,
+      perStarLimit: strategy === 'parallel-star-filters' ? REVIEWS_PER_STAR : null,
       targetMaximum: MAX_REVIEWS,
       returned: deduplicated.length,
       duplicateCount,

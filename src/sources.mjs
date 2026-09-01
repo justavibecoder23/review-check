@@ -81,7 +81,7 @@ export async function getReviews(url, options = {}) {
     : null;
   const productUrl = shopeeProduct?.canonicalUrl || tiktokProduct?.productUrl || parsed.href;
   const perStarLimit = platform === 'Shopee' ? getShopeeReviewsPerStar() : null;
-  const reviewLimit = platform === 'Shopee' ? perStarLimit : 200;
+  const reviewLimit = platform === 'Shopee' ? perStarLimit : 100;
 
   if (shopeeProduct?.wasShortened) {
     warnings.push('Đã mở link chia sẻ Shopee và chuẩn hóa về đúng sản phẩm trước khi thu thập review.');
