@@ -8,6 +8,14 @@ test('đọc product ID từ link TikTok Shop đầy đủ', async () => {
   assert.equal(result.wasShortened, false);
 });
 
+test('đọc product ID từ link TikTok Shop Việt Nam có tiền tố /vn/pdp', async () => {
+  const result = await resolveTikTokProductUrl(
+    'https://shop.tiktok.com/vn/pdp/binh-nuoc-lucky-1000ml-hinh-cho-va-meo-giu-nhiet-4-6-tieng/1732811145572746350?source=ecommerce_mall'
+  );
+  assert.equal(result.productId, '1732811145572746350');
+  assert.equal(result.wasShortened, false);
+});
+
 test('đọc product ID từ query của link TikTok', () => {
   assert.equal(
     getTikTokProductId('https://www.tiktok.com/view/product/landing?product_id=1729384756102938475'),

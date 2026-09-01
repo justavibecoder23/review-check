@@ -56,7 +56,7 @@ export function getTikTokProductId(value) {
   }
 
   const matches = [
-    url.pathname.match(/\/shop\/pdp\/(?:[^/]+\/)?(\d{8,25})(?:\/|$)/i),
+    url.pathname.match(/\/(?:shop\/|[a-z]{2}\/)?pdp\/(?:[^/]+\/)?(\d{8,25})(?:\/|$)/i),
     url.pathname.match(/\/(?:view\/)?product\/(\d{8,25})(?:\/|$)/i),
     url.pathname.match(/\/products?\/(\d{8,25})(?:\/|$)/i)
   ];
