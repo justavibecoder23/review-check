@@ -56,11 +56,12 @@ export function extractMarketplaceUrl(rawInput) {
 
   const markdownUrl = input.match(/\]\((https?:\/\/[^\s)]+)\)/i)?.[1];
   const plainUrl = input.match(/https?:\/\/[^\s<>"']+/i)?.[0];
-  const candidate = stripTrailingPunctuation(markdownUrl || plainUrl || '');
+  const bareMarketplaceUrl = input.match(/(?:^|\s)((?:(?:www\.)?shopee\.vn|s\.shopee\.vn|(?:www\.)?shope\.ee|vn\.shp\.ee|(?:www\.|shop\.|vt\.|vm\.)?tiktok\.com)\/[^\s<>"']+)/i)?.[1];
+  const candidate = stripTrailingPunctuation(markdownUrl || plainUrl || bareMarketplaceUrl || '');
 
   if (!candidate) throw httpError('Không tìm thấy đường dẫn trong nội dung đã dán.');
   try {
-    return new URL(candidate).href;
+    return new URL(/^https?:\/\//i.test(candidate) ? candidate : `https://${candidate}`).href;
   } catch {
     throw httpError('Link không hợp lệ.');
   }

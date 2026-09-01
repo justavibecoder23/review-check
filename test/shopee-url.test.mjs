@@ -38,6 +38,13 @@ test('tách URL khi nội dung sao chép từ ứng dụng có kèm văn bản',
   );
 });
 
+test('tự bổ sung HTTPS cho link share TikTok không có giao thức', () => {
+  assert.equal(
+    extractMarketplaceUrl('vt.tiktok.com/ZS9Bp94scsc6P-9DZVh/'),
+    'https://vt.tiktok.com/ZS9Bp94scsc6P-9DZVh/'
+  );
+});
+
 test('theo redirect s.shopee.vn và chuẩn hóa URL đích mới', async () => {
   const fetchImpl = async (url, options) => {
     assert.equal(url.href, 'https://s.shopee.vn/4AyF5bMwAe');

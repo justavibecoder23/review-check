@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { getTikTokProductId, resolveTikTokProductUrl } from '../src/tiktok-url.mjs';
 
 test('đọc product ID từ link TikTok Shop đầy đủ', async () => {
@@ -57,4 +58,10 @@ test('chặn link rút gọn TikTok chuyển hướng ra ngoài TikTok', async (
     }),
     /ra ngoài miền TikTok/
   );
+});
+
+test('form chấp nhận link share thiếu HTTPS để backend tự chuẩn hóa', async () => {
+  const html = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+  assert.match(html, /id="product-url"[^>]+type="text"[^>]+inputmode="url"/);
+  assert.match(html, /Shopee hoặc TikTok Shop/);
 });
