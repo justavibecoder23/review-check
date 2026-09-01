@@ -802,8 +802,9 @@ blockquote footer { margin-top: 7px; color: #9a4507; font-size: 10px; }
   .brand { font-size: 16px; }
   .brand-mark { width: 40px; height: 32px; }
   .hero-section { padding-top: 22px; overflow-x: clip; }
+  .hero-grid { row-gap: 14px; }
   .section-pill { max-width: 100%; padding: 7px 10px; font-size: 10px; line-height: 1.25; letter-spacing: .35px; }
-  .hero-copy { padding-top: 20px; }
+  .hero-copy { padding: 20px 0 0; }
   .hero-copy h1 { max-width: 100%; margin-top: 18px; font-size: clamp(38px, 11.2vw, 48px); line-height: 1.08; letter-spacing: -2.35px; overflow-wrap: anywhere; }
   .hero-copy h1 .hero-heading-line { white-space: normal; }
   .hero-description { font-size: 15px; }
@@ -820,38 +821,55 @@ blockquote footer { margin-top: 7px; color: #9a4507; font-size: 10px; }
   .loading small { margin-top: 6px; font-size: 8.5px; }
   .loading-progress { margin-top: 8px; }
   .supported {
-    width: 100%;
-    margin: 15px 0 0;
+    width: fit-content;
+    max-width: 100%;
+    margin: 10px auto 0;
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: max-content max-content;
+    justify-content: center;
     align-items: center;
-    gap: 7px 12px;
+    gap: 5px 22px;
+    color: #62625d;
+    font-size: clamp(10px, 2.8vw, 11px);
+    font-weight: 600;
+    line-height: 1.35;
     text-align: center;
   }
   .supported span {
     min-width: 0;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 5px;
-    line-height: 1.35;
+    line-height: inherit;
     white-space: nowrap;
   }
-  .supported span:first-child { grid-column: 1 / -1; }
+  .supported span:first-child {
+    grid-column: 1 / -1;
+    justify-self: center;
+    color: #565650;
+    font-weight: 700;
+  }
   .supported span + span::before { display: none; }
   .supported span:nth-child(3)::before {
     content: "";
     position: absolute;
     top: 50%;
-    left: -6px;
-    width: 3px;
-    height: 3px;
+    left: -11px;
+    width: 1px;
+    height: 12px;
     display: block;
-    border-radius: 50%;
-    background: #aaa9a1;
+    border-radius: 999px;
+    background: rgba(22,22,22,.18);
     transform: translateY(-50%);
   }
-  .status-dot { margin-right: 0; flex: 0 0 auto; }
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    margin-right: 0;
+    flex: 0 0 auto;
+    box-shadow: 0 0 0 3px rgba(44,154,97,.1);
+  }
   .hero-visual { min-height: 370px; overflow: hidden; }
   .hero-visual > .hero-illustration { top: 52px; right: 2.5%; width: 100%; }
   .orange-blob { top: 30px; right: 1%; bottom: 18px; left: -4%; }
