@@ -4,9 +4,15 @@ import {
   APIFY_POOL_COUNTERS_KEY,
   APIFY_POOL_KEY,
   APIFY_POOL_USED_KEY,
+  APIFY_TIKTOK_REVIEW_COUNTERS_KEY,
+  APIFY_TIKTOK_RESERVED_REVIEWS_KEY,
+  APIFY_TIKTOK_RUN_COUNTERS_KEY,
+  APIFY_TIKTOK_USED_KEY,
+  finalizeTikTokCredential,
   getApifyCredentialPoolStatus,
   reserveApifyCredential,
   reserveApifyCredentialSet,
+  reserveTikTokCredentials,
   saveApifyCredentialPool
 } from '../src/apify-credential-store.mjs';
 
@@ -34,6 +40,57 @@ function createRedisFake() {
       const config = JSON.parse(values.get(APIFY_POOL_KEY));
       const counters = hash(APIFY_POOL_COUNTERS_KEY);
       const used = hash(APIFY_POOL_USED_KEY);
+      if (String(command[1]).includes('TIKTOK_CREDENTIAL_FINALIZATION')) {
+        const reviews = hash(APIFY_TIKTOK_REVIEW_COUNTERS_KEY);
+        const reserved = hash(APIFY_TIKTOK_RESERVED_REVIEWS_KEY);
+        const tiktokUsed = hash(APIFY_TIKTOK_USED_KEY);
+        const planned = Number(command[6]);
+        const actual = Number(command[7]);
+        const maxReviews = Number(command[8]);
+        const exhausted = command[9] === '1';
+        const id = command[10];
+        reserved[id] = String(Math.max(0, Number(reserved[id] || 0) - planned));
+        let reviewCount = Number(reviews[id] || 0) + actual;
+        if (exhausted) reviewCount = maxReviews;
+        reviews[id] = String(reviewCount);
+        if (reviewCount >= maxReviews) {
+          tiktokUsed[id] = JSON.stringify({ id, label: command[11], reviewCount, maxReviewsPerKey: maxReviews, usedAt: command[12] });
+        }
+        return JSON.stringify({ ok: true, reviewCount, exhausted: reviewCount >= maxReviews });
+      }
+      if (String(command[1]).includes('TIKTOK_CREDENTIAL_RESERVATION')) {
+        const runs = hash(APIFY_TIKTOK_RUN_COUNTERS_KEY);
+        const reviews = hash(APIFY_TIKTOK_REVIEW_COUNTERS_KEY);
+        const reserved = hash(APIFY_TIKTOK_RESERVED_REVIEWS_KEY);
+        const desired = Number(command[7]);
+        const requestedPerKey = Number(command[8]);
+        const maxReviews = Number(command[9]);
+        const candidates = config.groups.flatMap((group) => group.credentials.map((credential) => ({ credential, group })))
+          .filter(({ credential }) => Number(reviews[credential.id] || 0) + Number(reserved[credential.id] || 0) < maxReviews)
+          .slice(0, desired);
+        if (candidates.length < desired) return JSON.stringify({ ok: false, code: 'INSUFFICIENT_KEYS', available: candidates.length, requested: desired });
+        return JSON.stringify({
+          ok: true,
+          source: 'redis-vault',
+          maxReviewsPerKey: maxReviews,
+          reservedAt: command[10],
+          credentials: candidates.map(({ credential, group }) => {
+            const currentReviews = Number(reviews[credential.id] || 0);
+            const plannedReviews = Math.min(requestedPerKey, maxReviews - currentReviews - Number(reserved[credential.id] || 0));
+            runs[credential.id] = String(Number(runs[credential.id] || 0) + 1);
+            reserved[credential.id] = String(Number(reserved[credential.id] || 0) + plannedReviews);
+            return {
+              ...credential,
+              groupId: group.id,
+              groupLabel: group.label,
+              runCount: Number(runs[credential.id]),
+              reviewCount: currentReviews,
+              plannedReviews,
+              reservedReviews: Number(reserved[credential.id])
+            };
+          })
+        });
+      }
       if (String(command[1]).includes('SINGLE_CREDENTIAL_RESERVATION')) {
         let selected;
         let credential;
@@ -229,6 +286,48 @@ test('pool mã hóa token, đếm nguyên tử và tự chuyển nhóm sau lư�
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       const envKey = { url: 'UPSTASH_REDIS_REST_URL', token: 'UPSTASH_REDIS_REST_TOKEN', vault: 'APIFY_TOKEN_VAULT_KEY' }[key];
+      if (value === undefined) delete process.env[envKey];
+      else process.env[envKey] = value;
+    }
+  }
+});
+
+test('TikTok dùng chung token nhưng có bộ đếm review riêng, không trừ lượt Shopee', async () => {
+  const previous = {
+    url: process.env.UPSTASH_REDIS_REST_URL,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    vault: process.env.APIFY_TOKEN_VAULT_KEY,
+    tiktokMax: process.env.TIKTOK_MAX_REVIEWS_PER_KEY
+  };
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.example.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'redis-test-token';
+  process.env.APIFY_TOKEN_VAULT_KEY = Buffer.alloc(32, 7).toString('base64');
+  process.env.TIKTOK_MAX_REVIEWS_PER_KEY = '200';
+  const redis = createRedisFake();
+  try {
+    await saveApifyCredentialPool({ maxUsesPerKey: 10, groups: [group('primary', 'primary')] }, { fetchImpl: redis.fetchImpl });
+    const allocation = await reserveTikTokCredentials({ count: 5, reviewsPerCredential: 40, fetchImpl: redis.fetchImpl });
+    assert.equal(allocation.credentials.length, 5);
+    assert.ok(allocation.credentials.every((credential) => credential.runCount === 1 && credential.plannedReviews === 40));
+    await Promise.all(allocation.credentials.map((credential) => finalizeTikTokCredential(
+      credential,
+      { reviewCount: 40 },
+      { fetchImpl: redis.fetchImpl }
+    )));
+
+    const status = await getApifyCredentialPoolStatus({ fetchImpl: redis.fetchImpl });
+    assert.ok(status.active.credentials.every((credential) => credential.shopee.usageCount === 0));
+    assert.ok(status.active.credentials.every((credential) => credential.tiktok.runCount === 1));
+    assert.ok(status.active.credentials.every((credential) => credential.tiktok.reviewCount === 40));
+    assert.ok(status.active.credentials.every((credential) => credential.tiktok.remainingReviews === 160));
+    assert.equal(status.platforms.shopee.usedHistory.length, 0);
+    assert.equal(status.platforms.tiktok.usedHistory.length, 0);
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      const envKey = {
+        url: 'UPSTASH_REDIS_REST_URL', token: 'UPSTASH_REDIS_REST_TOKEN',
+        vault: 'APIFY_TOKEN_VAULT_KEY', tiktokMax: 'TIKTOK_MAX_REVIEWS_PER_KEY'
+      }[key];
       if (value === undefined) delete process.env[envKey];
       else process.env[envKey] = value;
     }

@@ -1,5 +1,7 @@
 import { extractMarketplaceUrl, isShopeeUrl, resolveShopeeProductUrl } from './shopee-url.mjs';
 import { collectShopeeReviews } from './apify-review-scraper.mjs';
+import { collectTikTokReviews } from './apify-tiktok-review-scraper.mjs';
+import { isTikTokUrl, resolveTikTokProductUrl } from './tiktok-url.mjs';
 import { createProgressReporter } from './sse.mjs';
 
 const DEMO_REVIEWS = [
@@ -35,33 +37,9 @@ export function getShopeeReviewsPerStar(value = process.env.SHOPEE_REVIEWS_PER_S
 }
 
 function platformFrom(url) {
-  const host = new URL(url).hostname.toLowerCase();
   if (isShopeeUrl(url)) return 'Shopee';
-  if (host === 'vm.tiktok.com' || host === 'vt.tiktok.com' || host.includes('tiktok.com')) return 'TikTok Shop';
+  if (isTikTokUrl(url)) return 'TikTok Shop';
   throw Object.assign(new Error('Link chưa thuộc Shopee hoặc TikTok Shop.'), { statusCode: 400 });
-}
-
-async function loadFromConfiguredBot(url, platform) {
-  const endpoint = process.env.REVIEWS_BOT_URL;
-  if (!endpoint) throw new Error('Chưa cấu hình bot thu thập đánh giá.');
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: process.env.REVIEWS_BOT_TOKEN ? `Bearer ${process.env.REVIEWS_BOT_TOKEN}` : '' },
-    body: JSON.stringify({ url, platform, limit: 50 })
-  });
-  if (!response.ok) throw new Error(`Bot trả về HTTP ${response.status}`);
-  const body = await response.json();
-  if (!Array.isArray(body.reviews)) throw new Error('Bot không trả về danh sách reviews hợp lệ.');
-  return {
-    reviews: body.reviews.map((review) => ({
-      rating: Number(review.rating) || 0,
-      text: String(review.text || ''),
-      date: review.date || 'Không rõ ngày',
-      verified: Boolean(review.verified),
-      author: review.author || 'Khách đã mua'
-    })).filter((review) => review.text),
-    productMeta: normaliseProductMeta(body.product)
-  };
 }
 
 function firstValue(source, paths) {
@@ -98,32 +76,36 @@ export async function getReviews(url, options = {}) {
   const shopeeProduct = platform === 'Shopee'
     ? await resolveShopeeProductUrl(parsed.href)
     : null;
-  const productUrl = shopeeProduct?.canonicalUrl || parsed.href;
+  const tiktokProduct = platform === 'TikTok Shop'
+    ? await resolveTikTokProductUrl(parsed.href)
+    : null;
+  const productUrl = shopeeProduct?.canonicalUrl || tiktokProduct?.productUrl || parsed.href;
   const perStarLimit = platform === 'Shopee' ? getShopeeReviewsPerStar() : null;
-  const reviewLimit = platform === 'Shopee' ? perStarLimit : 50;
+  const reviewLimit = platform === 'Shopee' ? perStarLimit : 200;
 
   if (shopeeProduct?.wasShortened) {
     warnings.push('Đã mở link chia sẻ Shopee và chuẩn hóa về đúng sản phẩm trước khi thu thập review.');
+  }
+  if (tiktokProduct?.wasShortened) {
+    warnings.push('Đã mở link chia sẻ TikTok và khôi phục đúng mã sản phẩm trước khi thu thập review.');
   }
 
   try {
     progress('collecting', 14, 'Đang khởi tạo hệ thống lấy reviews...');
     const collected = platform === 'Shopee'
       ? await collectShopeeReviews(productUrl, { reviewLimit: perStarLimit, onProgress: options.onProgress })
-      : await loadFromConfiguredBot(productUrl, platform);
+      : await collectTikTokReviews(tiktokProduct.productId, { onProgress: options.onProgress });
     const reviews = collected.reviews;
     if (Array.isArray(collected.warnings)) warnings.push(...collected.warnings);
     return {
       reviews,
       source: {
         type: 'live',
-        label: platform === 'Shopee' ? 'Apify · Shopee Product Reviews Scraper' : 'Bot thu thập đã cấu hình',
+        label: platform === 'Shopee' ? 'Apify · Shopee Product Reviews Scraper' : 'Apify · TikTok Product Reviews Scraper',
         reviewLimit,
-        ...(platform === 'Shopee' ? {
-          collection: collected.collection,
-          credential: collected.credential,
-          usage: collected.usage
-        } : {})
+        collection: collected.collection,
+        credential: collected.credential,
+        usage: collected.usage
       },
       product: {
         platform,
@@ -134,6 +116,10 @@ export async function getReviews(url, options = {}) {
           shopId: shopeeProduct.shopId,
           itemId: shopeeProduct.itemId,
           resolvedFromShortLink: shopeeProduct.wasShortened
+        } : {}),
+        ...(tiktokProduct ? {
+          productId: tiktokProduct.productId,
+          resolvedFromShortLink: tiktokProduct.wasShortened
         } : {})
       },
       warnings
@@ -156,6 +142,10 @@ export async function getReviews(url, options = {}) {
           shopId: shopeeProduct.shopId,
           itemId: shopeeProduct.itemId,
           resolvedFromShortLink: shopeeProduct.wasShortened
+        } : {}),
+        ...(tiktokProduct ? {
+          productId: tiktokProduct.productId,
+          resolvedFromShortLink: tiktokProduct.wasShortened
         } : {})
       },
       warnings

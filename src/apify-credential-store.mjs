@@ -4,8 +4,87 @@ import { isRedisConfigured, redisCommand, redisTransaction } from './redis-rest.
 export const APIFY_POOL_KEY = 'realview:apify:credential-pool:v2';
 export const APIFY_POOL_COUNTERS_KEY = 'realview:apify:credential-pool:v2:counters';
 export const APIFY_POOL_USED_KEY = 'realview:apify:credential-pool:v2:used';
+export const APIFY_TIKTOK_RUN_COUNTERS_KEY = 'realview:apify:credential-pool:v2:tiktok:runs';
+export const APIFY_TIKTOK_REVIEW_COUNTERS_KEY = 'realview:apify:credential-pool:v2:tiktok:reviews';
+export const APIFY_TIKTOK_RESERVED_REVIEWS_KEY = 'realview:apify:credential-pool:v2:tiktok:reserved';
+export const APIFY_TIKTOK_USED_KEY = 'realview:apify:credential-pool:v2:tiktok:used';
 export const DEFAULT_MAX_USES_PER_KEY = 10;
+export const DEFAULT_TIKTOK_MAX_REVIEWS_PER_KEY = 6200;
 export const APIFY_STARS = Object.freeze([5, 4, 3, 2, 1]);
+
+// TikTok được tính theo số review, không dùng chung bộ đếm lượt của Shopee.
+// Việc giữ một hash reservation riêng ngăn hai request đồng thời cùng tiêu
+// quá ngân sách review còn lại của một token.
+const RESERVE_TIKTOK_CREDENTIALS_SCRIPT = String.raw`
+-- TIKTOK_CREDENTIAL_RESERVATION
+local raw = redis.call('GET', KEYS[1])
+if not raw then return cjson.encode({ok=false, code='POOL_NOT_CONFIGURED'}) end
+local pool = cjson.decode(raw)
+local desired = tonumber(ARGV[1]) or 1
+local requestedPerKey = tonumber(ARGV[2]) or 1
+local maxReviews = tonumber(ARGV[3]) or 6200
+local selected = {}
+
+for _, group in ipairs(pool.groups or {}) do
+  for _, credential in ipairs(group.credentials or {}) do
+    local reviews = tonumber(redis.call('HGET', KEYS[3], credential.id) or '0')
+    local reserved = tonumber(redis.call('HGET', KEYS[4], credential.id) or '0')
+    local remaining = maxReviews - reviews - reserved
+    if remaining > 0 and #selected < desired then
+      table.insert(selected, {
+        credential=credential,
+        groupId=group.id,
+        groupLabel=group.label,
+        reviews=reviews,
+        reserved=reserved,
+        planned=math.min(requestedPerKey, remaining)
+      })
+    end
+  end
+end
+
+if #selected < desired then
+  return cjson.encode({ok=false, code='INSUFFICIENT_KEYS', available=#selected, requested=desired})
+end
+
+local allocation = {ok=true, source='redis-vault', maxReviewsPerKey=maxReviews, credentials={}, reservedAt=ARGV[4]}
+for _, candidate in ipairs(selected) do
+  local runCount = tonumber(redis.call('HINCRBY', KEYS[2], candidate.credential.id, 1))
+  local reservedAfter = tonumber(redis.call('HINCRBY', KEYS[4], candidate.credential.id, candidate.planned))
+  local allocated = {}
+  for key, value in pairs(candidate.credential) do allocated[key] = value end
+  allocated.groupId = candidate.groupId
+  allocated.groupLabel = candidate.groupLabel
+  allocated.runCount = runCount
+  allocated.reviewCount = candidate.reviews
+  allocated.plannedReviews = candidate.planned
+  allocated.reservedReviews = reservedAfter
+  table.insert(allocation.credentials, allocated)
+end
+return cjson.encode(allocation)
+`;
+
+const FINALIZE_TIKTOK_CREDENTIAL_SCRIPT = String.raw`
+-- TIKTOK_CREDENTIAL_FINALIZATION
+local planned = tonumber(ARGV[1]) or 0
+local actual = tonumber(ARGV[2]) or 0
+local maxReviews = tonumber(ARGV[3]) or 6200
+local exhausted = ARGV[4] == '1'
+local currentReserved = tonumber(redis.call('HGET', KEYS[2], ARGV[5]) or '0')
+redis.call('HSET', KEYS[2], ARGV[5], math.max(0, currentReserved - planned))
+local reviewCount = tonumber(redis.call('HINCRBY', KEYS[1], ARGV[5], actual))
+if exhausted and reviewCount < maxReviews then
+  reviewCount = maxReviews
+  redis.call('HSET', KEYS[1], ARGV[5], reviewCount)
+end
+if reviewCount >= maxReviews then
+  redis.call('HSET', KEYS[3], ARGV[5], cjson.encode({
+    id=ARGV[5], label=ARGV[6], reviewCount=reviewCount,
+    maxReviewsPerKey=maxReviews, usedAt=ARGV[7]
+  }))
+end
+return cjson.encode({ok=true, reviewCount=reviewCount, exhausted=(reviewCount >= maxReviews)})
+`;
 
 // Chọn 5 key còn hạn mức và cộng bộ đếm trong cùng một lệnh Redis.
 // Ưu tiên mọi key còn lượt trong nhóm active; nếu nhóm thiếu key thì bù bằng
@@ -235,6 +314,12 @@ function cleanMaxUses(value, fallback = DEFAULT_MAX_USES_PER_KEY) {
   return parsed;
 }
 
+function cleanTikTokMaxReviews(value = process.env.TIKTOK_MAX_REVIEWS_PER_KEY) {
+  const parsed = Number.parseInt(String(value ?? DEFAULT_TIKTOK_MAX_REVIEWS_PER_KEY), 10);
+  if (!Number.isInteger(parsed) || parsed < 200 || parsed > 100_000) return DEFAULT_TIKTOK_MAX_REVIEWS_PER_KEY;
+  return parsed;
+}
+
 function normalizeInputCredentials(group, groupIndex) {
   const rawCredentials = group?.credentials || group?.keys;
   if (!Array.isArray(rawCredentials) || rawCredentials.length !== APIFY_STARS.length) {
@@ -336,15 +421,32 @@ function parseHashReply(value) {
   return result;
 }
 
-function publicCredential(credential, counters, maxUsesPerKey) {
+function publicCredential(credential, counters, maxUsesPerKey, tiktok = {}) {
   const usageCount = Number(counters[credential.id]) || 0;
+  const tiktokRunCount = Number(tiktok.runs?.[credential.id]) || 0;
+  const tiktokReviewCount = Number(tiktok.reviews?.[credential.id]) || 0;
+  const tiktokReservedReviews = Number(tiktok.reserved?.[credential.id]) || 0;
+  const tiktokMaxReviewsPerKey = cleanTikTokMaxReviews(tiktok.maxReviewsPerKey);
   return {
     id: credential.id,
     label: credential.label,
     star: Number(credential.star),
     usageCount,
     remainingUses: Math.max(0, maxUsesPerKey - usageCount),
-    status: usageCount >= maxUsesPerKey ? 'used' : 'available'
+    status: usageCount >= maxUsesPerKey ? 'used' : 'available',
+    shopee: {
+      usageCount,
+      remainingUses: Math.max(0, maxUsesPerKey - usageCount),
+      status: usageCount >= maxUsesPerKey ? 'used' : 'available'
+    },
+    tiktok: {
+      runCount: tiktokRunCount,
+      reviewCount: tiktokReviewCount,
+      reservedReviews: tiktokReservedReviews,
+      remainingReviews: Math.max(0, tiktokMaxReviewsPerKey - tiktokReviewCount - tiktokReservedReviews),
+      maxReviewsPerKey: tiktokMaxReviewsPerKey,
+      status: tiktokReviewCount >= tiktokMaxReviewsPerKey ? 'used' : 'available'
+    }
   };
 }
 
@@ -353,6 +455,7 @@ function emptyPoolStatus(provider = 'none') {
     version: 2,
     provider,
     maxUsesPerKey: DEFAULT_MAX_USES_PER_KEY,
+    tiktokMaxReviewsPerKey: cleanTikTokMaxReviews(),
     updatedAt: null,
     active: null,
     reserve: [],
@@ -361,17 +464,27 @@ function emptyPoolStatus(provider = 'none') {
     pending: [],
     pendingCount: 0,
     neededForNextGroup: 5,
+    platforms: {
+      shopee: { usedHistory: [] },
+      tiktok: { usedHistory: [] }
+    },
     totals: { groups: 0, active: 0, reserve: 0, used: 0, credentials: 0, pending: 0 }
   };
 }
 
-function buildPoolStatus(config, counterReply, usedReply) {
+function buildPoolStatus(config, counterReply, usedReply, tiktokReplies = {}) {
   const counters = parseHashReply(counterReply);
+  const tiktok = {
+    runs: parseHashReply(tiktokReplies.runs),
+    reviews: parseHashReply(tiktokReplies.reviews),
+    reserved: parseHashReply(tiktokReplies.reserved),
+    maxReviewsPerKey: cleanTikTokMaxReviews()
+  };
   const maxUsesPerKey = cleanMaxUses(config.maxUsesPerKey);
   let activeAssigned = false;
   let activeCredentialAssigned = false;
   const groups = (config.groups || []).map((group) => {
-    const credentialStatuses = group.credentials.map((credential) => publicCredential(credential, counters, maxUsesPerKey));
+    const credentialStatuses = group.credentials.map((credential) => publicCredential(credential, counters, maxUsesPerKey, tiktok));
     const exhausted = credentialStatuses.every((credential) => credential.usageCount >= maxUsesPerKey);
     const status = exhausted ? 'used' : activeAssigned ? 'reserve' : 'active';
     if (status === 'active') activeAssigned = true;
@@ -391,11 +504,15 @@ function buildPoolStatus(config, counterReply, usedReply) {
   const usedHistory = Object.values(parseHashReply(usedReply)).flatMap((value) => {
     try { return [typeof value === 'string' ? JSON.parse(value) : value]; } catch { return []; }
   }).sort((left, right) => String(right.usedAt || '').localeCompare(String(left.usedAt || '')));
+  const tiktokUsedHistory = Object.values(parseHashReply(tiktokReplies.used)).flatMap((value) => {
+    try { return [typeof value === 'string' ? JSON.parse(value) : value]; } catch { return []; }
+  }).sort((left, right) => String(right.usedAt || '').localeCompare(String(left.usedAt || '')));
   const pending = (config.pendingCredentials || []).map(({ id, label }) => ({ id, label, status: 'pending' }));
   return {
     version: config.version || 2,
     provider: 'upstash-redis',
     maxUsesPerKey,
+    tiktokMaxReviewsPerKey: tiktok.maxReviewsPerKey,
     updatedAt: config.updatedAt || null,
     active,
     reserve,
@@ -404,6 +521,10 @@ function buildPoolStatus(config, counterReply, usedReply) {
     pending,
     pendingCount: pending.length,
     neededForNextGroup: pending.length ? APIFY_STARS.length - pending.length : APIFY_STARS.length,
+    platforms: {
+      shopee: { maxUsesPerKey, usedHistory },
+      tiktok: { maxReviewsPerKey: tiktok.maxReviewsPerKey, usedHistory: tiktokUsedHistory }
+    },
     totals: {
       groups: groups.length,
       active: active ? 1 : 0,
@@ -532,14 +653,81 @@ export async function reserveApifyCredential(options = {}) {
   };
 }
 
+function decryptTikTokAllocation(allocation) {
+  return {
+    source: allocation.source,
+    maxReviewsPerKey: Number(allocation.maxReviewsPerKey),
+    reservedAt: allocation.reservedAt,
+    credentials: allocation.credentials.map((credential) => ({
+      id: credential.id,
+      label: credential.label,
+      groupId: credential.groupId,
+      groupLabel: credential.groupLabel,
+      runCount: Number(credential.runCount),
+      reviewCount: Number(credential.reviewCount),
+      plannedReviews: Number(credential.plannedReviews),
+      reservedReviews: Number(credential.reservedReviews),
+      token: decryptToken(credential)
+    }))
+  };
+}
+
+export async function reserveTikTokCredentials({ count = 5, reviewsPerCredential = 40, ...options } = {}) {
+  if (!isRedisConfigured()) throw new Error('Cần cấu hình Upstash Redis để cấp phát Apify key cho TikTok an toàn.');
+  if (!process.env.APIFY_TOKEN_VAULT_KEY) throw new Error('Chưa cấu hình APIFY_TOKEN_VAULT_KEY.');
+  const desired = Math.min(5, Math.max(1, Number.parseInt(String(count), 10) || 1));
+  const planned = Math.min(200, Math.max(1, Number.parseInt(String(reviewsPerCredential), 10) || 40));
+  const maxReviewsPerKey = cleanTikTokMaxReviews(options.maxReviewsPerKey);
+  const raw = await redisCommand([
+    'EVAL', RESERVE_TIKTOK_CREDENTIALS_SCRIPT, '4',
+    APIFY_POOL_KEY, APIFY_TIKTOK_RUN_COUNTERS_KEY, APIFY_TIKTOK_REVIEW_COUNTERS_KEY, APIFY_TIKTOK_RESERVED_REVIEWS_KEY,
+    String(desired), String(planned), String(maxReviewsPerKey), new Date().toISOString()
+  ], options);
+  const allocation = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  if (!allocation?.ok) {
+    const error = new Error(allocation?.code === 'INSUFFICIENT_KEYS'
+      ? `Không còn đủ ${desired} Apify key có hạn mức TikTok; hiện chỉ có ${Number(allocation.available) || 0} key.`
+      : 'Chưa cấu hình Apify key trong /api/apify-config.');
+    error.code = allocation?.code || 'POOL_NOT_CONFIGURED';
+    error.available = Number(allocation?.available) || 0;
+    error.statusCode = 503;
+    throw error;
+  }
+  return decryptTikTokAllocation(allocation);
+}
+
+export async function finalizeTikTokCredential(credential, result = {}, options = {}) {
+  if (!credential?.id) throw new Error('Thiếu mã Apify key để chốt bộ đếm TikTok.');
+  const plannedReviews = Math.max(0, Number(credential.plannedReviews) || 0);
+  const actualReviews = Math.max(0, Number(result.reviewCount) || 0);
+  const maxReviewsPerKey = cleanTikTokMaxReviews(options.maxReviewsPerKey);
+  const forceExhausted = Boolean(result.quotaExhausted);
+  const raw = await redisCommand([
+    'EVAL', FINALIZE_TIKTOK_CREDENTIAL_SCRIPT, '3',
+    APIFY_TIKTOK_REVIEW_COUNTERS_KEY, APIFY_TIKTOK_RESERVED_REVIEWS_KEY, APIFY_TIKTOK_USED_KEY,
+    String(plannedReviews), String(actualReviews), String(maxReviewsPerKey), forceExhausted ? '1' : '0',
+    credential.id, credential.label || credential.id, new Date().toISOString()
+  ], options);
+  return typeof raw === 'string' ? JSON.parse(raw) : raw;
+}
+
 export async function getApifyCredentialPoolStatus(options = {}) {
   if (!isRedisConfigured()) return emptyPoolStatus();
-  const [configValue, counters, used] = await redisTransaction([
+  const [configValue, counters, used, tiktokRuns, tiktokReviews, tiktokReserved, tiktokUsed] = await redisTransaction([
     ['GET', APIFY_POOL_KEY],
     ['HGETALL', APIFY_POOL_COUNTERS_KEY],
-    ['HGETALL', APIFY_POOL_USED_KEY]
+    ['HGETALL', APIFY_POOL_USED_KEY],
+    ['HGETALL', APIFY_TIKTOK_RUN_COUNTERS_KEY],
+    ['HGETALL', APIFY_TIKTOK_REVIEW_COUNTERS_KEY],
+    ['HGETALL', APIFY_TIKTOK_RESERVED_REVIEWS_KEY],
+    ['HGETALL', APIFY_TIKTOK_USED_KEY]
   ], options);
   if (!configValue) return emptyPoolStatus('upstash-redis');
   const config = typeof configValue === 'string' ? JSON.parse(configValue) : configValue;
-  return buildPoolStatus(config, counters, used);
+  return buildPoolStatus(config, counters, used, {
+    runs: tiktokRuns,
+    reviews: tiktokReviews,
+    reserved: tiktokReserved,
+    used: tiktokUsed
+  });
 }
