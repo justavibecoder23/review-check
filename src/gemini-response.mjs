@@ -30,6 +30,7 @@ async function fetchGemini(fetchImpl, url, init, context, model) {
     error.statusCode = Number(cause?.statusCode) || null;
     error.model = model;
     error.transient = true;
+    error.code = cause?.code || null;
     return { error, latencyMs: Date.now() - startedAt };
   }
 }
@@ -50,6 +51,7 @@ function attemptSignal(existingSignal, timeoutMs) {
 }
 
 function healthErrorType(error) {
+  if (error?.code === 'GEMINI_HEDGE_CANCELLED') return 'cancelled';
   if (error?.name === 'AbortError' || /abort|timeout|timed out/i.test(String(error?.message || ''))) return 'timeout';
   if (error?.code === 'GEMINI_INVALID_RESPONSE') return 'invalid-response';
   if (error?.quotaExhausted) return error.quotaScope === 'day' ? 'daily-quota' : 'rate-limit';
@@ -109,6 +111,7 @@ export async function requestGeminiWithFallback({
   deadlineAt,
   retryOnTimeout = true,
   routeContext,
+  avoidBusyRoutes = false,
   validateResponse
 }) {
   const requestStartedAt = Date.now();
@@ -195,7 +198,7 @@ export async function requestGeminiWithFallback({
     if (!candidates.length) break;
     const usable = candidates.filter((candidate) => Number.isFinite(candidate.pressure));
     const idle = usable.filter((candidate) => !sharedBusyRoutes.has(candidate.routeId));
-    const choices = idle.length ? idle : usable;
+    const choices = idle.length ? idle : avoidBusyRoutes ? [] : usable;
     if (!choices.length) {
       lastError ||= new Error(`${context} đang chờ API key Gemini hết thời gian pending.`);
       lastError.code = 'GEMINI_KEYS_PENDING';
@@ -315,8 +318,9 @@ export async function requestGeminiWithFallback({
     }, { fetchImpl: redisFetchImpl });
     if (state) health[routeId] = state;
 
-    const timedOut = healthErrorType(lastError) === 'timeout';
-    sharedFailedRoutes.add(routeId);
+    const errorType = healthErrorType(lastError);
+    const timedOut = errorType === 'timeout';
+    if (errorType !== 'cancelled') sharedFailedRoutes.add(routeId);
 
     const completedDayRequests = Number(state?.dayRequests ?? (geminiRoutePressure(selected.state, model, nowMs).dayRequests + 1));
     const dailyLimitReached = completedDayRequests >= configuredGeminiLimit(model).rpd;

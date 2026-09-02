@@ -1,6 +1,8 @@
 import { createRequire } from 'node:module';
 import { geminiThinkingConfig, parseGeminiJson, requestGeminiWithFallback } from './gemini-response.mjs';
 import { isRedisConfigured } from './redis-rest.mjs';
+import { readLayer2Cache, writeLayer2Cache } from './layer2-cache.mjs';
+import { combineAbortSignals } from './abort.mjs';
 
 const require = createRequire(import.meta.url);
 const rulesDocument = require('./layer1_rules.json');
@@ -105,8 +107,8 @@ function gibberishSpam(text) {
 
 const logisticsCuePattern = /\b(?:giao|ship|van chuyen|dong goi|goi ky|goi ki|nhan hang|shop)\b/u;
 const productExperiencePattern = /\b(?:san pham|chat luong|chat lieu|dung|su dung|xai|mac|uong|giu nhiet|ben|sac|pin|mau|size|form|mui|vi|cong nang|hoat dong)\b/u;
-const meaningfulFeedbackPattern = /\b(?:chat luong|chat lieu|do ben|chac chan|mem mai|mem|dai|day dan|tien loi|gon|dung tich|dung do|sac nhanh|sac on dinh|khong nong|nhan dien|dung on|dung tot|rat tot|chat luong tot|san pham tot|hang tot|hoat dong tot|dung duoc|y hinh|dung mo ta|de cuon|bao hanh)\b/u;
-const concreteFeedbackPattern = /\b(?:khong|ko|k|bi|loi|hong|rach|bung|dut|roi|rot|bong|nong|yeu|cham|nhanh|ben|chac|mem|dai|mong|day|vai|nhua|kim loai|boc du|dau cam|bao hanh|\d+\s*(?:ngay|thang|nam|gio|phut|lan|\/10))\b/u;
+const meaningfulFeedbackPattern = /\b(?:chat luong|chat lieu|do ben|chac chan|mem mai|mem|em chan|om chan|vua chan|bam chan|lot giay|lot vao|de dieu chinh|khong dau chan|im ban chan|dai|day dan|tien loi|gon|dung tich|dung do|sac nhanh|sac on dinh|khong nong|nhan dien|dung on|dung tot|rat tot|chat luong tot|san pham tot|hang tot|hoat dong tot|dung duoc|y hinh|dung mo ta|de cuon|bao hanh)\b/u;
+const concreteFeedbackPattern = /\b(?:khong|ko|k|bi|loi|hong|rach|bung|dut|roi|rot|bong|nong|yeu|cham|nhanh|ben|chac|mem|em chan|om chan|vua chan|bam chan|lot giay|lot vao|de dieu chinh|khong dau chan|im ban chan|dai|mong|day|vai|nhua|kim loai|boc du|dau cam|bao hanh|\d+\s*(?:ngay|thang|nam|gio|phut|lan|\/10))\b/u;
 
 function logisticsOnlyReview(text) {
   if (!logisticsCuePattern.test(text) || productExperiencePattern.test(text)) return false;
@@ -190,6 +192,16 @@ function baseLabels(layer1) {
     confidence: layer1.confidence,
     reason_code: layer1.reason_codes[0] || 'NO_RULE_MATCH'
   };
+}
+
+function canUseSafeLayer1Fallback(layer1) {
+  return !layer1.is_seeding
+    && !layer1.is_low_value
+    && !layer1.is_vague
+    && layer1.relevance !== 'needs_review'
+    && !layer1.conflicts.length
+    && ['medium', 'high'].includes(layer1.information_value)
+    && layer1.confidence >= 0.75;
 }
 
 export function labelReviewLayer1(review = {}, index = 0, product = {}) {
@@ -404,7 +416,7 @@ function normalizeLayer2Label(candidate, review, layer1, product = {}) {
   };
 }
 
-async function classifyBatchWithGemini(batch, product, options = {}) {
+export async function classifyBatchWithGemini(batch, product, options = {}) {
   const apiKey = process.env.GEMINI_API_KEY;
   const model = 'gemini-3.5-flash-lite';
   const payload = batch.map(({ review, layer1 }) => ({
@@ -412,7 +424,18 @@ async function classifyBatchWithGemini(batch, product, options = {}) {
     rating: Number(review.rating) || 0,
     text: String(review.text || '').slice(0, 1000),
     verified: Boolean(review.verified),
-    layer1
+    layer1: {
+      is_seeding: layer1.is_seeding,
+      is_low_value: layer1.is_low_value,
+      is_vague: layer1.is_vague,
+      relevance: layer1.relevance,
+      information_value: layer1.information_value,
+      has_defect: layer1.has_defect,
+      defect_categories: layer1.defect_categories,
+      confidence: layer1.confidence,
+      reason_codes: layer1.reason_codes,
+      evidence: layer1.evidence
+    }
   }));
   const prompt = [
     layer2Config.system_instruction,
@@ -422,17 +445,7 @@ async function classifyBatchWithGemini(batch, product, options = {}) {
     `Ngữ cảnh sản phẩm: ${JSON.stringify({ title: product?.title || null, category: product?.category || null, platform: product?.platform || null })}`,
     `Dữ liệu cần kiểm định: ${JSON.stringify(payload)}`
   ].join('\n');
-  const geminiResult = await requestGeminiWithFallback({
-    fetchImpl: options.fetchImpl,
-    apiKey,
-    primaryModel: model,
-    context: 'Gemini labeler',
-    deadlineAt: options.deadlineAt,
-    attemptTimeoutMs: 4_000,
-    maxRetries: 2,
-    retryOnTimeout: true,
-    routeContext: options.routeContext,
-    validateResponse: async (response) => {
+  const validateResponse = async (response) => {
       const body = await response.json();
       const parsed = parseGeminiJson(body, 'Gemini labeler');
       if (!Array.isArray(parsed.labels)) throw new Error('Thiếu mảng labels.');
@@ -443,22 +456,88 @@ async function classifyBatchWithGemini(batch, product, options = {}) {
         throw new Error(`Kết quả phải chứa đúng ${expectedIds.size} nhãn với ID không trùng.`);
       }
       return parsed.labels;
-    },
+  };
+  const requestGemini = options.requestGeminiImpl || requestGeminiWithFallback;
+  const run = (maxRetries, signal, avoidBusyRoutes = false) => requestGemini({
+    fetchImpl: options.fetchImpl,
+    redisFetchImpl: options.redisFetchImpl,
+    apiKey,
+    primaryModel: model,
+    context: 'Gemini labeler',
+    deadlineAt: options.deadlineAt,
+    attemptTimeoutMs: 7_500,
+    maxRetries,
+    retryOnTimeout: true,
+    routeContext: options.routeContext,
+    avoidBusyRoutes,
+    validateResponse,
     buildRequest: (selectedModel, selectedApiKey) => ({
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': selectedApiKey },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: {
-          maxOutputTokens: 4096,
+          maxOutputTokens: 2048,
           thinkingConfig: geminiThinkingConfig('minimal', selectedModel),
           responseMimeType: 'application/json',
           responseSchema: layer2ResponseSchema
         }
       }),
-      signal: options.signal
+      signal
     })
   });
+  const primaryController = new AbortController();
+  const primary = run(0, combineAbortSignals(options.signal, primaryController.signal));
+  let hedgeTimer;
+  const first = await Promise.race([
+    primary.then((value) => ({ type: 'success', value }), (error) => ({ type: 'error', error })),
+    new Promise((resolve) => {
+      hedgeTimer = setTimeout(() => resolve({ type: 'hedge' }), Number(options.hedgeDelayMs) || 1_800);
+    })
+  ]);
+  clearTimeout(hedgeTimer);
+  let geminiResult;
+  if (first.type === 'success') {
+    geminiResult = first.value;
+  } else if (first.type === 'error') {
+    geminiResult = await run(1, options.signal);
+  } else {
+    const hedgeController = new AbortController();
+    const hedge = run(1, combineAbortSignals(options.signal, hedgeController.signal), true);
+    try {
+      const winner = await Promise.any([
+        primary.then((value) => ({ source: 'primary', value })),
+        hedge.then((value) => ({ source: 'hedge', value }))
+      ]);
+      const cancellation = Object.assign(new Error('Hedged request đã có kết quả hợp lệ từ route khác.'), {
+        name: 'AbortError',
+        code: 'GEMINI_HEDGE_CANCELLED'
+      });
+      if (winner.source === 'primary') hedgeController.abort(cancellation);
+      else primaryController.abort(cancellation);
+      geminiResult = winner.value;
+    } catch (aggregate) {
+      const errors = aggregate?.errors || [];
+      const error = errors.at(-1) || errors[0] || aggregate;
+      error.attemptedModels = errors.flatMap((item) => item?.attemptedModels || []);
+      error.attemptedCredentialIds = [...new Set(errors.flatMap((item) => item?.attemptedCredentialIds || []))];
+      error.attemptedRouteIds = [...new Set(errors.flatMap((item) => item?.attemptedRouteIds || []))];
+      const attemptsRemaining = Math.max(0, 3 - error.attemptedRouteIds.length);
+      const hasTime = !Number.isFinite(Number(options.deadlineAt)) || Date.now() < Number(options.deadlineAt);
+      if (!options.signal?.aborted && attemptsRemaining > 0 && hasTime) {
+        try {
+          geminiResult = await run(attemptsRemaining - 1, options.signal);
+        } catch (finalError) {
+          finalError.attemptedModels = [...error.attemptedModels, ...(finalError?.attemptedModels || [])];
+          finalError.attemptedCredentialIds = [...new Set([...error.attemptedCredentialIds, ...(finalError?.attemptedCredentialIds || [])])];
+          finalError.attemptedRouteIds = [...new Set([...error.attemptedRouteIds, ...(finalError?.attemptedRouteIds || [])])];
+          throw finalError;
+        }
+      } else {
+        throw error;
+      }
+    }
+  }
   return {
     labels: geminiResult.value,
     retry: {
@@ -482,26 +561,33 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
   const prepared = reviews.map((review, index) => ({ review, layer1: labelReviewLayer1(review, index, options.product) }));
   const mode = options.mode || process.env.LABELER_LLM_MODE || 'uncertain';
   const selected = mode === 'off' ? [] : mode === 'uncertain' ? prepared.filter((item) => item.layer1.requires_llm) : prepared;
-  const batchSize = Math.min(20, Math.max(5, Number.parseInt(process.env.LABELER_LLM_BATCH_SIZE || '20', 10) || 20));
+  const selectedIds = new Set(selected.map((item) => String(item.layer1.id)));
+  const batchSize = Math.min(8, Math.max(5, Number.parseInt(process.env.LABELER_LLM_BATCH_SIZE || '6', 10) || 6));
   const warnings = [];
-  const layer2ById = new Map();
+  const layer2ById = await readLayer2Cache(selected, options.product, { fetchImpl: options.redisFetchImpl });
+  const cacheHits = layer2ById.size;
   const model = 'gemini-3.5-flash-lite';
-  const batches = chunks(selected, batchSize);
+  const uncached = selected.filter((item) => !layer2ById.has(String(item.layer1.id)));
+  const batches = chunks(uncached, batchSize);
   let succeededBatches = 0;
   let failedBatches = 0;
   let retryAttempts = 0;
   let credentialSwitches = 0;
   const modelsUsed = new Set();
   const batchDurationsMs = [];
-  if (selected.length && (process.env.GEMINI_API_KEY || isRedisConfigured())) {
+  if (uncached.length && (process.env.GEMINI_API_KEY || isRedisConfigured())) {
     const results = await Promise.all(batches.map(async (batch, batchIndex) => {
       try {
         const result = await classifyBatchWithGemini(batch, options.product, {
           fetchImpl: options.fetchImpl || fetch,
           deadlineAt: options.geminiContext?.layer2DeadlineAt,
           routeContext: options.geminiContext,
-          signal: options.signal
+          signal: options.signal,
+          redisFetchImpl: options.redisFetchImpl,
+          hedgeDelayMs: options.hedgeDelayMs,
+          requestGeminiImpl: options.requestGeminiImpl
         });
+        await writeLayer2Cache(batch, result.labels, options.product, { fetchImpl: options.redisFetchImpl });
         succeededBatches += 1;
         const attemptedCount = result.retry?.attemptedModels?.length || 1;
         retryAttempts += Math.max(0, attemptedCount - 1);
@@ -544,7 +630,7 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
       if (result.warning) warnings.push(result.warning);
       for (const candidate of result.labels) layer2ById.set(String(candidate.id), candidate);
     }
-  } else if (selected.length) {
+  } else if (uncached.length) {
     warnings.push('Layer 2 chưa chạy vì GEMINI_API_KEY chưa được cấu hình; nhãn Layer 1 vẫn được lưu đầy đủ.');
   }
 
@@ -564,7 +650,8 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
     if (layer2?.decision === 'abstain') abstained += 1;
     if (layer2?.changed) corrected += 1;
     const accepted = layer2 && layer2.decision !== 'abstain';
-    const layer2Unavailable = Boolean(layer1.requires_llm && !accepted);
+    const safeLayer1Fallback = Boolean(selectedIds.has(String(layer1.id)) && !accepted && canUseSafeLayer1Fallback(layer1));
+    const layer2Unavailable = Boolean(layer1.requires_llm && !accepted && !safeLayer1Fallback);
     const final = accepted ? {
       is_seeding: layer2.is_seeding,
       is_low_value: layer2.is_low_value,
@@ -579,7 +666,12 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
       reason_code: layer2.reason_code,
       layer2_unavailable: false,
       reviewed_by: 'gemini-layer2'
-    } : { ...baseLabels(layer1), layer2_unavailable: layer2Unavailable, reviewed_by: 'layer1' };
+    } : {
+      ...baseLabels(layer1),
+      layer2_unavailable: layer2Unavailable,
+      layer2_fallback_accepted: safeLayer1Fallback,
+      reviewed_by: safeLayer1Fallback ? 'layer1-safe-fallback' : 'layer1'
+    };
     return {
       ...review,
       labelId: layer1.id,
@@ -602,7 +694,8 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
       failedBatches,
       retryAttempts,
       credentialSwitches,
-      batchDurationsMs
+      batchDurationsMs,
+      cacheHits
     }));
   }
 
@@ -617,6 +710,7 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
       layer2Batches: { total: batches.length, succeeded: succeededBatches, failed: failedBatches },
       layer2Retry: { retryAttempts, credentialSwitches, modelsUsed: [...modelsUsed] },
       layer2DurationMs,
+      layer2CacheHits: cacheHits,
       corrected,
       abstained,
       engine: layer2ById.size ? 'layer1+gemini-layer2' : 'layer1-only',

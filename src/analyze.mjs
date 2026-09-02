@@ -83,7 +83,7 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   const geminiStartedAt = Date.now();
   const geminiContext = {
     deadlineAt: geminiStartedAt + 14_500,
-    layer2DeadlineAt: geminiStartedAt + 8_500,
+    layer2DeadlineAt: geminiStartedAt + 10_000,
     busyRouteIds: new Set(),
     failedRouteIds: new Set()
   };

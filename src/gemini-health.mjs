@@ -66,6 +66,7 @@ local raw = redis.call('HGET', KEYS[1], ARGV[1])
 local state = raw and cjson.decode(raw) or {}
 local nowMs = tonumber(ARGV[2]) or 0
 local ok = ARGV[5] == '1'
+local neutral = ARGV[8] == 'cancelled'
 local statusCode = tonumber(ARGV[6]) or 0
 local latencyMs = math.max(0, tonumber(ARGV[7]) or 0)
 if state.day ~= ARGV[4] then
@@ -74,26 +75,36 @@ if state.day ~= ARGV[4] then
 end
 state.inFlight = math.max(0, tonumber(state.inFlight or 0) - 1)
 state.reservedTokens = math.max(0, tonumber(state.reservedTokens or 0) - math.max(0, tonumber(ARGV[10]) or 0))
-local previousLatency = tonumber(state.ewmaLatencyMs or 0)
-if previousLatency > 0 then
-  state.ewmaLatencyMs = math.floor(previousLatency * 0.75 + latencyMs * 0.25 + 0.5)
-else
-  state.ewmaLatencyMs = math.floor(latencyMs + 0.5)
+if not neutral then
+  local previousLatency = tonumber(state.ewmaLatencyMs or 0)
+  if previousLatency > 0 then
+    state.ewmaLatencyMs = math.floor(previousLatency * 0.75 + latencyMs * 0.25 + 0.5)
+  else
+    state.ewmaLatencyMs = math.floor(latencyMs + 0.5)
+  end
 end
-state.consecutiveFailures = ok and 0 or math.max(0, tonumber(state.consecutiveFailures or 0)) + 1
-state.lastStatusCode = statusCode > 0 and statusCode or cjson.null
-state.lastError = ok and cjson.null or ARGV[8]
+if ok then
+  state.consecutiveFailures = 0
+  state.lastStatusCode = statusCode > 0 and statusCode or cjson.null
+  state.lastError = cjson.null
+elseif not neutral then
+  state.consecutiveFailures = math.max(0, tonumber(state.consecutiveFailures or 0)) + 1
+  state.lastStatusCode = statusCode > 0 and statusCode or cjson.null
+  state.lastError = ARGV[8]
+end
 state.lastFinishedAt = ARGV[3]
 state.lastFinishedAtMs = nowMs
 local events = {}
 for _, event in ipairs(state.events or {}) do
   if tonumber(event.at or 0) >= nowMs - ${MAX_EVENT_AGE_MS} then table.insert(events, event) end
 end
-table.insert(events, {at=nowMs, ok=ok, latencyMs=latencyMs, tokens=math.max(0, tonumber(ARGV[9]) or 0), statusCode=statusCode > 0 and statusCode or cjson.null})
+if not neutral then
+  table.insert(events, {at=nowMs, ok=ok, latencyMs=latencyMs, tokens=math.max(0, tonumber(ARGV[9]) or 0), statusCode=statusCode > 0 and statusCode or cjson.null})
+end
 while #events > 30 do table.remove(events, 1) end
 state.events = events
 local cooldownUntilMs = math.max(0, tonumber(state.cooldownUntilMs or 0))
-if not ok then
+if not ok and not neutral then
   local cooldownMs = 0
   if statusCode == 429 then cooldownMs = ${MINUTE_MS}
   elseif ARGV[8] == 'timeout' then cooldownMs = ${GEMINI_TIMEOUT_COOLDOWN_MS}
@@ -102,7 +113,7 @@ if not ok then
   elseif statusCode >= 500 then cooldownMs = 15000 end
   if cooldownMs == 0 then cooldownMs = ${MINUTE_MS} end
   state.cooldownUntilMs = math.max(cooldownUntilMs, nowMs + cooldownMs)
-else
+elseif ok then
   state.cooldownUntilMs = 0
 end
 redis.call('HSET', KEYS[1], ARGV[1], cjson.encode(state))

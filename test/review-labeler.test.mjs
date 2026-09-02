@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { labelReviewLayer1, labelReviewsTwoLayer } from '../src/review-labeler.mjs';
+import { classifyBatchWithGemini, labelReviewLayer1, labelReviewsTwoLayer } from '../src/review-labeler.mjs';
 
 test('review generic ngắn là low_value nhưng không bị suy diễn thành seeding', () => {
   const label = labelReviewLayer1({ rating: 5, text: 'Tốt' });
@@ -191,7 +191,7 @@ test('Layer 2 có thể sửa nhãn nhưng không được thay quote không có
     });
     assert.equal(requestPayload.generationConfig.temperature, undefined);
     assert.equal(requestPayload.generationConfig.thinkingConfig.thinkingLevel, 'minimal');
-    assert.equal(requestPayload.generationConfig.maxOutputTokens, 4096);
+    assert.equal(requestPayload.generationConfig.maxOutputTokens, 2048);
     assert.equal(result.stats.engine, 'layer1+gemini-layer2');
     assert.equal(result.reviews[0].labels.reviewed_by, 'gemini-layer2');
     assert.deepEqual(result.reviews[0].labels.defect_categories, ['dung-mo-ta']);
@@ -221,6 +221,43 @@ test('Layer 2 lỗi thì pipeline fail-safe về Layer 1', async () => {
   }
 });
 
+test('Layer 1 nhận diện trải nghiệm đệm lót chân rõ ràng mà không cần Gemini', () => {
+  for (const text of [
+    'Êm chân, dễ điều chỉnh, rất ok, nên mua nha',
+    'Lót vào đi rất êm và ôm chân. Rất hài lòng',
+    'Miếng lót mềm bàn chân, sẽ giới thiệu sản phẩm này với người khác'
+  ]) {
+    const label = labelReviewLayer1({ rating: 5, text, verified: true }, 0, {
+      title: 'Miếng lót giày êm chân hỗ trợ điều chỉnh kích thước'
+    });
+    assert.equal(label.is_low_value, false, text);
+    assert.equal(label.information_value, 'high', text);
+    assert.equal(label.requires_llm, false, text);
+  }
+});
+
+test('Layer 2 lỗi vẫn giữ quyết định Layer 1 khi review có bằng chứng hữu ích rõ ràng', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  try {
+    const result = await labelReviewsTwoLayer([{
+      rating: 5,
+      text: 'Dây mềm và dai, đầu cắm chắc chắn, sạc nhanh và không nóng máy',
+      verified: true
+    }], {
+      mode: 'all',
+      product: { title: 'Cáp sạc nhanh bọc dù' },
+      fetchImpl: async () => ({ ok: false, status: 503 })
+    });
+    assert.equal(result.reviews[0].labels.layer2_unavailable, false);
+    assert.equal(result.reviews[0].labels.layer2_fallback_accepted, true);
+    assert.equal(result.reviews[0].labels.reviewed_by, 'layer1-safe-fallback');
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
 test('Layer 2 phải abstain khi bằng chứng lỗi không phải trích dẫn nguyên văn', async () => {
   const previousKey = process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY = 'test-key';
@@ -244,7 +281,7 @@ test('Layer 2 phải abstain khi bằng chứng lỗi không phải trích dẫn
         }
       })
     });
-    assert.equal(result.reviews[0].labels.reviewed_by, 'layer1');
+    assert.equal(result.reviews[0].labels.reviewed_by, 'layer1-safe-fallback');
     assert.deepEqual(result.reviews[0].labels.defect_categories, ['su-dung']);
     assert.equal(result.reviews[0].labeling.layer2.decision, 'abstain');
     assert.equal(result.reviews[0].labeling.layer2.reason_code, 'DEFECT_QUOTE_NOT_VERBATIM');
@@ -339,10 +376,42 @@ test('Layer 2 không được loại review đúng sản phẩm bằng trích d�
       })
     });
     assert.equal(result.reviews[0].labels.is_off_topic, false);
-    assert.equal(result.reviews[0].labels.reviewed_by, 'layer1');
+    assert.equal(result.reviews[0].labels.reviewed_by, 'layer1-safe-fallback');
     assert.equal(result.reviews[0].labeling.layer2.reason_code, 'OFF_TOPIC_EVIDENCE_DOES_NOT_NAME_OTHER_PRODUCT');
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
     else delete process.env.GEMINI_API_KEY;
   }
+});
+
+test('Layer 2 hedge sang key khác khi request đầu phản hồi chậm', async () => {
+  const text = 'Êm chân và dễ điều chỉnh';
+  const batch = [{
+    review: { rating: 5, text, verified: true },
+    layer1: labelReviewLayer1({ rating: 5, text, verified: true }, 0)
+  }];
+  const labels = [{
+    id: 'r0001', decision: 'confirm', is_seeding: false, is_low_value: false,
+    is_vague: false, is_off_topic: false, relevance: 'on_topic', information_value: 'high',
+    has_defect: false, defect_categories: [], defect_quote: null,
+    evidence_quote: text, confidence: 0.98, reason_code: 'USEFUL_EXPERIENCE'
+  }];
+  const calls = [];
+  const result = await classifyBatchWithGemini(batch, { title: 'Miếng lót giày' }, {
+    hedgeDelayMs: 5,
+    requestGeminiImpl: async ({ maxRetries }) => {
+      calls.push(maxRetries);
+      if (maxRetries === 0) await new Promise((resolve) => setTimeout(resolve, 40));
+      return {
+        value: labels,
+        model: 'gemini-3.5-flash-lite',
+        attemptedModels: ['gemini-3.5-flash-lite'],
+        attemptedCredentialIds: [maxRetries === 0 ? 'slow-key' : 'fast-key'],
+        totalDurationMs: maxRetries === 0 ? 40 : 1
+      };
+    }
+  });
+  assert.deepEqual(calls, [0, 1]);
+  assert.deepEqual(result.labels, labels);
+  assert.equal(result.retry.credentialAttempts, 1);
 });
