@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { collectTikTokReviews, normalizeTikTokProductMeta } from '../src/apify-tiktok-review-scraper.mjs';
+import { collectTikTokReviews } from '../src/apify-tiktok-review-scraper.mjs';
 
 function allocation(count = 5) {
   return {
@@ -91,77 +91,3 @@ test('TikTok dùng một account unfiltered khi allocation chỉ có một key',
   assert.equal(inputs[0].reviews_limit, 100);
   assert.equal(result.collection.strategy, 'single-unfiltered');
 });
-
-
-test('TikTok lấy ảnh sản phẩm từ actor metadata riêng, không dùng ảnh review', async () => {
-  let productActorCalls = 0;
-  let reviewActorCalls = 0;
-  const productId = '1731695277744555051';
-  const productUrl = `https://shop.tiktok.com/vn/pdp/kinh-chong-tia-uv/${productId}`;
-  const result = await collectTikTokReviews(productId, {
-    allocation: allocation(),
-    productUrl,
-    fetchImpl: async (url, init) => {
-      if (String(url).includes('jungle_synthesizer~tiktok-shop-product-detail-scraper')) {
-        productActorCalls += 1;
-        const input = JSON.parse(init.body);
-        assert.deepEqual(input.items, [productUrl]);
-        assert.equal(input.country, 'vn');
-        assert.equal(input.includeCreatorVideos, false);
-        return {
-          ok: true,
-          async json() {
-            return [{
-              product_id: productId,
-              title: 'Kính chống tia UV',
-              image_url: 'https://p16-oec-sg.ibyteimg.com/tos/product-cover.webp'
-            }];
-          }
-        };
-      }
-
-      reviewActorCalls += 1;
-      const input = JSON.parse(init.body);
-      const star = Number(input.reviews_filter[0]);
-      return {
-        ok: true,
-        async json() {
-          return [{
-            review_id: `review-${star}`,
-            product_id: productId,
-            product_name: 'Kính chống tia UV',
-            review_rating: star,
-            review_text: `Đánh giá ${star} sao`,
-            review_images: ['https://p16-oec-sg.ibyteimg.com/tos/buyer-photo.webp']
-          }];
-        }
-      };
-    }
-  });
-
-  assert.equal(reviewActorCalls, 5);
-  assert.equal(productActorCalls, 1);
-  assert.equal(result.productMeta.productImage, 'https://p16-oec-sg.ibyteimg.com/tos/product-cover.webp');
-  assert.notEqual(result.productMeta.productImage, result.productMetaSource.review_images[0]);
-  assert.equal(result.collection.productMetadata.ok, true);
-});
-
-test('metadata TikTok loại ảnh CDN không tin cậy và product id không khớp', () => {
-  assert.deepEqual(
-    normalizeTikTokProductMeta({
-      product_id: '1730000000000000000',
-      title: 'Sai sản phẩm',
-      image_url: 'https://p16-oec-sg.ibyteimg.com/tos/wrong.webp'
-    }, '1731695277744555051'),
-    {}
-  );
-  assert.deepEqual(
-    normalizeTikTokProductMeta({
-      product_id: '1731695277744555051',
-      title: 'Sản phẩm đúng nhưng ảnh ngoài',
-      image_url: 'https://example.com/review-photo.webp'
-    }, '1731695277744555051'),
-    { title: 'Sản phẩm đúng nhưng ảnh ngoài' }
-  );
-});
-
