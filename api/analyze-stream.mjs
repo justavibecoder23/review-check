@@ -26,10 +26,13 @@ export default async function handler(request, response) {
   } catch (error) {
     stream.send('error', {
       error: error?.message || 'Có lỗi khi phân tích sản phẩm.',
-      statusCode: error?.statusCode || 500
+      statusCode: error?.statusCode || 500,
+      ...(error?.code ? { code: error.code } : {}),
+      ...(error?.details ? { details: error.details } : {})
     });
   } finally {
     clearInterval(heartbeat);
     stream.close();
   }
 }
+
