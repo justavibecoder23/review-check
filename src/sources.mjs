@@ -1,7 +1,7 @@
 import { extractMarketplaceUrl, isShopeeUrl, resolveShopeeProductUrl } from './shopee-url.mjs';
 import { collectShopeeReviews } from './apify-review-scraper.mjs';
 import { collectTikTokReviews } from './apify-tiktok-review-scraper.mjs';
-import { isTikTokUrl, resolveTikTokProductUrl } from './tiktok-url.mjs';
+import { getTikTokProductId, isTikTokUrl, resolveTikTokProductUrl } from './tiktok-url.mjs';
 import { createProgressReporter } from './sse.mjs';
 
 const DEMO_REVIEWS = [
@@ -53,7 +53,9 @@ function firstValue(source, paths) {
 function normaliseProductMeta(source = {}) {
   if (!source || typeof source !== 'object') return {};
   const title = firstValue(source, ['title', 'name', 'productName', 'product_name', 'productTitle', 'itemName', 'product.name', 'item.name']);
-  const image = firstValue(source, ['image', 'imageUrl', 'productImage', 'product_image', 'product_image_url', 'productCover', 'product_cover_url', 'cover', 'cover_url', 'thumbnail', 'product_images.0', 'images.0.url', 'images.0', 'variations.0.image', 'product.image', 'item.image']);
+  // Chỉ nhận các trường được đặt tên rõ là ảnh sản phẩm. Các trường `image`,
+  // `images` và `thumbnail` ở dataset review thường là ảnh do người mua tải lên.
+  const image = firstValue(source, ['productImage', 'product_image', 'product_image_url', 'productCover', 'product_cover_url', 'product_images.0', 'product.image', 'product.images.0', 'item.image']);
   const price = firstValue(source, ['price', 'productPrice', 'currentPrice', 'product.price', 'item.price']);
   const rating = firstValue(source, ['productRating', 'ratingAverage', 'averageRating', 'product.rating', 'item.rating']);
   return {
@@ -121,6 +123,19 @@ function isLikelyProductImageUrl(value) {
   } catch {
     return false;
   }
+}
+
+function preloadedProductImage(html, baseUrl) {
+  for (const tag of String(html || '').match(/<link\b[^>]*>/gi) || []) {
+    const attributes = attributesFromTag(tag);
+    const rel = String(attributes.rel || '').toLowerCase().split(/\s+/);
+    const isImageLink = (rel.includes('preload') && String(attributes.as || '').toLowerCase() === 'image')
+      || rel.includes('image_src');
+    if (!isImageLink) continue;
+    const image = safeMetadataUrl(attributes.href || attributes.imagesrcset, baseUrl);
+    if (image && isLikelyProductImageUrl(image) && !isGenericImageUrl(image)) return image;
+  }
+  return '';
 }
 
 function imageFromHtml(html, baseUrl, productTitle = '') {
@@ -234,8 +249,10 @@ export function extractProductPageMeta(html, baseUrl) {
     baseUrl
   );
   const socialImage = isLikelyProductImageUrl(socialImageCandidate) ? socialImageCandidate : '';
+  const preloadImage = preloadedProductImage(html, baseUrl);
   const galleryImage = imageFromHtml(html, baseUrl, title);
   const image = (!isGenericImageUrl(socialImage) && socialImage)
+    || preloadImage
     || galleryImage
     || embeddedMarketplaceImage(html, baseUrl);
   return {
@@ -280,8 +297,9 @@ function isSafeMarketplacePageUrl(value) {
 
 export async function fetchProductPageMeta(productUrl, options = {}) {
   const fetchImpl = options.fetchImpl || fetch;
+  const expectedProductId = String(options.expectedProductId || (isTikTokUrl(productUrl) ? getTikTokProductId(productUrl) : '') || '');
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), Number(options.timeoutMs) || 6500);
+  const timeout = setTimeout(() => controller.abort(), Number(options.timeoutMs) || 8000);
   let currentUrl = productUrl;
   try {
     for (let redirectCount = 0; redirectCount <= 4; redirectCount += 1) {
@@ -302,6 +320,10 @@ export async function fetchProductPageMeta(productUrl, options = {}) {
         continue;
       }
       if (!response.ok) return {};
+      if (expectedProductId && isTikTokUrl(currentUrl)) {
+        const resolvedProductId = getTikTokProductId(currentUrl);
+        if (resolvedProductId && resolvedProductId !== expectedProductId) return {};
+      }
       const contentType = response.headers.get('content-type') || '';
       if (contentType && !contentType.includes('text/html') && !contentType.includes('application/xhtml+xml')) return {};
       return extractProductPageMeta(await readLimitedHtml(response), currentUrl);
@@ -315,10 +337,10 @@ export async function fetchProductPageMeta(productUrl, options = {}) {
 export function productMetadataUrls(productUrl, product = {}) {
   const urls = [productUrl];
   if (product.platform === 'TikTok Shop' && /^\d{8,25}$/.test(String(product.productId || ''))) {
-    urls.push(
-      `https://shop-vn.tiktok.com/pdp/${product.productId}`,
-      `https://shop.tiktok.com/view/product/${product.productId}`
-    );
+    // URL không có slug của TikTok có thể chuyển sang một sản phẩm gợi ý khác.
+    // Chỉ dùng URL người dùng/actor đã xác nhận; productId sẽ được kiểm tra sau redirect.
+    const parsedId = getTikTokProductId(productUrl);
+    if (parsedId !== String(product.productId)) return [];
   }
   return [...new Set(urls.filter(isSafeMarketplacePageUrl))];
 }
@@ -335,6 +357,19 @@ export async function fetchProductPageMetaCandidates(urls, options = {}) {
       ...(!combined.title && metadata.title ? { title: metadata.title } : {}),
       ...(!combined.image && metadata.image ? { image: metadata.image } : {})
     }), {});
+}
+
+export function mergeProductMetadata(pageMeta = {}, collectedMeta = {}, platform = '') {
+  const title = collectedMeta.title || pageMeta.title;
+  const image = pageMeta.image || (platform === 'TikTok Shop' ? collectedMeta.image : '');
+  const merged = {
+    ...collectedMeta,
+    ...pageMeta,
+    ...(title ? { title } : {})
+  };
+  if (image) merged.image = image;
+  else delete merged.image;
+  return merged;
 }
 
 export function extractShopeeProductApiMeta(payload = {}) {
@@ -405,7 +440,7 @@ export async function getReviews(url, options = {}) {
     productId: tiktokProduct?.productId
   });
   const productMetaPromise = Promise.all([
-    fetchProductPageMetaCandidates(metadataUrls),
+    fetchProductPageMetaCandidates(metadataUrls, { expectedProductId: tiktokProduct?.productId }),
     shopeeProduct
       ? fetchShopeeProductApiMeta(shopeeProduct.shopId, shopeeProduct.itemId)
       : Promise.resolve({})
@@ -416,10 +451,14 @@ export async function getReviews(url, options = {}) {
     progress('collecting', 14, 'Đang khởi tạo hệ thống lấy reviews...');
     const collected = platform === 'Shopee'
       ? await collectShopeeReviews(productUrl, { reviewLimit: perStarLimit, onProgress: options.onProgress })
-      : await collectTikTokReviews(tiktokProduct.productId, { onProgress: options.onProgress });
+      : await collectTikTokReviews(tiktokProduct.productId, { productUrl, onProgress: options.onProgress });
     const reviews = collected.reviews;
     const pageMeta = await productMetaPromise;
-    const collectedMeta = collected.productMeta || normaliseProductMeta(collected.productMetaSource);
+    const collectedMeta = normaliseProductMeta({
+      ...(collected.productMetaSource || {}),
+      ...(collected.productMeta || {})
+    });
+    const productMeta = mergeProductMetadata(pageMeta, collectedMeta, platform);
     if (Array.isArray(collected.warnings)) warnings.push(...collected.warnings);
     return {
       reviews,
@@ -435,8 +474,7 @@ export async function getReviews(url, options = {}) {
         platform,
         url: productUrl,
         originalUrl: parsed.href,
-        ...pageMeta,
-        ...collectedMeta,
+        ...productMeta,
         ...(shopeeProduct ? {
           shopId: shopeeProduct.shopId,
           itemId: shopeeProduct.itemId,
@@ -479,3 +517,5 @@ export async function getReviews(url, options = {}) {
     };
   }
 }
+
+
