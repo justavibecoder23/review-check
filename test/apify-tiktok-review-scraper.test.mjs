@@ -102,12 +102,12 @@ test('TikTok lấy ảnh sản phẩm từ actor metadata riêng, không dùng �
     allocation: allocation(),
     productUrl,
     fetchImpl: async (url, init) => {
-      if (String(url).includes('devcake~tiktok-shop-data-scraper')) {
+      if (String(url).includes('jungle_synthesizer~tiktok-shop-product-detail-scraper')) {
         productActorCalls += 1;
         const input = JSON.parse(init.body);
-        assert.deepEqual(input.urls, [productUrl]);
-        assert.equal(input.includeReviews, false);
-        assert.equal(input.proxyConfiguration.apifyProxyCountryCode, 'VN');
+        assert.deepEqual(input.items, [productUrl]);
+        assert.equal(input.country, 'vn');
+        assert.equal(input.includeCreatorVideos, false);
         return {
           ok: true,
           async json() {
