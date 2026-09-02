@@ -107,6 +107,7 @@ test('TikTok lấy ảnh sản phẩm từ actor metadata riêng, không dùng �
         const input = JSON.parse(init.body);
         assert.deepEqual(input.urls, [productUrl]);
         assert.equal(input.includeReviews, false);
+        assert.equal(input.proxyConfiguration.apifyProxyCountryCode, 'VN');
         return {
           ok: true,
           async json() {
@@ -163,5 +164,4 @@ test('metadata TikTok loại ảnh CDN không tin cậy và product id không kh
     { title: 'Sản phẩm đúng nhưng ảnh ngoài' }
   );
 });
-
 
