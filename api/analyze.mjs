@@ -12,7 +12,10 @@ export default async function handler(request, response) {
     return response.status(200).json(result);
   } catch (error) {
     return response.status(error?.statusCode || 500).json({
-      error: error?.message || 'Có lỗi khi phân tích sản phẩm.'
+      error: error?.message || 'Có lỗi khi phân tích sản phẩm.',
+      ...(error?.code ? { code: error.code } : {}),
+      ...(error?.details ? { details: error.details } : {})
     });
   }
 }
+

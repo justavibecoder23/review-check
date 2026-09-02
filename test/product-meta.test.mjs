@@ -170,6 +170,68 @@ test('đổi mã ảnh Shopee thành URL CDN hiển thị được', () => {
   );
 });
 
+test('đọc đúng ảnh bìa Shopee từ dữ liệu hydration theo shop và sản phẩm', () => {
+  const item = {
+    item_id: 23747737004,
+    shop_id: 46844480,
+    title: 'Túi canvas Shopee',
+    image: 'vn-11134207-7qukw-productcoverhash'
+  };
+  const metadata = extractProductPageMeta(`
+    <script type="text/mfe-initial-data">
+      ${JSON.stringify({
+        initialState: {
+          item: { items: { 23747737004: item } },
+          DOMAIN_PDP: { data: { PDP_BFF_DATA: { cachedMap: {} } } }
+        }
+      })}
+    </script>
+  `, 'https://shopee.vn/product/46844480/23747737004', {
+    expectedShopId: '46844480',
+    expectedItemId: '23747737004'
+  });
+
+  assert.deepEqual(metadata, {
+    title: 'Túi canvas Shopee',
+    image: 'https://down-vn.img.susercontent.com/file/vn-11134207-7qukw-productcoverhash'
+  });
+});
+
+test('không nhận ảnh Shopee của sản phẩm khác trong cùng trang', () => {
+  const metadata = extractProductPageMeta(`
+    <script type="text/mfe-initial-data">
+      ${JSON.stringify({
+        initialState: {
+          item: {
+            items: {
+              999: { item_id: 999, shop_id: 888, title: 'Sản phẩm khác', image: 'vn-11134207-otherproducthash' }
+            }
+          }
+        }
+      })}
+    </script>
+  `, 'https://shopee.vn/product/46844480/23747737004', {
+    expectedShopId: '46844480',
+    expectedItemId: '23747737004'
+  });
+
+  assert.equal(metadata.image, undefined);
+});
+
+test('thử route Shopee có dữ liệu SSR trước route canonical dùng để thu thập review', () => {
+  assert.deepEqual(
+    productMetadataUrls('https://shopee.vn/product-i.46844480.23747737004', {
+      platform: 'Shopee',
+      shopId: '46844480',
+      itemId: '23747737004'
+    }),
+    [
+      'https://shopee.vn/product/46844480/23747737004',
+      'https://shopee.vn/product-i.46844480.23747737004'
+    ]
+  );
+});
+
 test('yêu cầu metadata TikTok bằng chế độ preview để nhận ảnh Open Graph', async () => {
   let requestedUserAgent = '';
   const metadata = await fetchProductPageMeta(
@@ -200,5 +262,6 @@ test('yêu cầu metadata TikTok bằng chế độ preview để nhận ảnh O
     image: 'https://p16-oec-sg.ibyteimg.com/tos/product.webp'
   });
 });
+
 
 

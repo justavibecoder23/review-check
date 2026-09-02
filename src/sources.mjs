@@ -1,4 +1,4 @@
-import { extractMarketplaceUrl, isShopeeUrl, resolveShopeeProductUrl } from './shopee-url.mjs';
+import { extractMarketplaceUrl, getShopeeProductIds, isShopeeUrl, resolveShopeeProductUrl } from './shopee-url.mjs';
 import { collectShopeeReviews } from './apify-review-scraper.mjs';
 import { collectTikTokReviews } from './apify-tiktok-review-scraper.mjs';
 import { getTikTokProductId, isTikTokUrl, resolveTikTokProductUrl } from './tiktok-url.mjs';
@@ -94,6 +94,14 @@ function safeMetadataUrl(value, baseUrl) {
   } catch {
     return '';
   }
+}
+
+function shopeeImageUrl(value) {
+  const rawImage = String(value || '').trim();
+  if (!rawImage) return '';
+  return /^[\w-]{16,}$/.test(rawImage)
+    ? `https://down-vn.img.susercontent.com/file/${rawImage}`
+    : safeMetadataUrl(rawImage, 'https://shopee.vn/');
 }
 
 function normaliseSearchText(value) {
@@ -233,7 +241,39 @@ function jsonLdProductMeta(html, baseUrl) {
   };
 }
 
-export function extractProductPageMeta(html, baseUrl) {
+function shopeeEmbeddedProductMeta(html, baseUrl, options = {}) {
+  const parsedIds = getShopeeProductIds(baseUrl);
+  const shopId = String(options.expectedShopId || parsedIds?.shopId || '');
+  const itemId = String(options.expectedItemId || parsedIds?.itemId || '');
+  if (!/^\d+$/.test(shopId) || !/^\d+$/.test(itemId)) return {};
+
+  for (const match of String(html || '').matchAll(/(<script\b[^>]*>)([\s\S]*?)<\/script>/gi)) {
+    const attributes = attributesFromTag(match[1]);
+    if (String(attributes.type || '').toLowerCase() !== 'text/mfe-initial-data') continue;
+    try {
+      const initialState = JSON.parse(String(match[2] || '').trim())?.initialState;
+      const cachedItem = initialState?.DOMAIN_PDP?.data?.PDP_BFF_DATA?.cachedMap?.[`${shopId}/${itemId}`]?.item;
+      const item = initialState?.item?.items?.[itemId] || cachedItem;
+      if (!item || typeof item !== 'object') continue;
+      const embeddedShopId = String(item.shop_id ?? item.shopid ?? '');
+      const embeddedItemId = String(item.item_id ?? item.itemid ?? '');
+      if (embeddedShopId !== shopId || embeddedItemId !== itemId) continue;
+      const title = firstValue(item, ['title', 'name']);
+      const image = shopeeImageUrl(firstValue(item, ['image', 'images.0']));
+      if (title || image) {
+        return {
+          ...(title ? { title: String(title) } : {}),
+          ...(image ? { image } : {})
+        };
+      }
+    } catch {
+      // Một block hydration lỗi không được làm mất metadata hợp lệ ở block khác.
+    }
+  }
+  return {};
+}
+
+export function extractProductPageMeta(html, baseUrl, options = {}) {
   const metadata = {};
   for (const tag of String(html || '').match(/<meta\b[^>]*>/gi) || []) {
     const attributes = attributesFromTag(tag);
@@ -242,8 +282,11 @@ export function extractProductPageMeta(html, baseUrl) {
   }
 
   const structured = jsonLdProductMeta(html, baseUrl);
+  const embeddedProduct = isShopeeUrl(baseUrl)
+    ? shopeeEmbeddedProductMeta(html, baseUrl, options)
+    : {};
   const pageTitle = decodeHtmlEntities(String(html || '').match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '');
-  const title = decodeHtmlEntities(metadata['og:title'] || metadata['twitter:title'] || structured.title || pageTitle);
+  const title = decodeHtmlEntities(metadata['og:title'] || metadata['twitter:title'] || embeddedProduct.title || structured.title || pageTitle);
   const socialImageCandidate = safeMetadataUrl(
     metadata['og:image:secure_url'] || metadata['og:image'] || metadata['twitter:image'] || structured.image,
     baseUrl
@@ -251,17 +294,18 @@ export function extractProductPageMeta(html, baseUrl) {
   const socialImage = isLikelyProductImageUrl(socialImageCandidate) ? socialImageCandidate : '';
   const preloadImage = preloadedProductImage(html, baseUrl);
   const galleryImage = imageFromHtml(html, baseUrl, title);
-  const image = (!isGenericImageUrl(socialImage) && socialImage)
+  const image = embeddedProduct.image
+    || (!isGenericImageUrl(socialImage) && socialImage)
     || preloadImage
     || galleryImage
-    || embeddedMarketplaceImage(html, baseUrl);
+    || (isTikTokUrl(baseUrl) ? embeddedMarketplaceImage(html, baseUrl) : '');
   return {
     ...(title ? { title } : {}),
     ...(image ? { image } : {})
   };
 }
 
-async function readLimitedHtml(response, maximumBytes = 512_000) {
+async function readLimitedHtml(response, maximumBytes = 1_200_000) {
   if (!response.body?.getReader) return String(await response.text()).slice(0, maximumBytes);
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -326,7 +370,7 @@ export async function fetchProductPageMeta(productUrl, options = {}) {
       }
       const contentType = response.headers.get('content-type') || '';
       if (contentType && !contentType.includes('text/html') && !contentType.includes('application/xhtml+xml')) return {};
-      return extractProductPageMeta(await readLimitedHtml(response), currentUrl);
+      return extractProductPageMeta(await readLimitedHtml(response), currentUrl, options);
     }
     return {};
   } finally {
@@ -336,6 +380,11 @@ export async function fetchProductPageMeta(productUrl, options = {}) {
 
 export function productMetadataUrls(productUrl, product = {}) {
   const urls = [productUrl];
+  if (product.platform === 'Shopee'
+    && /^\d+$/.test(String(product.shopId || ''))
+    && /^\d+$/.test(String(product.itemId || ''))) {
+    urls.unshift(`https://shopee.vn/product/${product.shopId}/${product.itemId}`);
+  }
   if (product.platform === 'TikTok Shop' && /^\d{8,25}$/.test(String(product.productId || ''))) {
     // URL không có slug của TikTok có thể chuyển sang một sản phẩm gợi ý khác.
     // Chỉ dùng URL người dùng/actor đã xác nhận; productId sẽ được kiểm tra sau redirect.
@@ -376,9 +425,7 @@ export function extractShopeeProductApiMeta(payload = {}) {
   const item = payload?.data?.item || payload?.item || payload?.data || {};
   const title = firstValue(item, ['name', 'title']);
   const rawImage = firstValue(item, ['image', 'images.0', 'image_info_list.0.image']);
-  const image = /^[\w-]{16,}$/.test(String(rawImage || ''))
-    ? `https://down-vn.img.susercontent.com/file/${rawImage}`
-    : safeMetadataUrl(rawImage, 'https://shopee.vn/');
+  const image = shopeeImageUrl(rawImage);
   return {
     ...(title ? { title: String(title) } : {}),
     ...(image ? { image } : {})
@@ -437,10 +484,16 @@ export async function getReviews(url, options = {}) {
 
   const metadataUrls = productMetadataUrls(productUrl, {
     platform,
-    productId: tiktokProduct?.productId
+    productId: tiktokProduct?.productId,
+    shopId: shopeeProduct?.shopId,
+    itemId: shopeeProduct?.itemId
   });
   const productMetaPromise = Promise.all([
-    fetchProductPageMetaCandidates(metadataUrls, { expectedProductId: tiktokProduct?.productId }),
+    fetchProductPageMetaCandidates(metadataUrls, {
+      expectedProductId: tiktokProduct?.productId,
+      expectedShopId: shopeeProduct?.shopId,
+      expectedItemId: shopeeProduct?.itemId
+    }),
     shopeeProduct
       ? fetchShopeeProductApiMeta(shopeeProduct.shopId, shopeeProduct.itemId)
       : Promise.resolve({})
@@ -517,5 +570,6 @@ export async function getReviews(url, options = {}) {
     };
   }
 }
+
 
 
