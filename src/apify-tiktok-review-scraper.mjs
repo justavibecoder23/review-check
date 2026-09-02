@@ -3,7 +3,7 @@ import { finalizeTikTokCredential, reserveTikTokCredentials } from './apify-cred
 import { createProgressReporter } from './sse.mjs';
 
 const DEFAULT_ACTOR_ID = 'web_wanderer/tiktok-reviews-scraper';
-const DEFAULT_PRODUCT_ACTOR_ID = 'devcake/tiktok-shop-data-scraper';
+const DEFAULT_PRODUCT_ACTOR_ID = 'jungle_synthesizer/tiktok-shop-product-detail-scraper';
 const MAX_REVIEWS = 100;
 const STAR_FILTERS = Object.freeze(['5_star', '4_star', '3_star', '2_star', '1_star']);
 const REVIEWS_PER_STAR = MAX_REVIEWS / STAR_FILTERS.length;
@@ -148,15 +148,10 @@ async function runProductMetaActor({ productId, productUrl, credential, fetchImp
         'content-type': 'application/json'
       },
       body: JSON.stringify({
-        urls: [String(productUrl)],
-        maxProducts: 20,
-        includeReviews: false,
-        maxReviews: 1,
-        proxyConfiguration: {
-          useApifyProxy: true,
-          apifyProxyGroups: ['RESIDENTIAL'],
-          apifyProxyCountryCode: 'VN'
-        }
+        items: [String(productUrl)],
+        country: 'vn',
+        maxItems: 1,
+        includeCreatorVideos: false
       }),
       signal: AbortSignal.timeout(timeoutMs)
     });
