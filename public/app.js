@@ -1,3 +1,5 @@
+import { validateMarketplaceInput } from './url-validation.js';
+
 const form = document.querySelector('#analyze-form');
 const input = document.querySelector('#product-url');
 const button = document.querySelector('#submit-button');
@@ -27,6 +29,45 @@ const delayLines = [
   'Đang lấy reviews...',
   'Đang hoàn thiện kết quả...'
 ];
+
+function showInputError(message, { focus = false } = {}) {
+  if (!form || !input || !errorBox) return;
+  form.classList.add('is-invalid');
+  input.setAttribute('aria-invalid', 'true');
+  errorBox.textContent = message;
+  errorBox.classList.remove('hidden');
+  if (focus) input.focus({ preventScroll: true });
+}
+
+function clearInputError() {
+  if (!form || !input || !errorBox) return;
+  form.classList.remove('is-invalid');
+  input.setAttribute('aria-invalid', 'false');
+  errorBox.classList.add('hidden');
+  errorBox.textContent = '';
+}
+
+function validateCurrentInput({ focus = false, allowEmpty = false } = {}) {
+  const value = input?.value || '';
+  if (allowEmpty && !value.trim()) {
+    clearInputError();
+    return null;
+  }
+  const validation = validateMarketplaceInput(value);
+  if (!validation.valid) {
+    showInputError(validation.message, { focus });
+    return null;
+  }
+  clearInputError();
+  return validation;
+}
+
+input?.addEventListener('input', () => {
+  validateCurrentInput({ allowEmpty: true });
+});
+input?.addEventListener('blur', () => {
+  if (input.value.trim()) validateCurrentInput();
+});
 
 const navLinks = [...document.querySelectorAll('.main-nav .nav-parent[href^="#"]')];
 const navIndicator = document.querySelector('.nav-indicator');
@@ -259,7 +300,8 @@ async function analyzeWithSse(url, onProgress) {
 
 if (form) form.addEventListener('submit', async (event) => {
   event.preventDefault();
-  errorBox.classList.add('hidden');
+  const validation = validateCurrentInput({ focus: true });
+  if (!validation) return;
   result.classList.add('hidden');
   loading.classList.remove('hidden');
   button.disabled = true;
@@ -274,7 +316,7 @@ if (form) form.addEventListener('submit', async (event) => {
     loading.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   });
   try {
-    const data = await analyzeWithSse(input.value.trim(), (progress) => {
+    const data = await analyzeWithSse(validation.url, (progress) => {
       if (loadingCopy) loadingCopy.textContent = publicProgressMessage(progress);
       const percent = Math.min(100, Math.max(0, Number(progress.percent) || 0));
       loadingProgress?.style.setProperty('--analysis-progress', `${percent}%`);
@@ -282,8 +324,7 @@ if (form) form.addEventListener('submit', async (event) => {
     });
     openResultsPage(data);
   } catch (error) {
-    errorBox.textContent = error.message;
-    errorBox.classList.remove('hidden');
+    showInputError(error.message);
   } finally {
     loading.classList.add('hidden');
     loadingProgress?.classList.remove('is-live');

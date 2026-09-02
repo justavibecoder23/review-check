@@ -143,6 +143,10 @@ test('payload diễn giải giữ thống kê đủ 100 review nhưng chỉ gử
   });
   const payload = buildGeminiNarrativePayload(syntheticReviews, fallback);
 
+  assert.ok(
+    fallback.drivers.some((driver) => /không dùng tỷ lệ đó để hạ TrustScore/i.test(driver.detail)),
+    'phải giải thích vì sao mẫu chia tầng không dùng tỷ lệ nhược điểm để hạ điểm'
+  );
   assert.equal(payload.fixedBackendDraft.score, fallback.score, 'payload không tính lại hoặc sửa TrustScore');
   assert.equal(payload.fullSampleStatistics.total, 100);
   assert.deepEqual(payload.fullSampleStatistics.ratings, { 1: 20, 2: 20, 3: 20, 4: 20, 5: 20, unknown: 0 });

@@ -79,6 +79,31 @@ test('mẫu lấy đều 5 mức sao không được xem là phân bố rating t
   assert.equal(result.fisher.negative.score <= 50, true);
 });
 
+test('mẫu TikTok chia đều mức sao không bị khóa cứng ở 39 vì tỷ lệ nhược điểm của mẫu', () => {
+  const reviews = [5, 4, 3, 2, 1].flatMap((rating) => Array.from({ length: 20 }, (_, index) => ({
+    rating,
+    text: `Trải nghiệm chi tiết số ${index + 1}: chất liệu mỏng và sản phẩm nhanh hỏng khi sử dụng.`,
+    verified: true,
+    labels: {
+      is_seeding: false,
+      is_vague: false,
+      is_low_value: false,
+      defect_categories: ['chat-lieu', 'su-dung'],
+      reviewed_by: 'layer1'
+    }
+  })));
+  const result = calculateTrustScoreV31(reviews, {
+    sampling: { strategy: 'parallel-star-filters', perStarLimit: 20 }
+  });
+
+  assert.equal(result.defects.status, 'neutral-controlled-sample');
+  assert.equal(result.defects.score, 50);
+  assert.ok(result.defects.observedScore < 25);
+  assert.equal(result.caps.defect, 100);
+  assert.notEqual(result.score, 39);
+  assert.equal(result.defects.tests.find((item) => item.id === 'chat-lieu').count, 100);
+});
+
 test('không đủ ý nghĩa Fisher là trung tính, không được tự động xem là tín hiệu tốt', () => {
   const result = calculateTrustScoreV31([
     { rating: 5, text: 'Nội dung chi tiết và bình thường.', labels: { is_seeding: false, is_vague: false, defect_categories: [] } },

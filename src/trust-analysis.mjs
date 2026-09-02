@@ -146,6 +146,7 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
   const { pros, cons } = fallbackCopy(reviews, included, excluded);
   const tone = trustTone(score);
   const mostFrequentDefect = [...method.defects.tests].sort((left, right) => right.count - left.count)[0];
+  const controlledDefectSample = method.defects.status === 'neutral-controlled-sample';
   const appliedCap = method.caps.applied[0];
   const detailedCount = included.filter((review) => normalise(review.text).length >= 45).length;
   const verifiedCount = included.filter((review) => review.verified).length;
@@ -159,13 +160,19 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
         : 'Một số review 5 sao hoặc 1 sao đi kèm nội dung khó kiểm chứng hay có dấu hiệu bất thường. Hệ thống vì thế thận trọng hơn và giảm mức tin cậy của tập review.'
     },
     {
-      impact: method.defects.score >= 60 ? 'up' : 'down',
-      title: mostFrequentDefect?.count
-        ? `${mostFrequentDefect.label} được nhiều người cùng nhắc`
-        : 'Chưa thấy một lỗi cụ thể bị nhắc lặp lại',
-      detail: mostFrequentDefect?.count
-        ? `${mostFrequentDefect.count} review đáng tham khảo cùng đề cập đến “${mostFrequentDefect.label.toLowerCase()}”. Khi nhiều người mua độc lập lặp lại cùng một vấn đề, đây được xem là nhược điểm cần cân nhắc và có thể kéo TrustScore xuống.`
-        : `Trong ${method.sample.afterSeedingRemoval} review còn lại sau bước lọc nhiễu, chưa có một nhóm lỗi nào được người mua nhắc lại đủ rõ. Điều này giúp TrustScore không bị kéo xuống bởi một vấn đề lặp lại.`
+      impact: controlledDefectSample ? 'neutral' : method.defects.score >= 60 ? 'up' : 'down',
+      title: controlledDefectSample
+        ? (mostFrequentDefect?.count ? `${mostFrequentDefect.label} xuất hiện trong nhóm review cần cân nhắc` : 'Chưa thấy một nhược điểm cụ thể lặp lại')
+        : mostFrequentDefect?.count
+          ? `${mostFrequentDefect.label} được nhiều người cùng nhắc`
+          : 'Chưa thấy một lỗi cụ thể bị nhắc lặp lại',
+      detail: controlledDefectSample
+        ? (mostFrequentDefect?.count
+          ? `${mostFrequentDefect.count} review đáng tham khảo cùng đề cập đến “${mostFrequentDefect.label.toLowerCase()}”. RealView vẫn đưa nhược điểm này ra để bạn cân nhắc, nhưng không dùng tỷ lệ đó để hạ TrustScore vì hệ thống đã chủ động lấy gần đều review ở từng mức sao, thay vì lấy theo tỷ lệ tự nhiên của toàn bộ sản phẩm.`
+          : `Trong ${method.sample.afterSeedingRemoval} review sau bước lọc nhiễu, chưa có một nhược điểm cụ thể được nhắc lặp lại rõ ràng. Mẫu được lấy gần đều theo mức sao nên yếu tố này được giữ trung tính khi tính TrustScore.`)
+        : mostFrequentDefect?.count
+          ? `${mostFrequentDefect.count} review đáng tham khảo cùng đề cập đến “${mostFrequentDefect.label.toLowerCase()}”. Khi nhiều người mua độc lập lặp lại cùng một vấn đề trong mẫu không chia tầng, đây là tín hiệu cần thận trọng về độ tin cậy của tập review.`
+          : `Trong ${method.sample.afterSeedingRemoval} review còn lại sau bước lọc nhiễu, chưa có một nhóm lỗi nào được người mua nhắc lại đủ rõ. Điều này giúp TrustScore không bị kéo xuống bởi một vấn đề lặp lại.`
     },
     {
       impact: method.components.text.score >= 60 ? 'up' : 'down',

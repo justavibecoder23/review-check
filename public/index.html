@@ -3,9 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="RealView giúp người mua tổng hợp các đánh giá công khai và nhìn rõ những điểm cần cân nhắc trước khi mua hàng trên Shopee." />
+    <meta name="description" content="RealView giúp người mua tổng hợp các đánh giá công khai và nhìn rõ những điểm cần cân nhắc trước khi mua hàng trên Shopee hoặc TikTok Shop." />
     <meta name="theme-color" content="#EFEFEB" />
     <title>RealView | Góc nhìn thật, lựa chọn đúng</title>
+    <link rel="icon" type="image/png" href="/assets/realview-rv.png" />
+    <link rel="apple-touch-icon" href="/assets/realview-rv.png" />
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/chatbot.css" />
   </head>
@@ -43,10 +45,10 @@
             <div class="section-pill"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 3v18h18" /><path d="m7 15 3-3 3 2 5-6" /></svg>Phân tích đánh giá sản phẩm</div>
             <h1 id="page-title"><span class="hero-heading-line hero-heading-line-primary">Tiết kiệm tiền cho</span><span class="hero-heading-line">quyết định đúng</span></h1>
             <p class="hero-description">Dán link sản phẩm Shopee hoặc TikTok Shop. RealView tổng hợp các đánh giá công khai, giảm nhiễu từ phản hồi ít thông tin và làm nổi bật những nhược điểm được người mua nhắc lại.</p>
-            <form id="analyze-form" class="url-form">
+            <form id="analyze-form" class="url-form" novalidate>
               <label class="sr-only" for="product-url">Link sản phẩm</label>
               <span class="input-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1" /><path d="M14 11a5 5 0 0 0-7.1-.1l-2 2A5 5 0 0 0 12 20l1.1-1.1" /></svg></span>
-              <input id="product-url" name="url" type="text" inputmode="url" placeholder="Dán link sản phẩm Shopee hoặc TikTok Shop..." autocomplete="url" required />
+              <input id="product-url" name="url" type="text" inputmode="url" placeholder="Dán link sản phẩm Shopee hoặc TikTok Shop..." autocomplete="url" aria-describedby="form-error" aria-invalid="false" spellcheck="false" required />
               <button id="submit-button" type="submit">Phân tích ngay <span aria-hidden="true">→</span></button>
             </form>
             <div class="analysis-status-shell">
@@ -56,7 +58,7 @@
                   <span class="loading-kicker"><i></i> RealView đang xử lý</span>
                   <p><strong>Đang chuẩn bị kết quả cho bạn</strong><span id="loading-copy">Đang xác thực liên kết sản phẩm...</span></p>
                   <div class="loading-progress" role="progressbar" aria-label="Tiến độ phân tích" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div>
-                  <small>Thường mất khoảng 15–45 giây. Vui lòng giữ trang này mở.</small>
+                  <small>Hệ thống đang tổng hợp đánh giá, vui lòng không thoát trang.</small>
                 </div>
               </section>
               <p id="form-error" class="error hidden" role="alert"></p>
@@ -117,7 +119,7 @@
               <img src="/assets/illustrations/undraw-user-feedback.svg" alt="Minh họa người dùng gửi phản hồi và đánh giá" width="703" height="800" />
             </figure>
             <ol class="steps" aria-label="Quy trình sử dụng RealView">
-              <li class="step-card"><span class="step-number">01</span><span class="step-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></svg></span><div class="step-copy"><h3>Sao chép link</h3><p>Copy đường dẫn sản phẩm từ Shopee.</p></div></li>
+              <li class="step-card"><span class="step-number">01</span><span class="step-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></svg></span><div class="step-copy"><h3>Sao chép link</h3><p>Sao chép đường dẫn sản phẩm từ Shopee hoặc TikTok Shop.</p></div></li>
               <li class="step-card"><span class="step-number">02</span><span class="step-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M11 14h10" /><path d="M16 4h2a2 2 0 0 1 2 2v1.344" /><path d="m17 18 4-4-4-4" /><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 1.793-1.113" /><rect x="8" y="2" width="8" height="4" rx="1" /></svg></span><div class="step-copy"><h3>Dán vào RealView</h3><p>Đưa link vào ô phân tích ở đầu trang.</p></div></li>
               <li class="step-card"><span class="step-number">03</span><span class="step-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5V19A9 3 0 0 0 21 19V5" /><path d="M3 12A9 3 0 0 0 21 12" /></svg></span><div class="step-copy"><h3>Thu thập review</h3><p>Hệ thống lấy dữ liệu từ nguồn được cấu hình.</p></div></li>
               <li class="step-card"><span class="step-number">04</span><span class="step-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M10 20a1 1 0 0 0 .553.895l2 1A1 1 0 0 0 14 21v-7a2 2 0 0 1 .517-1.341L21.74 4.67A1 1 0 0 0 21 3H3a1 1 0 0 0-.742 1.67l7.225 7.989A2 2 0 0 1 10 14z" /></svg></span><div class="step-copy"><h3>Lọc tín hiệu nhiễu</h3><p>Giảm ưu tiên phản hồi ngắn và ít thông tin.</p></div></li>
