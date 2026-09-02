@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   GEMINI_ATTEMPT_TIMEOUT_MS,
   GEMINI_MODEL,
+  geminiHttpError,
   geminiModelChain,
   geminiThinkingConfig,
   requestGeminiWithFallback
@@ -55,10 +56,20 @@ test('Flash Lite dùng thinking minimal và timeout mỗi attempt tối đa 10 g
   assert.deepEqual(geminiThinkingConfig('minimal', GEMINI_MODEL), { thinkingLevel: 'minimal' });
 });
 
+test('nhận diện quota ngày cả khi Gemini chỉ ghi trong error message', async () => {
+  const error = await geminiHttpError(response(429, {
+    status: 'RESOURCE_EXHAUSTED',
+    message: 'Quota exceeded for requests per day'
+  }));
+  assert.equal(error.quotaExhausted, true);
+  assert.equal(error.quotaScope, 'day');
+});
+
 test('mọi lỗi của key đầu tiên chuyển ngay sang key khác', async () => {
   const requests = [];
   const result = await requestGeminiWithFallback({
     listCredentialsImpl: async () => credentials(2),
+    markModelExhaustedImpl: async () => {},
     fetchImpl: async (_url, init) => {
       requests.push(selectedKey(init));
       return selectedKey(init) === 'secret-2'
@@ -69,6 +80,53 @@ test('mọi lỗi của key đầu tiên chuyển ngay sang key khác', async ()
   });
   assert.equal(result.credentialId, 'key-2');
   assert.deepEqual(requests, ['secret-1', 'secret-2']);
+});
+
+test('HTTP 200 có JSON sai schema phải retry bằng key khác và không ghi success giả', async () => {
+  const requests = [];
+  const finishes = [];
+  const result = await requestGeminiWithFallback({
+    listCredentialsImpl: async () => credentials(2),
+    fetchImpl: async (_url, init) => {
+      requests.push(selectedKey(init));
+      return {
+        ok: true,
+        status: 200,
+        async json() { return { valid: selectedKey(init) === 'secret-2' }; }
+      };
+    },
+    finishRouteImpl: async (_routeId, outcome) => {
+      finishes.push(outcome);
+      return {};
+    },
+    validateResponse: async (candidate) => {
+      const body = await candidate.json();
+      if (!body.valid) throw new Error('sai schema');
+      return body;
+    },
+    buildRequest: (_model, apiKey) => ({ headers: { 'x-goog-api-key': apiKey } })
+  });
+  assert.equal(result.credentialId, 'key-2');
+  assert.deepEqual(result.value, { valid: true });
+  assert.deepEqual(requests, ['secret-1', 'secret-2']);
+  assert.deepEqual(finishes.map((item) => item.ok), [false, true]);
+});
+
+test('reservation nguyên tử từ chối route quá tải trước khi gọi Gemini', async () => {
+  const requests = [];
+  const result = await requestGeminiWithFallback({
+    listCredentialsImpl: async () => credentials(2),
+    beginRouteImpl: async (routeId) => routeId.startsWith('key-1:')
+      ? { ok: false, code: 'RPM_LIMIT', state: {} }
+      : { ok: true, state: {} },
+    fetchImpl: async (_url, init) => {
+      requests.push(selectedKey(init));
+      return response(200);
+    },
+    buildRequest: (_model, apiKey) => ({ headers: { 'x-goog-api-key': apiKey } })
+  });
+  assert.equal(result.credentialId, 'key-2');
+  assert.deepEqual(requests, ['secret-2']);
 });
 
 test('ưu tiên API key có bộ đếm ngày thấp nhất', async () => {
@@ -98,6 +156,21 @@ test('timeout chuyển ngay sang Flash Lite của key dự phòng', async () => 
   });
   assert.deepEqual(requests, ['secret-1', 'secret-2']);
   assert.deepEqual(result.attemptedModels, [GEMINI_MODEL, GEMINI_MODEL]);
+});
+
+test('client hủy request thì dừng ngay và không tiêu hao key dự phòng', async () => {
+  const controller = new AbortController();
+  let calls = 0;
+  await assert.rejects(() => requestGeminiWithFallback({
+    listCredentialsImpl: async () => credentials(3),
+    fetchImpl: async () => {
+      calls += 1;
+      controller.abort();
+      throw Object.assign(new Error('client disconnected'), { name: 'AbortError' });
+    },
+    buildRequest: () => ({ signal: controller.signal })
+  }), /client disconnected|không phản hồi/);
+  assert.equal(calls, 1);
 });
 
 test('dừng ở lần đầu cộng tối đa hai retry trên ba API key khác nhau', async () => {

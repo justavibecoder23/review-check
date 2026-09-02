@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server.mjs",
-    "dev": "node --watch server.mjs",
+    "start:local": "node tools/local-server.mjs",
+    "dev": "node --watch tools/local-server.mjs",
     "generate:apify-pool": "node tools/generate-apify-pool.mjs",
     "generate:gemini-pool": "node tools/generate-gemini-pool.mjs",
     "test": "node --test"

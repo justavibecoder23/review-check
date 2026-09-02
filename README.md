@@ -7,7 +7,7 @@ Website độc lập (không extension) để lọc review nhiễu và tóm tắ
 Yêu cầu Node.js 18 trở lên:
 
 ```bash
-npm start
+npm run start:local
 ```
 
 Mở `http://localhost:3000`, dán một link sản phẩm. Không cần cài package nào.

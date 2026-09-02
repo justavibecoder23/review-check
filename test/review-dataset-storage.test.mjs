@@ -45,3 +45,15 @@ test('Vercel không có Blob token phải báo không lưu thay vì ghi vào fil
     else delete process.env.BLOB_READ_WRITE_TOKEN;
   }
 });
+
+test('dataset TikTok dùng productId ổn định và không mang tiền tố Shopee', async (context) => {
+  const root = await mkdtemp(join(tmpdir(), 'realview-tiktok-dataset-'));
+  context.after(() => rm(root, { recursive: true, force: true }));
+  const saved = await saveReviewDatasets({
+    rawReviews: [],
+    labeledReviews: [],
+    product: { platform: 'TikTok Shop', productId: '1732811145572746350', title: 'Sản phẩm' }
+  }, { localRoot: root, runId: 'tiktok-run', now: new Date('2026-08-27T10:00:00.000Z') });
+  assert.match(saved.rawPath, /tiktok-1732811145572746350/);
+  assert.doesNotMatch(saved.rawPath, /shopee-/);
+});

@@ -104,7 +104,11 @@ export async function saveReviewDatasets({ rawReviews = [], labeledReviews = [],
   const runId = options.runId || createRunId(now);
   const createdAt = now.toISOString();
   const datePath = createdAt.slice(0, 10).replaceAll('-', '/');
-  const productKey = product.itemId ? `shopee-${safeSegment(product.itemId)}` : safeSegment(product.title, 'product');
+  const productKey = product.platform === 'TikTok Shop' && product.productId
+    ? `tiktok-${safeSegment(product.productId)}`
+    : product.itemId
+      ? `shopee-${safeSegment(product.itemId)}`
+      : safeSegment(product.title, 'product');
   const pathPrefix = `${datePath}/${productKey}/${runId}`;
   const rawDataset = datasetEnvelope({
     kind: 'raw-reviews', runId, createdAt, product, source,

@@ -19,6 +19,18 @@ export function createProgressReporter(report) {
   };
 }
 
+export function clientDisconnectSignal(request, response) {
+  const controller = new AbortController();
+  const abort = () => {
+    if (!response.writableEnded && !controller.signal.aborted) {
+      controller.abort(new DOMException('Client disconnected', 'AbortError'));
+    }
+  };
+  request.once?.('aborted', abort);
+  response.once?.('close', abort);
+  return controller.signal;
+}
+
 export function openSse(response) {
   response.statusCode = 200;
   response.setHeader('content-type', 'text/event-stream; charset=utf-8');

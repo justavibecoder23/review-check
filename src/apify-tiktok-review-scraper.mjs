@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { finalizeTikTokCredential, reserveTikTokCredentials } from './apify-credential-store.mjs';
 import { createProgressReporter } from './sse.mjs';
+import { timeoutAbortSignal } from './abort.mjs';
 
 const DEFAULT_ACTOR_ID = 'web_wanderer/tiktok-reviews-scraper';
 const MAX_REVIEWS = 100;
@@ -49,7 +50,7 @@ function normalizeReview(review, productId) {
   };
 }
 
-async function runActor({ productId, reviewLimit, reviewFilter, credential, fetchImpl, actorId, timeoutMs }) {
+async function runActor({ productId, reviewLimit, reviewFilter, credential, fetchImpl, actorId, timeoutMs, signal }) {
   const startedAt = performance.now();
   const endpoint = `https://api.apify.com/v2/acts/${actorPath(actorId)}/run-sync-get-dataset-items`;
   try {
@@ -67,7 +68,7 @@ async function runActor({ productId, reviewLimit, reviewFilter, credential, fetc
         reviews_sort: 'recommended',
         include_personal_information: false
       }),
-      signal: AbortSignal.timeout(timeoutMs)
+      signal: timeoutAbortSignal(timeoutMs, signal)
     });
     if (!response.ok) {
       const detail = compactErrorDetail(await response.text());
@@ -150,7 +151,8 @@ export async function collectTikTokReviews(productId, options = {}) {
     credential,
     fetchImpl,
     actorId,
-    timeoutMs
+    timeoutMs,
+    signal: options.signal
   })));
 
   if (allocation.source === 'redis-vault') {

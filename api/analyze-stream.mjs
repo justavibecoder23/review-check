@@ -1,5 +1,5 @@
 import { analyzeProductUrl } from '../src/analyze.mjs';
-import { openSse } from '../src/sse.mjs';
+import { clientDisconnectSignal, openSse } from '../src/sse.mjs';
 
 export default async function handler(request, response) {
   if (request.method !== 'POST') {
@@ -15,12 +15,14 @@ export default async function handler(request, response) {
   }
 
   const stream = openSse(response);
+  const signal = clientDisconnectSignal(request, response);
   const heartbeat = setInterval(() => stream.send('heartbeat', { at: Date.now() }), 15_000);
   stream.send('ready', { message: 'Đã mở luồng cập nhật tiến độ.' });
 
   try {
     const result = await analyzeProductUrl(body.url, {
-      onProgress: (progress) => stream.send('progress', progress)
+      onProgress: (progress) => stream.send('progress', progress),
+      signal
     });
     stream.send('result', result);
   } catch (error) {

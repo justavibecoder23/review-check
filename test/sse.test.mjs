@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-import { createProgressReporter, encodeSseEvent } from '../src/sse.mjs';
+import { EventEmitter } from 'node:events';
+import { clientDisconnectSignal, createProgressReporter, encodeSseEvent } from '../src/sse.mjs';
 
 test('mã hóa event SSE thành hai dòng và kết thúc bằng dòng trống', () => {
   assert.equal(
@@ -26,6 +27,16 @@ test('progress reporter chuẩn hóa phần trăm và giữ details', () => {
 test('lỗi ở consumer tiến độ không làm vỡ tiến trình backend', () => {
   const report = createProgressReporter(() => { throw new Error('client disconnected'); });
   assert.doesNotThrow(() => report('saving', 80, 'Đang lưu'));
+});
+
+test('ngắt kết nối SSE phát AbortSignal để dừng backend', () => {
+  const request = new EventEmitter();
+  const response = new EventEmitter();
+  response.writableEnded = false;
+  const signal = clientDisconnectSignal(request, response);
+  response.emit('close');
+  assert.equal(signal.aborted, true);
+  assert.equal(signal.reason.name, 'AbortError');
 });
 
 test('spinner chỉ hiển thị thông tin chung, không lộ số account hoặc tiến trình backend', async () => {

@@ -3,6 +3,7 @@ import { collectShopeeReviews } from './apify-review-scraper.mjs';
 import { collectTikTokReviews } from './apify-tiktok-review-scraper.mjs';
 import { getTikTokProductId, isTikTokUrl, resolveTikTokProductUrl } from './tiktok-url.mjs';
 import { createProgressReporter } from './sse.mjs';
+import { combineAbortSignals, throwIfAborted } from './abort.mjs';
 
 const DEMO_REVIEWS = [
   { rating: 5, text: 'Nhận xu nên đánh giá cho shop 5 sao nha mọi người.', date: '12/08/2026', verified: false },
@@ -350,7 +351,7 @@ export async function fetchProductPageMeta(productUrl, options = {}) {
       if (!isSafeMarketplacePageUrl(currentUrl)) return {};
       const response = await fetchImpl(currentUrl, {
         redirect: 'manual',
-        signal: controller.signal,
+        signal: combineAbortSignals(options.signal, controller.signal),
         headers: {
           accept: 'text/html,application/xhtml+xml',
           'accept-language': 'vi-VN,vi;q=0.9,en;q=0.7',
@@ -442,7 +443,7 @@ export async function fetchShopeeProductApiMeta(shopId, itemId, options = {}) {
     apiUrl.searchParams.set('shopid', String(shopId));
     apiUrl.searchParams.set('itemid', String(itemId));
     const response = await fetchImpl(apiUrl, {
-      signal: controller.signal,
+      signal: combineAbortSignals(options.signal, controller.signal),
       headers: {
         accept: 'application/json',
         'accept-language': 'vi-VN,vi;q=0.9,en;q=0.7',
@@ -457,6 +458,7 @@ export async function fetchShopeeProductApiMeta(shopId, itemId, options = {}) {
 }
 
 export async function getReviews(url, options = {}) {
+  throwIfAborted(options.signal);
   const progress = createProgressReporter(options.onProgress);
   let parsed;
   try { parsed = new URL(extractMarketplaceUrl(url)); } catch (error) {
@@ -466,10 +468,10 @@ export async function getReviews(url, options = {}) {
   progress('resolving', 8, 'Đang kiểm tra liên kết...');
   const warnings = [];
   const shopeeProduct = platform === 'Shopee'
-    ? await resolveShopeeProductUrl(parsed.href)
+    ? await resolveShopeeProductUrl(parsed.href, { signal: options.signal })
     : null;
   const tiktokProduct = platform === 'TikTok Shop'
-    ? await resolveTikTokProductUrl(parsed.href)
+    ? await resolveTikTokProductUrl(parsed.href, { signal: options.signal })
     : null;
   const productUrl = shopeeProduct?.canonicalUrl || tiktokProduct?.productUrl || parsed.href;
   const perStarLimit = platform === 'Shopee' ? getShopeeReviewsPerStar() : null;
@@ -492,10 +494,11 @@ export async function getReviews(url, options = {}) {
     fetchProductPageMetaCandidates(metadataUrls, {
       expectedProductId: tiktokProduct?.productId,
       expectedShopId: shopeeProduct?.shopId,
-      expectedItemId: shopeeProduct?.itemId
+      expectedItemId: shopeeProduct?.itemId,
+      signal: options.signal
     }),
     shopeeProduct
-      ? fetchShopeeProductApiMeta(shopeeProduct.shopId, shopeeProduct.itemId)
+      ? fetchShopeeProductApiMeta(shopeeProduct.shopId, shopeeProduct.itemId, { signal: options.signal })
       : Promise.resolve({})
   ])
     .then(([pageMeta, platformMeta]) => ({ ...pageMeta, ...platformMeta }))
@@ -503,8 +506,8 @@ export async function getReviews(url, options = {}) {
   try {
     progress('collecting', 14, 'Đang khởi tạo hệ thống lấy reviews...');
     const collected = platform === 'Shopee'
-      ? await collectShopeeReviews(productUrl, { reviewLimit: perStarLimit, onProgress: options.onProgress })
-      : await collectTikTokReviews(tiktokProduct.productId, { productUrl, onProgress: options.onProgress });
+      ? await collectShopeeReviews(productUrl, { reviewLimit: perStarLimit, onProgress: options.onProgress, signal: options.signal })
+      : await collectTikTokReviews(tiktokProduct.productId, { productUrl, onProgress: options.onProgress, signal: options.signal });
     const reviews = collected.reviews;
     const pageMeta = await productMetaPromise;
     const collectedMeta = normaliseProductMeta({

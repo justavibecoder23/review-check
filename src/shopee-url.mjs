@@ -1,3 +1,5 @@
+import { combineAbortSignals } from './abort.mjs';
+
 const DIRECT_SHOPEE_HOSTS = new Set([
   'shopee.vn',
   'www.shopee.vn'
@@ -257,7 +259,7 @@ export async function resolveShopeeProductUrl(rawInput, options = {}) {
           'user-agent': 'Mozilla/5.0 (compatible; RealView/1.0; +https://review-check-beige.vercel.app)'
         },
         cache: 'no-store',
-        signal: controller.signal
+        signal: combineAbortSignals(options.signal, controller.signal)
       });
     } catch (error) {
       if (error?.name === 'AbortError' || error?.name === 'TimeoutError') throw timeoutError();

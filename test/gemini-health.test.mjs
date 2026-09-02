@@ -63,3 +63,17 @@ test('Flash Lite dùng sức chứa 15 RPM và theo dõi TPM', () => {
   assert.equal(pressure.dayRequests, 78);
   assert.ok(pressure.value > 0 && pressure.value < 1);
 });
+
+test('health tính request đang reserve vào RPM và TPM trước khi response hoàn tất', () => {
+  const nowMs = Date.now();
+  const state = {
+    starts: Array.from({ length: 15 }, (_, index) => nowMs - index * 500),
+    reservedTokens: 20_000,
+    inFlight: 3,
+    lastStartedAtMs: nowMs
+  };
+  const pressure = geminiRoutePressure(state, 'gemini-3.5-flash-lite', nowMs);
+  assert.equal(pressure.recentRequests, 15);
+  assert.equal(pressure.recentTokens, 20_000);
+  assert.equal(pressure.minuteLimited, true);
+});

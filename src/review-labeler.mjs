@@ -432,6 +432,18 @@ async function classifyBatchWithGemini(batch, product, options = {}) {
     maxRetries: 2,
     retryOnTimeout: true,
     routeContext: options.routeContext,
+    validateResponse: async (response) => {
+      const body = await response.json();
+      const parsed = parseGeminiJson(body, 'Gemini labeler');
+      if (!Array.isArray(parsed.labels)) throw new Error('Thiếu mảng labels.');
+      const expectedIds = new Set(batch.map(({ layer1 }) => String(layer1.id)));
+      const returnedIds = parsed.labels.map((candidate) => String(candidate?.id || ''));
+      if (returnedIds.length !== expectedIds.size || new Set(returnedIds).size !== returnedIds.length
+        || returnedIds.some((id) => !expectedIds.has(id))) {
+        throw new Error(`Kết quả phải chứa đúng ${expectedIds.size} nhãn với ID không trùng.`);
+      }
+      return parsed.labels;
+    },
     buildRequest: (selectedModel, selectedApiKey) => ({
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': selectedApiKey },
@@ -444,14 +456,11 @@ async function classifyBatchWithGemini(batch, product, options = {}) {
           responseSchema: layer2ResponseSchema
         }
       }),
-      signal: AbortSignal.timeout(10_000)
+      signal: options.signal
     })
   });
-  const { response } = geminiResult;
-  const body = await response.json();
-  const parsed = parseGeminiJson(body, 'Gemini labeler');
   return {
-    labels: Array.isArray(parsed.labels) ? parsed.labels : [],
+    labels: geminiResult.value,
     retry: {
       model: geminiResult.model,
       attemptedModels: geminiResult.attemptedModels || [],
@@ -490,7 +499,8 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
         const result = await classifyBatchWithGemini(batch, options.product, {
           fetchImpl: options.fetchImpl || fetch,
           deadlineAt: options.geminiContext?.layer2DeadlineAt,
-          routeContext: options.geminiContext
+          routeContext: options.geminiContext,
+          signal: options.signal
         });
         succeededBatches += 1;
         const attemptedCount = result.retry?.attemptedModels?.length || 1;

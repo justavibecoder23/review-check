@@ -452,6 +452,10 @@ async function analyzeWithGemini(reviews, fallback, options = {}) {
     maxRetries: 2,
     retryOnTimeout: true,
     routeContext: options.geminiContext,
+    validateResponse: async (response) => {
+      const body = await response.json();
+      return validateGeminiTrust(parseGeminiJson(body, 'Gemini TrustScore'), fallback);
+    },
     buildRequest: (selectedModel, selectedApiKey) => ({
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': selectedApiKey },
@@ -464,13 +468,11 @@ async function analyzeWithGemini(reviews, fallback, options = {}) {
           responseSchema: trustSchema
         }
       }),
-      signal: AbortSignal.timeout(10_000)
+      signal: options.signal
     })
   });
-  const { response } = geminiResult;
-  const body = await response.json();
   return {
-    result: validateGeminiTrust(parseGeminiJson(body, 'Gemini TrustScore'), fallback),
+    result: geminiResult.value,
     retry: {
       attemptedModels: geminiResult.attemptedModels || [],
       attemptedRouteIds: geminiResult.attemptedRouteIds || [],
@@ -486,7 +488,8 @@ export async function buildTrustAnalysis(reviews = [], options = {}) {
   try {
     const analyzed = await analyzeWithGemini(reviews, fallback, {
       fetchImpl: options.fetchImpl || fetch,
-      geminiContext: options.geminiContext
+      geminiContext: options.geminiContext,
+      signal: options.signal
     });
     const result = analyzed.result;
     if (process.env.VERCEL || options.logGeminiErrors) {

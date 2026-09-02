@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { reserveApifyCredential, reserveApifyCredentialSet } from './apify-credential-store.mjs';
 import { createProgressReporter } from './sse.mjs';
+import { timeoutAbortSignal } from './abort.mjs';
 
 const DEFAULT_ACTOR_ID = 'zen-studio/shopee-product-reviews-scraper';
 export const SHOPEE_DEMO_REVIEW_LIMIT = 20;
@@ -41,7 +42,7 @@ function normalizeReview(review) {
   };
 }
 
-async function runUnfiltered({ url, reviewLimit, starFilter, credential, fetchImpl, actorId, timeoutMs }) {
+async function runUnfiltered({ url, reviewLimit, starFilter, credential, fetchImpl, actorId, timeoutMs, signal }) {
   const startedAt = performance.now();
   const endpoint = `https://api.apify.com/v2/acts/${actorPath(actorId)}/run-sync-get-dataset-items`;
   try {
@@ -57,7 +58,7 @@ async function runUnfiltered({ url, reviewLimit, starFilter, credential, fetchIm
         contentFilter: 'with comments',
         maxReviewsPerProduct: reviewLimit
       }),
-      signal: AbortSignal.timeout(timeoutMs)
+      signal: timeoutAbortSignal(timeoutMs, signal)
     });
     if (!response.ok) {
       const detail = compactErrorDetail(await response.text());
@@ -93,8 +94,8 @@ async function runUnfiltered({ url, reviewLimit, starFilter, credential, fetchIm
   }
 }
 
-async function runStarFilter({ url, star, reviewLimit, credential, fetchImpl, actorId, timeoutMs }) {
-  const run = await runUnfiltered({ url, reviewLimit, starFilter: star, credential, fetchImpl, actorId, timeoutMs });
+async function runStarFilter({ url, star, reviewLimit, credential, fetchImpl, actorId, timeoutMs, signal }) {
+  const run = await runUnfiltered({ url, reviewLimit, starFilter: star, credential, fetchImpl, actorId, timeoutMs, signal });
   if (!run.ok) return { ...run, star };
   const matching = run.items.filter((item) => Number(item.ratingStar) === Number(star));
   return {
@@ -147,7 +148,7 @@ async function collectShopeeReviewsDemo(url, options = {}) {
     : 70_000;
   const startedAt = performance.now();
 
-  const run = await runUnfiltered({ url, reviewLimit, credential, fetchImpl, actorId, timeoutMs });
+  const run = await runUnfiltered({ url, reviewLimit, credential, fetchImpl, actorId, timeoutMs, signal: options.signal });
   progress('collecting', 58, 'Đang lấy reviews...');
   const runs = [run];
   const successful = runs.filter((run) => run.ok);
@@ -236,7 +237,8 @@ async function collectShopeeReviewsProduction(url, options = {}) {
     credential,
     fetchImpl,
     actorId,
-    timeoutMs
+    timeoutMs,
+    signal: options.signal
   })));
   progress('collecting', 58, 'Đang lấy reviews...');
   const successful = runs.filter((run) => run.ok);

@@ -5,6 +5,7 @@ import { labelReviewsTwoLayer } from './review-labeler.mjs';
 import { saveReviewDatasets } from './review-dataset-storage.mjs';
 import { createProgressReporter } from './sse.mjs';
 import { assertEnoughReviews } from './analysis-eligibility.mjs';
+import { throwIfAborted } from './abort.mjs';
 
 const issueDefinitions = ISSUE_DEFINITIONS.map(({ id, label, words }) => ({ id, label, words }));
 const lowValuePatterns = [/^ok+([.! ]*)$/i, /tốt([.! ]*)$/i, /^đẹp([.! ]*)$/i, /^5\s*sao/i, /chưa.{0,12}(dùng|thử)/i];
@@ -47,7 +48,7 @@ export function shouldKeep(review) {
   if (review.labels?.is_low_value && !hasIssue) {
     return { keep: false, reason: lowValueReason || 'Nội dung ít thông tin, không đủ làm bằng chứng' };
   }
-  if (review.labels?.layer2_unavailable && !hasIssue && !hasUsefulEvidence) {
+  if (review.labels?.layer2_unavailable) {
     return { keep: false, reason: 'Chưa đủ dữ liệu để kiểm định nội dung review' };
   }
   if ((text.length < 14 || generic) && !hasIssue && !hasUsefulEvidence) {
@@ -69,7 +70,8 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
 
   progress('validating', 3, 'Đang khởi tạo hệ thống...');
   const { reviews, source, product, warnings } = await getReviews(rawUrl.trim(), {
-    onProgress: options.onProgress
+    onProgress: options.onProgress,
+    signal: options.signal
   });
   try {
     assertEnoughReviews(reviews);
@@ -85,7 +87,7 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
     busyRouteIds: new Set(),
     failedRouteIds: new Set()
   };
-  const labeling = await labelReviewsTwoLayer(reviews, { product, geminiContext });
+  const labeling = await labelReviewsTwoLayer(reviews, { product, geminiContext, signal: options.signal });
   progress('filtering', 76, 'Đang phân tích reviews...');
   const checked = labeling.reviews.map((review) => ({ ...review, filter: shouldKeep(review) }));
   const genuine = checked.filter((review) => review.filter.keep);
@@ -110,9 +112,19 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
 
   const lowRatings = genuine.filter((review) => review.rating <= 3).length;
   const signal = issues.length === 0 ? 'Chưa thấy nhược điểm lặp lại rõ ràng' : issues[0].label;
-  const processedReviews = checked.map(({ filter, ...review }) => ({ ...review, included: filter.keep, exclusionReason: filter.reason }));
+  const processedReviews = checked.map(({ filter, ...review }) => ({
+    ...review,
+    included: filter.keep,
+    verificationStatus: review.labels?.layer2_unavailable ? 'unverified' : filter.keep ? 'accepted' : 'excluded',
+    exclusionReason: filter.reason
+  }));
+  const unverifiedCount = processedReviews.filter((review) => review.verificationStatus === 'unverified').length;
+  if (reviews.length && unverifiedCount / reviews.length > 0.2) {
+    warnings.push(`Có ${unverifiedCount}/${reviews.length} review chưa được Layer 2 kiểm định; các review này không tham gia TrustScore.`);
+  }
   const trustSample = processedReviews.filter((review) => !classifyReviewSignals(review).seeding).length;
   progress('saving', 84, 'Đang hoàn thiện kết quả...');
+  throwIfAborted(options.signal);
   const dataset = await saveReviewDatasets({
     rawReviews: reviews,
     labeledReviews: processedReviews,
@@ -127,7 +139,8 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   const trust = await buildTrustAnalysis(processedReviews, {
     product,
     sampling: source?.collection,
-    geminiContext
+    geminiContext,
+    signal: options.signal
   });
   if (process.env.VERCEL) {
     console.log(JSON.stringify({
@@ -152,6 +165,7 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
       included: genuine.length,
       genuine: genuine.length,
       excluded: excluded.length,
+      unverified: unverifiedCount,
       lowRatings,
       trustSample: trust.method?.sample?.afterSeedingRemoval ?? trustSample,
       algorithmSample: trust.method?.sample?.afterSeedingRemoval ?? trustSample,

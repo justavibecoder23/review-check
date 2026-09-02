@@ -1,12 +1,12 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
-import { analyzeProductUrl } from './src/analyze.mjs';
-import { answerWebsiteQuestion } from './src/site-chatbot.mjs';
-import { assertApifyAdmin, readApifyAdminStatus, updateApifyAdminPool } from './src/apify-admin.mjs';
-import { assertGeminiAdmin, readGeminiAdminStatus, updateGeminiAdminPool } from './src/gemini-admin.mjs';
-import { openSse } from './src/sse.mjs';
-import { normalizeApiPath } from './src/server-route.mjs';
+import { analyzeProductUrl } from '../src/analyze.mjs';
+import { answerWebsiteQuestion } from '../src/site-chatbot.mjs';
+import { assertApifyAdmin, readApifyAdminStatus, updateApifyAdminPool } from '../src/apify-admin.mjs';
+import { assertGeminiAdmin, readGeminiAdminStatus, updateGeminiAdminPool } from '../src/gemini-admin.mjs';
+import { clientDisconnectSignal, openSse } from '../src/sse.mjs';
+import { normalizeApiPath } from '../src/server-route.mjs';
 
 const port = Number(process.env.PORT || 3000);
 const host = process.env.HOST || '127.0.0.1';
@@ -40,18 +40,20 @@ const server = createServer(async (request, response) => {
 
     if (request.method === 'POST' && apiPath === '/api/analyze') {
       const body = await getBody(request);
-      const result = await analyzeProductUrl(body.url);
+      const result = await analyzeProductUrl(body.url, { signal: clientDisconnectSignal(request, response) });
       return sendJson(response, 200, result);
     }
 
     if (request.method === 'POST' && apiPath === '/api/analyze-stream') {
       const body = await getBody(request);
       const stream = openSse(response);
+      const signal = clientDisconnectSignal(request, response);
       const heartbeat = setInterval(() => stream.send('heartbeat', { at: Date.now() }), 15_000);
       stream.send('ready', { message: 'Đã mở luồng cập nhật tiến độ.' });
       try {
         const result = await analyzeProductUrl(body.url, {
-          onProgress: (progress) => stream.send('progress', progress)
+          onProgress: (progress) => stream.send('progress', progress),
+          signal
         });
         stream.send('result', result);
       } catch (error) {
@@ -85,6 +87,13 @@ const server = createServer(async (request, response) => {
       return sendJson(response, 200, { updated: true, pool });
     }
 
+    if (apiPath.startsWith('/api/')) {
+      const knownPath = ['/api/analyze', '/api/analyze-stream', '/api/chat', '/api/apify-config', '/api/gemini-config'].includes(apiPath);
+      return sendJson(response, knownPath ? 405 : 404, {
+        error: knownPath ? 'Phương thức không được hỗ trợ.' : 'API không tồn tại.'
+      });
+    }
+
     if (request.method !== 'GET' && request.method !== 'HEAD') {
       return sendJson(response, 405, { error: 'Phương thức không được hỗ trợ.' });
     }
@@ -97,7 +106,7 @@ const server = createServer(async (request, response) => {
     response.writeHead(200, { 'content-type': mimeTypes[extname(filePath)] || 'application/octet-stream' });
     response.end(request.method === 'HEAD' ? undefined : content);
   } catch (error) {
-    const status = error instanceof SyntaxError ? 400 : error?.statusCode || 500;
+    const status = error instanceof SyntaxError ? 400 : error?.code === 'ENOENT' ? 404 : error?.statusCode || 500;
     const message = error?.message || 'Có lỗi khi xử lý yêu cầu.';
     if (request.url?.startsWith('/api/')) return sendJson(response, status, { error: message });
     response.writeHead(status, { 'content-type': 'text/plain; charset=utf-8' });

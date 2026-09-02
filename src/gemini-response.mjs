@@ -51,6 +51,7 @@ function attemptSignal(existingSignal, timeoutMs) {
 
 function healthErrorType(error) {
   if (error?.name === 'AbortError' || /abort|timeout|timed out/i.test(String(error?.message || ''))) return 'timeout';
+  if (error?.code === 'GEMINI_INVALID_RESPONSE') return 'invalid-response';
   if (error?.quotaExhausted) return error.quotaScope === 'day' ? 'daily-quota' : 'rate-limit';
   if (Number(error?.statusCode) >= 500) return 'provider-overload';
   return 'request-error';
@@ -76,7 +77,10 @@ export async function geminiHttpError(response, context = 'Gemini') {
     // Không đưa response thô vào log vì có thể chứa dữ liệu người dùng.
   }
   const httpStatus = Number(response?.status) || 'không rõ';
-  const rawQuotaDetails = JSON.stringify(payload?.error?.details || []);
+  const rawQuotaDetails = JSON.stringify({
+    message: payload?.error?.message || '',
+    details: payload?.error?.details || []
+  });
   const error = new Error(`${context} trả về HTTP ${httpStatus}${detail ? `: ${detail}` : ''}`);
   error.statusCode = Number(response?.status) || null;
   error.geminiStatus = truncate(payload?.error?.status, 80) || null;
@@ -104,7 +108,8 @@ export async function requestGeminiWithFallback({
   attemptTimeoutMs = GEMINI_ATTEMPT_TIMEOUT_MS,
   deadlineAt,
   retryOnTimeout = true,
-  routeContext
+  routeContext,
+  validateResponse
 }) {
   const requestStartedAt = Date.now();
   const models = geminiModelChain();
@@ -142,7 +147,11 @@ export async function requestGeminiWithFallback({
     const routeId = geminiRouteId(credential.id, GEMINI_MODEL);
     const state = health[routeId] || {};
     if (geminiRoutePressure(state, GEMINI_MODEL, Date.now()).dayRequests < configuredGeminiLimit(GEMINI_MODEL).rpd) continue;
-    await markModelExhaustedImpl(credential, GEMINI_MODEL, { fetchImpl: redisFetchImpl });
+    try {
+      await markModelExhaustedImpl(credential, GEMINI_MODEL, { fetchImpl: redisFetchImpl });
+    } catch {
+      // Không chọn lại route đã đủ RPD dù đồng bộ trạng thái used tạm thời thất bại.
+    }
     credential.exhaustedModels = [GEMINI_MODEL];
   }
   for (let attemptIndex = 0; attemptIndex < maxAttempts; attemptIndex += 1) {
@@ -203,9 +212,31 @@ export async function requestGeminiWithFallback({
 
     let attempt;
     let request;
+    let reservedTokens = 0;
+    let responseTokens = 0;
     try {
-      await beginRouteImpl(routeId, { fetchImpl: redisFetchImpl, nowMs });
       request = buildRequest(model, credential.apiKey);
+      const bodyLength = typeof request?.body === 'string' ? request.body.length : 0;
+      let maxOutputTokens = 0;
+      try { maxOutputTokens = Number(JSON.parse(request?.body || '{}')?.generationConfig?.maxOutputTokens) || 0; } catch {}
+      reservedTokens = Math.max(1, Math.ceil(bodyLength / 4) + maxOutputTokens);
+      const reservation = await beginRouteImpl(routeId, {
+        fetchImpl: redisFetchImpl,
+        nowMs,
+        model,
+        reservedTokens
+      });
+      if (reservation?.ok === false) {
+        if (reservation.state) health[routeId] = reservation.state;
+        const error = new Error(`${context} tạm bỏ qua API key đang chạm ${reservation.code || 'giới hạn quota'}.`);
+        error.code = reservation.code || 'GEMINI_ROUTE_UNAVAILABLE';
+        error.model = model;
+        error.credentialId = credential.id;
+        lastError = error;
+        sharedFailedRoutes.add(routeId);
+        continue;
+      }
+      if (reservation?.state) health[routeId] = reservation.state;
       const remainingMs = Number.isFinite(Number(deadlineAt)) ? Number(deadlineAt) - Date.now() : timeoutMs;
       attempt = await fetchGemini(
         fetchImpl,
@@ -218,27 +249,52 @@ export async function requestGeminiWithFallback({
       sharedBusyRoutes.delete(routeId);
     }
     if (attempt.response) {
-      const tokens = await responseTokenCount(attempt.response);
-      const state = await finishRouteImpl(routeId, {
-        ok: true, statusCode: Number(attempt.response.status) || 200, latencyMs: attempt.latencyMs, tokens
-      }, { fetchImpl: redisFetchImpl });
-      if (state) health[routeId] = state;
-      const completedDayRequests = Number(state?.dayRequests ?? (geminiRoutePressure(selected.state, model, nowMs).dayRequests + 1));
-      if (credential.id && completedDayRequests >= configuredGeminiLimit(model).rpd) {
-        await markModelExhaustedImpl(credential, model, { fetchImpl: redisFetchImpl });
-        credential.exhaustedModels = [model];
+      responseTokens = await responseTokenCount(attempt.response);
+      let validatedValue;
+      if (typeof validateResponse === 'function') {
+        try {
+          const validationResponse = typeof attempt.response.clone === 'function' ? attempt.response.clone() : attempt.response;
+          validatedValue = await validateResponse(validationResponse);
+        } catch (cause) {
+          const error = new Error(`${context} trả dữ liệu không hợp lệ: ${truncate(cause?.message || cause || 'sai schema')}`);
+          error.code = 'GEMINI_INVALID_RESPONSE';
+          error.statusCode = 200;
+          error.model = model;
+          error.transient = true;
+          attempt = { error, latencyMs: attempt.latencyMs };
+        }
       }
-      return {
-        response: attempt.response,
-        model,
-        attemptedModels,
-        credentialId: credential.id,
-        attemptedCredentialIds,
-        attemptedRouteIds: [...attemptedRoutes],
-        attempts: attemptIndex + 1,
-        finalAttemptLatencyMs: attempt.latencyMs,
-        totalDurationMs: Date.now() - requestStartedAt
-      };
+      if (attempt.response) {
+        const state = await finishRouteImpl(routeId, {
+          ok: true,
+          statusCode: Number(attempt.response.status) || 200,
+          latencyMs: attempt.latencyMs,
+          tokens: responseTokens,
+          reservedTokens
+        }, { fetchImpl: redisFetchImpl });
+        if (state) health[routeId] = state;
+        const completedDayRequests = Number(state?.dayRequests ?? (geminiRoutePressure(selected.state, model, nowMs).dayRequests + 1));
+        if (credential.id && completedDayRequests >= configuredGeminiLimit(model).rpd) {
+          try {
+            await markModelExhaustedImpl(credential, model, { fetchImpl: redisFetchImpl });
+          } catch {
+            // Request hợp lệ vẫn phải được trả về; health đã chặn route tại RPD.
+          }
+          credential.exhaustedModels = [model];
+        }
+        return {
+          response: attempt.response,
+          model,
+          attemptedModels,
+          credentialId: credential.id,
+          attemptedCredentialIds,
+          attemptedRouteIds: [...attemptedRoutes],
+          attempts: attemptIndex + 1,
+          finalAttemptLatencyMs: attempt.latencyMs,
+          totalDurationMs: Date.now() - requestStartedAt,
+          value: validatedValue
+        };
+      }
     }
 
     lastError = attempt.error;
@@ -253,7 +309,9 @@ export async function requestGeminiWithFallback({
       ok: false,
       statusCode: lastError.statusCode,
       latencyMs: attempt.latencyMs,
-      errorType: healthErrorType(lastError)
+      errorType: healthErrorType(lastError),
+      reservedTokens,
+      tokens: responseTokens
     }, { fetchImpl: redisFetchImpl });
     if (state) health[routeId] = state;
 
@@ -262,10 +320,16 @@ export async function requestGeminiWithFallback({
 
     const completedDayRequests = Number(state?.dayRequests ?? (geminiRoutePressure(selected.state, model, nowMs).dayRequests + 1));
     const dailyLimitReached = completedDayRequests >= configuredGeminiLimit(model).rpd;
-    if (credential.id && (dailyLimitReached || (lastError.quotaExhausted && lastError.quotaScope === 'day'))) {
-      await markModelExhaustedImpl(credential, model, { fetchImpl: redisFetchImpl });
+    const permanentlyUnavailable = [401, 403].includes(Number(lastError.statusCode));
+    if (credential.id && (dailyLimitReached || permanentlyUnavailable || (lastError.quotaExhausted && lastError.quotaScope === 'day'))) {
+      try {
+        await markModelExhaustedImpl(credential, model, { fetchImpl: redisFetchImpl });
+      } catch {
+        // Health state đã cooldown route; lỗi cập nhật danh sách used không được chặn retry key khác.
+      }
       credential.exhaustedModels = [model];
     }
+    if (request?.signal?.aborted) throw lastError;
     if (timedOut && !retryOnTimeout) throw lastError;
     // Mọi lỗi của route hiện tại đều đưa key vào pending/used và chuyển ngay
     // sang key khác. attemptedRoutes đảm bảo không gọi lại cùng key trong request này.

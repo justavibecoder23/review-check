@@ -193,11 +193,18 @@ ${conversation}
 `.trim();
 
   try {
-    const { response } = await requestGeminiWithFallback({
+    const geminiResult = await requestGeminiWithFallback({
       fetchImpl: options.fetchImpl || fetch,
       apiKey,
       primaryModel: model,
       context: 'Gemini chatbot',
+      validateResponse: async (response) => {
+        const payload = await response.json();
+        const parsed = parseGeminiJson(payload, 'Gemini chatbot');
+        if (typeof parsed?.supported !== 'boolean') throw new Error('Thiếu trường supported.');
+        if (parsed.supported && typeof parsed.answer !== 'string') throw new Error('Thiếu nội dung answer.');
+        return parsed;
+      },
       buildRequest: (selectedModel, selectedApiKey) => ({
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-goog-api-key': selectedApiKey },
@@ -213,8 +220,7 @@ ${conversation}
         signal: AbortSignal.timeout(10_000)
       })
     });
-    const payload = await response.json();
-    const parsed = parseGeminiJson(payload, 'Gemini chatbot');
+    const parsed = geminiResult.value;
     if (parsed?.supported !== true) return { answer: OUT_OF_SCOPE_REPLY, engine: 'gemini' };
     const answer = String(parsed.answer || '').trim().slice(0, 1200);
     return { answer: answer || OUT_OF_SCOPE_REPLY, engine: 'gemini' };

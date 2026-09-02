@@ -12,7 +12,7 @@ test('bộ lọc cuối loại review sai sản phẩm', () => {
   assert.match(result.reason, /sản phẩm khác/u);
 });
 
-test('bộ lọc cuối giữ nhận xét chất lượng hữu ích dù ngắn và Layer 2 không phản hồi', () => {
+test('bộ lọc cuối không đưa review chưa được Layer 2 kiểm định vào TrustScore', () => {
   const result = shouldKeep({
     rating: 5,
     text: 'Dây mềm và dai, đầu sạc chắc chắn',
@@ -24,7 +24,8 @@ test('bộ lọc cuối giữ nhận xét chất lượng hữu ích dù ngắn 
       defect_categories: []
     }
   });
-  assert.equal(result.keep, true);
+  assert.equal(result.keep, false);
+  assert.match(result.reason, /Chưa đủ dữ liệu để kiểm định/);
 });
 
 test('bộ lọc cuối trả lý do riêng cho rác và review chỉ nói giao hàng', () => {

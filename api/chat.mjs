@@ -1,5 +1,4 @@
-import { analyzeProductUrl } from '../src/analyze.mjs';
-import { clientDisconnectSignal } from '../src/sse.mjs';
+import { answerWebsiteQuestion } from '../src/site-chatbot.mjs';
 
 export default async function handler(request, response) {
   if (request.method !== 'POST') {
@@ -9,14 +8,11 @@ export default async function handler(request, response) {
 
   try {
     const body = typeof request.body === 'string' ? JSON.parse(request.body || '{}') : (request.body || {});
-    const result = await analyzeProductUrl(body.url, { signal: clientDisconnectSignal(request, response) });
+    const result = await answerWebsiteQuestion(body.messages);
     return response.status(200).json(result);
   } catch (error) {
     return response.status(error?.statusCode || 500).json({
-      error: error?.message || 'Có lỗi khi phân tích sản phẩm.',
-      ...(error?.code ? { code: error.code } : {}),
-      ...(error?.details ? { details: error.details } : {})
+      error: error?.message || 'Có lỗi khi xử lý câu hỏi.'
     });
   }
 }
-

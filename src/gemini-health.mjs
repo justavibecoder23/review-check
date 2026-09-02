@@ -12,17 +12,52 @@ const BEGIN_ROUTE_SCRIPT = String.raw`
 -- GEMINI_HEALTH_BEGIN
 local raw = redis.call('HGET', KEYS[1], ARGV[1])
 local state = raw and cjson.decode(raw) or {}
+local nowMs = tonumber(ARGV[2]) or 0
+local rpm = math.max(0, tonumber(ARGV[5]) or 0)
+local tpm = math.max(0, tonumber(ARGV[6]) or 0)
+local rpd = math.max(0, tonumber(ARGV[7]) or 0)
+local reservedTokens = math.max(0, tonumber(ARGV[8]) or 0)
 if state.day ~= ARGV[4] then
   state.day = ARGV[4]
   state.dayRequests = 0
 end
-if tonumber(state.lastStartedAtMs or 0) < tonumber(ARGV[2]) - 120000 then state.inFlight = 0 end
+if tonumber(state.lastStartedAtMs or 0) < nowMs - 120000 then
+  state.inFlight = 0
+  state.reservedTokens = 0
+end
+local starts = {}
+for _, startedAt in ipairs(state.starts or {}) do
+  if tonumber(startedAt or 0) >= nowMs - ${MINUTE_MS} then table.insert(starts, tonumber(startedAt)) end
+end
+local recentTokens = 0
+for _, event in ipairs(state.events or {}) do
+  if tonumber(event.at or 0) >= nowMs - ${MINUTE_MS} then
+    recentTokens = recentTokens + math.max(0, tonumber(event.tokens) or 0)
+  end
+end
+local currentReservedTokens = math.max(0, tonumber(state.reservedTokens or 0))
+if tonumber(state.cooldownUntilMs or 0) > nowMs then
+  return cjson.encode({ok=false, code='COOLDOWN', state=state})
+end
+if rpm > 0 and #starts >= rpm then
+  return cjson.encode({ok=false, code='RPM_LIMIT', state=state})
+end
+if tpm > 0 and recentTokens + currentReservedTokens + reservedTokens > tpm then
+  return cjson.encode({ok=false, code='TPM_LIMIT', state=state})
+end
+if rpd > 0 and tonumber(state.dayRequests or 0) >= rpd then
+  return cjson.encode({ok=false, code='RPD_LIMIT', state=state})
+end
+table.insert(starts, nowMs)
+while #starts > 30 do table.remove(starts, 1) end
+state.starts = starts
 state.inFlight = math.max(0, tonumber(state.inFlight or 0)) + 1
+state.reservedTokens = currentReservedTokens + reservedTokens
 state.dayRequests = math.max(0, tonumber(state.dayRequests or 0)) + 1
 state.lastStartedAt = ARGV[3]
-state.lastStartedAtMs = tonumber(ARGV[2])
+state.lastStartedAtMs = nowMs
 redis.call('HSET', KEYS[1], ARGV[1], cjson.encode(state))
-return cjson.encode(state)
+return cjson.encode({ok=true, state=state})
 `;
 
 const FINISH_ROUTE_SCRIPT = String.raw`
@@ -38,6 +73,7 @@ if state.day ~= ARGV[4] then
   state.dayRequests = 0
 end
 state.inFlight = math.max(0, tonumber(state.inFlight or 0) - 1)
+state.reservedTokens = math.max(0, tonumber(state.reservedTokens or 0) - math.max(0, tonumber(ARGV[10]) or 0))
 local previousLatency = tonumber(state.ewmaLatencyMs or 0)
 if previousLatency > 0 then
   state.ewmaLatencyMs = math.floor(previousLatency * 0.75 + latencyMs * 0.25 + 0.5)
@@ -109,12 +145,19 @@ function normalizeState(state, nowMs) {
   next.events = Array.isArray(next.events)
     ? next.events.filter((event) => number(event.at) >= nowMs - MAX_EVENT_AGE_MS).slice(-30)
     : [];
+  next.starts = Array.isArray(next.starts)
+    ? next.starts.map((value) => number(value)).filter((value) => value >= nowMs - MINUTE_MS).slice(-30)
+    : [];
   if (next.day !== pacificDay(nowMs)) {
     next.day = pacificDay(nowMs);
     next.dayRequests = 0;
   }
   next.inFlight = Math.max(0, number(next.inFlight));
-  if (number(next.lastStartedAtMs) < nowMs - 120_000) next.inFlight = 0;
+  next.reservedTokens = Math.max(0, number(next.reservedTokens));
+  if (number(next.lastStartedAtMs) < nowMs - 120_000) {
+    next.inFlight = 0;
+    next.reservedTokens = 0;
+  }
   next.dayRequests = Math.max(0, number(next.dayRequests));
   next.consecutiveFailures = Math.max(0, number(next.consecutiveFailures));
   next.cooldownUntilMs = Math.max(0, number(next.cooldownUntilMs));
@@ -124,13 +167,14 @@ function normalizeState(state, nowMs) {
 export function geminiRoutePressure(state, model, nowMs = Date.now()) {
   const current = normalizeState(state, nowMs);
   const recent = current.events.filter((event) => number(event.at) >= nowMs - MINUTE_MS);
+  const recentStarts = current.starts.length ? current.starts : recent.map((event) => number(event.at));
   const failures = recent.filter((event) => !event.ok).length;
-  const recentTokens = recent.reduce((sum, event) => sum + Math.max(0, number(event.tokens)), 0);
+  const recentTokens = recent.reduce((sum, event) => sum + Math.max(0, number(event.tokens)), 0) + current.reservedTokens;
   const limits = configuredGeminiLimit(model);
-  const rpmRatio = limits.rpm ? recent.length / limits.rpm : recent.length / 10;
+  const rpmRatio = limits.rpm ? recentStarts.length / limits.rpm : recentStarts.length / 10;
   const tpmRatio = limits.tpm ? recentTokens / limits.tpm : 0;
   const rpdRatio = limits.rpd ? current.dayRequests / limits.rpd : 0;
-  const minuteLimited = Boolean((limits.rpm && recent.length >= limits.rpm)
+  const minuteLimited = Boolean((limits.rpm && recentStarts.length >= limits.rpm)
     || (limits.tpm && recentTokens >= limits.tpm));
   const dailyLimited = Boolean(limits.rpd && current.dayRequests >= limits.rpd);
   const utilization = Math.max(rpmRatio, tpmRatio, rpdRatio);
@@ -139,7 +183,7 @@ export function geminiRoutePressure(state, model, nowMs = Date.now()) {
   const failurePressure = recent.length ? failures / recent.length : 0;
   return {
     cooldown: current.cooldownUntilMs > nowMs,
-    recentRequests: recent.length,
+    recentRequests: recentStarts.length,
     recentTokens,
     dayRequests: current.dayRequests,
     limits,
@@ -158,34 +202,28 @@ export function geminiRouteScore(state, model, nowMs = Date.now()) {
 
 export async function getGeminiHealthSnapshot(options = {}) {
   if (!isRedisConfigured()) return {};
-  try {
-    const routeIds = [...new Set((options.routeIds || []).map(String).filter(Boolean))];
-    if (routeIds.length) {
-      const values = await redisCommand(['HMGET', GEMINI_HEALTH_KEY, ...routeIds], options);
-      return Object.fromEntries(routeIds.map((routeId, index) => [routeId, parseJson(values?.[index], {})]));
-    }
-    const raw = await redisCommand(['HGETALL', GEMINI_HEALTH_KEY], options);
-    const pairs = Array.isArray(raw) ? raw : Object.entries(raw || {}).flat();
-    const result = {};
-    for (let index = 0; index < pairs.length; index += 2) result[pairs[index]] = parseJson(pairs[index + 1], {});
-    return result;
-  } catch {
-    return {};
+  const routeIds = [...new Set((options.routeIds || []).map(String).filter(Boolean))];
+  if (routeIds.length) {
+    const values = await redisCommand(['HMGET', GEMINI_HEALTH_KEY, ...routeIds], options);
+    return Object.fromEntries(routeIds.map((routeId, index) => [routeId, parseJson(values?.[index], {})]));
   }
+  const raw = await redisCommand(['HGETALL', GEMINI_HEALTH_KEY], options);
+  const pairs = Array.isArray(raw) ? raw : Object.entries(raw || {}).flat();
+  const result = {};
+  for (let index = 0; index < pairs.length; index += 2) result[pairs[index]] = parseJson(pairs[index + 1], {});
+  return result;
 }
 
 export async function beginGeminiRoute(routeId, options = {}) {
   if (!isRedisConfigured()) return null;
-  try {
-    const nowMs = number(options.nowMs, Date.now());
-    const raw = await redisCommand([
-      'EVAL', BEGIN_ROUTE_SCRIPT, '1', GEMINI_HEALTH_KEY,
-      routeId, String(nowMs), new Date(nowMs).toISOString(), pacificDay(nowMs)
-    ], options);
-    return parseJson(raw, null);
-  } catch {
-    return null;
-  }
+  const nowMs = number(options.nowMs, Date.now());
+  const limits = configuredGeminiLimit(options.model);
+  const raw = await redisCommand([
+    'EVAL', BEGIN_ROUTE_SCRIPT, '1', GEMINI_HEALTH_KEY,
+    routeId, String(nowMs), new Date(nowMs).toISOString(), pacificDay(nowMs),
+    String(limits.rpm), String(limits.tpm), String(limits.rpd), String(Math.max(0, number(options.reservedTokens)))
+  ], options);
+  return parseJson(raw, null);
 }
 
 export async function finishGeminiRoute(routeId, result, options = {}) {
@@ -199,7 +237,7 @@ export async function finishGeminiRoute(routeId, result, options = {}) {
       'EVAL', FINISH_ROUTE_SCRIPT, '1', GEMINI_HEALTH_KEY,
       routeId, String(nowMs), new Date(nowMs).toISOString(), pacificDay(nowMs), ok ? '1' : '0',
       String(statusCode || 0), String(latencyMs), String(result?.errorType || 'unknown').slice(0, 80),
-      String(Math.max(0, number(result?.tokens)))
+      String(Math.max(0, number(result?.tokens))), String(Math.max(0, number(result?.reservedTokens)))
     ], options);
     return parseJson(raw, null);
   } catch {
