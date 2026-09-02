@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "version": "2.2.0",
-  "description": "Labeling functions cho review tiếng Việt. Rule có thể abstain; nhãn cuối phải giữ provenance và được Layer 2 kiểm tra khi mơ hồ.",
+  "version": "2.3.0",
+  "description": "Labeling functions cho review tiếng Việt. Relevance và giá trị thông tin là hai trục riêng; Layer 1 chỉ tạo ứng viên off-topic và Layer 2 phải xác nhận bằng bằng chứng nguyên văn.",
   "policy": {
     "allowed_defect_categories": ["chat-lieu", "kich-co", "dung-mo-ta", "giao-hang", "su-dung"],
     "vague_only_for_ratings": [1, 2],
@@ -63,7 +63,7 @@
     "negation_filter": {
       "description": "Chỉ phủ định keyword trong cửa sổ gần; không phủ định các cụm lỗi vốn bắt đầu bằng 'không' như 'không hoạt động'.",
       "window_characters": 28,
-      "negation_words": ["khong", "k", "ko", "chang", "cha", "dau co"],
+      "negation_words": ["khong", "k", "ko", "chang", "cha", "dau co", "do", "it", "han che", "chong"],
       "bridge_words": ["he", "co", "bi", "qua", "thay", "con"]
     },
     "defect_categories": {

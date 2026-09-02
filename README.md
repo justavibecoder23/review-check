@@ -145,11 +145,11 @@ Các baseline `p0` mặc định là ví dụ trong tài liệu v3.1 nên giao d
 
 Mỗi lượt thu thập review chạy theo thứ tự:
 
-1. `src/review-labeler.mjs` áp dụng labeling functions trong `src/layer1_rules.json`. Rule có thể gắn `seeding`, `low_value`, `vague`, nhiều nhóm lỗi hoặc đánh dấu mơ hồ để Layer 2 kiểm tra.
-2. Nếu có `GEMINI_API_KEY`, Layer 2 kiểm tra review theo batch bằng schema trong `src/sample_ai_payload.json`. LLM chỉ được `confirm`, `correct` hoặc `abstain`; mọi lần sửa nhãn phải kèm trích dẫn nguyên văn. Kết quả sai ID, category lạ, quote không phải chuỗi con nguyên văn hoặc vi phạm bất biến sẽ bị backend từ chối.
+1. `src/review-labeler.mjs` áp dụng labeling functions trong `src/layer1_rules.json`. Rule tách riêng `relevance` (mức liên quan) và `information_value` (giá trị thông tin), đồng thời có các nhãn độc lập cho `seeding`, `low_value`, `vague` và nhóm lỗi. Layer 1 chỉ tạo ứng viên off-topic, không tự loại review dựa trên từ khóa mơ hồ.
+2. Nếu có `GEMINI_API_KEY`, Layer 2 kiểm tra các trường hợp chưa chắc chắn theo batch bằng schema trong `src/sample_ai_payload.json`. LLM chỉ được `confirm`, `correct` hoặc `abstain`; mọi lần sửa nhãn phải kèm trích dẫn nguyên văn. Nhãn off-topic còn phải trích đúng đoạn nêu một sản phẩm khác; kết quả sai ID, category lạ, quote không nguyên văn hoặc vi phạm bất biến sẽ bị backend từ chối.
 3. TrustScore v3.1 đọc nhãn cuối cùng. Nếu Layer 2 lỗi hoặc không có khóa, hệ thống vẫn chạy bằng Layer 1 và ghi rõ provenance.
 
-`LABELER_LLM_MODE=all` kiểm tra toàn bộ review; `uncertain` chỉ gửi các trường hợp xung đột/độ tin cậy thấp; `off` tắt Layer 2.
+`LABELER_LLM_MODE=uncertain` là mặc định tiết kiệm: chỉ gửi ứng viên off-topic, trường hợp xung đột hoặc độ tin cậy thấp; `all` dùng để audit toàn bộ review; `off` tắt Layer 2.
 
 Layer 2 chia tối đa 20 review mỗi batch và chạy các batch song song. Nếu Gemini
 timeout, lỗi mạng hoặc HTTP 5xx, mỗi batch thử model kế tiếp; sau hai model vẫn

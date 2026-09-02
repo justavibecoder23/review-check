@@ -27,14 +27,65 @@ test('Layer 1 loại lời khen chỉ nói giao hàng và đóng gói', () => {
   assert.equal(label.reason_codes.some((code) => ['LOW_VALUE_REPETITION', 'LOW_VALUE_LOGISTICS_ONLY'].includes(code)), true);
 });
 
-test('Layer 1 nhận diện review mô tả sai nhóm sản phẩm khi có title TikTok', () => {
+test('Layer 1 chỉ tạo ứng viên sai nhóm sản phẩm và bắt buộc chuyển Layer 2', () => {
   const label = labelReviewLayer1(
     { rating: 5, text: 'Dao cạo râu ok, sắc, bền và giá hạt dẻ' },
     0,
     { title: 'Bình nước Lucky 1000ml hình chó và mèo giữ nhiệt 4–6 tiếng' }
   );
-  assert.equal(label.is_off_topic, true);
-  assert.equal(label.reason_codes.includes('OFF_TOPIC_PRODUCT_MISMATCH'), true);
+  assert.equal(label.is_off_topic, false);
+  assert.equal(label.relevance, 'needs_review');
+  assert.equal(label.requires_llm, true);
+  assert.equal(label.reason_codes.includes('OFF_TOPIC_CANDIDATE'), true);
+});
+
+test('Layer 1 không nhầm từ đẹp thành dép và giữ review cáp sạc hữu ích', () => {
+  const product = { title: 'Cáp sạc nhanh Baseus bọc dù đầu cắm Type-C' };
+  const samples = [
+    'Dây sạc Baseus dùng rất tốt, sạc nhanh, bền, đầu cắm chắc chắn không lỏng lẻo. Thiết kế đẹp, dày dặn.',
+    'DÂY sạc nhanh thật xịn sò, cắm vào nhận điện ngay, sạc ổn định không nóng máy. Màu sắc đẹp và chắc chắn.',
+    'Đúng với mô tả: Xanh lam. Chất lượng sản phẩm: Rất tốt. Cáp đẹp nha, mềm, màu bắt mắt. Chất liệu dùng đỡ bị xù lông dây bọc dù.',
+    'Màu xanh nhạt siêu đẹp. Dây mềm và dai, dễ cuốn. Đầu sạc chắc chắn.',
+    'Sản phẩm dây sạc màu tím Huế, dây mềm mại, sạc nhanh, chất lượng tốt và bảo hành 2 năm.'
+  ];
+  for (const text of samples) {
+    const label = labelReviewLayer1({ rating: 5, text }, 0, product);
+    assert.equal(label.is_off_topic, false, text);
+    assert.notEqual(label.relevance, 'needs_review', text);
+    assert.equal(label.is_low_value, false, text);
+    assert.ok(['medium', 'high'].includes(label.information_value), text);
+  }
+});
+
+test('Layer 1 giữ review hộp đựng đồ có nhận xét chất lượng dù không lặp tên đầy đủ', () => {
+  const product = { title: 'COMBO 2 Hộp vải đựng đồ đa năng' };
+  const samples = [
+    'Dung tích: vừa, to Chất liệu: vải Độ bền: 7/10 Đặc điểm: đẹp, nói chung là dùng được ổn.',
+    'Hài lòng quá rẻ đẹp đựng đồ tiện lợi gọn hàng',
+    'Hàng chất lượng y hình chất liệu tốt, đẹp, giao hàng hơi lâu nha.'
+  ];
+  for (const text of samples) {
+    const label = labelReviewLayer1({ rating: 5, text }, 0, product);
+    assert.equal(label.is_off_topic, false, text);
+    assert.equal(label.is_low_value, false, text);
+    assert.ok(['medium', 'high'].includes(label.information_value), text);
+  }
+});
+
+test('chế độ mặc định chỉ gửi trường hợp chưa chắc chắn sang Gemini', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  try {
+    const result = await labelReviewsTwoLayer([
+      { rating: 5, text: 'Dây mềm và dai, đầu sạc chắc chắn, sạc nhanh ổn định.' },
+      { rating: 1, text: 'Pin yếu, sạc không vào.' },
+      { rating: 5, text: 'Tốt' },
+      { rating: 4, text: 'Mình đã sử dụng một thời gian và cảm nhận nhìn chung ổn.' }
+    ], { product: { title: 'Cáp sạc nhanh Baseus' } });
+    assert.equal(result.stats.layer2Requested, 1);
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+  }
 });
 
 test('rule nhận xu tạo nhãn seeding có evidence', () => {
@@ -67,6 +118,16 @@ test('phủ định cục bộ ngăn bắt nhầm keyword đơn', () => {
 test('chuẩn hóa không được biến từ đồng âm khác dấu thành lỗi', () => {
   const label = labelReviewLayer1({ rating: 5, text: 'Lớp sơn đẹp, màu đúng như hình.' });
   assert.equal(label.has_defect, false);
+});
+
+test('chuẩn hóa xử lý đúng chữ Đ viết hoa khi nhận diện bằng chứng sản phẩm', () => {
+  const label = labelReviewLayer1(
+    { rating: 5, text: 'ĐẦU SẠC chắc chắn, DÂY SẠC mềm và sạc nhanh.' },
+    0,
+    { title: 'Cáp sạc nhanh Baseus' }
+  );
+  assert.equal(label.relevance, 'on_topic');
+  assert.equal(label.is_off_topic, false);
 });
 
 test('bắt được cụm lỗi có ngữ cảnh nhưng không dùng keyword đơn quá rộng', () => {
@@ -145,6 +206,7 @@ test('Layer 2 lỗi thì pipeline fail-safe về Layer 1', async () => {
   process.env.GEMINI_API_KEY = 'test-key';
   try {
     const result = await labelReviewsTwoLayer([{ rating: 5, text: 'Tốt' }], {
+      mode: 'all',
       fetchImpl: async () => ({ ok: false, status: 503 })
     });
     assert.equal(result.reviews[0].labels.reviewed_by, 'layer1');
@@ -166,6 +228,7 @@ test('Layer 2 phải abstain khi bằng chứng lỗi không phải trích dẫn
     const result = await labelReviewsTwoLayer([
       { rating: 1, text: 'Pin yếu, sạc không vào.', verified: true }
     ], {
+      mode: 'all',
       fetchImpl: async () => ({
         ok: true,
         async json() {
@@ -215,6 +278,69 @@ test('Layer 2 không được mở khóa review logistics-only bằng defect suy
     assert.equal(result.reviews[0].labels.is_low_value, true);
     assert.equal(result.reviews[0].labels.has_defect, false);
     assert.deepEqual(result.reviews[0].labels.defect_categories, []);
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
+test('Layer 2 xác nhận off-topic chỉ khi trích dẫn nguyên văn nêu sản phẩm khác', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  try {
+    const text = 'Dao cạo râu ok, sắc, bền và giá hạt dẻ';
+    const result = await labelReviewsTwoLayer([{ rating: 5, text }], {
+      product: { title: 'Bình nước Lucky 1000ml giữ nhiệt' },
+      fetchImpl: async () => ({
+        ok: true,
+        async json() {
+          return {
+            candidates: [{ content: { parts: [{ text: JSON.stringify({ labels: [{
+              id: 'r0001', decision: 'correct', is_seeding: false, is_low_value: false,
+              is_vague: false, is_off_topic: true, relevance: 'off_topic',
+              information_value: 'medium', has_defect: false, defect_categories: [],
+              defect_quote: null, evidence_quote: 'Dao cạo râu', confidence: 0.96,
+              reason_code: 'OTHER_PRODUCT_EXPLICIT'
+            }] }) }] } }]
+          };
+        }
+      })
+    });
+    assert.equal(result.reviews[0].labels.is_off_topic, true);
+    assert.equal(result.reviews[0].labels.relevance, 'off_topic');
+    assert.equal(result.reviews[0].labels.reviewed_by, 'gemini-layer2');
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
+test('Layer 2 không được loại review đúng sản phẩm bằng trích dẫn chung chung', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  try {
+    const text = 'Dây sạc Baseus dùng tốt, đầu cắm chắc chắn và thiết kế đẹp';
+    const result = await labelReviewsTwoLayer([{ rating: 5, text }], {
+      mode: 'all',
+      product: { title: 'Cáp sạc nhanh Baseus bọc dù' },
+      fetchImpl: async () => ({
+        ok: true,
+        async json() {
+          return {
+            candidates: [{ content: { parts: [{ text: JSON.stringify({ labels: [{
+              id: 'r0001', decision: 'correct', is_seeding: false, is_low_value: false,
+              is_vague: false, is_off_topic: true, relevance: 'off_topic',
+              information_value: 'high', has_defect: false, defect_categories: [],
+              defect_quote: null, evidence_quote: 'thiết kế đẹp', confidence: 0.99,
+              reason_code: 'WRONG_OFF_TOPIC'
+            }] }) }] } }]
+          };
+        }
+      })
+    });
+    assert.equal(result.reviews[0].labels.is_off_topic, false);
+    assert.equal(result.reviews[0].labels.reviewed_by, 'layer1');
+    assert.equal(result.reviews[0].labeling.layer2.reason_code, 'OFF_TOPIC_EVIDENCE_DOES_NOT_NAME_OTHER_PRODUCT');
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
     else delete process.env.GEMINI_API_KEY;

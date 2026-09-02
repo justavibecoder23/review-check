@@ -9,6 +9,15 @@ import { assertEnoughReviews } from './analysis-eligibility.mjs';
 const issueDefinitions = ISSUE_DEFINITIONS.map(({ id, label, words }) => ({ id, label, words }));
 const lowValuePatterns = [/^ok+([.! ]*)$/i, /tốt([.! ]*)$/i, /^đẹp([.! ]*)$/i, /^5\s*sao/i, /chưa.{0,12}(dùng|thử)/i];
 
+const exclusionReasonByCode = Object.freeze({
+  LOW_VALUE_GIBBERISH: 'Nội dung là chuỗi ký tự ngẫu nhiên hoặc không có nghĩa',
+  LOW_VALUE_LOGISTICS_ONLY: 'Chỉ đề cập giao hàng hoặc đóng gói, không đánh giá sản phẩm',
+  LOW_VALUE_REPETITION: 'Nội dung lặp ký tự hoặc biểu tượng, không đủ làm bằng chứng',
+  LOW_VALUE_ICON_ONLY: 'Chỉ có biểu tượng, không có nhận xét về sản phẩm',
+  LOW_VALUE_GENERIC: 'Nhận xét quá chung chung, không có thông tin về sản phẩm',
+  LOW_VALUE_SHORT: 'Nội dung quá ngắn, không đủ làm bằng chứng'
+});
+
 function normalise(text = '') {
   return text.toLowerCase().replace(/\s+/g, ' ').trim();
 }
@@ -25,14 +34,28 @@ export function shouldKeep(review) {
   const generic = lowValuePatterns.some((pattern) => pattern.test(text));
   const signals = classifyReviewSignals(review);
   const seeding = signals.seeding;
-  if (review.labels?.is_off_topic) return { keep: false, reason: 'Nội dung không liên quan đến sản phẩm đang phân tích' };
+  const informationValue = review.labels?.information_value;
+  const hasUsefulEvidence = informationValue === 'medium' || informationValue === 'high';
+  const reasonCodes = [review.labels?.reason_code, ...(review.labeling?.layer1?.reason_codes || [])].filter(Boolean);
+  const lowValueReason = reasonCodes.map((code) => exclusionReasonByCode[code]).find(Boolean);
+  if (review.labels?.relevance === 'off_topic' || review.labels?.is_off_topic) {
+    return { keep: false, reason: 'Nội dung mô tả một sản phẩm khác với sản phẩm đang phân tích' };
+  }
   if (seeding && !hasIssue) return { keep: false, reason: 'Có dấu hiệu nhận xu / seeding' };
   if (seeding) return { keep: false, reason: 'Có bằng chứng seeding dù review có nhắc đến lỗi' };
   if (review.labels?.is_vague) return { keep: false, reason: 'Phản hồi tiêu cực mơ hồ, chưa nêu lỗi cụ thể' };
-  if (review.labels?.is_low_value && !hasIssue) return { keep: false, reason: 'Nội dung ít thông tin, không đủ làm bằng chứng' };
-  if (review.labels?.layer2_unavailable && !hasIssue) return { keep: false, reason: 'Chưa đủ dữ liệu để kiểm định nội dung review' };
-  if ((text.length < 14 || generic) && !hasIssue) return { keep: false, reason: 'Quá ngắn hoặc không có trải nghiệm cụ thể' };
-  if (review.rating >= 4 && !hasIssue && text.length < 38) return { keep: false, reason: 'Khen chung chung, ít thông tin kiểm chứng' };
+  if (review.labels?.is_low_value && !hasIssue) {
+    return { keep: false, reason: lowValueReason || 'Nội dung ít thông tin, không đủ làm bằng chứng' };
+  }
+  if (review.labels?.layer2_unavailable && !hasIssue && !hasUsefulEvidence) {
+    return { keep: false, reason: 'Chưa đủ dữ liệu để kiểm định nội dung review' };
+  }
+  if ((text.length < 14 || generic) && !hasIssue && !hasUsefulEvidence) {
+    return { keep: false, reason: 'Quá ngắn hoặc không có trải nghiệm cụ thể' };
+  }
+  if (review.rating >= 4 && !hasIssue && text.length < 38 && !hasUsefulEvidence) {
+    return { keep: false, reason: 'Khen chung chung, ít thông tin kiểm chứng' };
+  }
   return { keep: true, reason: null };
 }
 

@@ -14,7 +14,7 @@ export function normalizeVietnamese(value = '') {
   return String(value)
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
+    .replace(/[đĐ]/g, 'd')
     .toLowerCase()
     .replace(/\s+/g, ' ')
     .trim();
@@ -105,6 +105,8 @@ function gibberishSpam(text) {
 
 const logisticsCuePattern = /\b(?:giao|ship|van chuyen|dong goi|goi ky|goi ki|nhan hang|shop)\b/u;
 const productExperiencePattern = /\b(?:san pham|chat luong|chat lieu|dung|su dung|xai|mac|uong|giu nhiet|ben|sac|pin|mau|size|form|mui|vi|cong nang|hoat dong)\b/u;
+const meaningfulFeedbackPattern = /\b(?:chat luong|chat lieu|do ben|chac chan|mem mai|mem|dai|day dan|tien loi|gon|dung tich|dung do|sac nhanh|sac on dinh|khong nong|nhan dien|dung on|dung tot|rat tot|chat luong tot|san pham tot|hang tot|hoat dong tot|dung duoc|y hinh|dung mo ta|de cuon|bao hanh)\b/u;
+const concreteFeedbackPattern = /\b(?:khong|ko|k|bi|loi|hong|rach|bung|dut|roi|rot|bong|nong|yeu|cham|nhanh|ben|chac|mem|dai|mong|day|vai|nhua|kim loai|boc du|dau cam|bao hanh|\d+\s*(?:ngay|thang|nam|gio|phut|lan|\/10))\b/u;
 
 function logisticsOnlyReview(text) {
   if (!logisticsCuePattern.test(text) || productExperiencePattern.test(text)) return false;
@@ -115,28 +117,63 @@ function logisticsOnlyReview(text) {
   return stripped.split(/\s+/u).filter(Boolean).length <= 3;
 }
 
+// Chỉ dùng cụm từ có nghĩa sản phẩm rõ ràng. Không dùng từ đơn mơ hồ sau khi
+// bỏ dấu (ví dụ "đẹp" và "dép" đều thành "dep").
 const productFamilies = Object.freeze({
-  drinkware: ["binh nuoc", "binh giu nhiet", "ly giu nhiet", "ly nuoc", "coc nuoc", "chai nuoc"],
-  grooming: ["dao cao rau", "may cao rau", "cao rau"],
-  audio: ["tai nghe", "loa bluetooth", "headphone", "earphone"],
-  clothing: ["ao thun", "ao khoac", "quan jean", "quan ao", "vay dam"],
-  footwear: ["giay", "dep", "sandal"],
-  phoneAccessory: ["op lung", "kinh cuong luc", "cap sac", "sac du phong"]
+  drinkware: ['binh nuoc', 'binh giu nhiet', 'ly giu nhiet', 'ly nuoc', 'coc nuoc', 'chai nuoc'],
+  grooming: ['dao cao rau', 'may cao rau', 'luoi dao cao'],
+  audio: ['tai nghe', 'loa bluetooth', 'headphone', 'earphone'],
+  clothing: ['ao thun', 'ao khoac', 'quan jean', 'quan ao', 'vay dam'],
+  footwear: ['giay the thao', 'giay cao got', 'doi giay', 'doi dep', 'dep quai', 'dep sandal'],
+  phoneAccessory: ['op lung', 'kinh cuong luc', 'cap sac', 'day sac', 'dau sac', 'sac du phong', 'cap type c', 'cap lightning'],
+  storage: ['hop dung do', 'hop vai', 'tu vai', 'dung quan ao', 'dung do da nang']
 });
 
-function matchingProductFamilies(text) {
-  return Object.entries(productFamilies)
-    .filter(([, phrases]) => phrases.some((phrase) => text.includes(phrase)))
-    .map(([family]) => family);
+function containsFoldedPhrase(text, phrase) {
+  const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?:^|[^a-z0-9])${escaped}(?=$|[^a-z0-9])`, 'u').test(text);
 }
 
-function offTopicProductMismatch(reviewText, product = {}) {
+function matchingProductFamilies(value) {
+  const text = normalizeVietnamese(value);
+  return Object.entries(productFamilies).flatMap(([family, phrases]) => {
+    const matches = phrases.filter((phrase) => containsFoldedPhrase(text, phrase));
+    return matches.length ? [{ family, phrases: matches }] : [];
+  });
+}
+
+function assessProductRelevance(reviewText, product = {}) {
   const title = normalizeVietnamese(product?.title || '');
-  if (!title || /san pham dang phan tich/u.test(title)) return false;
+  if (!title || /san pham dang phan tich/u.test(title)) {
+    return { state: 'unknown', targetFamilies: [], reviewFamilies: [], targetEvidence: [], otherEvidence: [] };
+  }
   const titleFamilies = matchingProductFamilies(title);
   const reviewFamilies = matchingProductFamilies(reviewText);
-  if (!titleFamilies.length || !reviewFamilies.length) return false;
-  return !reviewFamilies.some((family) => titleFamilies.includes(family));
+  const targetFamilyIds = new Set(titleFamilies.map(({ family }) => family));
+  const targetEvidence = reviewFamilies.filter(({ family }) => targetFamilyIds.has(family));
+  const otherEvidence = reviewFamilies.filter(({ family }) => !targetFamilyIds.has(family));
+  const state = !titleFamilies.length || !reviewFamilies.length
+    ? 'unknown'
+    : targetEvidence.length
+      ? 'on_topic'
+      : otherEvidence.length
+        ? 'needs_review'
+        : 'unknown';
+  return {
+    state,
+    targetFamilies: [...targetFamilyIds],
+    reviewFamilies: reviewFamilies.map(({ family }) => family),
+    targetEvidence: targetEvidence.flatMap(({ phrases }) => phrases),
+    otherEvidence: otherEvidence.flatMap(({ phrases }) => phrases)
+  };
+}
+
+function assessInformationValue(text, defects, flags = {}) {
+  if (flags.gibberish || flags.iconOnly || flags.repeated) return 'none';
+  if (flags.logisticsOnly || flags.generic || !text) return 'low';
+  if (defects.length || (meaningfulFeedbackPattern.test(text) && concreteFeedbackPattern.test(text))) return 'high';
+  if (meaningfulFeedbackPattern.test(text)) return 'medium';
+  return 'low';
 }
 
 function baseLabels(layer1) {
@@ -145,6 +182,8 @@ function baseLabels(layer1) {
     is_low_value: layer1.is_low_value,
     is_vague: layer1.is_vague,
     is_off_topic: layer1.is_off_topic,
+    relevance: layer1.relevance,
+    information_value: layer1.information_value,
     has_defect: layer1.has_defect,
     defect_categories: [...layer1.defect_categories],
     defect_quote: layer1.defect_quote,
@@ -166,12 +205,17 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
   const iconOnly = Boolean(originalText && iconOnlyPattern.test(originalText));
   const gibberish = gibberishSpam(text);
   const logisticsOnly = logisticsOnlyReview(text);
-  const isOffTopic = offTopicProductMismatch(text, product);
   const tooShort = text.length < Number(rules.spam_and_low_value.min_character_length)
     || tokens.length < Number(rules.spam_and_low_value.min_token_count);
   const repeated = repeatedCharacterSpam(text);
+  const relevanceAssessment = assessProductRelevance(originalText, product);
+  const offTopicCandidate = relevanceAssessment.state === 'needs_review';
+  const meaningfulFeedback = !generic && meaningfulFeedbackPattern.test(text);
   const lowValueCandidate = !text || generic || iconOnly || repeated || gibberish || logisticsOnly || tooShort;
-  const isLowValue = defects.length === 0 && lowValueCandidate;
+  const isLowValue = defects.length === 0 && lowValueCandidate && !meaningfulFeedback;
+  const informationValue = assessInformationValue(text, defects, {
+    generic, iconOnly, repeated, gibberish, logisticsOnly, tooShort
+  });
   const rating = Number(review.rating) || 0;
   const rantKeyword = rules.vague_rant_detection.rant_keywords.find((keyword) => text.includes(normalizeVietnamese(keyword)));
   const vagueRating = rules.vague_rant_detection.trigger_ratings.includes(rating);
@@ -189,9 +233,13 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
     evidence.push({ label: 'seeding_candidate', rule: weakSeeding, quote: originalText.slice(0, 180) });
   }
   if (isLowValue) reasonCodes.push(gibberish ? 'LOW_VALUE_GIBBERISH' : logisticsOnly ? 'LOW_VALUE_LOGISTICS_ONLY' : generic ? 'LOW_VALUE_GENERIC' : iconOnly ? 'LOW_VALUE_ICON_ONLY' : repeated ? 'LOW_VALUE_REPETITION' : 'LOW_VALUE_SHORT');
-  if (isOffTopic) {
-    reasonCodes.push('OFF_TOPIC_PRODUCT_MISMATCH');
-    evidence.push({ label: 'off_topic', rule: 'product_family_mismatch', quote: originalText.slice(0, 180) });
+  if (offTopicCandidate) {
+    reasonCodes.push('OFF_TOPIC_CANDIDATE');
+    evidence.push({
+      label: 'off_topic_candidate',
+      rule: `other_product:${relevanceAssessment.otherEvidence.join('|')}`,
+      quote: originalText.slice(0, 180)
+    });
   }
   if (isVague) reasonCodes.push(rantKeyword ? 'VAGUE_RANT' : 'VAGUE_WITHOUT_DEFECT');
   for (const defect of defects) {
@@ -202,10 +250,11 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
   const conflicts = [];
   if (isSeeding && defects.length) conflicts.push('SEEDING_WITH_CONCRETE_DEFECT');
   if (weakSeeding && !isSeeding) conflicts.push('WEAK_SEEDING_CUE_ONLY');
-  const signalConfidence = isOffTopic || gibberish ? 0.97
+  const signalConfidence = gibberish ? 0.97
     : exactSeeding ? 0.99
     : strongSeeding ? 0.94
       : defects.length ? 0.92
+        : meaningfulFeedback ? 0.91
         : rantKeyword ? 0.88
           : isLowValue ? 0.9
             : weakSeeding ? 0.62
@@ -217,7 +266,11 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
     is_seeding: isSeeding,
     is_low_value: isLowValue,
     is_vague: isVague,
-    is_off_topic: isOffTopic,
+    // Layer 1 không tự kết luận off-topic. Gemini phải xác nhận ứng viên bằng
+    // trích dẫn nguyên văn để tránh false positive từ chuẩn hóa/ngữ cảnh.
+    is_off_topic: false,
+    relevance: relevanceAssessment.state,
+    information_value: informationValue,
     has_defect: defects.length > 0,
     defect_categories: defects.map((defect) => defect.id),
     defect_quote: defects[0]?.evidence?.[0]?.quote || null,
@@ -225,7 +278,9 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
     reason_codes: reasonCodes.length ? reasonCodes : ['NO_RULE_MATCH'],
     evidence,
     conflicts,
-    requires_llm: conflicts.length > 0 || confidence < Number(policy.llm_review_confidence_below)
+    // Review đã bị loại chắc chắn vì rác/low-value không cần tốn thêm một lượt
+    // Gemini; mọi trường hợp còn lại chưa chắc chắn vẫn bắt buộc qua Layer 2.
+    requires_llm: !isLowValue && (offTopicCandidate || conflicts.length > 0 || confidence < Number(policy.llm_review_confidence_below))
   };
   return result;
 }
@@ -244,6 +299,8 @@ const layer2ResponseSchema = {
           is_low_value: { type: 'boolean' },
           is_vague: { type: 'boolean' },
           is_off_topic: { type: 'boolean' },
+          relevance: { type: 'string', enum: ['on_topic', 'uncertain', 'off_topic'] },
+          information_value: { type: 'string', enum: ['high', 'medium', 'low', 'none'] },
           has_defect: { type: 'boolean' },
           defect_categories: { type: 'array', items: { type: 'string', enum: [...allowedCategories] }, maxItems: 5 },
           defect_quote: { anyOf: [{ type: 'string' }, { type: 'null' }] },
@@ -251,14 +308,14 @@ const layer2ResponseSchema = {
           confidence: { type: 'number', minimum: 0, maximum: 1 },
           reason_code: { type: 'string' }
         },
-        required: ['id', 'decision', 'is_seeding', 'is_low_value', 'is_vague', 'is_off_topic', 'has_defect', 'defect_categories', 'defect_quote', 'evidence_quote', 'confidence', 'reason_code']
+        required: ['id', 'decision', 'is_seeding', 'is_low_value', 'is_vague', 'is_off_topic', 'relevance', 'information_value', 'has_defect', 'defect_categories', 'defect_quote', 'evidence_quote', 'confidence', 'reason_code']
       }
     }
   },
   required: ['labels']
 };
 
-function normalizeLayer2Label(candidate, review, layer1) {
+function normalizeLayer2Label(candidate, review, layer1, product = {}) {
   if (!candidate || !['confirm', 'correct', 'abstain'].includes(candidate.decision)) return null;
   const categories = [...new Set((candidate.defect_categories || []).filter((category) => allowedCategories.has(category)))];
   const confidence = clamp(candidate.confidence);
@@ -280,18 +337,50 @@ function normalizeLayer2Label(candidate, review, layer1) {
     };
   }
   const lockedLowValue = layer1.reason_codes.some((code) => ['LOW_VALUE_GIBBERISH', 'LOW_VALUE_LOGISTICS_ONLY', 'LOW_VALUE_REPETITION'].includes(code));
-  const lockedOffTopic = layer1.reason_codes.includes('OFF_TOPIC_PRODUCT_MISMATCH');
   // Các tín hiệu deterministic này không được để LLM mở khóa bằng một category
   // defect được suy diễn. Review lỗi thật đã được Layer 1 ưu tiên defect và sẽ
   // không mang lockedLowValue ngay từ đầu.
-  const hasDefect = Boolean(!lockedLowValue && !lockedOffTopic && candidate.has_defect && categories.length && quote);
+  const hasDefect = Boolean(!lockedLowValue && candidate.has_defect && categories.length && quote);
   const ratingAllowsVague = policy.vague_only_for_ratings.includes(Number(review.rating));
   const isVague = Boolean(candidate.is_vague && ratingAllowsVague && !hasDefect);
   const isLowValue = Boolean(lockedLowValue || (candidate.is_low_value && !hasDefect));
-  const isOffTopic = Boolean(candidate.is_off_topic || lockedOffTopic);
+  const requestedRelevance = ['on_topic', 'uncertain', 'off_topic'].includes(candidate.relevance)
+    ? candidate.relevance
+    : candidate.is_off_topic
+      ? 'off_topic'
+      : 'on_topic';
+  const informationValue = ['high', 'medium', 'low', 'none'].includes(candidate.information_value)
+    ? candidate.information_value
+    : layer1.information_value;
+  const wantsOffTopic = Boolean(candidate.is_off_topic || requestedRelevance === 'off_topic');
+  if (wantsOffTopic && (!evidenceQuote || confidence < 0.8)) {
+    return {
+      decision: 'abstain',
+      confidence,
+      reason_code: !evidenceQuote ? 'OFF_TOPIC_EVIDENCE_NOT_VERBATIM' : 'OFF_TOPIC_CONFIDENCE_TOO_LOW'
+    };
+  }
+  if (wantsOffTopic) {
+    const titleHasKnownFamily = matchingProductFamilies(product?.title || '').length > 0;
+    const quoteRelevance = assessProductRelevance(evidenceQuote, product);
+    if (titleHasKnownFamily && quoteRelevance.state !== 'needs_review') {
+      return {
+        decision: 'abstain',
+        confidence,
+        reason_code: 'OFF_TOPIC_EVIDENCE_DOES_NOT_NAME_OTHER_PRODUCT'
+      };
+    }
+    if (!titleHasKnownFamily && confidence < 0.9) {
+      return { decision: 'abstain', confidence, reason_code: 'OFF_TOPIC_UNKNOWN_PRODUCT_CONTEXT' };
+    }
+  }
+  const isOffTopic = wantsOffTopic;
+  const relevance = isOffTopic ? 'off_topic' : requestedRelevance;
   const changed = ['is_seeding', 'is_vague', 'has_defect'].some((key) => Boolean(candidate[key]) !== Boolean(layer1[key]))
     || isLowValue !== Boolean(layer1.is_low_value)
     || isOffTopic !== Boolean(layer1.is_off_topic)
+    || relevance !== layer1.relevance
+    || informationValue !== layer1.information_value
     || JSON.stringify(categories) !== JSON.stringify(layer1.defect_categories);
   const decision = candidate.decision === 'confirm' && changed ? 'correct' : candidate.decision;
   if (decision === 'correct' && !evidenceQuote) {
@@ -303,6 +392,8 @@ function normalizeLayer2Label(candidate, review, layer1) {
     is_low_value: isLowValue,
     is_vague: isVague,
     is_off_topic: isOffTopic,
+    relevance,
+    information_value: informationValue,
     has_defect: hasDefect,
     defect_categories: hasDefect ? categories : [],
     defect_quote: hasDefect ? quote : null,
@@ -380,7 +471,7 @@ function chunks(items, size) {
 export async function labelReviewsTwoLayer(reviews = [], options = {}) {
   const layer2StartedAt = Date.now();
   const prepared = reviews.map((review, index) => ({ review, layer1: labelReviewLayer1(review, index, options.product) }));
-  const mode = options.mode || process.env.LABELER_LLM_MODE || 'all';
+  const mode = options.mode || process.env.LABELER_LLM_MODE || 'uncertain';
   const selected = mode === 'off' ? [] : mode === 'uncertain' ? prepared.filter((item) => item.layer1.requires_llm) : prepared;
   const batchSize = Math.min(20, Math.max(5, Number.parseInt(process.env.LABELER_LLM_BATCH_SIZE || '20', 10) || 20));
   const warnings = [];
@@ -459,7 +550,7 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
   let abstained = 0;
   const labeledReviews = prepared.map(({ review, layer1 }) => {
     const candidate = layer2ById.get(layer1.id);
-    const layer2 = normalizeLayer2Label(candidate, review, layer1);
+    const layer2 = normalizeLayer2Label(candidate, review, layer1, options.product);
     if (layer2?.decision === 'abstain') abstained += 1;
     if (layer2?.changed) corrected += 1;
     const accepted = layer2 && layer2.decision !== 'abstain';
@@ -469,6 +560,8 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
       is_low_value: layer2.is_low_value,
       is_vague: layer2.is_vague,
       is_off_topic: layer2.is_off_topic,
+      relevance: layer2.relevance,
+      information_value: layer2.information_value,
       has_defect: layer2.has_defect,
       defect_categories: layer2.defect_categories,
       defect_quote: layer2.defect_quote,
@@ -481,7 +574,7 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
       ...review,
       labelId: layer1.id,
       labels: final,
-      labeling: { layer1, layer2, final, pipelineVersion: '2.2.0' }
+      labeling: { layer1, layer2, final, pipelineVersion: '2.3.0' }
     };
   });
 
