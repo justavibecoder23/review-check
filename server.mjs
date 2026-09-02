@@ -6,6 +6,7 @@ import { answerWebsiteQuestion } from './src/site-chatbot.mjs';
 import { assertApifyAdmin, readApifyAdminStatus, updateApifyAdminPool } from './src/apify-admin.mjs';
 import { assertGeminiAdmin, readGeminiAdminStatus, updateGeminiAdminPool } from './src/gemini-admin.mjs';
 import { openSse } from './src/sse.mjs';
+import { normalizeApiPath } from './src/server-route.mjs';
 
 const port = Number(process.env.PORT || 3000);
 const host = process.env.HOST || '127.0.0.1';
@@ -35,14 +36,15 @@ async function getBody(request) {
 const server = createServer(async (request, response) => {
   try {
     const url = new URL(request.url, `http://${request.headers.host}`);
+    const apiPath = normalizeApiPath(url.pathname);
 
-    if (request.method === 'POST' && url.pathname === '/api/analyze') {
+    if (request.method === 'POST' && apiPath === '/api/analyze') {
       const body = await getBody(request);
       const result = await analyzeProductUrl(body.url);
       return sendJson(response, 200, result);
     }
 
-    if (request.method === 'POST' && url.pathname === '/api/analyze-stream') {
+    if (request.method === 'POST' && apiPath === '/api/analyze-stream') {
       const body = await getBody(request);
       const stream = openSse(response);
       const heartbeat = setInterval(() => stream.send('heartbeat', { at: Date.now() }), 15_000);
@@ -61,13 +63,13 @@ const server = createServer(async (request, response) => {
       return;
     }
 
-    if (request.method === 'POST' && url.pathname === '/api/chat') {
+    if (request.method === 'POST' && apiPath === '/api/chat') {
       const body = await getBody(request);
       const result = await answerWebsiteQuestion(body.messages);
       return sendJson(response, 200, result);
     }
 
-    if (['GET', 'PUT'].includes(request.method) && url.pathname === '/api/apify-config') {
+    if (['GET', 'PUT'].includes(request.method) && apiPath === '/api/apify-config') {
       assertApifyAdmin(request.headers.authorization);
       if (request.method === 'GET') return sendJson(response, 200, await readApifyAdminStatus());
       const body = await getBody(request);
@@ -75,7 +77,7 @@ const server = createServer(async (request, response) => {
       return sendJson(response, 200, { updated: true, pool });
     }
 
-    if (['GET', 'PUT'].includes(request.method) && url.pathname === '/api/gemini-config') {
+    if (['GET', 'PUT'].includes(request.method) && apiPath === '/api/gemini-config') {
       assertGeminiAdmin(request.headers.authorization);
       if (request.method === 'GET') return sendJson(response, 200, await readGeminiAdminStatus());
       const body = await getBody(request);
