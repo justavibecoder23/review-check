@@ -231,11 +231,17 @@ function componentScores(reviews, signals, genuine, defectPenalty, options = {})
     return negative === null ? base : 0.6 * base + 0.4 * negative;
   });
   const text = textValues.length ? textValues.reduce((sum, value) => sum + value, 0) / textValues.length : 0;
+  const observedDefect = clamp(100 * (1 - 2.5 * defectPenalty));
   return {
     distribution,
     distributionStatus: controlledStarStrata ? 'neutral-controlled-sample' : 'observed-distribution',
     text,
-    defect: clamp(100 * (1 - 2.5 * defectPenalty))
+    // Mẫu TikTok được lấy gần đều theo từng mức sao nên tỷ lệ lỗi quan sát không
+    // đại diện cho tỷ lệ lỗi của toàn bộ review. Giữ thành phần này trung tính,
+    // nhưng vẫn lưu observedDefect để hiển thị nhược điểm và phục vụ kiểm tra.
+    defect: controlledStarStrata ? 50 : observedDefect,
+    defectStatus: controlledStarStrata ? 'neutral-controlled-sample' : 'observed-prevalence',
+    observedDefect
   };
 }
 
@@ -276,7 +282,7 @@ function resolveBaselines(options, category) {
   return { values, calibrated: Boolean(configured?.calibrated), source: configured?.source || 'Ví dụ minh họa trong tài liệu v3.1' };
 }
 
-export function combineTrustComponents(componentScores) {
+export function combineTrustComponents(componentScores, options = {}) {
   const weighted = {
     distribution: {
       score: clamp(componentScores.distribution),
@@ -286,14 +292,20 @@ export function combineTrustComponents(componentScores) {
     },
     text: { score: clamp(componentScores.text), weight: 0.20, label: 'Chất lượng nội dung' },
     fisher: { score: clamp(componentScores.fisher), weight: 0.20, label: 'Fisher 2×2' },
-    defect: { score: clamp(componentScores.defect), weight: 0.30, label: 'Rủi ro khuyết tật' },
+    defect: {
+      score: clamp(componentScores.defect),
+      weight: 0.30,
+      label: 'Rủi ro khuyết tật',
+      status: componentScores.defectStatus || 'observed-prevalence'
+    },
     temporal: { score: clamp(componentScores.temporal), weight: 0.15, label: 'Tính ổn định thời gian' }
   };
   const rawScore = Object.values(weighted).reduce((sum, component) => sum + component.score * component.weight, 0);
+  const defectGateEnabled = options.defectGateEnabled !== false;
   const caps = {
     fisher: weighted.fisher.score < 40 ? 55 : 100,
-    defect: weighted.defect.score < 25 ? 39 : 100,
-    high: weighted.fisher.score < 60 || weighted.defect.score < 60 ? 79 : 100
+    defect: defectGateEnabled && weighted.defect.score < 25 ? 39 : 100,
+    high: weighted.fisher.score < 60 || (defectGateEnabled && weighted.defect.score < 60) ? 79 : 100
   };
   const applied = Object.entries(caps).filter(([, value]) => value < 100).map(([id, value]) => ({ id, value }));
   return {
@@ -355,7 +367,10 @@ export function calculateTrustScoreV31(reviews = [], options = {}) {
     text: components.text,
     fisher: fisher.score,
     defect: components.defect,
+    defectStatus: components.defectStatus,
     temporal: temporal.score
+  }, {
+    defectGateEnabled: !controlledStarStrata
   });
   const dateCoverage = temporal.coverage;
   const baselineCoverage = ratio(defects.filter((item) => item.p0 !== null).length, defects.length);
@@ -386,6 +401,8 @@ export function calculateTrustScoreV31(reviews = [], options = {}) {
     fisher,
     defects: {
       score: components.defect,
+      observedScore: components.observedDefect,
+      status: components.defectStatus,
       penalty: defectPenalty,
       tests: defects,
       alphaFamily: ALPHA_FAMILY,
@@ -405,7 +422,10 @@ export function calculateTrustScoreV31(reviews = [], options = {}) {
         : 'Các p0 mặc định chỉ là ví dụ từ tài liệu; p-value khuyết tật chỉ để tham khảo cho tới khi baseline được hiệu chuẩn.',
       normalizedReviews.length < 100
         ? `Mẫu có ${normalizedReviews.length}/100 review mục tiêu; cần đọc kết quả với mức thận trọng cao hơn.`
-        : 'Mẫu đạt ngưỡng thiết kế 100 review.'
+        : 'Mẫu đạt ngưỡng thiết kế 100 review.',
+      controlledStarStrata
+        ? 'Mẫu được cân bằng theo mức sao; tỷ lệ nhược điểm quan sát vẫn được trình bày nhưng không dùng để áp trần TrustScore.'
+        : 'Tỷ lệ nhược điểm được quan sát trên mẫu không chia tầng theo mức sao.'
     ]
   };
 }
