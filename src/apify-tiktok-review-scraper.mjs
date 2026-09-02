@@ -3,7 +3,6 @@ import { finalizeTikTokCredential, reserveTikTokCredentials } from './apify-cred
 import { createProgressReporter } from './sse.mjs';
 
 const DEFAULT_ACTOR_ID = 'web_wanderer/tiktok-reviews-scraper';
-const DEFAULT_PRODUCT_ACTOR_ID = 'jungle_synthesizer/tiktok-shop-product-detail-scraper';
 const MAX_REVIEWS = 100;
 const STAR_FILTERS = Object.freeze(['5_star', '4_star', '3_star', '2_star', '1_star']);
 const REVIEWS_PER_STAR = MAX_REVIEWS / STAR_FILTERS.length;
@@ -108,80 +107,6 @@ async function runActor({ productId, reviewLimit, reviewFilter, credential, fetc
   }
 }
 
-function safeProductImage(value) {
-  try {
-    const image = new URL(String(value || ''));
-    const trustedHost = /(?:ibyteimg|byteimg|tiktokcdn|ttcdn)(?:-[a-z0-9]+)?\.com$/i.test(image.hostname)
-      || /(?:^|\.)(?:ibyteimg|byteimg|tiktokcdn|ttcdn)[^/]*\.com$/i.test(image.hostname);
-    return image.protocol === 'https:' && trustedHost ? image.href : '';
-  } catch {
-    return '';
-  }
-}
-
-export function normalizeTikTokProductMeta(item = {}, expectedProductId = '') {
-  const productId = String(item.product_id ?? item.productId ?? item.id ?? '');
-  if (expectedProductId && productId && productId !== String(expectedProductId)) return {};
-  const title = item.product_name || item.productTitle || item.title || item.name;
-  const rawImage = item.image_url
-    || item.product_image_url
-    || item.productImage
-    || item.images?.[0]?.url
-    || item.images?.[0];
-  const productImage = safeProductImage(rawImage);
-  return {
-    ...(title ? { title: String(title) } : {}),
-    ...(productImage ? { productImage } : {}),
-    ...(item.price !== undefined && item.price !== null ? { price: String(item.price) } : {}),
-    ...(item.rating !== undefined && item.rating !== null ? { rating: Number(item.rating) || String(item.rating) } : {})
-  };
-}
-
-async function runProductMetaActor({ productId, productUrl, credential, fetchImpl, actorId, timeoutMs }) {
-  const startedAt = performance.now();
-  const endpoint = `https://api.apify.com/v2/acts/${actorPath(actorId)}/run-sync-get-dataset-items`;
-  try {
-    const response = await fetchImpl(endpoint, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${credential.token}`,
-        'content-type': 'application/json'
-      },
-      body: JSON.stringify({
-        items: [String(productUrl)],
-        country: 'vn',
-        maxItems: 1,
-        includeCreatorVideos: false
-      }),
-      signal: AbortSignal.timeout(timeoutMs)
-    });
-    if (!response.ok) {
-      const detail = compactErrorDetail(await response.text());
-      throw Object.assign(new Error(`Apify product metadata trả về HTTP ${response.status}${detail ? `: ${detail}` : ''}`), {
-        statusCode: response.status
-      });
-    }
-    const items = await response.json();
-    if (!Array.isArray(items)) throw new Error('Apify không trả về metadata sản phẩm TikTok hợp lệ.');
-    const meta = items
-      .map((item) => normalizeTikTokProductMeta(item, productId))
-      .find((item) => item.productImage || item.title) || {};
-    return {
-      ok: Boolean(meta.productImage || meta.title),
-      meta,
-      latencyMs: Math.round(performance.now() - startedAt)
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      meta: {},
-      latencyMs: Math.round(performance.now() - startedAt),
-      statusCode: error?.statusCode || null,
-      error: error?.message || 'Không lấy được metadata sản phẩm TikTok.'
-    };
-  }
-}
-
 async function allocate(options) {
   if (options.allocation) return { allocation: options.allocation, strategy: options.allocation.credentials.length === 5 ? 'parallel-star-filters' : 'single-unfiltered' };
   try {
@@ -215,31 +140,18 @@ export async function collectTikTokReviews(productId, options = {}) {
   if (!allocation?.credentials?.length) throw new Error('Không có Apify key khả dụng cho TikTok.');
   const fetchImpl = options.fetchImpl || fetch;
   const actorId = options.actorId || process.env.APIFY_TIKTOK_ACTOR_ID || DEFAULT_ACTOR_ID;
-  const productActorId = options.productActorId || process.env.APIFY_TIKTOK_PRODUCT_ACTOR_ID || DEFAULT_PRODUCT_ACTOR_ID;
   const configuredTimeout = Number(options.timeoutMs ?? process.env.APIFY_RUN_TIMEOUT_MS ?? 70_000);
   const timeoutMs = Number.isFinite(configuredTimeout) ? Math.min(110_000, Math.max(10_000, configuredTimeout)) : 70_000;
   const startedAt = performance.now();
-  const [runs, productMetaRun] = await Promise.all([
-    Promise.all(allocation.credentials.map((credential, index) => runActor({
-      productId,
-      reviewLimit: Math.min(credential.plannedReviews || (strategy === 'parallel-star-filters' ? REVIEWS_PER_STAR : MAX_REVIEWS), MAX_REVIEWS),
-      reviewFilter: strategy === 'parallel-star-filters' ? STAR_FILTERS[index] : 'all',
-      credential,
-      fetchImpl,
-      actorId,
-      timeoutMs
-    }))),
-    options.productUrl
-      ? runProductMetaActor({
-          productId,
-          productUrl: options.productUrl,
-          credential: allocation.credentials[0],
-          fetchImpl,
-          actorId: productActorId,
-          timeoutMs
-        })
-      : Promise.resolve({ ok: false, skipped: true, meta: {}, latencyMs: 0 })
-  ]);
+  const runs = await Promise.all(allocation.credentials.map((credential, index) => runActor({
+    productId,
+    reviewLimit: Math.min(credential.plannedReviews || (strategy === 'parallel-star-filters' ? REVIEWS_PER_STAR : MAX_REVIEWS), MAX_REVIEWS),
+    reviewFilter: strategy === 'parallel-star-filters' ? STAR_FILTERS[index] : 'all',
+    credential,
+    fetchImpl,
+    actorId,
+    timeoutMs
+  })));
 
   if (allocation.source === 'redis-vault') {
     await Promise.allSettled(runs.map((run, index) => (options.finalizeImpl || finalizeTikTokCredential)(
@@ -289,18 +201,12 @@ export async function collectTikTokReviews(productId, options = {}) {
   if (emptyCommentCount) warnings.push(`Đã bỏ ${emptyCommentCount} review TikTok không có bình luận viết.`);
   if (duplicateCount) warnings.push(`Đã loại ${duplicateCount} review TikTok trùng trong dữ liệu trả về.`);
   if (strategy === 'single-unfiltered') warnings.push('TikTok đang dùng một key không lọc sao vì không còn đủ 5 key có hạn mức để chia mẫu an toàn.');
-  if (!productMetaRun.ok && !productMetaRun.skipped) {
-    warnings.push('TikTok không cung cấp được ảnh sản phẩm từ nguồn metadata chuyên dụng; kết quả vẫn dùng được nhưng có thể thiếu ảnh.');
-  }
 
   const firstItem = successful.find((run) => run.items.length)?.items[0] || null;
   return {
     reviews: deduplicated,
     productMetaSource: firstItem,
-    productMeta: {
-      ...(firstItem?.product_name ? { title: String(firstItem.product_name) } : {}),
-      ...(productMetaRun.meta || {})
-    },
+    productMeta: firstItem?.product_name ? { title: String(firstItem.product_name) } : {},
     warnings,
     credential: {
       source: allocation.source,
@@ -327,14 +233,7 @@ export async function collectTikTokReviews(productId, options = {}) {
       duplicateCount,
       emptyCommentCount,
       latencyMs: Math.round(performance.now() - startedAt),
-      productMetadata: {
-        ok: productMetaRun.ok,
-        provider: productMetaRun.skipped ? 'skipped' : 'apify-product-actor',
-        latencyMs: productMetaRun.latencyMs,
-        ...(productMetaRun.error ? { error: compactErrorDetail(productMetaRun.error) } : {})
-      },
       runs: runs.map(({ items: _items, error, ...run }) => ({ ...run, ...(error ? { error } : {}) }))
     }
   };
 }
-
