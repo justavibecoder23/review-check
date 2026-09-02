@@ -35,7 +35,7 @@ function safeUrl(value, fallback = '/#home') {
 
 function safeImageUrl(value) {
   const url = safeUrl(value, '');
-  return url && /^https?:/i.test(url) ? url : '';
+  return url && /^https:/i.test(url) ? url : '';
 }
 
 function clamp(value, minimum, maximum) {
@@ -199,7 +199,7 @@ function renderResult(data) {
   for (const selector of ['#open-product', '#product-inline-link']) document.querySelector(selector).href = productUrl;
   document.querySelector('#open-product span').textContent = `Xem sản phẩm trên ${platform}`;
 
-  const imageUrl = safeImageUrl(product.image);
+  const imageUrl = safeImageUrl(product.image || product.imageUrl || product.thumbnail);
   if (imageUrl) {
     const image = document.querySelector('#product-image');
     const illustration = document.querySelector('#product-illustration');
