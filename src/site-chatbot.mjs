@@ -168,7 +168,7 @@ export async function answerWebsiteQuestion(messages, options = {}) {
   if (!matches.length) return { answer: OUT_OF_SCOPE_REPLY, engine: 'rules' };
 
   const apiKey = process.env.GEMINI_API_KEY;
-  const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+  const model = 'gemini-3.5-flash-lite';
   const conversation = cleaned.map((message) => `${message.role === 'user' ? 'Người dùng' : 'Trợ lý'}: ${message.content}`).join('\n');
   const prompt = `
 Bạn là Trợ lý RealView. Hãy trả lời bằng tiếng Việt, thân thiện, ngắn gọn và dễ hiểu.

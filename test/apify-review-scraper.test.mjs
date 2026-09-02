@@ -79,3 +79,40 @@ test('không tự đổi credential giữa một lượt khi account bị từ c
     /không còn quyền\/hạn mức/
   );
 });
+
+test('chế độ production lấy tối đa 60 review bằng 3 filter sao song song và khử trùng', async () => {
+  const inputs = [];
+  const credentialSet = {
+    groupId: 'group-production', groupLabel: 'production', source: 'test', maxUsesPerKey: 10,
+    retiresAfterReservation: false,
+    credentials: [5, 3, 1].map((star) => ({
+      id: `key-${star}`, label: `account-${star}`, token: `token-${star}`, star, usageCount: 1
+    }))
+  };
+  const result = await collectShopeeReviews('https://shopee.vn/product-i.1.2', {
+    mode: 'production-60',
+    credentialSet,
+    fetchImpl: async (_url, init) => {
+      const input = JSON.parse(init.body);
+      inputs.push(input);
+      return {
+        ok: true,
+        async json() {
+          return Array.from({ length: 20 }, (_, index) => ({
+            reviewId: `${input.starFilter}-${index}`,
+            ratingStar: Number(input.starFilter),
+            comment: `Review ${input.starFilter} sao số ${index}`
+          }));
+        }
+      };
+    }
+  });
+  assert.equal(inputs.length, 3);
+  assert.deepEqual(inputs.map((input) => input.starFilter), ['5', '3', '1']);
+  assert.ok(inputs.every((input) => input.contentFilter === 'with comments'));
+  assert.ok(inputs.every((input) => input.maxReviewsPerProduct === 20));
+  assert.equal(result.reviews.length, 60);
+  assert.equal(result.collection.strategy, 'parallel-star-filters');
+  assert.equal(result.collection.targetMaximum, 60);
+  assert.equal(JSON.stringify(result).includes('token-'), false);
+});

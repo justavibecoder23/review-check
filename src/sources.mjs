@@ -518,7 +518,7 @@ export async function getReviews(url, options = {}) {
       source: {
         type: 'live',
         label: platform === 'Shopee' ? 'Apify · Shopee Product Reviews Scraper' : 'Apify · TikTok Product Reviews Scraper',
-        reviewLimit,
+        reviewLimit: collected.collection?.targetMaximum || reviewLimit,
         collection: collected.collection,
         credential: collected.credential,
         usage: collected.usage

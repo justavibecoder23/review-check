@@ -146,7 +146,7 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
   const { pros, cons } = fallbackCopy(reviews, included, excluded);
   const tone = trustTone(score);
   const mostFrequentDefect = [...method.defects.tests].sort((left, right) => right.count - left.count)[0];
-  const controlledDefectSample = method.defects.status === 'neutral-controlled-sample';
+  const controlledDefectSample = method.defects.status === 'standardized-controlled-sample';
   const appliedCap = method.caps.applied[0];
   const detailedCount = included.filter((review) => normalise(review.text).length >= 45).length;
   const verifiedCount = included.filter((review) => review.verified).length;
@@ -154,13 +154,13 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
   const drivers = [
     {
       impact: method.fisher.score >= 60 ? 'up' : 'down',
-      title: method.fisher.score >= 60 ? 'Các đánh giá cực cao và cực thấp khá tự nhiên' : 'Một số đánh giá cực đoan cần được thận trọng',
+      title: method.fisher.score >= 60 ? 'Chưa thấy liên hệ nội dung bất thường rõ ràng' : 'Một số đánh giá cực đoan cần được thận trọng',
       detail: method.fisher.score >= 60
-        ? 'Các review 5 sao không tập trung bất thường ở nội dung mang dấu hiệu quảng bá, và review 1 sao không chủ yếu là lời phàn nàn quá mơ hồ. Vì vậy nhóm đánh giá cực cao hoặc cực thấp không làm giảm độ tin cậy.'
+        ? 'Trong chính mẫu đã thu thập, review 5 sao không tập trung bất thường ở nội dung mang dấu hiệu quảng bá và review 1 sao không chủ yếu là lời phàn nàn quá mơ hồ.'
         : 'Một số review 5 sao hoặc 1 sao đi kèm nội dung khó kiểm chứng hay có dấu hiệu bất thường. Hệ thống vì thế thận trọng hơn và giảm mức tin cậy của tập review.'
     },
     {
-      impact: controlledDefectSample ? 'neutral' : method.defects.score >= 60 ? 'up' : 'down',
+      impact: method.defects.score >= 60 ? 'up' : 'down',
       title: controlledDefectSample
         ? (mostFrequentDefect?.count ? `${mostFrequentDefect.label} xuất hiện trong nhóm review cần cân nhắc` : 'Chưa thấy một nhược điểm cụ thể lặp lại')
         : mostFrequentDefect?.count
@@ -168,8 +168,8 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
           : 'Chưa thấy một lỗi cụ thể bị nhắc lặp lại',
       detail: controlledDefectSample
         ? (mostFrequentDefect?.count
-          ? `${mostFrequentDefect.count} review đáng tham khảo cùng đề cập đến “${mostFrequentDefect.label.toLowerCase()}”. RealView vẫn đưa nhược điểm này ra để bạn cân nhắc, nhưng không dùng tỷ lệ đó để hạ TrustScore vì hệ thống đã chủ động lấy gần đều review ở từng mức sao, thay vì lấy theo tỷ lệ tự nhiên của toàn bộ sản phẩm.`
-          : `Trong ${method.sample.afterSeedingRemoval} review sau bước lọc nhiễu, chưa có một nhược điểm cụ thể được nhắc lặp lại rõ ràng. Mẫu được lấy gần đều theo mức sao nên yếu tố này được giữ trung tính khi tính TrustScore.`)
+          ? `${mostFrequentDefect.count} review đáng tham khảo cùng đề cập đến “${mostFrequentDefect.label.toLowerCase()}”. Vì mẫu được lấy gần đều theo mức sao, thuật toán cân bằng mức lỗi giữa từng nhóm sao trước khi tính điểm; con số này không được diễn giải là tỷ lệ lỗi của toàn bộ sản phẩm.`
+          : `Trong ${method.sample.afterSeedingRemoval} review sau bước lọc nhiễu, chưa có một nhược điểm cụ thể được nhắc lặp lại rõ ràng. Với mẫu chia tầng, thuật toán so sánh cân bằng giữa các mức sao thay vì giả định đây là phân bố tự nhiên.`)
         : mostFrequentDefect?.count
           ? `${mostFrequentDefect.count} review đáng tham khảo cùng đề cập đến “${mostFrequentDefect.label.toLowerCase()}”. Khi nhiều người mua độc lập lặp lại cùng một vấn đề trong mẫu không chia tầng, đây là tín hiệu cần thận trọng về độ tin cậy của tập review.`
           : `Trong ${method.sample.afterSeedingRemoval} review còn lại sau bước lọc nhiễu, chưa có một nhóm lỗi nào được người mua nhắc lại đủ rõ. Điều này giúp TrustScore không bị kéo xuống bởi một vấn đề lặp lại.`
@@ -185,7 +185,7 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
         ? 'Phân bố số sao là do thiết kế lấy mẫu'
         : method.components.distribution.score >= 70 ? 'Phân bố số sao không quá dồn về một phía' : 'Số sao đang nghiêng mạnh về một phía',
       detail: method.sampling.controlledStarStrata
-        ? 'Hệ thống chủ động lấy tối đa cùng số review ở mỗi mức từ 5 sao đến 1 sao để tránh trùng và giữ độ trễ thấp. Vì đây không phải phân bố tự nhiên của toàn bộ review sản phẩm, thành phần này được giữ trung tính và không được dùng để nâng TrustScore.'
+        ? 'Hệ thống chủ động lấy tối đa cùng số review ở mỗi mức từ 5 sao đến 1 sao để tránh trùng và giữ độ trễ thấp. Vì đây không phải phân bố tự nhiên của toàn bộ review sản phẩm, thành phần phân bố sao được loại khỏi phép tính và các trọng số còn lại được chuẩn hóa.'
         : method.components.distribution.score >= 70
         ? 'Các mức đánh giá không bị dồn bất thường vào chỉ 5 sao hoặc chỉ 1 sao. Sự đa dạng này giúp kết quả phản ánh nhiều trải nghiệm hơn thay vì chỉ một luồng ý kiến.'
         : 'Khi phần lớn review cùng tập trung ở một mức sao, hệ thống sẽ thận trọng hơn vì một nhóm đánh giá có thể đang lấn át các trải nghiệm khác.'
@@ -423,7 +423,7 @@ function validateGeminiTrust(value, fallback) {
 
 async function analyzeWithGemini(reviews, fallback, options = {}) {
   const apiKey = process.env.GEMINI_API_KEY;
-  const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+  const model = 'gemini-3.5-flash-lite';
   const narrativePayload = buildGeminiNarrativePayload(reviews, fallback);
   const prompt = [
     'Bạn là hệ thống kiểm định review thương mại điện tử của RealView.',
@@ -448,8 +448,9 @@ async function analyzeWithGemini(reviews, fallback, options = {}) {
     primaryModel: model,
     context: 'Gemini TrustScore',
     deadlineAt: options.geminiContext?.deadlineAt,
-    attemptTimeoutMs: 6_000,
-    retryOnTimeout: false,
+    attemptTimeoutMs: 5_000,
+    maxRetries: 2,
+    retryOnTimeout: true,
     routeContext: options.geminiContext,
     buildRequest: (selectedModel, selectedApiKey) => ({
       method: 'POST',
@@ -504,7 +505,7 @@ export async function buildTrustAnalysis(reviews = [], options = {}) {
   } catch (error) {
     if (process.env.VERCEL || options.logGeminiErrors) {
       (options.logger || console).error('[trust-analysis] Gemini request failed', {
-        model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+        model: 'gemini-3.5-flash-lite',
         durationMs: Date.now() - narrativeStartedAt,
         attempts: error?.attempts || 0,
         attemptedModels: error?.attemptedModels || [],

@@ -4,21 +4,21 @@ import { GEMINI_MODEL_LIMITS, GEMINI_TIMEOUT_COOLDOWN_MS, geminiRoutePressure, g
 
 test('route đang cooldown không được chọn trước route khỏe', () => {
   const nowMs = Date.now();
-  const cooling = geminiRouteScore({ cooldownUntilMs: nowMs + 30_000 }, 'gemini-3.5-flash', nowMs);
-  const healthy = geminiRouteScore({ events: [], inFlight: 0 }, 'gemini-3.5-flash', nowMs);
+  const cooling = geminiRouteScore({ cooldownUntilMs: nowMs + 30_000 }, 'gemini-3.5-flash-lite', nowMs);
+  const healthy = geminiRouteScore({ events: [], inFlight: 0 }, 'gemini-3.5-flash-lite', nowMs);
   assert.equal(cooling, Number.POSITIVE_INFINITY);
   assert.ok(healthy < cooling);
 });
 
 test('health router tăng áp lực theo tải gần đây, độ trễ và request đang chạy', () => {
   const nowMs = Date.now();
-  const quiet = geminiRoutePressure({ events: [], ewmaLatencyMs: 500, inFlight: 0 }, 'gemini-3.5-flash', nowMs);
+  const quiet = geminiRoutePressure({ events: [], ewmaLatencyMs: 500, inFlight: 0 }, 'gemini-3.5-flash-lite', nowMs);
   const busy = geminiRoutePressure({
     events: Array.from({ length: 8 }, (_, index) => ({ at: nowMs - index * 1_000, ok: index > 1 })),
     ewmaLatencyMs: 8_000,
     inFlight: 2,
     lastStartedAtMs: nowMs
-  }, 'gemini-3.5-flash', nowMs);
+  }, 'gemini-3.5-flash-lite', nowMs);
   assert.ok(busy.value > quiet.value);
   assert.equal(busy.recentRequests, 8);
   assert.equal(busy.inFlight, 2);
@@ -28,27 +28,23 @@ test('health router bỏ dữ liệu tải cũ khỏi cửa sổ một phút', (
   const nowMs = Date.now();
   const pressure = geminiRoutePressure({
     events: [{ at: nowMs - 90_000, ok: false }, { at: nowMs - 2_000, ok: true }]
-  }, 'gemini-3.5-flash', nowMs);
+  }, 'gemini-3.5-flash-lite', nowMs);
   assert.equal(pressure.recentRequests, 1);
 });
 
-test('health router dùng đúng RPM, TPM và RPD của bốn model', () => {
+test('health router chỉ quản lý quota của Gemini 3.5 Flash Lite', () => {
   assert.deepEqual(GEMINI_MODEL_LIMITS, {
-    'gemini-3.5-flash': { rpm: 5, tpm: 250_000, rpd: 20 },
-    'gemini-3.6-flash': { rpm: 5, tpm: 250_000, rpd: 20 },
-    'gemini-3.7-flash': { rpm: 5, tpm: 250_000, rpd: 20 },
     'gemini-3.5-flash-lite': { rpm: 15, tpm: 250_000, rpd: 500 }
   });
   assert.equal(GEMINI_TIMEOUT_COOLDOWN_MS, 120_000);
 });
 
-test('3.5 Flash tăng mạnh áp lực khi chạm giới hạn 5 RPM', () => {
+test('Flash Lite chuyển pending khi chạm giới hạn 15 RPM', () => {
   const nowMs = Date.now();
-  const fourRequests = Array.from({ length: 4 }, (_, index) => ({ at: nowMs - index * 1_000, ok: true }));
-  const fiveRequests = [...fourRequests, { at: nowMs - 4_000, ok: true }];
-  const nearLimit = geminiRoutePressure({ events: fourRequests }, 'gemini-3.5-flash', nowMs).value;
-  const atLimit = geminiRoutePressure({ events: fiveRequests }, 'gemini-3.5-flash', nowMs).value;
-  assert.ok(atLimit > nearLimit * 5);
+  const fourteen = Array.from({ length: 14 }, (_, index) => ({ at: nowMs - index * 1_000, ok: true }));
+  const fifteen = [...fourteen, { at: nowMs - 14_000, ok: true }];
+  assert.ok(Number.isFinite(geminiRouteScore({ events: fourteen }, 'gemini-3.5-flash-lite', nowMs)));
+  assert.equal(geminiRouteScore({ events: fifteen }, 'gemini-3.5-flash-lite', nowMs), Number.POSITIVE_INFINITY);
 });
 
 test('Flash Lite dùng sức chứa 15 RPM và theo dõi TPM', () => {

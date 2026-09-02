@@ -33,6 +33,7 @@ Tại Vercel → **Settings → Environment Variables**, thêm biến:
 
 ```text
 APIFY_ACTOR_ID=zen-studio/shopee-product-reviews-scraper
+SHOPEE_COLLECTION_MODE=demo
 SHOPEE_REVIEWS_PER_STAR=20
 APIFY_RUN_TIMEOUT_MS=70000
 APIFY_TOKEN_VAULT_KEY=<base64 32 byte>
@@ -41,7 +42,7 @@ UPSTASH_REDIS_REST_URL=<Upstash REST URL>
 UPSTASH_REDIS_REST_TOKEN=<Upstash REST token>
 ```
 
-Trong chế độ test một tài khoản, `SHOPEE_REVIEWS_PER_STAR` đóng vai trò giới hạn review cho một run và được giới hạn từ 1–20. Các Apify token không nằm trong environment của Vercel: chúng được cập nhật tập trung qua API quản trị và mã hóa trong Redis. Không đưa file chứa token vào GitHub hoặc JavaScript trình duyệt.
+Mặc định `SHOPEE_COLLECTION_MODE=demo`: hệ thống dùng một account, không ép phân bố sao và lấy tối đa 20 review có bình luận. Khi chuyển sang `SHOPEE_COLLECTION_MODE=production-60`, hệ thống dùng 3 account song song cho ba tầng 5★/3★/1★, lấy đúng mức tối đa 20 review mỗi account (tổng tối đa 60), kiểm tra đúng mức sao và khử trùng trước khi phân tích. Actor chỉ hỗ trợ một mức sao cho mỗi run, nên mẫu 60 review là mẫu chia tầng đại diện ba cực và không được diễn giải như phân bố rating tự nhiên của toàn bộ sản phẩm. TikTok vẫn giữ nguyên cơ chế 5 account cho 5 mức sao. Các Apify token không nằm trong environment của Vercel: chúng được cập nhật tập trung qua API quản trị và mã hóa trong Redis. Không đưa file chứa token vào GitHub hoặc JavaScript trình duyệt.
 
 ### Cấu hình và tự động xoay vòng Apify key
 
@@ -124,12 +125,12 @@ Tại Vercel → **Settings → Environment Variables**, thêm:
 
 ```text
 GEMINI_API_KEY=<khóa Gemini của bạn>
-GEMINI_MODEL=gemini-3.5-flash
+GEMINI_MODEL=gemini-3.5-flash-lite
 GEMINI_API_KEY_VAULT_KEY=<kết quả openssl rand -base64 32>
 GEMINI_ADMIN_KEY=<khóa quản trị; có thể bỏ trống để dùng APIFY_ADMIN_KEY>
 ```
 
-Gemini pool được lưu mã hóa trong Upstash Redis và dùng theo thứ tự `3.5 Flash → 3.6 Flash → 3.7 Flash → 3.5 Flash-Lite` trên cùng một API key. Chỉ sau khi cả bốn model hết quota ngày, backend mới chuyển sang key dự phòng tiếp theo. Trạng thái `used` tự hết hiệu lực sau 00:00 `America/Los_Angeles`, không cần cron. Các key phải thuộc Google Cloud project khác nhau nếu muốn có quota độc lập; nhiều key trong cùng project vẫn chia sẻ một quota.
+Gemini pool được lưu mã hóa trong Upstash Redis và chỉ dùng `Gemini 3.5 Flash Lite`. Router ưu tiên key có bộ đếm ngày thấp nhất. Key lỗi hoặc chạm quota phút được đưa vào `pending`; key chạm 500 request/ngày hoặc Gemini xác nhận hết quota ngày được đưa vào `used`. Bộ đếm ngày và trạng thái `used` tự mở lại sau 00:00 `America/Los_Angeles`, không cần cron. Mỗi lần gọi có tối đa hai retry và mỗi retry bắt buộc dùng một API key khác. Các key phải thuộc Google Cloud project khác nhau nếu muốn có quota độc lập; nhiều key trong cùng project vẫn chia sẻ một quota.
 
 Nạp hoặc bổ sung key bằng:
 

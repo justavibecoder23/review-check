@@ -1,8 +1,13 @@
 import { createHash } from 'node:crypto';
-import { reserveApifyCredential } from './apify-credential-store.mjs';
+import { reserveApifyCredential, reserveApifyCredentialSet } from './apify-credential-store.mjs';
 import { createProgressReporter } from './sse.mjs';
 
 const DEFAULT_ACTOR_ID = 'zen-studio/shopee-product-reviews-scraper';
+export const SHOPEE_DEMO_REVIEW_LIMIT = 20;
+export const SHOPEE_PRODUCTION_REVIEW_LIMIT = 60;
+// Actor chỉ hỗ trợ một mức sao mỗi run. Ba tầng 5★, 3★ và 1★ giữ được
+// ba cực tích cực/trung tính/tiêu cực mà không tạo phần giao nhau.
+export const SHOPEE_STAR_FILTERS = Object.freeze(['5', '3', '1']);
 
 function actorPath(actorId) {
   return encodeURIComponent(String(actorId || DEFAULT_ACTOR_ID).trim().replace('/', '~'));
@@ -36,7 +41,7 @@ function normalizeReview(review) {
   };
 }
 
-async function runUnfiltered({ url, reviewLimit, credential, fetchImpl, actorId, timeoutMs }) {
+async function runUnfiltered({ url, reviewLimit, starFilter, credential, fetchImpl, actorId, timeoutMs }) {
   const startedAt = performance.now();
   const endpoint = `https://api.apify.com/v2/acts/${actorPath(actorId)}/run-sync-get-dataset-items`;
   try {
@@ -48,6 +53,7 @@ async function runUnfiltered({ url, reviewLimit, credential, fetchImpl, actorId,
       },
       body: JSON.stringify({
         startUrls: [{ url }],
+        ...(starFilter ? { starFilter } : {}),
         contentFilter: 'with comments',
         maxReviewsPerProduct: reviewLimit
       }),
@@ -87,6 +93,19 @@ async function runUnfiltered({ url, reviewLimit, credential, fetchImpl, actorId,
   }
 }
 
+async function runStarFilter({ url, star, reviewLimit, credential, fetchImpl, actorId, timeoutMs }) {
+  const run = await runUnfiltered({ url, reviewLimit, starFilter: star, credential, fetchImpl, actorId, timeoutMs });
+  if (!run.ok) return { ...run, star };
+  const matching = run.items.filter((item) => Number(item.ratingStar) === Number(star));
+  return {
+    ...run,
+    star,
+    droppedWrongRating: run.items.length - matching.length,
+    reviewCount: matching.length,
+    items: matching
+  };
+}
+
 function legacyAllocation(credential) {
   return {
     groupId: credential.id || 'legacy-single-token',
@@ -105,9 +124,18 @@ function validateAllocation(allocation) {
   return allocation;
 }
 
-export async function collectShopeeReviews(url, options = {}) {
+function validateCredentialSet(credentialSet) {
+  const credentials = Array.isArray(credentialSet?.credentials) ? credentialSet.credentials : [];
+  const byStar = new Map(credentials.map((credential) => [String(credential.star), credential]));
+  if (credentials.length !== SHOPEE_STAR_FILTERS.length || SHOPEE_STAR_FILTERS.some((star) => !byStar.get(star)?.token)) {
+    throw new Error('Cần đủ 3 Apify key để chạy chế độ Shopee 60 review có lọc sao.');
+  }
+  return { ...credentialSet, credentials: SHOPEE_STAR_FILTERS.map((star) => byStar.get(star)) };
+}
+
+async function collectShopeeReviewsDemo(url, options = {}) {
   const progress = createProgressReporter(options.onProgress);
-  const reviewLimit = Math.min(20, Math.max(1, Number.parseInt(String(options.reviewLimit ?? process.env.SHOPEE_REVIEW_LIMIT ?? 20), 10) || 20));
+  const reviewLimit = Math.min(SHOPEE_DEMO_REVIEW_LIMIT, Math.max(1, Number.parseInt(String(options.reviewLimit ?? process.env.SHOPEE_REVIEW_LIMIT ?? SHOPEE_DEMO_REVIEW_LIMIT), 10) || SHOPEE_DEMO_REVIEW_LIMIT));
   const allocation = validateAllocation(options.allocation
     || (options.credential ? legacyAllocation(options.credential) : await reserveApifyCredential({ fetchImpl: options.redisFetchImpl })));
   const credential = allocation.credential;
@@ -186,4 +214,95 @@ export async function collectShopeeReviews(url, options = {}) {
       runs: runs.map(({ items: _items, error, ...run }) => ({ ...run, ...(error ? { error } : {}) }))
     }
   };
+}
+
+async function collectShopeeReviewsProduction(url, options = {}) {
+  const progress = createProgressReporter(options.onProgress);
+  const perStarLimit = SHOPEE_PRODUCTION_REVIEW_LIMIT / SHOPEE_STAR_FILTERS.length;
+  const credentialSet = validateCredentialSet(options.credentialSet || await reserveApifyCredentialSet({
+    count: SHOPEE_STAR_FILTERS.length,
+    stars: SHOPEE_STAR_FILTERS.map(Number),
+    fetchImpl: options.redisFetchImpl
+  }));
+  const fetchImpl = options.fetchImpl || fetch;
+  const actorId = options.actorId || process.env.APIFY_ACTOR_ID || DEFAULT_ACTOR_ID;
+  const configuredTimeout = Number(options.timeoutMs ?? process.env.APIFY_RUN_TIMEOUT_MS ?? 70_000);
+  const timeoutMs = Number.isFinite(configuredTimeout) ? Math.min(110_000, Math.max(10_000, configuredTimeout)) : 70_000;
+  const startedAt = performance.now();
+  const runs = await Promise.all(credentialSet.credentials.map((credential) => runStarFilter({
+    url,
+    star: String(credential.star),
+    reviewLimit: perStarLimit,
+    credential,
+    fetchImpl,
+    actorId,
+    timeoutMs
+  })));
+  progress('collecting', 58, 'Đang lấy reviews...');
+  const successful = runs.filter((run) => run.ok);
+  if (!successful.length) {
+    const detail = runs.map((run) => `${run.star}★: ${run.error}`).join(' | ');
+    const error = new Error(`Không lấy được reviews Shopee từ 3 nhóm sao. ${detail}`);
+    error.statusCode = 502;
+    throw error;
+  }
+
+  const seen = new Set();
+  const deduplicated = [];
+  let duplicateCount = 0;
+  for (const run of runs) {
+    for (const rawReview of run.items) {
+      const key = reviewKey(rawReview);
+      if (seen.has(key)) {
+        duplicateCount += 1;
+        continue;
+      }
+      seen.add(key);
+      if (deduplicated.length < SHOPEE_PRODUCTION_REVIEW_LIMIT) deduplicated.push(normalizeReview(rawReview));
+    }
+  }
+
+  const warnings = [...(credentialSet.warnings || [])];
+  for (const run of runs.filter((item) => !item.ok)) warnings.push(run.error);
+  const wrongRatingCount = runs.reduce((sum, run) => sum + (run.droppedWrongRating || 0), 0);
+  if (wrongRatingCount) warnings.push(`Đã bỏ ${wrongRatingCount} review không khớp bộ lọc sao.`);
+  if (duplicateCount) warnings.push(`Đã loại ${duplicateCount} review trùng giữa các lượt lấy dữ liệu.`);
+  const firstItem = successful.find((run) => run.items.length)?.items[0] || null;
+  return {
+    reviews: deduplicated,
+    productMetaSource: firstItem,
+    warnings,
+    credential: {
+      groupId: credentialSet.groupId,
+      label: credentialSet.groupLabel,
+      source: credentialSet.source,
+      retiresAfterReservation: credentialSet.retiresAfterReservation,
+      keys: credentialSet.credentials.map(({ id, label, star, usageCount }) => ({ id, label, star, usageCount }))
+    },
+    usage: {
+      provider: credentialSet.source,
+      tracked: credentialSet.source === 'redis-vault',
+      groupId: credentialSet.groupId,
+      maxUsesPerKey: credentialSet.maxUsesPerKey,
+      credentials: credentialSet.credentials.map(({ id, label, star, usageCount }) => ({ id, label, star, usageCount }))
+    },
+    collection: {
+      strategy: 'parallel-star-filters',
+      contentFilter: 'with comments',
+      filters: [...SHOPEE_STAR_FILTERS],
+      perStarLimit,
+      targetMaximum: SHOPEE_PRODUCTION_REVIEW_LIMIT,
+      returned: deduplicated.length,
+      duplicateCount,
+      latencyMs: Math.round(performance.now() - startedAt),
+      runs: runs.map(({ items: _items, error, ...run }) => ({ ...run, ...(error ? { error } : {}) }))
+    }
+  };
+}
+
+export async function collectShopeeReviews(url, options = {}) {
+  const mode = String(options.mode || process.env.SHOPEE_COLLECTION_MODE || 'demo').toLowerCase();
+  return mode === 'production-60'
+    ? collectShopeeReviewsProduction(url, options)
+    : collectShopeeReviewsDemo(url, options);
 }

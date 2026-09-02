@@ -5,9 +5,6 @@ const MINUTE_MS = 60_000;
 const MAX_EVENT_AGE_MS = 5 * MINUTE_MS;
 export const GEMINI_TIMEOUT_COOLDOWN_MS = 120_000;
 export const GEMINI_MODEL_LIMITS = Object.freeze({
-  'gemini-3.5-flash': { rpm: 5, tpm: 250_000, rpd: 20 },
-  'gemini-3.6-flash': { rpm: 5, tpm: 250_000, rpd: 20 },
-  'gemini-3.7-flash': { rpm: 5, tpm: 250_000, rpd: 20 },
   'gemini-3.5-flash-lite': { rpm: 15, tpm: 250_000, rpd: 500 }
 });
 
@@ -67,6 +64,7 @@ if not ok then
   elseif statusCode == 503 then
     cooldownMs = state.consecutiveFailures >= 2 and 120000 or ${MINUTE_MS}
   elseif statusCode >= 500 then cooldownMs = 15000 end
+  if cooldownMs == 0 then cooldownMs = ${MINUTE_MS} end
   state.cooldownUntilMs = math.max(cooldownUntilMs, nowMs + cooldownMs)
 else
   state.cooldownUntilMs = 0
@@ -96,7 +94,7 @@ export function geminiRouteId(credentialId, model) {
   return `${String(credentialId || 'environment')}:${String(model)}`;
 }
 
-function configuredLimit(model) {
+export function configuredGeminiLimit(model) {
   const limits = parseJson(process.env.GEMINI_MODEL_LIMITS_JSON, {});
   const item = limits?.[model] || GEMINI_MODEL_LIMITS[model] || {};
   return {
@@ -128,10 +126,13 @@ export function geminiRoutePressure(state, model, nowMs = Date.now()) {
   const recent = current.events.filter((event) => number(event.at) >= nowMs - MINUTE_MS);
   const failures = recent.filter((event) => !event.ok).length;
   const recentTokens = recent.reduce((sum, event) => sum + Math.max(0, number(event.tokens)), 0);
-  const limits = configuredLimit(model);
+  const limits = configuredGeminiLimit(model);
   const rpmRatio = limits.rpm ? recent.length / limits.rpm : recent.length / 10;
   const tpmRatio = limits.tpm ? recentTokens / limits.tpm : 0;
   const rpdRatio = limits.rpd ? current.dayRequests / limits.rpd : 0;
+  const minuteLimited = Boolean((limits.rpm && recent.length >= limits.rpm)
+    || (limits.tpm && recentTokens >= limits.tpm));
+  const dailyLimited = Boolean(limits.rpd && current.dayRequests >= limits.rpd);
   const utilization = Math.max(rpmRatio, tpmRatio, rpdRatio);
   const quotaPressure = utilization + Math.max(0, utilization - 0.8) * 20;
   const latencyPressure = Math.max(0, number(current.ewmaLatencyMs) - 2_500) / 7_500;
@@ -141,6 +142,9 @@ export function geminiRoutePressure(state, model, nowMs = Date.now()) {
     recentRequests: recent.length,
     recentTokens,
     dayRequests: current.dayRequests,
+    limits,
+    minuteLimited,
+    dailyLimited,
     inFlight: current.inFlight,
     value: quotaPressure + current.inFlight * 0.35 + latencyPressure + failurePressure
   };
@@ -148,7 +152,7 @@ export function geminiRoutePressure(state, model, nowMs = Date.now()) {
 
 export function geminiRouteScore(state, model, nowMs = Date.now()) {
   const pressure = geminiRoutePressure(state, model, nowMs);
-  if (pressure.cooldown) return Number.POSITIVE_INFINITY;
+  if (pressure.cooldown || pressure.minuteLimited || pressure.dailyLimited) return Number.POSITIVE_INFINITY;
   return pressure.value;
 }
 

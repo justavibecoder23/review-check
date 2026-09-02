@@ -73,13 +73,14 @@ test('mẫu lấy đều 5 mức sao không được xem là phân bố rating t
     sampling: { strategy: 'parallel-star-filters', perStarLimit: 20 }
   });
   assert.equal(result.sampling.controlledStarStrata, true);
-  assert.equal(result.components.distribution.score, 50);
-  assert.equal(result.components.distribution.status, 'neutral-controlled-sample');
-  assert.equal(result.fisher.positive.score <= 50, true);
-  assert.equal(result.fisher.negative.score <= 50, true);
+  assert.equal(result.components.distribution.active, false);
+  assert.equal(result.components.distribution.status, 'excluded-controlled-sample');
+  assert.equal(result.sampling.populationInferenceEnabled, false);
+  assert.equal(result.fisher.positive.score, 100);
+  assert.equal(result.fisher.negative.score, 100);
 });
 
-test('mẫu TikTok chia đều mức sao không bị khóa cứng ở 39 vì tỷ lệ nhược điểm của mẫu', () => {
+test('mẫu chia tầng vẫn giữ điểm và hard-cap nhược điểm theo mức rủi ro chuẩn hóa', () => {
   const reviews = [5, 4, 3, 2, 1].flatMap((rating) => Array.from({ length: 20 }, (_, index) => ({
     rating,
     text: `Trải nghiệm chi tiết số ${index + 1}: chất liệu mỏng và sản phẩm nhanh hỏng khi sử dụng.`,
@@ -96,23 +97,55 @@ test('mẫu TikTok chia đều mức sao không bị khóa cứng ở 39 vì t�
     sampling: { strategy: 'parallel-star-filters', perStarLimit: 20 }
   });
 
-  assert.equal(result.defects.status, 'neutral-controlled-sample');
-  assert.equal(result.defects.score, 50);
+  assert.equal(result.defects.status, 'standardized-controlled-sample');
+  assert.ok(result.defects.score < 25);
   assert.ok(result.defects.observedScore < 25);
-  assert.equal(result.caps.defect, 100);
-  assert.notEqual(result.score, 39);
+  assert.equal(result.caps.defect, 39);
+  assert.equal(result.score, 39);
   assert.equal(result.defects.tests.find((item) => item.id === 'chat-lieu').count, 100);
+  assert.ok(result.defects.tests.every((item) => item.pValue === null));
 });
 
-test('không đủ ý nghĩa Fisher là trung tính, không được tự động xem là tín hiệu tốt', () => {
+test('review bị loại vì off-topic hoặc low-value không được làm thay đổi TrustScore', () => {
+  const kept = [{
+    rating: 4,
+    text: 'Sản phẩm dùng ổn định, đầu cắm chắc chắn và không nóng máy.',
+    verified: true,
+    included: true,
+    labels: { is_seeding: false, is_vague: false, is_low_value: false, is_off_topic: false, relevance: 'on_topic', defect_categories: [] }
+  }];
+  const rejected = [
+    {
+      rating: 1,
+      text: 'Đôi dép bị rách và không dùng được.',
+      included: false,
+      labels: { is_seeding: false, is_vague: false, is_low_value: false, is_off_topic: true, relevance: 'off_topic', defect_categories: ['chat-lieu', 'su-dung'] }
+    },
+    {
+      rating: 5,
+      text: 'ok',
+      included: false,
+      labels: { is_seeding: false, is_vague: false, is_low_value: true, is_off_topic: false, relevance: 'on_topic', defect_categories: [] }
+    }
+  ];
+  const baseline = calculateTrustScoreV31(kept);
+  const withRejected = calculateTrustScoreV31([...kept, ...rejected]);
+  assert.equal(withRejected.score, baseline.score);
+  assert.deepEqual(withRejected.components, baseline.components);
+  assert.equal(withRejected.sample.afterSeedingRemoval, 1);
+  assert.equal(withRejected.sample.rejectedFromEvidence, 2);
+});
+
+test('Fisher không phát hiện bất thường giữ 100 điểm đúng thang v3.1', () => {
   const result = calculateTrustScoreV31([
     { rating: 5, text: 'Nội dung chi tiết và bình thường.', labels: { is_seeding: false, is_vague: false, defect_categories: [] } },
     { rating: 1, text: 'Không dính và rơi ra.', labels: { is_seeding: false, is_vague: false, defect_categories: ['chat-lieu'] } }
   ]);
   assert.equal(result.fisher.positive.significant, false);
   assert.equal(result.fisher.negative.significant, false);
-  assert.equal(result.fisher.positive.score, 50);
-  assert.equal(result.fisher.negative.score, 50);
+  assert.equal(result.fisher.positive.score, 100);
+  assert.equal(result.fisher.negative.score, 100);
+  assert.equal(result.caps.fisher, 100, 'Fisher khỏe không được tự kích hoạt cap 55');
 });
 
 test('chỉ báo Holm chỉ bật khi đủ p-value cho cả gia đình kiểm định', () => {

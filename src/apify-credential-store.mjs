@@ -86,7 +86,7 @@ end
 return cjson.encode({ok=true, reviewCount=reviewCount, exhausted=(reviewCount >= maxReviews)})
 `;
 
-// Chọn 5 key còn hạn mức và cộng bộ đếm trong cùng một lệnh Redis.
+// Chọn số key còn hạn mức theo yêu cầu và cộng bộ đếm trong cùng một lệnh Redis.
 // Ưu tiên mọi key còn lượt trong nhóm active; nếu nhóm thiếu key thì bù bằng
 // key ít được dùng nhất từ các nhóm reserve. Pool gốc không bị gom nhóm lại,
 // nên active/reserve/pending và lịch sử bộ đếm vẫn được giữ nguyên.
@@ -98,46 +98,43 @@ end
 
 local pool = cjson.decode(raw)
 local limit = tonumber(pool.maxUsesPerKey) or 10
+local desired = tonumber(ARGV[2]) or 5
+local stars = cjson.decode(ARGV[3] or '[5,4,3,2,1]')
 local selected = {}
-local reserveCandidates = {}
+local candidates = {}
 local activeGroupIndex = nil
 local order = 0
 
 for groupIndex, group in ipairs(pool.groups or {}) do
-  local available = {}
   for _, credential in ipairs(group.credentials or {}) do
     order = order + 1
     local count = tonumber(redis.call('HGET', KEYS[2], credential.id) or '0')
     if count < limit then
-      table.insert(available, {
+      if not activeGroupIndex then activeGroupIndex = groupIndex end
+      table.insert(candidates, {
         credential=credential,
         count=count,
         order=order,
+        groupIndex=groupIndex,
         groupId=group.id,
         groupLabel=group.label
       })
     end
   end
-  if #available > 0 and not activeGroupIndex then
-    activeGroupIndex = groupIndex
-    for _, candidate in ipairs(available) do table.insert(selected, candidate) end
-  elseif activeGroupIndex and groupIndex > activeGroupIndex then
-    for _, candidate in ipairs(available) do table.insert(reserveCandidates, candidate) end
-  end
 end
 
-table.sort(reserveCandidates, function(left, right)
+table.sort(candidates, function(left, right)
+  if left.groupIndex ~= right.groupIndex then return left.groupIndex < right.groupIndex end
   if left.count == right.count then return left.order < right.order end
   return left.count < right.count
 end)
 
-local reserveIndex = 1
-while #selected < 5 and reserveCandidates[reserveIndex] do
-  table.insert(selected, reserveCandidates[reserveIndex])
-  reserveIndex = reserveIndex + 1
+for _, candidate in ipairs(candidates) do
+  if #selected >= desired then break end
+  table.insert(selected, candidate)
 end
 
-if #selected < 5 then
+if #selected < desired or #stars ~= desired then
   return cjson.encode({ok=false, code='POOL_EXHAUSTED', maxUsesPerKey=limit})
 end
 
@@ -147,8 +144,6 @@ for index = 2, #selected do
 end
 local allocationGroupId = mixedGroups and 'mixed-available-keys' or selected[1].groupId
 local allocationGroupLabel = mixedGroups and 'mixed-available-keys' or selected[1].groupLabel
-local stars = {5, 4, 3, 2, 1}
-
 local allocation = {
   ok=true,
   source='redis-vault',
@@ -591,17 +586,22 @@ export async function saveApifyCredentialPool({ groups = [], pendingCredentials 
 }
 
 export async function reserveApifyCredentialSet(options = {}) {
-  if (!isRedisConfigured()) throw new Error('Cần cấu hình Upstash Redis để cấp phát và xoay vòng 5 Apify key an toàn.');
+  if (!isRedisConfigured()) throw new Error('Cần cấu hình Upstash Redis để cấp phát và xoay vòng Apify key an toàn.');
   if (!process.env.APIFY_TOKEN_VAULT_KEY) throw new Error('Chưa cấu hình APIFY_TOKEN_VAULT_KEY.');
+  const stars = Array.isArray(options.stars) && options.stars.length
+    ? options.stars.map(Number).filter((star) => APIFY_STARS.includes(star))
+    : [...APIFY_STARS];
+  const count = Math.min(5, Math.max(1, Number.parseInt(String(options.count ?? stars.length), 10) || stars.length));
+  if (stars.length !== count || new Set(stars).size !== stars.length) throw new Error('Danh sách filter sao không hợp lệ.');
   const raw = await redisCommand([
     'EVAL', RESERVE_POOL_SCRIPT, '3', APIFY_POOL_KEY, APIFY_POOL_COUNTERS_KEY, APIFY_POOL_USED_KEY,
-    new Date().toISOString()
+    new Date().toISOString(), String(count), JSON.stringify(stars)
   ], options);
   const allocation = typeof raw === 'string' ? JSON.parse(raw) : raw;
   if (!allocation?.ok) {
     const error = new Error(allocation?.code === 'POOL_EXHAUSTED'
-      ? 'Tất cả nhóm Apify đã dùng đủ số lượt. Hãy thêm một nhóm 5 key dự phòng trong /api/apify-config.'
-      : 'Chưa cấu hình pool 5 Apify key trong /api/apify-config.');
+      ? `Không còn đủ ${count} Apify key khả dụng. Hãy bổ sung key dự phòng trong /api/apify-config.`
+      : 'Chưa cấu hình pool Apify key trong /api/apify-config.');
     error.statusCode = 503;
     throw error;
   }

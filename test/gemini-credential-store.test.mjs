@@ -46,7 +46,7 @@ function createRedisFake() {
           state = null;
         }
         const exhausted = state?.models || {};
-        if (config.models.some((model) => !exhausted[model])) {
+        if (!exhausted[command[8]]) {
           return JSON.stringify({
             ok: true, source: 'redis-vault', credential,
             exhaustedModels: exhausted, models: config.models,
@@ -73,8 +73,8 @@ function createRedisFake() {
       state.updatedAt = nowIso;
       state.resetAt = resetAt;
       state.resetAtMs = resetAtMs;
-      state.exhaustedCount = config.models.filter((requiredModel) => state.models[requiredModel]).length;
-      state.used = state.exhaustedCount >= config.models.length;
+      state.exhaustedCount = state.models[model] ? 1 : 0;
+      state.used = state.exhaustedCount >= 1;
       if (state.used) state.usedAt ||= nowIso;
       states[id] = JSON.stringify(state);
       return JSON.stringify({ ok: true, exhaustedCount: state.exhaustedCount, used: state.used, resetAt });
@@ -94,7 +94,7 @@ function createRedisFake() {
   };
 }
 
-test('Gemini pool mã hóa key, dùng đủ bốn model rồi chuyển key và reset lúc nửa đêm Pacific', async () => {
+test('Gemini pool mã hóa key, hết quota Flash Lite thì chuyển key và reset lúc nửa đêm Pacific', async () => {
   const previous = {
     url: process.env.UPSTASH_REDIS_REST_URL,
     token: process.env.UPSTASH_REDIS_REST_TOKEN,

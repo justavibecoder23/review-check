@@ -208,23 +208,72 @@ function temporalScore(reviews) {
   };
 }
 
-function componentScores(reviews, signals, genuine, defectPenalty, options = {}) {
-  const seedingRate = ratio(signals.filter((item) => item.seeding).length, reviews.length);
-  const fiveStarRate = ratio(reviews.filter((review) => Number(review.rating) === 5).length, reviews.length);
-  const oneStarRate = ratio(reviews.filter((review) => Number(review.rating) === 1).length, reviews.length);
+function isExplicitlyIncluded(review) {
+  return review?.included !== false;
+}
+
+function samplingPolicy(sampling = {}) {
+  const stratifiedByRating = sampling?.strategy === 'parallel-star-filters';
+  return {
+    strategy: sampling?.strategy || 'unknown',
+    stratifiedByRating,
+    distributionMode: stratifiedByRating ? 'excluded-controlled-sample' : 'observed-sample',
+    defectMode: stratifiedByRating ? 'standardized-controlled-sample' : 'observed-sample',
+    populationInferenceEnabled: !stratifiedByRating
+  };
+}
+
+function statisticalSamples(reviews) {
+  const annotated = reviews.map((review, index) => ({ review, index, signal: classifyReviewSignals(review) }));
+  const evidence = annotated.filter(({ review, signal }) => isExplicitlyIncluded(review) && !signal.seeding);
+  // Fisher cần giữ lại review nghi seeding/vague để phát hiện quan hệ bất thường.
+  // Off-topic và low-value thuần túy không được phép tác động vào thống kê.
+  const audit = annotated.filter(({ review, signal }) => {
+    if (signal.source === 'legacy-rules' && review?.included === undefined) return true;
+    if (review?.labels?.is_off_topic || review?.labels?.relevance === 'off_topic') return false;
+    return isExplicitlyIncluded(review) || signal.seeding || signal.vague;
+  });
+  return { evidence, audit };
+}
+
+function reviewDefectSeverity(signal) {
+  return signal.issues.reduce((sum, issue) => sum + issue.severity, 0);
+}
+
+function defectPenaltyForSample(evidence, policy) {
+  if (!evidence.length) return 0;
+  if (!policy.stratifiedByRating) {
+    return evidence.reduce((sum, { signal }) => sum + reviewDefectSeverity(signal), 0) / evidence.length;
+  }
+  const strata = new Map();
+  for (const entry of evidence) {
+    const rating = Number(entry.review.rating);
+    if (rating < 1 || rating > 5) continue;
+    if (!strata.has(rating)) strata.set(rating, []);
+    strata.get(rating).push(entry);
+  }
+  if (!strata.size) return 0;
+  const perStratum = [...strata.values()].map((entries) => (
+    entries.reduce((sum, { signal }) => sum + reviewDefectSeverity(signal), 0) / entries.length
+  ));
+  return perStratum.reduce((sum, value) => sum + value, 0) / perStratum.length;
+}
+
+function componentScores(distributionReviews, distributionSignals, evidence, defectPenalty, policy) {
+  const seedingRate = ratio(distributionSignals.filter((item) => item.seeding).length, distributionReviews.length);
+  const fiveStarRate = ratio(distributionReviews.filter((review) => Number(review.rating) === 5).length, distributionReviews.length);
+  const oneStarRate = ratio(distributionReviews.filter((review) => Number(review.rating) === 1).length, distributionReviews.length);
   const saturationPenalty = clamp((fiveStarRate - 0.85) / 0.15, 0, 1);
   const attackPenalty = clamp((oneStarRate - 0.5) / 0.5, 0, 1);
   // Năm Apify run chủ động lấy gần bằng nhau ở từng mức sao. Phân bố đó là
   // thiết kế lấy mẫu, không phải phân bố rating tự nhiên của sản phẩm.
-  const controlledStarStrata = options.controlledStarStrata === true;
-  const distribution = controlledStarStrata
-    ? 50
+  const distribution = policy.stratifiedByRating
+    ? null
     : clamp(100 * (1 - 0.5 * seedingRate - 0.3 * saturationPenalty - 0.2 * attackPenalty));
 
-  const textValues = genuine.map((review) => {
-    const reviewSignals = classifyReviewSignals(review);
-    const detail = clamp(reviewSignals.text.length / 120, 0, 1);
-    const specificity = Number(reviewSignals.issues.length > 0 || reviewSignals.text.length >= 60);
+  const textValues = evidence.map(({ review, signal }) => {
+    const detail = clamp(signal.text.length / 120, 0, 1);
+    const specificity = Number(signal.issues.length > 0 || signal.text.length >= 60);
     const verified = Number(Boolean(review.verified));
     const base = 100 * (0.45 * detail + 0.35 * specificity + 0.2 * verified);
     const negative = scoreNegativeReview(review);
@@ -234,13 +283,10 @@ function componentScores(reviews, signals, genuine, defectPenalty, options = {})
   const observedDefect = clamp(100 * (1 - 2.5 * defectPenalty));
   return {
     distribution,
-    distributionStatus: controlledStarStrata ? 'neutral-controlled-sample' : 'observed-distribution',
+    distributionStatus: policy.distributionMode,
     text,
-    // Mẫu TikTok được lấy gần đều theo từng mức sao nên tỷ lệ lỗi quan sát không
-    // đại diện cho tỷ lệ lỗi của toàn bộ review. Giữ thành phần này trung tính,
-    // nhưng vẫn lưu observedDefect để hiển thị nhược điểm và phục vụ kiểm tra.
-    defect: controlledStarStrata ? 50 : observedDefect,
-    defectStatus: controlledStarStrata ? 'neutral-controlled-sample' : 'observed-prevalence',
+    defect: observedDefect,
+    defectStatus: policy.defectMode,
     observedDefect
   };
 }
@@ -264,10 +310,10 @@ function fisherComponent(signals, reviews) {
   const positive = build((signal) => signal.seeding, (_signal, review) => Number(review.rating) === 5);
   const negative = build((signal) => signal.vague, (_signal, review) => Number(review.rating) === 1);
   const seedingRate = ratio(signals.filter((signal) => signal.seeding).length, reviews.length);
-  // Không bác bỏ H0 không phải bằng chứng rằng dữ liệu tốt. Vì vậy 50 là
-  // trung tính; chỉ một liên hệ bất thường có ý nghĩa và OR > 1 mới phạt.
-  const positiveScore = 50 * (1 - seedingRate) / (1 + positive.penalty);
-  const negativeScore = 50 / (1 + negative.penalty);
+  // Theo v3.1, khi không phát hiện liên hệ bất thường thì nhánh Fisher giữ
+  // 100 điểm; penalty chỉ được kích hoạt khi p-value vượt ngưỡng quyết định.
+  const positiveScore = 100 * (1 - seedingRate) / (1 + positive.penalty);
+  const negativeScore = 100 / (1 + negative.penalty);
   return {
     score: clamp(0.6 * positiveScore + 0.4 * negativeScore),
     positive: { ...positive, score: positiveScore },
@@ -283,29 +329,34 @@ function resolveBaselines(options, category) {
 }
 
 export function combineTrustComponents(componentScores, options = {}) {
+  const distributionActive = componentScores.distribution !== null && componentScores.distribution !== undefined;
   const weighted = {
     distribution: {
       score: clamp(componentScores.distribution),
       weight: 0.15,
+      active: distributionActive,
       label: 'Phân bố rating',
       status: componentScores.distributionStatus || 'observed-distribution'
     },
-    text: { score: clamp(componentScores.text), weight: 0.20, label: 'Chất lượng nội dung' },
-    fisher: { score: clamp(componentScores.fisher), weight: 0.20, label: 'Fisher 2×2' },
+    text: { score: clamp(componentScores.text), weight: 0.20, active: true, label: 'Chất lượng nội dung' },
+    fisher: { score: clamp(componentScores.fisher), weight: 0.20, active: true, label: 'Fisher 2×2' },
     defect: {
       score: clamp(componentScores.defect),
       weight: 0.30,
+      active: true,
       label: 'Rủi ro khuyết tật',
       status: componentScores.defectStatus || 'observed-prevalence'
     },
-    temporal: { score: clamp(componentScores.temporal), weight: 0.15, label: 'Tính ổn định thời gian' }
+    temporal: { score: clamp(componentScores.temporal), weight: 0.15, active: true, label: 'Tính ổn định thời gian' }
   };
-  const rawScore = Object.values(weighted).reduce((sum, component) => sum + component.score * component.weight, 0);
-  const defectGateEnabled = options.defectGateEnabled !== false;
+  const activeWeight = Object.values(weighted).reduce((sum, component) => sum + (component.active ? component.weight : 0), 0);
+  const rawScore = activeWeight
+    ? Object.values(weighted).reduce((sum, component) => sum + (component.active ? component.score * component.weight : 0), 0) / activeWeight
+    : 0;
   const caps = {
     fisher: weighted.fisher.score < 40 ? 55 : 100,
-    defect: defectGateEnabled && weighted.defect.score < 25 ? 39 : 100,
-    high: weighted.fisher.score < 60 || (defectGateEnabled && weighted.defect.score < 60) ? 79 : 100
+    defect: weighted.defect.score < 25 ? 39 : 100,
+    high: weighted.fisher.score < 60 || weighted.defect.score < 60 ? 79 : 100
   };
   const applied = Object.entries(caps).filter(([, value]) => value < 100).map(([id, value]) => ({ id, value }));
   return {
@@ -318,8 +369,11 @@ export function combineTrustComponents(componentScores, options = {}) {
 
 export function calculateTrustScoreV31(reviews = [], options = {}) {
   const normalizedReviews = Array.isArray(reviews) ? reviews : [];
-  const signals = normalizedReviews.map(classifyReviewSignals);
-  const genuine = normalizedReviews.filter((_review, index) => !signals[index].seeding);
+  const policy = samplingPolicy(options.sampling);
+  const samples = statisticalSamples(normalizedReviews);
+  const evidenceReviews = samples.evidence.map(({ review }) => review);
+  const auditReviews = samples.audit.map(({ review }) => review);
+  const auditSignals = samples.audit.map(({ signal }) => signal);
   const explicitCategory = fold(options.category);
   const category = ['fashion', 'electronics', 'beauty', 'general'].includes(explicitCategory)
     ? explicitCategory
@@ -327,15 +381,15 @@ export function calculateTrustScoreV31(reviews = [], options = {}) {
   const baseline = resolveBaselines(options, category);
   const issueCounts = ISSUE_DEFINITIONS.map((issue) => ({
     ...issue,
-    count: genuine.filter((review) => classifyReviewSignals(review).issues.some((match) => match.id === issue.id)).length
+    count: samples.evidence.filter(({ signal }) => signal.issues.some((match) => match.id === issue.id)).length
   }));
-  const defectPenalty = genuine.length
-    ? issueCounts.reduce((sum, issue) => sum + issue.severity * issue.count, 0) / genuine.length
-    : 0;
+  const defectPenalty = defectPenaltyForSample(samples.evidence, policy);
   const defectTests = issueCounts.map((issue) => {
     const p0 = Number(baseline.values?.[issue.id]);
     const hasBaseline = Number.isFinite(p0) && p0 >= 0 && p0 <= 1;
-    const pValue = hasBaseline ? exactBinomialSurvival(genuine.length, issue.count, p0) : null;
+    const pValue = hasBaseline && policy.populationInferenceEnabled
+      ? exactBinomialSurvival(evidenceReviews.length, issue.count, p0)
+      : null;
     return {
       id: issue.id,
       label: issue.label,
@@ -344,7 +398,7 @@ export function calculateTrustScoreV31(reviews = [], options = {}) {
       p0: hasBaseline ? p0 : null,
       pValue,
       significantBonferroni: pValue !== null && pValue <= ALPHA_FAMILY / ISSUE_DEFINITIONS.length,
-      decisionEnabled: baseline.calibrated && hasBaseline
+      decisionEnabled: baseline.calibrated && hasBaseline && policy.populationInferenceEnabled
     };
   });
   const completeDefectFamily = defectTests.every((item) => Number.isFinite(item.pValue));
@@ -357,10 +411,9 @@ export function calculateTrustScoreV31(reviews = [], options = {}) {
       significantAdjusted: completeDefectFamily ? item.significantHolm : item.significantBonferroni
     }));
 
-  const controlledStarStrata = options.sampling?.strategy === 'parallel-star-filters';
-  const fisher = fisherComponent(signals, normalizedReviews);
-  const components = componentScores(normalizedReviews, signals, genuine, defectPenalty, { controlledStarStrata });
-  const temporal = temporalScore(genuine);
+  const fisher = fisherComponent(auditSignals, auditReviews);
+  const components = componentScores(auditReviews, auditSignals, samples.evidence, defectPenalty, policy);
+  const temporal = temporalScore(evidenceReviews);
   const combined = combineTrustComponents({
     distribution: components.distribution,
     distributionStatus: components.distributionStatus,
@@ -369,13 +422,13 @@ export function calculateTrustScoreV31(reviews = [], options = {}) {
     defect: components.defect,
     defectStatus: components.defectStatus,
     temporal: temporal.score
-  }, {
-    defectGateEnabled: !controlledStarStrata
   });
   const dateCoverage = temporal.coverage;
-  const baselineCoverage = ratio(defects.filter((item) => item.p0 !== null).length, defects.length);
+  const baselineCoverage = policy.populationInferenceEnabled
+    ? ratio(defects.filter((item) => item.p0 !== null).length, defects.length)
+    : 0;
   const adequacyScore = Math.round(100 * (
-    0.75 * Math.min(1, normalizedReviews.length / 100)
+    0.75 * Math.min(1, evidenceReviews.length / 100)
     + 0.15 * dateCoverage
     + 0.10 * baselineCoverage
   ));
@@ -386,10 +439,19 @@ export function calculateTrustScoreV31(reviews = [], options = {}) {
     rawScore: combined.rawScore,
     components: combined.components,
     caps: combined.caps,
-    sample: { total: normalizedReviews.length, afterSeedingRemoval: genuine.length, seedingCount: normalizedReviews.length - genuine.length },
+    sample: {
+      total: normalizedReviews.length,
+      statisticalPopulation: auditReviews.length,
+      afterSeedingRemoval: evidenceReviews.length,
+      rejectedFromEvidence: normalizedReviews.length - evidenceReviews.length,
+      seedingCount: normalizedReviews.filter((review) => classifyReviewSignals(review).seeding).length
+    },
     sampling: {
-      strategy: options.sampling?.strategy || 'unknown',
-      controlledStarStrata,
+      strategy: policy.strategy,
+      controlledStarStrata: policy.stratifiedByRating,
+      distributionMode: policy.distributionMode,
+      defectMode: policy.defectMode,
+      populationInferenceEnabled: policy.populationInferenceEnabled,
       perStarLimit: Number(options.sampling?.perStarLimit) || null
     },
     adequacy: {
@@ -412,19 +474,21 @@ export function calculateTrustScoreV31(reviews = [], options = {}) {
       baseline: { category, calibrated: baseline.calibrated, source: baseline.source }
     },
     temporal,
-    negativeReviewScores: normalizedReviews
-      .map((review, index) => ({ index, score: scoreNegativeReview(review) }))
+    negativeReviewScores: samples.evidence
+      .map(({ review, index }) => ({ index, score: scoreNegativeReview(review) }))
       .filter((item) => item.score !== null),
     notes: [
       'Fisher exact dùng số đếm nguyên gốc; hiệu chỉnh +0,5 chỉ dùng để ổn định odds ratio.',
-      baseline.calibrated
+      baseline.calibrated && policy.populationInferenceEnabled
         ? `Kiểm định khuyết tật dùng baseline đã hiệu chuẩn: ${baseline.source}.`
-        : 'Các p0 mặc định chỉ là ví dụ từ tài liệu; p-value khuyết tật chỉ để tham khảo cho tới khi baseline được hiệu chuẩn.',
-      normalizedReviews.length < 100
-        ? `Mẫu có ${normalizedReviews.length}/100 review mục tiêu; cần đọc kết quả với mức thận trọng cao hơn.`
+        : policy.populationInferenceEnabled
+          ? 'Các p0 mặc định chỉ là ví dụ từ tài liệu; p-value khuyết tật chỉ để tham khảo cho tới khi baseline được hiệu chuẩn.'
+          : 'Không chạy suy luận tỷ lệ khuyết tật theo p0 vì dữ liệu được chủ động chia tầng theo mức sao.',
+      evidenceReviews.length < 100
+        ? `Mẫu bằng chứng có ${evidenceReviews.length}/100 review mục tiêu; cần đọc kết quả với mức thận trọng cao hơn.`
         : 'Mẫu đạt ngưỡng thiết kế 100 review.',
-      controlledStarStrata
-        ? 'Mẫu được cân bằng theo mức sao; tỷ lệ nhược điểm quan sát vẫn được trình bày nhưng không dùng để áp trần TrustScore.'
+      policy.stratifiedByRating
+        ? 'Mẫu được cân bằng theo mức sao: thành phần phân bố rating được loại khỏi phép cộng và các trọng số còn lại được chuẩn hóa. Nhược điểm được tính cân bằng giữa các tầng sao, không diễn giải là tỷ lệ của toàn bộ sản phẩm.'
         : 'Tỷ lệ nhược điểm được quan sát trên mẫu không chia tầng theo mức sao.'
     ]
   };

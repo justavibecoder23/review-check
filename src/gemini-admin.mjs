@@ -33,7 +33,13 @@ export async function readGeminiAdminStatus(options = {}) {
       credentialId: credential.id,
       label: credential.label,
       model,
-      status: pressure.cooldown ? 'cooldown' : pressure.value >= 1 ? 'busy' : 'healthy',
+      status: pressure.dailyLimited
+        ? 'used'
+        : pressure.cooldown || pressure.minuteLimited
+          ? 'pending'
+          : pressure.value >= 1
+            ? 'busy'
+            : 'healthy',
       recentRequests: pressure.recentRequests,
       recentTokens: pressure.recentTokens,
       dayRequests: pressure.dayRequests,
@@ -44,14 +50,48 @@ export async function readGeminiAdminStatus(options = {}) {
       cooldownUntil: pressure.cooldown ? new Date(Number(state.cooldownUntilMs)).toISOString() : null
     };
   }));
+  const routeByCredential = new Map(routes.map((route) => [route.credentialId, route]));
+  const originalUsedIds = new Set((pool.used || []).map((credential) => credential.id));
+  const used = credentials.filter((credential) => originalUsedIds.has(credential.id)
+    || routeByCredential.get(credential.id)?.status === 'used').map((credential) => ({ ...credential, status: 'used' }));
+  const usedIds = new Set(used.map((credential) => credential.id));
+  const pending = credentials.filter((credential) => !usedIds.has(credential.id)
+    && routeByCredential.get(credential.id)?.status === 'pending').map((credential) => ({
+      ...credential,
+      status: 'pending',
+      pendingUntil: routeByCredential.get(credential.id)?.cooldownUntil || null
+    }));
+  const pendingIds = new Set(pending.map((credential) => credential.id));
+  const available = credentials.filter((credential) => !usedIds.has(credential.id) && !pendingIds.has(credential.id))
+    .sort((left, right) => {
+      const leftRoute = routeByCredential.get(left.id) || {};
+      const rightRoute = routeByCredential.get(right.id) || {};
+      return Number(leftRoute.dayRequests || 0) - Number(rightRoute.dayRequests || 0)
+        || Number(leftRoute.recentRequests || 0) - Number(rightRoute.recentRequests || 0);
+    });
+  const normalizedPool = {
+    ...pool,
+    active: available[0] ? { ...available[0], status: 'active' } : null,
+    backup: available.slice(1).map((credential) => ({ ...credential, status: 'backup' })),
+    pending,
+    used,
+    totals: {
+      credentials: credentials.length,
+      active: available.length ? 1 : 0,
+      backup: Math.max(0, available.length - 1),
+      pending: pending.length,
+      used: used.length
+    }
+  };
   return {
-    pool,
+    pool: normalizedPool,
     health: {
       routes,
       totals: {
         healthy: routes.filter((route) => route.status === 'healthy').length,
         busy: routes.filter((route) => route.status === 'busy').length,
-        cooldown: routes.filter((route) => route.status === 'cooldown').length
+        pending: routes.filter((route) => route.status === 'pending').length,
+        used: routes.filter((route) => route.status === 'used').length
       }
     }
   };

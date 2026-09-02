@@ -3,12 +3,7 @@ import { isRedisConfigured, redisCommand, redisTransaction } from './redis-rest.
 
 export const GEMINI_POOL_KEY = 'realview:gemini:credential-pool:v1';
 export const GEMINI_POOL_STATES_KEY = 'realview:gemini:credential-pool:v1:states';
-export const DEFAULT_GEMINI_MODELS = Object.freeze([
-  'gemini-3.5-flash',
-  'gemini-3.6-flash',
-  'gemini-3.7-flash',
-  'gemini-3.5-flash-lite'
-]);
+export const DEFAULT_GEMINI_MODELS = Object.freeze(['gemini-3.5-flash-lite']);
 
 const RESERVE_GEMINI_CREDENTIAL_SCRIPT = String.raw`
 -- GEMINI_CREDENTIAL_RESERVATION
@@ -16,6 +11,7 @@ local raw = redis.call('GET', KEYS[1])
 if not raw then return cjson.encode({ok=false, code='POOL_NOT_CONFIGURED'}) end
 local pool = cjson.decode(raw)
 local nowMs = tonumber(ARGV[1]) or 0
+local managedModel = ARGV[4]
 local excluded = {}
 if ARGV[3] and ARGV[3] ~= '' then
   for _, id in ipairs(cjson.decode(ARGV[3])) do excluded[id] = true end
@@ -30,11 +26,7 @@ for _, credential in ipairs(pool.credentials or {}) do
     state = nil
   end
   local exhausted = state and state.models or {}
-  local exhaustedCount = 0
-  for _, model in ipairs(pool.models or {}) do
-    if exhausted[model] then exhaustedCount = exhaustedCount + 1 end
-  end
-  if exhaustedCount < #(pool.models or {}) then
+  if not exhausted[managedModel] then
     return cjson.encode({
       ok=true,
       source='redis-vault',
@@ -75,12 +67,9 @@ state.updatedAt = nowIso
 state.resetAt = resetAt
 state.resetAtMs = resetAtMs
 
-local exhaustedCount = 0
-for _, requiredModel in ipairs(pool.models or {}) do
-  if state.models[requiredModel] then exhaustedCount = exhaustedCount + 1 end
-end
+local exhaustedCount = state.models[model] and 1 or 0
 state.exhaustedCount = exhaustedCount
-state.used = exhaustedCount >= #(pool.models or {})
+state.used = exhaustedCount >= 1
 if state.used and not state.usedAt then state.usedAt = nowIso end
 redis.call('HSET', KEYS[2], credentialId, cjson.encode(state))
 return cjson.encode({ok=true, exhaustedCount=exhaustedCount, used=state.used, resetAt=resetAt})
@@ -218,7 +207,7 @@ export async function reserveGeminiCredential(options = {}) {
   const excludedIds = [...new Set((options.excludeCredentialIds || []).map(String).filter(Boolean))];
   const raw = await redisCommand([
     'EVAL', RESERVE_GEMINI_CREDENTIAL_SCRIPT, '2', GEMINI_POOL_KEY, GEMINI_POOL_STATES_KEY,
-    String(now.getTime()), resetAt, JSON.stringify(excludedIds)
+    String(now.getTime()), resetAt, JSON.stringify(excludedIds), DEFAULT_GEMINI_MODELS[0]
   ], options);
   const allocation = typeof raw === 'string' ? JSON.parse(raw) : raw;
   if (!allocation?.ok) {
@@ -237,8 +226,8 @@ export async function reserveGeminiCredential(options = {}) {
     id: allocation.credential.id,
     label: allocation.credential.label,
     apiKey: decryptApiKey(allocation.credential),
-    models: Array.isArray(allocation.models) ? allocation.models : [...DEFAULT_GEMINI_MODELS],
-    exhaustedModels: Object.keys(allocation.exhaustedModels || {}),
+    models: [...DEFAULT_GEMINI_MODELS],
+    exhaustedModels: Object.keys(allocation.exhaustedModels || {}).filter((model) => DEFAULT_GEMINI_MODELS.includes(model)),
     resetAt: allocation.resetAt || resetAt
   };
 }
@@ -270,12 +259,12 @@ export async function listAvailableGeminiCredentials(options = {}) {
       id: credential.id,
       label: credential.label,
       apiKey: decryptApiKey(credential),
-      models: Array.isArray(config.models) ? config.models : [...DEFAULT_GEMINI_MODELS],
-      exhaustedModels: Object.keys(validState?.models || {}),
+      models: [...DEFAULT_GEMINI_MODELS],
+      exhaustedModels: Object.keys(validState?.models || {}).filter((model) => DEFAULT_GEMINI_MODELS.includes(model)),
       resetAt: validState?.resetAt || resetAt
     };
   });
-  if (!credentials.some((credential) => credential.exhaustedModels.length < credential.models.length)) {
+  if (!credentials.some((credential) => credential.exhaustedModels.length < DEFAULT_GEMINI_MODELS.length)) {
     const error = new Error(`Tất cả Gemini API key đã dùng hết quota ngày. Pool sẽ tự mở lại sau ${resetAt}.`);
     error.code = 'POOL_EXHAUSTED';
     error.statusCode = 429;
@@ -320,13 +309,13 @@ export async function getGeminiCredentialPoolStatus(options = {}) {
   const publicCredentials = (config.credentials || []).map(({ id, label }) => {
     const state = parseState(states[id]);
     const validState = state && Number(state.resetAtMs || 0) > nowMs ? state : null;
-    const exhaustedModels = Object.keys(validState?.models || {}).filter((model) => config.models.includes(model));
+    const exhaustedModels = Object.keys(validState?.models || {}).filter((model) => DEFAULT_GEMINI_MODELS.includes(model));
     return {
       id,
       label,
       exhaustedModels,
-      remainingModels: config.models.filter((model) => !exhaustedModels.includes(model)),
-      status: exhaustedModels.length >= config.models.length ? 'used' : 'available',
+      remainingModels: DEFAULT_GEMINI_MODELS.filter((model) => !exhaustedModels.includes(model)),
+      status: exhaustedModels.length >= DEFAULT_GEMINI_MODELS.length ? 'used' : 'available',
       resetAt: validState?.resetAt || nextPacificResetAt(new Date(nowMs))
     };
   });
@@ -344,7 +333,7 @@ export async function getGeminiCredentialPoolStatus(options = {}) {
     provider: 'upstash-redis',
     updatedAt: config.updatedAt || null,
     timeZone: config.timeZone || 'America/Los_Angeles',
-    models: config.models || [...DEFAULT_GEMINI_MODELS],
+    models: [...DEFAULT_GEMINI_MODELS],
     resetAt: nextPacificResetAt(new Date(nowMs)),
     active: available.find((credential) => credential.status === 'active') || null,
     backup: available.filter((credential) => credential.status === 'backup'),

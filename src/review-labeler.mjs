@@ -406,7 +406,7 @@ function normalizeLayer2Label(candidate, review, layer1, product = {}) {
 
 async function classifyBatchWithGemini(batch, product, options = {}) {
   const apiKey = process.env.GEMINI_API_KEY;
-  const model = process.env.LABELER_GEMINI_MODEL || process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+  const model = 'gemini-3.5-flash-lite';
   const payload = batch.map(({ review, layer1 }) => ({
     id: layer1.id,
     rating: Number(review.rating) || 0,
@@ -426,11 +426,11 @@ async function classifyBatchWithGemini(batch, product, options = {}) {
     fetchImpl: options.fetchImpl,
     apiKey,
     primaryModel: model,
-    fallbackModels: process.env.LABELER_GEMINI_FALLBACK_MODELS || process.env.GEMINI_FALLBACK_MODELS,
     context: 'Gemini labeler',
     deadlineAt: options.deadlineAt,
-    attemptTimeoutMs: 8_000,
-    retryOnTimeout: false,
+    attemptTimeoutMs: 4_000,
+    maxRetries: 2,
+    retryOnTimeout: true,
     routeContext: options.routeContext,
     buildRequest: (selectedModel, selectedApiKey) => ({
       method: 'POST',
@@ -476,7 +476,7 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
   const batchSize = Math.min(20, Math.max(5, Number.parseInt(process.env.LABELER_LLM_BATCH_SIZE || '20', 10) || 20));
   const warnings = [];
   const layer2ById = new Map();
-  const model = process.env.LABELER_GEMINI_MODEL || process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+  const model = 'gemini-3.5-flash-lite';
   const batches = chunks(selected, batchSize);
   let succeededBatches = 0;
   let failedBatches = 0;
