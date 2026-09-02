@@ -4,6 +4,7 @@ import {
   extractProductPageMeta,
   extractShopeeProductApiMeta,
   fetchProductPageMeta,
+  mergeProductMetadata,
   productMetadataUrls
 } from '../src/sources.mjs';
 
@@ -19,6 +20,64 @@ test('đọc tên và ảnh sản phẩm từ Open Graph dù thứ tự thuộc 
     title: 'Hộp 500g Đậu Hà Lan & Tỏi Ớt',
     image: 'https://cdn.example.com/product-500.jpg'
   });
+});
+
+test('đọc ảnh sản phẩm từ preload khi TikTok không trả Open Graph', () => {
+  const metadata = extractProductPageMeta(`
+    <title>Kính chống tia UV</title>
+    <link rel="preload" fetchPriority="high" as="image"
+      href="https://p16-oec-sg.ibyteimg.com/tos/product-cover~tplv-crop-webp:800:800.webp?x=1&amp;y=2">
+  `, 'https://shop.tiktok.com/vn/pdp/kinh-chong-tia-uv/1731695277744555051');
+
+  assert.equal(
+    metadata.image,
+    'https://p16-oec-sg.ibyteimg.com/tos/product-cover~tplv-crop-webp:800:800.webp?x=1&y=2'
+  );
+});
+
+test('từ chối metadata TikTok nếu redirect sang product id khác', async () => {
+  const metadata = await fetchProductPageMeta(
+    'https://shop.tiktok.com/vn/pdp/san-pham/1731159356089795879',
+    {
+      expectedProductId: '1731159356089795879',
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        headers: { get: () => 'text/html; charset=utf-8' },
+        body: null,
+        async text() {
+          return '<meta property="og:image" content="https://p16-oec-sg.ibyteimg.com/tos/wrong.webp">';
+        }
+      })
+    }
+  );
+  assert.equal(metadata.image, 'https://p16-oec-sg.ibyteimg.com/tos/wrong.webp');
+
+  const redirected = await fetchProductPageMeta(
+    'https://shop.tiktok.com/vn/pdp/san-pham/1731159356089795879',
+    {
+      expectedProductId: '1731159356089795879',
+      fetchImpl: async (url) => {
+        if (String(url).includes('1731159356089795879')) {
+          return {
+            ok: false,
+            status: 302,
+            headers: { get: (name) => name === 'location' ? 'https://shop.tiktok.com/vn/pdp/san-pham-khac/1731695277744555051' : null }
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: () => 'text/html; charset=utf-8' },
+          body: null,
+          async text() {
+            return '<meta property="og:image" content="https://p16-oec-sg.ibyteimg.com/tos/wrong-product.webp">';
+          }
+        };
+      }
+    }
+  );
+  assert.deepEqual(redirected, {});
 });
 
 test('dùng Product JSON-LD làm phương án dự phòng cho ảnh sản phẩm', () => {
@@ -59,17 +118,38 @@ test('ưu tiên ảnh gallery sản phẩm khi Open Graph chỉ là logo chung',
   );
 });
 
-test('tạo thêm URL TikTok Shop SEO từ đúng product id', () => {
+test('chỉ dùng URL TikTok đã xác nhận đúng product id', () => {
   assert.deepEqual(
     productMetadataUrls('https://shop.tiktok.com/vn/pdp/kinh-doi-mau/1731159356089795879', {
       platform: 'TikTok Shop',
       productId: '1731159356089795879'
     }),
-    [
-      'https://shop.tiktok.com/vn/pdp/kinh-doi-mau/1731159356089795879',
-      'https://shop-vn.tiktok.com/pdp/1731159356089795879',
-      'https://shop.tiktok.com/view/product/1731159356089795879'
-    ]
+    ['https://shop.tiktok.com/vn/pdp/kinh-doi-mau/1731159356089795879']
+  );
+  assert.deepEqual(
+    productMetadataUrls('https://shop.tiktok.com/vn/pdp/san-pham-khac/1730000000000000000', {
+      platform: 'TikTok Shop',
+      productId: '1731159356089795879'
+    }),
+    []
+  );
+});
+
+test('ảnh sản phẩm Shopee không bao giờ bị ảnh review ghi đè', () => {
+  assert.deepEqual(
+    mergeProductMetadata(
+      { title: 'Trang Shopee', image: 'https://down-vn.img.susercontent.com/file/product-cover' },
+      { title: 'Tên từ review', image: 'https://down-vn.img.susercontent.com/file/review-photo' },
+      'Shopee'
+    ),
+    {
+      title: 'Tên từ review',
+      image: 'https://down-vn.img.susercontent.com/file/product-cover'
+    }
+  );
+  assert.deepEqual(
+    mergeProductMetadata({}, { title: 'Tên từ review', image: 'https://down-vn.img.susercontent.com/file/review-photo' }, 'Shopee'),
+    { title: 'Tên từ review' }
   );
 });
 
@@ -120,3 +200,5 @@ test('yêu cầu metadata TikTok bằng chế độ preview để nhận ảnh O
     image: 'https://p16-oec-sg.ibyteimg.com/tos/product.webp'
   });
 });
+
+
