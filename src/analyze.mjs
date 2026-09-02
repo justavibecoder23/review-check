@@ -4,6 +4,7 @@ import { classifyReviewSignals, findReviewIssues, ISSUE_DEFINITIONS } from './tr
 import { labelReviewsTwoLayer } from './review-labeler.mjs';
 import { saveReviewDatasets } from './review-dataset-storage.mjs';
 import { createProgressReporter } from './sse.mjs';
+import { assertEnoughReviews } from './analysis-eligibility.mjs';
 
 const issueDefinitions = ISSUE_DEFINITIONS.map(({ id, label, words }) => ({ id, label, words }));
 const lowValuePatterns = [/^ok+([.! ]*)$/i, /tốt([.! ]*)$/i, /^đẹp([.! ]*)$/i, /^5\s*sao/i, /chưa.{0,12}(dùng|thử)/i];
@@ -47,6 +48,12 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   const { reviews, source, product, warnings } = await getReviews(rawUrl.trim(), {
     onProgress: options.onProgress
   });
+  try {
+    assertEnoughReviews(reviews);
+  } catch (error) {
+    progress('eligibility', 64, 'Sản phẩm chưa đủ đánh giá để phân tích.');
+    throw error;
+  }
   progress('labeling', 66, 'Đang phân tích reviews...');
   const geminiStartedAt = Date.now();
   const geminiContext = {
@@ -139,4 +146,5 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   progress('complete', 100, 'Phân tích hoàn tất.');
   return result;
 }
+
 
