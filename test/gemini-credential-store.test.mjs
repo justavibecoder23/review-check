@@ -5,6 +5,7 @@ import {
   GEMINI_POOL_KEY,
   GEMINI_POOL_STATES_KEY,
   getGeminiCredentialPoolStatus,
+  listAvailableGeminiCredentials,
   markGeminiModelExhausted,
   nextPacificResetAt,
   reserveGeminiCredential,
@@ -113,6 +114,10 @@ test('Gemini pool mã hóa key, dùng đủ bốn model rồi chuyển key và r
       ]
     }, { fetchImpl: redis.fetchImpl, now });
     assert.doesNotMatch(redis.values.get(GEMINI_POOL_KEY), /AIza-/);
+
+    const available = await listAvailableGeminiCredentials({ fetchImpl: redis.fetchImpl, now });
+    assert.deepEqual(available.map((credential) => credential.label), ['project-one', 'project-two']);
+    assert.equal(available[1].apiKey, 'AIza-second-project-secret-key');
 
     const first = await reserveGeminiCredential({ fetchImpl: redis.fetchImpl, now });
     assert.equal(first.label, 'project-one');

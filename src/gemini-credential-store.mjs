@@ -243,6 +243,48 @@ export async function reserveGeminiCredential(options = {}) {
   };
 }
 
+export async function listAvailableGeminiCredentials(options = {}) {
+  if (!isRedisConfigured()) {
+    const error = new Error('Chưa cấu hình Upstash Redis cho Gemini pool.');
+    error.code = 'POOL_NOT_CONFIGURED';
+    throw error;
+  }
+  const [configRaw, statesRaw] = await redisTransaction([
+    ['GET', GEMINI_POOL_KEY],
+    ['HGETALL', GEMINI_POOL_STATES_KEY]
+  ], options);
+  if (!configRaw) {
+    const error = new Error('Chưa cấu hình Gemini API key pool.');
+    error.code = 'POOL_NOT_CONFIGURED';
+    throw error;
+  }
+  const config = typeof configRaw === 'string' ? JSON.parse(configRaw) : configRaw;
+  const states = parseHashReply(statesRaw);
+  const nowMs = (options.now ? new Date(options.now) : new Date()).getTime();
+  const resetAt = nextPacificResetAt(new Date(nowMs));
+  const credentials = (config.credentials || []).map((credential) => {
+    const state = parseState(states[credential.id]);
+    const validState = state && Number(state.resetAtMs || 0) > nowMs ? state : null;
+    return {
+      source: 'redis-vault',
+      id: credential.id,
+      label: credential.label,
+      apiKey: decryptApiKey(credential),
+      models: Array.isArray(config.models) ? config.models : [...DEFAULT_GEMINI_MODELS],
+      exhaustedModels: Object.keys(validState?.models || {}),
+      resetAt: validState?.resetAt || resetAt
+    };
+  });
+  if (!credentials.some((credential) => credential.exhaustedModels.length < credential.models.length)) {
+    const error = new Error(`Tất cả Gemini API key đã dùng hết quota ngày. Pool sẽ tự mở lại sau ${resetAt}.`);
+    error.code = 'POOL_EXHAUSTED';
+    error.statusCode = 429;
+    error.resetAt = resetAt;
+    throw error;
+  }
+  return credentials;
+}
+
 export async function markGeminiModelExhausted(credential, model, options = {}) {
   if (!credential?.id) throw new Error('Thiếu mã Gemini API key cần cập nhật.');
   if (!DEFAULT_GEMINI_MODELS.includes(model)) throw new Error('Model Gemini không thuộc chuỗi quota được quản lý.');

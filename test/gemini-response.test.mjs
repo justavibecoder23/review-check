@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { geminiThinkingConfig, requestGeminiWithFallback } from '../src/gemini-response.mjs';
+import { GEMINI_ATTEMPT_TIMEOUT_MS, geminiThinkingConfig, requestGeminiWithFallback } from '../src/gemini-response.mjs';
 
 function quotaResponse() {
   return {
@@ -12,24 +12,23 @@ function quotaResponse() {
   };
 }
 
-test('Gemini tự chuyển 3.5 sang 3.6, 3.7 rồi 3.5 Flash-Lite khi từng model hết quota', async () => {
+test('Gemini dừng sau tối đa hai retry dù chuỗi còn model khác', async () => {
   const requestedModels = [];
-  const { model, attemptedModels } = await requestGeminiWithFallback({
+  await assert.rejects(() => requestGeminiWithFallback({
     apiKey: 'test-key',
     primaryModel: 'gemini-3.5-flash',
     fetchImpl: async (url) => {
       const requestedModel = decodeURIComponent(url).match(/models\/(.+):generateContent/)[1];
       requestedModels.push(requestedModel);
-      return requestedModel === 'gemini-3.5-flash-lite' ? { ok: true } : quotaResponse();
+      return quotaResponse();
     },
     buildRequest: () => ({ method: 'POST' })
-  });
-  assert.equal(model, 'gemini-3.5-flash-lite');
-  assert.deepEqual(requestedModels, ['gemini-3.5-flash', 'gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-3.5-flash-lite']);
-  assert.deepEqual(attemptedModels, requestedModels);
+  }), /HTTP 429/);
+  assert.deepEqual(requestedModels, ['gemini-3.5-flash', 'gemini-3.6-flash', 'gemini-3.7-flash']);
 });
 
 test('Gemini 3.7 dùng thinking low còn các model khác giữ minimal', () => {
+  assert.equal(GEMINI_ATTEMPT_TIMEOUT_MS, 10_000);
   assert.deepEqual(geminiThinkingConfig('minimal', 'gemini-3.7-flash'), { thinkingLevel: 'low' });
   assert.deepEqual(geminiThinkingConfig('minimal', 'gemini-3.5-flash-lite'), { thinkingLevel: 'minimal' });
 });
@@ -52,25 +51,15 @@ test('Gemini không đổi model khi lỗi không phải hết quota', async () 
   assert.equal(requestedModels.length, 1);
 });
 
-test('Gemini dùng đủ bốn model trên một key rồi mới chuyển sang key tiếp theo', async () => {
+test('Gemini retry model khác một lần rồi dùng API key dự phòng ở retry cuối', async () => {
   const credentials = [
     { id: 'key-1', apiKey: 'secret-1', exhaustedModels: [] },
     { id: 'key-2', apiKey: 'secret-2', exhaustedModels: [] }
   ];
-  const marked = new Map();
   const requests = [];
   const result = await requestGeminiWithFallback({
     apiKey: 'bootstrap-key',
-    reserveCredentialImpl: async () => {
-      const credential = credentials.find((item) => (marked.get(item.id)?.size || 0) < 4);
-      if (!credential) throw Object.assign(new Error('Hết pool'), { code: 'POOL_EXHAUSTED' });
-      return { ...credential, exhaustedModels: [...(marked.get(credential.id) || [])] };
-    },
-    markModelExhaustedImpl: async (credential, model) => {
-      if (!marked.has(credential.id)) marked.set(credential.id, new Set());
-      marked.get(credential.id).add(model);
-      return { used: marked.get(credential.id).size === 4 };
-    },
+    listCredentialsImpl: async () => credentials,
     fetchImpl: async (url, init) => {
       const model = decodeURIComponent(url).match(/models\/(.+):generateContent/)[1];
       const key = init.headers['x-goog-api-key'];
@@ -84,10 +73,9 @@ test('Gemini dùng đủ bốn model trên một key rồi mới chuyển sang k
   assert.deepEqual(requests, [
     'secret-1:gemini-3.5-flash',
     'secret-1:gemini-3.6-flash',
-    'secret-1:gemini-3.7-flash',
-    'secret-1:gemini-3.5-flash-lite',
     'secret-2:gemini-3.5-flash'
   ]);
+  assert.equal(result.attempts, 3);
 });
 
 test('Gemini timeout thì retry model khác rồi chuyển sang API key dự phòng', async () => {
@@ -98,11 +86,7 @@ test('Gemini timeout thì retry model khác rồi chuyển sang API key dự ph�
   const requests = [];
   const result = await requestGeminiWithFallback({
     primaryModel: 'gemini-3.5-flash',
-    reserveCredentialImpl: async ({ excludeCredentialIds = [] } = {}) => {
-      const credential = credentials.find((item) => !excludeCredentialIds.includes(item.id));
-      if (!credential) throw Object.assign(new Error('Không còn key retry'), { code: 'POOL_RETRY_EXHAUSTED' });
-      return credential;
-    },
+    listCredentialsImpl: async () => credentials,
     fetchImpl: async (url, init) => {
       const model = decodeURIComponent(url).match(/models\/(.+):generateContent/)[1];
       const key = init.headers['x-goog-api-key'];
@@ -119,4 +103,26 @@ test('Gemini timeout thì retry model khác rồi chuyển sang API key dự ph�
     'secret-2:gemini-3.5-flash'
   ]);
   assert.deepEqual(result.attemptedCredentialIds, ['key-1', 'key-2']);
+});
+
+test('timeout được áp cho từng attempt và vẫn dừng ở hai retry', async () => {
+  let calls = 0;
+  const startedAt = Date.now();
+  await assert.rejects(() => requestGeminiWithFallback({
+    apiKey: 'test-key',
+    attemptTimeoutMs: 20,
+    fetchImpl: async (_url, init) => {
+      calls += 1;
+      await new Promise((resolve, reject) => {
+        const guard = setTimeout(resolve, 1_000);
+        init.signal.addEventListener('abort', () => {
+          clearTimeout(guard);
+          reject(init.signal.reason);
+        }, { once: true });
+      });
+    },
+    buildRequest: () => ({ method: 'POST' })
+  }), /tạm thời không phản hồi/);
+  assert.equal(calls, 3);
+  assert.ok(Date.now() - startedAt < 500);
 });

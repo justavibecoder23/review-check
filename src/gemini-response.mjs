@@ -1,4 +1,11 @@
-import { markGeminiModelExhausted, reserveGeminiCredential } from './gemini-credential-store.mjs';
+import { listAvailableGeminiCredentials, markGeminiModelExhausted } from './gemini-credential-store.mjs';
+import {
+  beginGeminiRoute,
+  finishGeminiRoute,
+  geminiRouteId,
+  geminiRouteScore,
+  getGeminiHealthSnapshot
+} from './gemini-health.mjs';
 
 function truncate(value, maxLength = 240) {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, maxLength);
@@ -6,6 +13,7 @@ function truncate(value, maxLength = 240) {
 
 const DEFAULT_MODEL = 'gemini-3.5-flash';
 const DEFAULT_FALLBACK_MODELS = Object.freeze(['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-3.5-flash-lite']);
+export const GEMINI_ATTEMPT_TIMEOUT_MS = 10_000;
 
 function configuredFallbackModels(value) {
   if (value === undefined || value === null || String(value).trim() === '') return DEFAULT_FALLBACK_MODELS;
@@ -20,20 +28,34 @@ function transientGeminiError(error) {
 }
 
 async function fetchGemini(fetchImpl, url, init, context, model) {
+  const startedAt = Date.now();
   try {
     const response = await fetchImpl(url, init);
-    if (response.ok) return { response };
+    if (response.ok) return { response, latencyMs: Date.now() - startedAt };
     const error = await geminiHttpError(response, context);
     error.model = model;
-    return { error };
+    return { error, latencyMs: Date.now() - startedAt };
   } catch (cause) {
     const error = new Error(`${context} tạm thời không phản hồi: ${truncate(cause?.message || cause || 'lỗi mạng')}`);
     error.name = cause?.name || 'GeminiNetworkError';
     error.statusCode = Number(cause?.statusCode) || null;
     error.model = model;
     error.transient = true;
-    return { error };
+    return { error, latencyMs: Date.now() - startedAt };
   }
+}
+
+function attemptSignal(existingSignal, timeoutMs) {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  if (!existingSignal || typeof AbortSignal.any !== 'function') return timeoutSignal;
+  return AbortSignal.any([existingSignal, timeoutSignal]);
+}
+
+function healthErrorType(error) {
+  if (error?.name === 'AbortError' || /abort|timeout|timed out/i.test(String(error?.message || ''))) return 'timeout';
+  if (error?.quotaExhausted) return error.quotaScope === 'day' ? 'daily-quota' : 'rate-limit';
+  if (Number(error?.statusCode) >= 500) return 'provider-overload';
+  return 'request-error';
 }
 
 export function geminiModelChain(primaryModel = DEFAULT_MODEL, fallbackModels = process.env.GEMINI_FALLBACK_MODELS) {
@@ -81,110 +103,136 @@ export async function requestGeminiWithFallback({
   fallbackModels,
   context = 'Gemini',
   buildRequest,
-  reserveCredentialImpl = reserveGeminiCredential,
+  listCredentialsImpl = listAvailableGeminiCredentials,
   markModelExhaustedImpl = markGeminiModelExhausted,
-  transientModelsPerKey = 2,
-  transientBackupKeyRetries = process.env.GEMINI_TRANSIENT_KEY_RETRIES || '1'
+  getHealthSnapshotImpl = getGeminiHealthSnapshot,
+  beginRouteImpl = beginGeminiRoute,
+  finishRouteImpl = finishGeminiRoute,
+  maxRetries = 2,
+  attemptTimeoutMs = GEMINI_ATTEMPT_TIMEOUT_MS
 }) {
+  const requestStartedAt = Date.now();
   const models = geminiModelChain(primaryModel, fallbackModels);
-  const maxTransientModelsPerKey = Math.min(models.length, Math.max(1, Number.parseInt(transientModelsPerKey, 10) || 1));
-  const maxTransientBackupKeys = Math.min(2, Math.max(0, Number.parseInt(transientBackupKeyRetries, 10) || 0));
+  const maxAttempts = 1 + Math.min(2, Math.max(0, Number.parseInt(maxRetries, 10) || 0));
+  const timeoutMs = Math.min(GEMINI_ATTEMPT_TIMEOUT_MS, Math.max(10, Number.parseInt(attemptTimeoutMs, 10) || GEMINI_ATTEMPT_TIMEOUT_MS));
   let lastError;
-  let credential = null;
+  let credentials = [];
   try {
-    credential = await reserveCredentialImpl({ fetchImpl: redisFetchImpl });
+    credentials = await listCredentialsImpl({ fetchImpl: redisFetchImpl });
   } catch (error) {
     if (error?.code !== 'POOL_NOT_CONFIGURED') throw error;
   }
 
-  if (!credential) {
+  if (!credentials.length) {
     if (!apiKey) {
       const error = new Error('GEMINI_API_KEY chưa được cấu hình và Gemini pool chưa có key.');
       error.code = 'GEMINI_NOT_CONFIGURED';
       error.statusCode = 503;
       throw error;
     }
-    let transientAttempts = 0;
-    for (let index = 0; index < models.length; index += 1) {
-      const model = models[index];
-      const attempt = await fetchGemini(fetchImpl,
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-        buildRequest(model, apiKey), context, model
-      );
-      if (attempt.response) return { response: attempt.response, model, attemptedModels: models.slice(0, index + 1), credentialId: null };
-      lastError = attempt.error;
-      lastError.model = model;
-      lastError.attemptedModels = models.slice(0, index + 1);
-      if (transientGeminiError(lastError)) {
-        transientAttempts += 1;
-        if (transientAttempts < maxTransientModelsPerKey && index < models.length - 1) continue;
-        throw lastError;
-      }
-      if (!lastError.quotaExhausted || index === models.length - 1) throw lastError;
-    }
-    throw lastError || new Error(`${context} không có model khả dụng.`);
+    credentials = [{ id: null, apiKey, exhaustedModels: [] }];
   }
 
   const attemptedModels = [];
   const attemptedCredentialIds = [];
-  const excludedCredentialIds = new Set();
-  let transientBackupKeysUsed = 0;
-  while (credential) {
-    if (excludedCredentialIds.has(credential.id)) throw lastError || new Error(`${context} không còn API key khác để retry.`);
-    attemptedCredentialIds.push(credential.id);
-    excludedCredentialIds.add(credential.id);
-    const exhausted = new Set(credential.exhaustedModels || []);
-    const availableModels = models.filter((model) => !exhausted.has(model));
-    let credentialUsed = false;
-    let temporaryQuotaFailure = false;
-    let transientAttempts = 0;
-    let rotateAfterTransientFailure = false;
-    for (const model of availableModels) {
-      attemptedModels.push(model);
-      const attempt = await fetchGemini(fetchImpl,
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-        buildRequest(model, credential.apiKey), context, model
-      );
-      if (attempt.response) {
-        return { response: attempt.response, model, attemptedModels, credentialId: credential.id, attemptedCredentialIds };
-      }
-      lastError = attempt.error;
-      lastError.model = model;
-      lastError.credentialId = credential.id;
-      lastError.attemptedModels = [...attemptedModels];
-      lastError.attemptedCredentialIds = [...attemptedCredentialIds];
-      if (transientGeminiError(lastError)) {
-        transientAttempts += 1;
-        if (transientAttempts < maxTransientModelsPerKey) continue;
-        rotateAfterTransientFailure = true;
-        break;
-      }
-      if (!lastError.quotaExhausted) throw lastError;
-      if (lastError.quotaScope === 'minute') {
-        temporaryQuotaFailure = true;
-        continue;
-      }
-      const state = await markModelExhaustedImpl(credential, model, { fetchImpl: redisFetchImpl });
-      credentialUsed = Boolean(state.used);
-    }
-    if (rotateAfterTransientFailure || temporaryQuotaFailure) {
-      if (transientBackupKeysUsed >= maxTransientBackupKeys) throw lastError;
-      transientBackupKeysUsed += 1;
-      try {
-        credential = await reserveCredentialImpl({
-          fetchImpl: redisFetchImpl,
-          excludeCredentialIds: [...excludedCredentialIds]
+  const attemptedRoutes = new Set();
+  const routeIds = credentials.flatMap((credential) => models
+    .filter((model) => !(credential.exhaustedModels || []).includes(model))
+    .map((model) => geminiRouteId(credential.id, model)));
+  const health = await getHealthSnapshotImpl({ fetchImpl: redisFetchImpl, routeIds });
+  let firstCredentialId;
+
+  for (let attemptIndex = 0; attemptIndex < maxAttempts; attemptIndex += 1) {
+    const nowMs = Date.now();
+    const candidates = [];
+    credentials.forEach((credential, credentialIndex) => {
+      const exhausted = new Set(credential.exhaustedModels || []);
+      models.forEach((model, modelIndex) => {
+        if (exhausted.has(model)) return;
+        const routeId = geminiRouteId(credential.id, model);
+        if (attemptedRoutes.has(routeId)) return;
+        const state = health[routeId] || {};
+        const pressure = geminiRouteScore(state, model, nowMs);
+        candidates.push({
+          credential,
+          credentialIndex,
+          model,
+          modelIndex,
+          routeId,
+          state,
+          pressure,
+          score: credentialIndex * 10 + modelIndex + pressure * 5
         });
-      } catch (error) {
-        if (error?.code === 'POOL_RETRY_EXHAUSTED') throw lastError;
-        throw error;
-      }
-      continue;
+      });
+    });
+    if (!candidates.length) break;
+    const healthy = candidates.filter((candidate) => Number.isFinite(candidate.pressure));
+    let choices = healthy.length ? healthy : candidates;
+    if (attemptIndex === 1 && firstCredentialId !== undefined) {
+      const sameCredential = choices.filter((candidate) => candidate.credential.id === firstCredentialId);
+      if (sameCredential.length) choices = sameCredential;
     }
-    if (!credentialUsed) throw lastError;
-    credential = await reserveCredentialImpl({ fetchImpl: redisFetchImpl, excludeCredentialIds: [...excludedCredentialIds] });
+    if (attemptIndex === 2 && firstCredentialId !== undefined) {
+      const backupCredential = choices.filter((candidate) => candidate.credential.id !== firstCredentialId);
+      if (backupCredential.length) choices = backupCredential;
+    }
+    choices.sort((left, right) => left.score - right.score
+      || Number(left.state?.cooldownUntilMs || 0) - Number(right.state?.cooldownUntilMs || 0));
+    const selected = choices[0];
+    const { credential, model, routeId } = selected;
+    if (attemptIndex === 0) firstCredentialId = credential.id;
+    attemptedRoutes.add(routeId);
+    attemptedModels.push(model);
+    if (credential.id && !attemptedCredentialIds.includes(credential.id)) attemptedCredentialIds.push(credential.id);
+
+    await beginRouteImpl(routeId, { fetchImpl: redisFetchImpl, nowMs });
+    const request = buildRequest(model, credential.apiKey);
+    const attempt = await fetchGemini(
+      fetchImpl,
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+      { ...request, signal: attemptSignal(request?.signal, timeoutMs) },
+      context,
+      model
+    );
+    if (attempt.response) {
+      const state = await finishRouteImpl(routeId, {
+        ok: true, statusCode: Number(attempt.response.status) || 200, latencyMs: attempt.latencyMs
+      }, { fetchImpl: redisFetchImpl });
+      if (state) health[routeId] = state;
+      return {
+        response: attempt.response,
+        model,
+        attemptedModels,
+        credentialId: credential.id,
+        attemptedCredentialIds,
+        attempts: attemptIndex + 1,
+        finalAttemptLatencyMs: attempt.latencyMs,
+        totalDurationMs: Date.now() - requestStartedAt
+      };
+    }
+
+    lastError = attempt.error;
+    lastError.model = model;
+    lastError.credentialId = credential.id;
+    lastError.attemptedModels = [...attemptedModels];
+    lastError.attemptedCredentialIds = [...attemptedCredentialIds];
+    lastError.attempts = attemptIndex + 1;
+    lastError.totalDurationMs = Date.now() - requestStartedAt;
+    const state = await finishRouteImpl(routeId, {
+      ok: false,
+      statusCode: lastError.statusCode,
+      latencyMs: attempt.latencyMs,
+      errorType: healthErrorType(lastError)
+    }, { fetchImpl: redisFetchImpl });
+    if (state) health[routeId] = state;
+
+    if (lastError.quotaExhausted && lastError.quotaScope === 'day' && credential.id) {
+      await markModelExhaustedImpl(credential, model, { fetchImpl: redisFetchImpl });
+      credential.exhaustedModels = [...new Set([...(credential.exhaustedModels || []), model])];
+    }
+    if (!lastError.quotaExhausted && !transientGeminiError(lastError)) throw lastError;
   }
-  throw lastError || new Error(`${context} không có model khả dụng.`);
+  throw lastError || new Error(`${context} không còn route Gemini khả dụng sau ${maxAttempts} lần thử.`);
 }
 
 export function parseGeminiJson(payload, context = 'Gemini') {

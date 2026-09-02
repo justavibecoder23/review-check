@@ -461,7 +461,7 @@ async function analyzeWithGemini(reviews, fallback, fetchImpl) {
           responseSchema: trustSchema
         }
       }),
-      signal: AbortSignal.timeout(20_000)
+      signal: AbortSignal.timeout(10_000)
     })
   });
   const body = await response.json();
@@ -469,13 +469,26 @@ async function analyzeWithGemini(reviews, fallback, fetchImpl) {
 }
 
 export async function buildTrustAnalysis(reviews = [], options = {}) {
+  const narrativeStartedAt = Date.now();
   const fallback = buildRuleBasedTrust(reviews, options);
   try {
-    return await analyzeWithGemini(reviews, fallback, options.fetchImpl || fetch);
+    const result = await analyzeWithGemini(reviews, fallback, options.fetchImpl || fetch);
+    if (process.env.VERCEL || options.logGeminiErrors) {
+      (options.logger || console).log(JSON.stringify({
+        level: 'info',
+        event: 'gemini_trust_narrative_complete',
+        durationMs: Date.now() - narrativeStartedAt,
+        reviews: reviews.length,
+        engine: result.engine
+      }));
+    }
+    return result;
   } catch (error) {
     if (process.env.VERCEL || options.logGeminiErrors) {
       (options.logger || console).error('[trust-analysis] Gemini request failed', {
         model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+        durationMs: Date.now() - narrativeStartedAt,
+        attempts: error?.attempts || 0,
         error: error?.message || 'Lỗi Gemini không xác định.'
       });
     }
@@ -485,4 +498,3 @@ export async function buildTrustAnalysis(reviews = [], options = {}) {
     };
   }
 }
-

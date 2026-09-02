@@ -210,7 +210,7 @@ ${conversation}
             responseSchema
           }
         }),
-        signal: AbortSignal.timeout(18_000)
+        signal: AbortSignal.timeout(10_000)
       })
     });
     const payload = await response.json();

@@ -349,7 +349,7 @@ async function classifyBatchWithGemini(batch, product, fetchImpl) {
           responseSchema: layer2ResponseSchema
         }
       }),
-      signal: AbortSignal.timeout(20_000)
+      signal: AbortSignal.timeout(10_000)
     })
   });
   const { response } = geminiResult;
@@ -360,7 +360,9 @@ async function classifyBatchWithGemini(batch, product, fetchImpl) {
     retry: {
       model: geminiResult.model,
       attemptedModels: geminiResult.attemptedModels || [],
-      credentialAttempts: geminiResult.attemptedCredentialIds?.length || (geminiResult.credentialId ? 1 : 0)
+      credentialAttempts: geminiResult.attemptedCredentialIds?.length || (geminiResult.credentialId ? 1 : 0),
+      durationMs: geminiResult.totalDurationMs || 0,
+      finalAttemptLatencyMs: geminiResult.finalAttemptLatencyMs || 0
     }
   };
 }
@@ -372,6 +374,7 @@ function chunks(items, size) {
 }
 
 export async function labelReviewsTwoLayer(reviews = [], options = {}) {
+  const layer2StartedAt = Date.now();
   const prepared = reviews.map((review, index) => ({ review, layer1: labelReviewLayer1(review, index, options.product) }));
   const mode = options.mode || process.env.LABELER_LLM_MODE || 'all';
   const selected = mode === 'off' ? [] : mode === 'uncertain' ? prepared.filter((item) => item.layer1.requires_llm) : prepared;
@@ -385,6 +388,7 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
   let retryAttempts = 0;
   let credentialSwitches = 0;
   const modelsUsed = new Set();
+  const batchDurationsMs = [];
   if (selected.length && (process.env.GEMINI_API_KEY || isRedisConfigured())) {
     const results = await Promise.all(batches.map(async (batch, batchIndex) => {
       try {
@@ -394,6 +398,7 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
         retryAttempts += Math.max(0, attemptedCount - 1);
         credentialSwitches += Math.max(0, (result.retry?.credentialAttempts || 1) - 1);
         if (result.retry?.model) modelsUsed.add(result.retry.model);
+        if (result.retry?.durationMs) batchDurationsMs.push(result.retry.durationMs);
         if ((attemptedCount > 1 || result.retry?.credentialAttempts > 1) && (process.env.VERCEL || options.logLayer2Errors)) {
           (options.logger || console).warn('[review-labeler] Layer 2 recovered after retry', {
             batch: batchIndex + 1,
@@ -467,6 +472,24 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
     };
   });
 
+  const layer2DurationMs = Date.now() - layer2StartedAt;
+  if (process.env.VERCEL || options.logLayer2Errors) {
+    (options.logger || console).log(JSON.stringify({
+      level: 'info',
+      event: 'gemini_layer2_complete',
+      durationMs: layer2DurationMs,
+      reviews: reviews.length,
+      requested: selected.length,
+      returned: layer2ById.size,
+      batches: batches.length,
+      succeededBatches,
+      failedBatches,
+      retryAttempts,
+      credentialSwitches,
+      batchDurationsMs
+    }));
+  }
+
   return {
     reviews: labeledReviews,
     stats: {
@@ -477,6 +500,7 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
       layer2Model: model,
       layer2Batches: { total: batches.length, succeeded: succeededBatches, failed: failedBatches },
       layer2Retry: { retryAttempts, credentialSwitches, modelsUsed: [...modelsUsed] },
+      layer2DurationMs,
       corrected,
       abstained,
       engine: layer2ById.size ? 'layer1+gemini-layer2' : 'layer1-only',
