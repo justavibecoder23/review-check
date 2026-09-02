@@ -45,6 +45,15 @@ async function fetchGemini(fetchImpl, url, init, context, model) {
   }
 }
 
+async function responseTokenCount(response) {
+  try {
+    const payload = await response.clone().json();
+    return Math.max(0, Number(payload?.usageMetadata?.totalTokenCount) || 0);
+  } catch {
+    return 0;
+  }
+}
+
 function attemptSignal(existingSignal, timeoutMs) {
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
   if (!existingSignal || typeof AbortSignal.any !== 'function') return timeoutSignal;
@@ -109,7 +118,10 @@ export async function requestGeminiWithFallback({
   beginRouteImpl = beginGeminiRoute,
   finishRouteImpl = finishGeminiRoute,
   maxRetries = 2,
-  attemptTimeoutMs = GEMINI_ATTEMPT_TIMEOUT_MS
+  attemptTimeoutMs = GEMINI_ATTEMPT_TIMEOUT_MS,
+  deadlineAt,
+  retryOnTimeout = true,
+  routeContext
 }) {
   const requestStartedAt = Date.now();
   const models = geminiModelChain(primaryModel, fallbackModels);
@@ -136,6 +148,8 @@ export async function requestGeminiWithFallback({
   const attemptedModels = [];
   const attemptedCredentialIds = [];
   const attemptedRoutes = new Set();
+  const sharedBusyRoutes = routeContext?.busyRouteIds instanceof Set ? routeContext.busyRouteIds : new Set();
+  const sharedFailedRoutes = routeContext?.failedRouteIds instanceof Set ? routeContext.failedRouteIds : new Set();
   const routeIds = credentials.flatMap((credential) => models
     .filter((model) => !(credential.exhaustedModels || []).includes(model))
     .map((model) => geminiRouteId(credential.id, model)));
@@ -144,13 +158,22 @@ export async function requestGeminiWithFallback({
 
   for (let attemptIndex = 0; attemptIndex < maxAttempts; attemptIndex += 1) {
     const nowMs = Date.now();
+    if (Number.isFinite(Number(deadlineAt)) && nowMs >= Number(deadlineAt)) {
+      lastError = new Error(`${context} đã hết ngân sách thời gian.`);
+      lastError.name = 'TimeoutError';
+      lastError.attemptedModels = [...attemptedModels];
+      lastError.attemptedCredentialIds = [...attemptedCredentialIds];
+      lastError.attemptedRouteIds = [...attemptedRoutes];
+      lastError.attempts = attemptedModels.length;
+      break;
+    }
     const candidates = [];
     credentials.forEach((credential, credentialIndex) => {
       const exhausted = new Set(credential.exhaustedModels || []);
       models.forEach((model, modelIndex) => {
         if (exhausted.has(model)) return;
         const routeId = geminiRouteId(credential.id, model);
-        if (attemptedRoutes.has(routeId)) return;
+        if (attemptedRoutes.has(routeId) || sharedBusyRoutes.has(routeId) || sharedFailedRoutes.has(routeId)) return;
         const state = health[routeId] || {};
         const pressure = geminiRouteScore(state, model, nowMs);
         candidates.push({
@@ -161,7 +184,7 @@ export async function requestGeminiWithFallback({
           routeId,
           state,
           pressure,
-          score: credentialIndex * 10 + modelIndex + pressure * 5
+          score: pressure * 100 + modelIndex * 0.1 + credentialIndex * 0.01
         });
       });
     });
@@ -182,21 +205,30 @@ export async function requestGeminiWithFallback({
     const { credential, model, routeId } = selected;
     if (attemptIndex === 0) firstCredentialId = credential.id;
     attemptedRoutes.add(routeId);
+    sharedBusyRoutes.add(routeId);
     attemptedModels.push(model);
     if (credential.id && !attemptedCredentialIds.includes(credential.id)) attemptedCredentialIds.push(credential.id);
 
-    await beginRouteImpl(routeId, { fetchImpl: redisFetchImpl, nowMs });
-    const request = buildRequest(model, credential.apiKey);
-    const attempt = await fetchGemini(
-      fetchImpl,
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-      { ...request, signal: attemptSignal(request?.signal, timeoutMs) },
-      context,
-      model
-    );
+    let attempt;
+    let request;
+    try {
+      await beginRouteImpl(routeId, { fetchImpl: redisFetchImpl, nowMs });
+      request = buildRequest(model, credential.apiKey);
+      const remainingMs = Number.isFinite(Number(deadlineAt)) ? Number(deadlineAt) - Date.now() : timeoutMs;
+      attempt = await fetchGemini(
+        fetchImpl,
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+        { ...request, signal: attemptSignal(request?.signal, Math.max(10, Math.min(timeoutMs, remainingMs))) },
+        context,
+        model
+      );
+    } finally {
+      sharedBusyRoutes.delete(routeId);
+    }
     if (attempt.response) {
+      const tokens = await responseTokenCount(attempt.response);
       const state = await finishRouteImpl(routeId, {
-        ok: true, statusCode: Number(attempt.response.status) || 200, latencyMs: attempt.latencyMs
+        ok: true, statusCode: Number(attempt.response.status) || 200, latencyMs: attempt.latencyMs, tokens
       }, { fetchImpl: redisFetchImpl });
       if (state) health[routeId] = state;
       return {
@@ -205,6 +237,7 @@ export async function requestGeminiWithFallback({
         attemptedModels,
         credentialId: credential.id,
         attemptedCredentialIds,
+        attemptedRouteIds: [...attemptedRoutes],
         attempts: attemptIndex + 1,
         finalAttemptLatencyMs: attempt.latencyMs,
         totalDurationMs: Date.now() - requestStartedAt
@@ -218,6 +251,7 @@ export async function requestGeminiWithFallback({
     lastError.attemptedCredentialIds = [...attemptedCredentialIds];
     lastError.attempts = attemptIndex + 1;
     lastError.totalDurationMs = Date.now() - requestStartedAt;
+    lastError.attemptedRouteIds = [...attemptedRoutes];
     const state = await finishRouteImpl(routeId, {
       ok: false,
       statusCode: lastError.statusCode,
@@ -226,10 +260,16 @@ export async function requestGeminiWithFallback({
     }, { fetchImpl: redisFetchImpl });
     if (state) health[routeId] = state;
 
+    const timedOut = healthErrorType(lastError) === 'timeout';
+    if (timedOut || lastError.quotaExhausted || Number(lastError.statusCode) >= 500) {
+      sharedFailedRoutes.add(routeId);
+    }
+
     if (lastError.quotaExhausted && lastError.quotaScope === 'day' && credential.id) {
       await markModelExhaustedImpl(credential, model, { fetchImpl: redisFetchImpl });
       credential.exhaustedModels = [...new Set([...(credential.exhaustedModels || []), model])];
     }
+    if (timedOut && !retryOnTimeout) throw lastError;
     if (!lastError.quotaExhausted && !transientGeminiError(lastError)) throw lastError;
   }
   throw lastError || new Error(`${context} không còn route Gemini khả dụng sau ${maxAttempts} lần thử.`);

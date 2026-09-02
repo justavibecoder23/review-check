@@ -101,7 +101,7 @@ test('Gemini dùng khóa ở header backend và trả cấu trúc giao diện an
     assert.equal(receivedHeader, 'test-only-key');
     assert.equal(requestPayload.generationConfig.temperature, undefined);
     assert.equal(requestPayload.generationConfig.thinkingConfig.thinkingLevel, 'minimal');
-    assert.equal(requestPayload.generationConfig.maxOutputTokens, 4096);
+    assert.equal(requestPayload.generationConfig.maxOutputTokens, 2048);
     assert.equal(trust.engine, 'gemini');
     assert.equal(trust.score, statisticalScore, 'Gemini không được thay đổi điểm thống kê');
     assert.equal(trust.pros[0].title, 'Đúng mô tả');
@@ -175,4 +175,3 @@ test('payload diễn giải giữ thống kê đủ 100 review nhưng chỉ gử
     'payload mới phải nhỏ hơn ít nhất 45% so với cách gửi toàn bộ review'
   );
 });
-

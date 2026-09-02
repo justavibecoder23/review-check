@@ -48,7 +48,14 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
     onProgress: options.onProgress
   });
   progress('labeling', 66, 'Đang phân tích reviews...');
-  const labeling = await labelReviewsTwoLayer(reviews, { product });
+  const geminiStartedAt = Date.now();
+  const geminiContext = {
+    deadlineAt: geminiStartedAt + 14_500,
+    layer2DeadlineAt: geminiStartedAt + 8_500,
+    busyRouteIds: new Set(),
+    failedRouteIds: new Set()
+  };
+  const labeling = await labelReviewsTwoLayer(reviews, { product, geminiContext });
   progress('filtering', 76, 'Đang phân tích reviews...');
   const checked = labeling.reviews.map((review) => ({ ...review, filter: shouldKeep(review) }));
   const genuine = checked.filter((review) => review.filter.keep);
@@ -86,10 +93,24 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   if (dataset.warning) warnings.push(dataset.warning);
   warnings.push(...labeling.warnings);
   progress('scoring', 91, 'Đang hoàn thiện kết quả...');
+  const narrativeStartedAt = Date.now();
   const trust = await buildTrustAnalysis(processedReviews, {
     product,
-    sampling: source?.collection
+    sampling: source?.collection,
+    geminiContext
   });
+  if (process.env.VERCEL) {
+    console.log(JSON.stringify({
+      level: 'info',
+      event: 'gemini_pipeline_complete',
+      durationMs: Date.now() - geminiStartedAt,
+      layer2DurationMs: labeling.stats.layer2DurationMs,
+      narrativeDurationMs: Date.now() - narrativeStartedAt,
+      layer2Status: labeling.stats.layer2Status,
+      narrativeEngine: trust.engine,
+      failedRoutes: geminiContext.failedRouteIds.size
+    }));
+  }
   const result = {
     product,
     source,

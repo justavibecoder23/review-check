@@ -130,7 +130,7 @@ test('Layer 2 có thể sửa nhãn nhưng không được thay quote không có
     });
     assert.equal(requestPayload.generationConfig.temperature, undefined);
     assert.equal(requestPayload.generationConfig.thinkingConfig.thinkingLevel, 'minimal');
-    assert.equal(requestPayload.generationConfig.maxOutputTokens, 8192);
+    assert.equal(requestPayload.generationConfig.maxOutputTokens, 4096);
     assert.equal(result.stats.engine, 'layer1+gemini-layer2');
     assert.equal(result.reviews[0].labels.reviewed_by, 'gemini-layer2');
     assert.deepEqual(result.reviews[0].labels.defect_categories, ['dung-mo-ta']);

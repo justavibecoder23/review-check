@@ -126,3 +126,75 @@ test('timeout được áp cho từng attempt và vẫn dừng ở hai retry', a
   assert.equal(calls, 3);
   assert.ok(Date.now() - startedAt < 500);
 });
+
+test('Layer 2 không retry nối tiếp sau timeout và khóa route lỗi cho bước diễn giải', async () => {
+  const credentials = [{ id: 'key-1', apiKey: 'secret-1', exhaustedModels: [] }];
+  const routeContext = { busyRouteIds: new Set(), failedRouteIds: new Set() };
+  const attempted = [];
+  await assert.rejects(() => requestGeminiWithFallback({
+    listCredentialsImpl: async () => credentials,
+    retryOnTimeout: false,
+    routeContext,
+    fetchImpl: async (url) => {
+      attempted.push(decodeURIComponent(url).match(/models\/(.+):generateContent/)[1]);
+      throw Object.assign(new Error('timeout'), { name: 'AbortError' });
+    },
+    buildRequest: () => ({ method: 'POST' })
+  }), /timeout/);
+  assert.deepEqual(attempted, ['gemini-3.5-flash']);
+  assert.ok(routeContext.failedRouteIds.has('key-1:gemini-3.5-flash'));
+
+  const result = await requestGeminiWithFallback({
+    listCredentialsImpl: async () => credentials,
+    maxRetries: 0,
+    routeContext,
+    fetchImpl: async () => ({ ok: true, status: 200 }),
+    buildRequest: () => ({ method: 'POST' })
+  });
+  assert.equal(result.model, 'gemini-3.6-flash');
+});
+
+test('các batch song song trong cùng pipeline được phân sang route khác nhau', async () => {
+  const credentials = [{ id: 'key-1', apiKey: 'secret-1', exhaustedModels: [] }];
+  const routeContext = { busyRouteIds: new Set(), failedRouteIds: new Set() };
+  const requestedModels = [];
+  const makeRequest = () => requestGeminiWithFallback({
+    listCredentialsImpl: async () => credentials,
+    getHealthSnapshotImpl: async () => ({}),
+    beginRouteImpl: async () => new Promise((resolve) => setTimeout(resolve, 5)),
+    finishRouteImpl: async () => ({}),
+    maxRetries: 0,
+    routeContext,
+    fetchImpl: async (url) => {
+      requestedModels.push(decodeURIComponent(url).match(/models\/(.+):generateContent/)[1]);
+      return { ok: true, status: 200 };
+    },
+    buildRequest: () => ({ method: 'POST' })
+  });
+  await Promise.all([makeRequest(), makeRequest()]);
+  assert.deepEqual(new Set(requestedModels), new Set(['gemini-3.5-flash', 'gemini-3.6-flash']));
+});
+
+test('deadline chung rút ngắn attempt thay vì cho mỗi tầng thêm 10 giây', async () => {
+  let calls = 0;
+  const startedAt = Date.now();
+  await assert.rejects(() => requestGeminiWithFallback({
+    apiKey: 'test-key',
+    deadlineAt: Date.now() + 30,
+    attemptTimeoutMs: 1_000,
+    retryOnTimeout: false,
+    fetchImpl: async (_url, init) => {
+      calls += 1;
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(resolve, 500);
+        init.signal.addEventListener('abort', () => {
+          clearTimeout(timeout);
+          reject(Object.assign(new Error('timeout'), { name: 'AbortError' }));
+        });
+      });
+    },
+    buildRequest: () => ({ method: 'POST' })
+  }), /timeout/);
+  assert.equal(calls, 1);
+  assert.ok(Date.now() - startedAt < 100);
+});

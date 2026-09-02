@@ -421,7 +421,7 @@ function validateGeminiTrust(value, fallback) {
   };
 }
 
-async function analyzeWithGemini(reviews, fallback, fetchImpl) {
+async function analyzeWithGemini(reviews, fallback, options = {}) {
   const apiKey = process.env.GEMINI_API_KEY;
   const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
   const narrativePayload = buildGeminiNarrativePayload(reviews, fallback);
@@ -442,20 +442,22 @@ async function analyzeWithGemini(reviews, fallback, fetchImpl) {
     `Điểm cố định phải giữ nguyên: ${fallback.score}/100.`,
     `Dữ liệu diễn giải: ${JSON.stringify(narrativePayload)}`
   ].join('\n');
-  const { response } = await requestGeminiWithFallback({
-    fetchImpl,
+  const geminiResult = await requestGeminiWithFallback({
+    fetchImpl: options.fetchImpl,
     apiKey,
     primaryModel: model,
     context: 'Gemini TrustScore',
-    transientModelsPerKey: 2,
-    transientBackupKeyRetries: 0,
+    deadlineAt: options.geminiContext?.deadlineAt,
+    attemptTimeoutMs: 6_000,
+    retryOnTimeout: false,
+    routeContext: options.geminiContext,
     buildRequest: (selectedModel, selectedApiKey) => ({
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': selectedApiKey },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: {
-          maxOutputTokens: 4096,
+          maxOutputTokens: 2048,
           thinkingConfig: geminiThinkingConfig('minimal', selectedModel),
           responseMimeType: 'application/json',
           responseSchema: trustSchema
@@ -464,22 +466,38 @@ async function analyzeWithGemini(reviews, fallback, fetchImpl) {
       signal: AbortSignal.timeout(10_000)
     })
   });
+  const { response } = geminiResult;
   const body = await response.json();
-  return validateGeminiTrust(parseGeminiJson(body, 'Gemini TrustScore'), fallback);
+  return {
+    result: validateGeminiTrust(parseGeminiJson(body, 'Gemini TrustScore'), fallback),
+    retry: {
+      attemptedModels: geminiResult.attemptedModels || [],
+      attemptedRouteIds: geminiResult.attemptedRouteIds || [],
+      credentialAttempts: geminiResult.attemptedCredentialIds?.length || (geminiResult.credentialId ? 1 : 0),
+      durationMs: geminiResult.totalDurationMs || 0
+    }
+  };
 }
 
 export async function buildTrustAnalysis(reviews = [], options = {}) {
   const narrativeStartedAt = Date.now();
   const fallback = buildRuleBasedTrust(reviews, options);
   try {
-    const result = await analyzeWithGemini(reviews, fallback, options.fetchImpl || fetch);
+    const analyzed = await analyzeWithGemini(reviews, fallback, {
+      fetchImpl: options.fetchImpl || fetch,
+      geminiContext: options.geminiContext
+    });
+    const result = analyzed.result;
     if (process.env.VERCEL || options.logGeminiErrors) {
       (options.logger || console).log(JSON.stringify({
         level: 'info',
         event: 'gemini_trust_narrative_complete',
         durationMs: Date.now() - narrativeStartedAt,
         reviews: reviews.length,
-        engine: result.engine
+        engine: result.engine,
+        attemptedModels: analyzed.retry.attemptedModels,
+        attemptedRouteIds: analyzed.retry.attemptedRouteIds,
+        credentialAttempts: analyzed.retry.credentialAttempts
       }));
     }
     return result;
@@ -489,6 +507,9 @@ export async function buildTrustAnalysis(reviews = [], options = {}) {
         model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
         durationMs: Date.now() - narrativeStartedAt,
         attempts: error?.attempts || 0,
+        attemptedModels: error?.attemptedModels || [],
+        attemptedRouteIds: error?.attemptedRouteIds || [],
+        credentialAttempts: error?.attemptedCredentialIds?.length || 0,
         error: error?.message || 'Lỗi Gemini không xác định.'
       });
     }

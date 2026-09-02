@@ -3,8 +3,12 @@ import { isRedisConfigured, redisCommand } from './redis-rest.mjs';
 export const GEMINI_HEALTH_KEY = 'realview:gemini:route-health:v1';
 const MINUTE_MS = 60_000;
 const MAX_EVENT_AGE_MS = 5 * MINUTE_MS;
-const CONFIRMED_MODEL_LIMITS = Object.freeze({
-  'gemini-3.5-flash': { rpm: 5, rpd: 20 }
+export const GEMINI_TIMEOUT_COOLDOWN_MS = 120_000;
+export const GEMINI_MODEL_LIMITS = Object.freeze({
+  'gemini-3.5-flash': { rpm: 5, tpm: 250_000, rpd: 20 },
+  'gemini-3.6-flash': { rpm: 5, tpm: 250_000, rpd: 20 },
+  'gemini-3.7-flash': { rpm: 5, tpm: 250_000, rpd: 20 },
+  'gemini-3.5-flash-lite': { rpm: 15, tpm: 250_000, rpd: 500 }
 });
 
 const BEGIN_ROUTE_SCRIPT = String.raw`
@@ -52,15 +56,16 @@ local events = {}
 for _, event in ipairs(state.events or {}) do
   if tonumber(event.at or 0) >= nowMs - ${MAX_EVENT_AGE_MS} then table.insert(events, event) end
 end
-table.insert(events, {at=nowMs, ok=ok, latencyMs=latencyMs, statusCode=statusCode > 0 and statusCode or cjson.null})
+table.insert(events, {at=nowMs, ok=ok, latencyMs=latencyMs, tokens=math.max(0, tonumber(ARGV[9]) or 0), statusCode=statusCode > 0 and statusCode or cjson.null})
 while #events > 30 do table.remove(events, 1) end
 state.events = events
 local cooldownUntilMs = math.max(0, tonumber(state.cooldownUntilMs or 0))
 if not ok then
   local cooldownMs = 0
   if statusCode == 429 then cooldownMs = ${MINUTE_MS}
-  elseif ARGV[8] == 'timeout' or statusCode == 503 then
-    cooldownMs = state.consecutiveFailures >= 2 and ${MINUTE_MS} or 15000
+  elseif ARGV[8] == 'timeout' then cooldownMs = ${GEMINI_TIMEOUT_COOLDOWN_MS}
+  elseif statusCode == 503 then
+    cooldownMs = state.consecutiveFailures >= 2 and 120000 or ${MINUTE_MS}
   elseif statusCode >= 500 then cooldownMs = 15000 end
   state.cooldownUntilMs = math.max(cooldownUntilMs, nowMs + cooldownMs)
 else
@@ -93,9 +98,10 @@ export function geminiRouteId(credentialId, model) {
 
 function configuredLimit(model) {
   const limits = parseJson(process.env.GEMINI_MODEL_LIMITS_JSON, {});
-  const item = limits?.[model] || CONFIRMED_MODEL_LIMITS[model] || {};
+  const item = limits?.[model] || GEMINI_MODEL_LIMITS[model] || {};
   return {
     rpm: Math.max(0, number(item.rpm)),
+    tpm: Math.max(0, number(item.tpm)),
     rpd: Math.max(0, number(item.rpd))
   };
 }
@@ -121,15 +127,19 @@ export function geminiRoutePressure(state, model, nowMs = Date.now()) {
   const current = normalizeState(state, nowMs);
   const recent = current.events.filter((event) => number(event.at) >= nowMs - MINUTE_MS);
   const failures = recent.filter((event) => !event.ok).length;
+  const recentTokens = recent.reduce((sum, event) => sum + Math.max(0, number(event.tokens)), 0);
   const limits = configuredLimit(model);
   const rpmRatio = limits.rpm ? recent.length / limits.rpm : recent.length / 10;
+  const tpmRatio = limits.tpm ? recentTokens / limits.tpm : 0;
   const rpdRatio = limits.rpd ? current.dayRequests / limits.rpd : 0;
-  const quotaPressure = Math.max(0, Math.max(rpmRatio, rpdRatio) - 0.8) * 5;
+  const utilization = Math.max(rpmRatio, tpmRatio, rpdRatio);
+  const quotaPressure = utilization + Math.max(0, utilization - 0.8) * 20;
   const latencyPressure = Math.max(0, number(current.ewmaLatencyMs) - 2_500) / 7_500;
   const failurePressure = recent.length ? failures / recent.length : 0;
   return {
     cooldown: current.cooldownUntilMs > nowMs,
     recentRequests: recent.length,
+    recentTokens,
     dayRequests: current.dayRequests,
     inFlight: current.inFlight,
     value: quotaPressure + current.inFlight * 0.35 + latencyPressure + failurePressure
@@ -184,7 +194,8 @@ export async function finishGeminiRoute(routeId, result, options = {}) {
     const raw = await redisCommand([
       'EVAL', FINISH_ROUTE_SCRIPT, '1', GEMINI_HEALTH_KEY,
       routeId, String(nowMs), new Date(nowMs).toISOString(), pacificDay(nowMs), ok ? '1' : '0',
-      String(statusCode || 0), String(latencyMs), String(result?.errorType || 'unknown').slice(0, 80)
+      String(statusCode || 0), String(latencyMs), String(result?.errorType || 'unknown').slice(0, 80),
+      String(Math.max(0, number(result?.tokens)))
     ], options);
     return parseJson(raw, null);
   } catch {

@@ -313,7 +313,7 @@ function normalizeLayer2Label(candidate, review, layer1) {
   };
 }
 
-async function classifyBatchWithGemini(batch, product, fetchImpl) {
+async function classifyBatchWithGemini(batch, product, options = {}) {
   const apiKey = process.env.GEMINI_API_KEY;
   const model = process.env.LABELER_GEMINI_MODEL || process.env.GEMINI_MODEL || 'gemini-3.5-flash';
   const payload = batch.map(({ review, layer1 }) => ({
@@ -332,18 +332,22 @@ async function classifyBatchWithGemini(batch, product, fetchImpl) {
     `Dữ liệu cần kiểm định: ${JSON.stringify(payload)}`
   ].join('\n');
   const geminiResult = await requestGeminiWithFallback({
-    fetchImpl,
+    fetchImpl: options.fetchImpl,
     apiKey,
     primaryModel: model,
     fallbackModels: process.env.LABELER_GEMINI_FALLBACK_MODELS || process.env.GEMINI_FALLBACK_MODELS,
     context: 'Gemini labeler',
+    deadlineAt: options.deadlineAt,
+    attemptTimeoutMs: 8_000,
+    retryOnTimeout: false,
+    routeContext: options.routeContext,
     buildRequest: (selectedModel, selectedApiKey) => ({
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': selectedApiKey },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: {
-          maxOutputTokens: 8192,
+          maxOutputTokens: 4096,
           thinkingConfig: geminiThinkingConfig('minimal', selectedModel),
           responseMimeType: 'application/json',
           responseSchema: layer2ResponseSchema
@@ -392,7 +396,11 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
   if (selected.length && (process.env.GEMINI_API_KEY || isRedisConfigured())) {
     const results = await Promise.all(batches.map(async (batch, batchIndex) => {
       try {
-        const result = await classifyBatchWithGemini(batch, options.product, options.fetchImpl || fetch);
+        const result = await classifyBatchWithGemini(batch, options.product, {
+          fetchImpl: options.fetchImpl || fetch,
+          deadlineAt: options.geminiContext?.layer2DeadlineAt,
+          routeContext: options.geminiContext
+        });
         succeededBatches += 1;
         const attemptedCount = result.retry?.attemptedModels?.length || 1;
         retryAttempts += Math.max(0, attemptedCount - 1);
@@ -411,6 +419,10 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
         return result;
       } catch (error) {
         failedBatches += 1;
+        const attemptedCount = error?.attemptedModels?.length || 0;
+        retryAttempts += Math.max(0, attemptedCount - 1);
+        credentialSwitches += Math.max(0, (error?.attemptedCredentialIds?.length || 0) - 1);
+        for (const attemptedModel of error?.attemptedModels || []) modelsUsed.add(attemptedModel);
         const warning = error?.message || 'Layer 2 không phản hồi.';
         if (process.env.VERCEL || options.logLayer2Errors) {
           (options.logger || console).error('[review-labeler] Layer 2 batch failed', {
@@ -419,6 +431,7 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
             reviewCount: batch.length,
             model,
             attemptedModels: error?.attemptedModels || [],
+            attemptedRouteIds: error?.attemptedRouteIds || [],
             credentialAttempts: error?.attemptedCredentialIds?.length || 0,
             error: warning
           });

@@ -1,6 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
 import { getGeminiCredentialPoolStatus, saveGeminiCredentialPool } from './gemini-credential-store.mjs';
-import { geminiRouteId, geminiRoutePressure, getGeminiHealthSnapshot } from './gemini-health.mjs';
+import { GEMINI_MODEL_LIMITS, geminiRouteId, geminiRoutePressure, getGeminiHealthSnapshot } from './gemini-health.mjs';
 
 function safeEqual(left, right) {
   const leftBuffer = Buffer.from(String(left || ''));
@@ -35,7 +35,9 @@ export async function readGeminiAdminStatus(options = {}) {
       model,
       status: pressure.cooldown ? 'cooldown' : pressure.value >= 1 ? 'busy' : 'healthy',
       recentRequests: pressure.recentRequests,
+      recentTokens: pressure.recentTokens,
       dayRequests: pressure.dayRequests,
+      limits: GEMINI_MODEL_LIMITS[model] || null,
       inFlight: pressure.inFlight,
       ewmaLatencyMs: Number(state.ewmaLatencyMs) || 0,
       consecutiveFailures: Number(state.consecutiveFailures) || 0,
