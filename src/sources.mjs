@@ -53,7 +53,7 @@ function firstValue(source, paths) {
 function normaliseProductMeta(source = {}) {
   if (!source || typeof source !== 'object') return {};
   const title = firstValue(source, ['title', 'name', 'productName', 'productTitle', 'itemName', 'product.name', 'item.name']);
-  const image = firstValue(source, ['image', 'imageUrl', 'productImage', 'thumbnail', 'product.image', 'item.image']);
+  const image = firstValue(source, ['image', 'imageUrl', 'productImage', 'product_image', 'product_image_url', 'productCover', 'product_cover_url', 'cover', 'cover_url', 'thumbnail', 'variations.0.image', 'product.image', 'item.image']);
   const price = firstValue(source, ['price', 'productPrice', 'currentPrice', 'product.price', 'item.price']);
   const rating = firstValue(source, ['productRating', 'ratingAverage', 'averageRating', 'product.rating', 'item.rating']);
   return {
@@ -62,6 +62,166 @@ function normaliseProductMeta(source = {}) {
     ...(price ? { price: String(price) } : {}),
     ...(rating ? { rating: Number(rating) || String(rating) } : {})
   };
+}
+
+function decodeHtmlEntities(value) {
+  return String(value || '')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&#(\d+);/g, (_match, code) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([\da-f]+);/gi, (_match, code) => String.fromCodePoint(Number.parseInt(code, 16)))
+    .trim();
+}
+
+function attributesFromTag(tag) {
+  const attributes = {};
+  const pattern = /([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>]+))/g;
+  for (const match of String(tag).matchAll(pattern)) {
+    attributes[match[1].toLowerCase()] = decodeHtmlEntities(match[2] ?? match[3] ?? match[4] ?? '');
+  }
+  return attributes;
+}
+
+function safeMetadataUrl(value, baseUrl) {
+  try {
+    const url = new URL(decodeHtmlEntities(value), baseUrl);
+    return url.protocol === 'https:' ? url.href : '';
+  } catch {
+    return '';
+  }
+}
+
+function jsonLdProductMeta(html, baseUrl) {
+  const candidates = [];
+  const scripts = String(html).matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
+  for (const match of scripts) {
+    try {
+      let root;
+      try {
+        root = JSON.parse(String(match[1]).trim());
+      } catch {
+        root = JSON.parse(decodeHtmlEntities(match[1]));
+      }
+      const queue = Array.isArray(root) ? [...root] : [root];
+      let visited = 0;
+      while (queue.length && visited < 1000) {
+        const node = queue.shift();
+        visited += 1;
+        if (!node || typeof node !== 'object') continue;
+        candidates.push(node);
+        for (const value of Object.values(node)) {
+          if (value && typeof value === 'object') queue.push(...(Array.isArray(value) ? value : [value]));
+        }
+      }
+    } catch {
+      // Một block JSON-LD lỗi không được làm mất metadata hợp lệ ở block khác.
+    }
+  }
+  const product = candidates.find((node) => {
+    const types = Array.isArray(node['@type']) ? node['@type'] : [node['@type']];
+    return types.some((type) => String(type).toLowerCase() === 'product');
+  });
+  if (!product) return {};
+  const rawImage = Array.isArray(product.image) ? product.image[0] : product.image;
+  const imageValue = rawImage && typeof rawImage === 'object'
+    ? rawImage.url || rawImage.contentUrl
+    : rawImage;
+  const image = safeMetadataUrl(imageValue, baseUrl);
+  return {
+    ...(product.name ? { title: decodeHtmlEntities(product.name) } : {}),
+    ...(image ? { image } : {})
+  };
+}
+
+export function extractProductPageMeta(html, baseUrl) {
+  const metadata = {};
+  for (const tag of String(html || '').match(/<meta\b[^>]*>/gi) || []) {
+    const attributes = attributesFromTag(tag);
+    const key = String(attributes.property || attributes.name || '').toLowerCase();
+    if (key && attributes.content && metadata[key] === undefined) metadata[key] = attributes.content;
+  }
+
+  const structured = jsonLdProductMeta(html, baseUrl);
+  const pageTitle = decodeHtmlEntities(String(html || '').match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '');
+  const title = decodeHtmlEntities(metadata['og:title'] || metadata['twitter:title'] || structured.title || pageTitle);
+  const image = safeMetadataUrl(
+    metadata['og:image:secure_url'] || metadata['og:image'] || metadata['twitter:image'] || structured.image,
+    baseUrl
+  );
+  return {
+    ...(title ? { title } : {}),
+    ...(image ? { image } : {})
+  };
+}
+
+async function readLimitedHtml(response, maximumBytes = 512_000) {
+  if (!response.body?.getReader) return String(await response.text()).slice(0, maximumBytes);
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let total = 0;
+  let html = '';
+  while (total < maximumBytes) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    const chunk = value || new Uint8Array();
+    total += chunk.byteLength;
+    html += decoder.decode(chunk, { stream: true });
+    if (total >= maximumBytes) {
+      await reader.cancel().catch(() => {});
+      break;
+    }
+  }
+  html += decoder.decode();
+  return html.slice(0, maximumBytes);
+}
+
+function isSafeMarketplacePageUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:'
+      && !url.username
+      && !url.password
+      && (!url.port || url.port === '443')
+      && (isShopeeUrl(url.href) || isTikTokUrl(url.href));
+  } catch {
+    return false;
+  }
+}
+
+export async function fetchProductPageMeta(productUrl, options = {}) {
+  const fetchImpl = options.fetchImpl || fetch;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Number(options.timeoutMs) || 6500);
+  let currentUrl = productUrl;
+  try {
+    for (let redirectCount = 0; redirectCount <= 4; redirectCount += 1) {
+      if (!isSafeMarketplacePageUrl(currentUrl)) return {};
+      const response = await fetchImpl(currentUrl, {
+        redirect: 'manual',
+        signal: controller.signal,
+        headers: {
+          accept: 'text/html,application/xhtml+xml',
+          'user-agent': 'Mozilla/5.0 (compatible; RealView/1.0; +https://www.realview.com.vn/)'
+        }
+      });
+      if ([301, 302, 303, 307, 308].includes(response.status)) {
+        const location = response.headers.get('location');
+        if (!location) return {};
+        currentUrl = new URL(location, currentUrl).href;
+        continue;
+      }
+      if (!response.ok) return {};
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType && !contentType.includes('text/html') && !contentType.includes('application/xhtml+xml')) return {};
+      return extractProductPageMeta(await readLimitedHtml(response), currentUrl);
+    }
+    return {};
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function getReviews(url, options = {}) {
@@ -90,12 +250,15 @@ export async function getReviews(url, options = {}) {
     warnings.push('Đã mở link chia sẻ TikTok và khôi phục đúng mã sản phẩm trước khi thu thập review.');
   }
 
+  const productMetaPromise = fetchProductPageMeta(productUrl).catch(() => ({}));
   try {
     progress('collecting', 14, 'Đang khởi tạo hệ thống lấy reviews...');
     const collected = platform === 'Shopee'
       ? await collectShopeeReviews(productUrl, { reviewLimit: perStarLimit, onProgress: options.onProgress })
       : await collectTikTokReviews(tiktokProduct.productId, { onProgress: options.onProgress });
     const reviews = collected.reviews;
+    const pageMeta = await productMetaPromise;
+    const collectedMeta = collected.productMeta || normaliseProductMeta(collected.productMetaSource);
     if (Array.isArray(collected.warnings)) warnings.push(...collected.warnings);
     return {
       reviews,
@@ -111,7 +274,8 @@ export async function getReviews(url, options = {}) {
         platform,
         url: productUrl,
         originalUrl: parsed.href,
-        ...(collected.productMeta || normaliseProductMeta(collected.productMetaSource)),
+        ...pageMeta,
+        ...collectedMeta,
         ...(shopeeProduct ? {
           shopId: shopeeProduct.shopId,
           itemId: shopeeProduct.itemId,
@@ -130,6 +294,7 @@ export async function getReviews(url, options = {}) {
     }
     warnings.push(`Không thể lấy dữ liệu trực tiếp: ${error.message}`);
     warnings.push('Đang hiển thị dữ liệu mô phỏng để kiểm tra luồng. Không dùng kết quả này để quyết định mua hàng.');
+    const pageMeta = await productMetaPromise;
     return {
       reviews: DEMO_REVIEWS,
       source: { type: 'demo', label: 'Dữ liệu mô phỏng', reviewLimit },
@@ -138,6 +303,7 @@ export async function getReviews(url, options = {}) {
         url: productUrl,
         originalUrl: parsed.href,
         title: platform === 'Shopee' ? 'Sản phẩm đang phân tích trên Shopee' : 'Sản phẩm đang phân tích trên TikTok Shop',
+        ...pageMeta,
         ...(shopeeProduct ? {
           shopId: shopeeProduct.shopId,
           itemId: shopeeProduct.itemId,
