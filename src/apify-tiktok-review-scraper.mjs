@@ -151,7 +151,12 @@ async function runProductMetaActor({ productId, productUrl, credential, fetchImp
         urls: [String(productUrl)],
         maxProducts: 20,
         includeReviews: false,
-        maxReviews: 1
+        maxReviews: 1,
+        proxyConfiguration: {
+          useApifyProxy: true,
+          apifyProxyGroups: ['RESIDENTIAL'],
+          apifyProxyCountryCode: 'VN'
+        }
       }),
       signal: AbortSignal.timeout(timeoutMs)
     });
@@ -330,11 +335,11 @@ export async function collectTikTokReviews(productId, options = {}) {
       productMetadata: {
         ok: productMetaRun.ok,
         provider: productMetaRun.skipped ? 'skipped' : 'apify-product-actor',
-        latencyMs: productMetaRun.latencyMs
+        latencyMs: productMetaRun.latencyMs,
+        ...(productMetaRun.error ? { error: compactErrorDetail(productMetaRun.error) } : {})
       },
       runs: runs.map(({ items: _items, error, ...run }) => ({ ...run, ...(error ? { error } : {}) }))
     }
   };
 }
-
 
