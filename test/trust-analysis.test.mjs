@@ -10,15 +10,15 @@ const reviews = [
   { rating: 5, text: 'Tốt', verified: false, included: false, exclusionReason: 'Quá ngắn hoặc không có trải nghiệm cụ thể' }
 ];
 
-test('TrustScore quy tắc luôn nằm trên thang 100 và có giải thích', () => {
+test('mẫu quá nhỏ không công bố điểm nhưng vẫn trả ưu nhược điểm và giải thích', () => {
   const trust = buildRuleBasedTrust(reviews);
-  assert.equal(Number.isInteger(trust.score), true);
-  assert.equal(trust.score >= 0 && trust.score <= 100, true);
+  assert.equal(trust.score, null);
+  assert.equal(trust.scoreStatus, 'insufficient');
   assert.equal('confidence' in trust, false);
   assert.equal(trust.pros.length > 0, true);
   assert.equal(trust.cons.length > 0, true);
   assert.equal(trust.drivers.length >= 6, true);
-  assert.match(trust.summary, /không phải điểm chất lượng tuyệt đối của sản phẩm/i);
+  assert.match(trust.summary, /chưa có đủ review/i);
   assert.match(trust.pros[0].detail, /Dẫn chứng:/);
   assert.doesNotMatch(trust.drivers.map((driver) => `${driver.title} ${driver.detail}`).join(' '), /Fisher|p\s*=|OR\*|logistic|hard cap|Bonferroni/i);
 });
@@ -38,6 +38,18 @@ test('nhược điểm hiển thị dùng cùng nhãn cuối với bộ đếm T
   assert.equal(trust.cons.find((item) => item.title === 'Chất liệu / độ bền').mentions, 1);
 });
 
+test('cụm phủ định không bị đếm ngược thành ưu điểm', () => {
+  const trust = buildRuleBasedTrust(Array.from({ length: 20 }, (_, index) => ({
+    rating: 5,
+    text: `Sản phẩm không bền sau ${index + 1} lần sử dụng và mình không thấy chắc chắn.`,
+    verified: true,
+    included: true,
+    labels: { information_value: 'high', is_seeding: false, is_vague: false, is_low_value: false, defect_categories: ['chat-lieu'] }
+  })));
+  assert.equal(trust.pros.some((item) => item.title === 'Chất lượng sản phẩm'), false);
+  assert.equal(trust.cons.find((item) => item.title === 'Chất liệu / độ bền').mentions, 20);
+});
+
 test('giao diện bỏ Confidence và làm nổi bật ý nghĩa đúng của TrustScore', () => {
   const html = readFileSync(new URL('../public/results.html', import.meta.url), 'utf8');
   const clientScript = readFileSync(new URL('../public/results.js', import.meta.url), 'utf8');
@@ -47,6 +59,7 @@ test('giao diện bỏ Confidence và làm nổi bật ý nghĩa đúng của Tr
 });
 
 test('màu TrustScore tuân theo đúng các ngưỡng giao diện', () => {
+  assert.equal(trustTone(null).id, 'neutral');
   assert.equal(trustTone(81).id, 'green');
   assert.equal(trustTone(80).id, 'green');
   assert.equal(trustTone(60).id, 'yellow');
@@ -55,13 +68,21 @@ test('màu TrustScore tuân theo đúng các ngưỡng giao diện', () => {
   assert.equal(trustTone(39).id, 'red');
 });
 
+test('frontend không tự tính TrustScore từ trung bình sao khi backend thiếu điểm', () => {
+  const clientScript = readFileSync(new URL('../public/results.js', import.meta.url), 'utf8');
+  const fallbackBody = clientScript.slice(clientScript.indexOf('function fallbackTrust'), clientScript.indexOf('function renderStars'));
+  assert.match(fallbackBody, /score:\s*null/);
+  assert.doesNotMatch(fallbackBody, /average\s*\/\s*5|reduce\(\(sum, review\).*rating/s);
+  assert.match(clientScript, /score\s*>=\s*80/);
+});
+
 test('tự dùng kết quả quy tắc khi Gemini không được cấu hình', async () => {
   const previousKey = process.env.GEMINI_API_KEY;
   delete process.env.GEMINI_API_KEY;
   try {
     const trust = await buildTrustAnalysis(reviews);
-    assert.equal(trust.engine, 'statistical-v3.1');
-    assert.equal(trust.method.version, '3.1');
+    assert.equal(trust.engine, 'statistical-v4.0');
+    assert.equal(trust.method.version, '4.0');
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
   }
@@ -144,7 +165,7 @@ test('payload diễn giải giữ thống kê đủ 100 review nhưng chỉ gử
   const payload = buildGeminiNarrativePayload(syntheticReviews, fallback);
 
   assert.ok(
-    fallback.drivers.some((driver) => /cân bằng mức lỗi giữa từng nhóm sao/i.test(driver.detail)),
+    fallback.drivers.some((driver) => /cân bằng mức lỗi giữa các nhóm sao/i.test(driver.detail)),
     'phải giải thích cách mẫu chia tầng chuẩn hóa tỷ lệ nhược điểm'
   );
   assert.equal(payload.fixedBackendDraft.score, fallback.score, 'payload không tính lại hoặc sửa TrustScore');

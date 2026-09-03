@@ -43,7 +43,8 @@ function clamp(value, minimum, maximum) {
 }
 
 function toneForScore(score) {
-  if (score > 80) return { id: 'green', label: 'Độ tin cậy cao' };
+  if (typeof score !== 'number' || !Number.isFinite(score)) return { id: 'neutral', label: 'Chưa đủ bằng chứng' };
+  if (score >= 80) return { id: 'green', label: 'Độ tin cậy cao' };
   if (score >= 60) return { id: 'yellow', label: 'Khá đáng tin' };
   if (score >= 50) return { id: 'orange', label: 'Nên cân nhắc kỹ' };
   return { id: 'red', label: 'Độ tin cậy thấp' };
@@ -52,22 +53,27 @@ function toneForScore(score) {
 function fallbackTrust(data, reviews) {
   const included = reviews.filter((review) => review.included !== false);
   const excluded = reviews.filter((review) => review.included === false);
-  const average = included.length ? included.reduce((sum, review) => sum + clamp(review.rating, 0, 5), 0) / included.length : 0;
   const usefulRatio = reviews.length ? included.length / reviews.length : 0;
-  const verifiedRatio = included.length ? included.filter((review) => review.verified).length / included.length : 0;
-  const detailedRatio = included.length ? included.filter((review) => String(review.text || '').length >= 45).length / included.length : 0;
-  const score = Math.round(clamp(average / 5 * 55 + usefulRatio * 15 + verifiedRatio * 15 + detailedRatio * 15, 0, 100));
-  const tone = toneForScore(score);
+  const knownVerification = included.filter((review) => typeof review.verified === 'boolean');
+  const verifiedRatio = knownVerification.length ? knownVerification.filter((review) => review.verified).length / knownVerification.length : null;
+  const tone = toneForScore(null);
   return {
-    score,
+    score: null,
+    scoreStatus: 'unavailable',
     tone: tone.id,
     label: tone.label,
-    summary: data?.verdict || 'Điểm số phản ánh mức hài lòng và chất lượng bằng chứng trong các review hữu ích.',
+    summary: 'Backend chưa cung cấp đủ dữ liệu để tính TrustScore. Bạn vẫn có thể đọc các review đã lọc, nhưng giao diện không tự suy ra điểm từ số sao.',
     pros: [{ title: 'Phản hồi tích cực', detail: `${included.filter((review) => Number(review.rating) >= 4).length} review hữu ích chấm từ 4 sao.`, mentions: included.filter((review) => Number(review.rating) >= 4).length }],
     cons: [{ title: 'Phản hồi cần cân nhắc', detail: `${included.filter((review) => Number(review.rating) <= 3).length} review hữu ích chấm từ 3 sao trở xuống.`, mentions: included.filter((review) => Number(review.rating) <= 3).length }],
     drivers: [
       { impact: usefulRatio >= .6 ? 'up' : 'down', title: 'Tỷ lệ review hữu ích', detail: `${included.length}/${reviews.length} review vượt qua bước giảm nhiễu.` },
-      { impact: verifiedRatio >= .6 ? 'up' : 'down', title: 'Khả năng kiểm chứng', detail: `${Math.round(verifiedRatio * 100)}% review giữ lại đến từ người mua đã xác minh.` },
+      {
+        impact: verifiedRatio === null ? 'neutral' : verifiedRatio >= .6 ? 'up' : 'down',
+        title: 'Khả năng kiểm chứng',
+        detail: verifiedRatio === null
+          ? 'Nguồn dữ liệu không cung cấp trạng thái xác minh mua hàng; hệ thống không tự suy diễn.'
+          : `${Math.round(verifiedRatio * 100)}% review có trạng thái xác minh rõ ràng đến từ người mua đã xác minh.`
+      },
       ...(excluded.length ? [{ impact: 'neutral', title: 'Review đã bị loại', detail: `${excluded.length} phản hồi không được dùng để kết luận sản phẩm.` }] : [])
     ],
     engine: 'rules'
@@ -182,8 +188,10 @@ function renderResult(data) {
   const keptReviews = reviews.filter((review) => review.included !== false);
   const excludedReviews = reviews.filter((review) => review.included === false);
   const trust = data.trust || fallbackTrust(data, reviews);
-  const score = Math.round(clamp(trust.score, 0, 100));
-  const tone = toneForScore(score);
+  const scoreAvailable = typeof trust.score === 'number' && Number.isFinite(trust.score);
+  const score = scoreAvailable ? Math.round(clamp(trust.score, 0, 100)) : 0;
+  const scoreText = scoreAvailable ? String(score) : '—';
+  const tone = toneForScore(scoreAvailable ? score : null);
   const platform = String(product.platform || 'Shopee');
   const productUrl = safeUrl(product.url);
   const productTitle = String(product.title || `Sản phẩm đang phân tích trên ${platform}`);
@@ -215,10 +223,10 @@ function renderResult(data) {
 
   document.querySelector('#trust-card').dataset.tone = tone.id;
   document.querySelector('#trust-gauge').style.setProperty('--score', score);
-  document.querySelector('#trust-gauge').dataset.scoreLength = String(score).length;
-  document.querySelector('#trust-gauge').setAttribute('aria-label', `TrustScore ${score} trên 100`);
-  document.querySelector('#trust-score').textContent = score;
-  document.querySelector('#action-score').textContent = score;
+  document.querySelector('#trust-gauge').dataset.scoreLength = scoreText.length;
+  document.querySelector('#trust-gauge').setAttribute('aria-label', scoreAvailable ? `TrustScore ${score} trên 100` : 'Chưa đủ bằng chứng để tính TrustScore');
+  document.querySelector('#trust-score').textContent = scoreText;
+  document.querySelector('#action-score').textContent = scoreText;
   document.querySelector('#trust-label').textContent = trust.label || tone.label;
   document.querySelector('#trust-summary').textContent = trust.summary || data.verdict;
   document.querySelector('#analysis-source').textContent = trust.engine === 'gemini' ? 'Gemini AI + bộ lọc RealView' : 'Bộ lọc minh bạch RealView';

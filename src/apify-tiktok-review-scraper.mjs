@@ -37,6 +37,7 @@ function normalizeCreatedAt(value) {
 
 function normalizeReview(review, productId) {
   const createdAt = normalizeCreatedAt(review.review_time);
+  const verificationValue = review.is_verified_purchase ?? review.isVerifiedPurchase ?? review.verified;
   return {
     reviewId: review.review_id !== undefined && review.review_id !== null ? String(review.review_id) : null,
     itemId: review.product_id !== undefined && review.product_id !== null ? String(review.product_id) : String(productId),
@@ -45,9 +46,15 @@ function normalizeReview(review, productId) {
     text: String(review.review_text || '').trim(),
     date: createdAt ? new Date(createdAt).toLocaleDateString('vi-VN') : 'Không rõ ngày',
     createdAt,
-    verified: Boolean(review.is_verified_purchase),
+    // Provider không trả trường xác minh thì giữ null, không suy diễn thành false.
+    verified: typeof verificationValue === 'boolean' ? verificationValue : null,
     author: review.reviewer_name || review.user_name || 'Khách đã mua'
   };
+}
+
+function ratingFromFilter(reviewFilter) {
+  const match = String(reviewFilter || '').match(/^([1-5])_star$/);
+  return match ? Number(match[1]) : null;
 }
 
 async function runActor({ productId, reviewLimit, reviewFilter, credential, fetchImpl, actorId, timeoutMs, signal }) {
@@ -78,6 +85,10 @@ async function runActor({ productId, reviewLimit, reviewFilter, credential, fetc
     }
     const items = await response.json();
     if (!Array.isArray(items)) throw new Error('Apify không trả về danh sách review TikTok hợp lệ.');
+    const expectedRating = ratingFromFilter(reviewFilter);
+    const matching = expectedRating === null
+      ? items
+      : items.filter((item) => Number(item?.review_rating) === expectedRating);
     return {
       ok: true,
       credentialId: credential.id,
@@ -86,9 +97,10 @@ async function runActor({ productId, reviewLimit, reviewFilter, credential, fetc
       filter: reviewFilter,
       requested: reviewLimit,
       billedReviewCount: items.length,
-      reviewCount: items.filter((item) => String(item?.review_text || '').trim()).length,
+      droppedWrongRating: items.length - matching.length,
+      reviewCount: matching.filter((item) => String(item?.review_text || '').trim()).length,
       latencyMs: Math.round(performance.now() - startedAt),
-      items
+      items: matching
     };
   } catch (error) {
     return {
@@ -200,6 +212,8 @@ export async function collectTikTokReviews(productId, options = {}) {
 
   const warnings = [];
   for (const run of runs.filter((run) => !run.ok)) warnings.push(run.error);
+  const wrongRatingCount = runs.reduce((sum, run) => sum + (run.droppedWrongRating || 0), 0);
+  if (wrongRatingCount) warnings.push(`Đã bỏ ${wrongRatingCount} review TikTok không khớp bộ lọc sao.`);
   if (emptyCommentCount) warnings.push(`Đã bỏ ${emptyCommentCount} review TikTok không có bình luận viết.`);
   if (duplicateCount) warnings.push(`Đã loại ${duplicateCount} review TikTok trùng trong dữ liệu trả về.`);
   if (strategy === 'single-unfiltered') warnings.push('TikTok đang dùng một key không lọc sao vì không còn đủ 5 key có hạn mức để chia mẫu an toàn.');
@@ -234,6 +248,7 @@ export async function collectTikTokReviews(productId, options = {}) {
       returned: deduplicated.length,
       duplicateCount,
       emptyCommentCount,
+      wrongRatingCount,
       latencyMs: Math.round(performance.now() - startedAt),
       runs: runs.map(({ items: _items, error, ...run }) => ({ ...run, ...(error ? { error } : {}) }))
     }

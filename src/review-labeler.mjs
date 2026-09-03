@@ -3,6 +3,7 @@ import { geminiThinkingConfig, parseGeminiJson, requestGeminiWithFallback } from
 import { isRedisConfigured } from './redis-rest.mjs';
 import { readLayer2Cache, writeLayer2Cache } from './layer2-cache.mjs';
 import { combineAbortSignals } from './abort.mjs';
+import { annotateReviewDuplicates } from './review-deduplication.mjs';
 
 const require = createRequire(import.meta.url);
 const rulesDocument = require('./layer1_rules.json');
@@ -109,6 +110,10 @@ const logisticsCuePattern = /\b(?:giao|ship|van chuyen|dong goi|goi ky|goi ki|nh
 const productExperiencePattern = /\b(?:san pham|chat luong|chat lieu|dung|su dung|xai|mac|uong|giu nhiet|ben|sac|pin|mau|size|form|mui|vi|cong nang|hoat dong)\b/u;
 const meaningfulFeedbackPattern = /\b(?:chat luong|chat lieu|do ben|chac chan|mem mai|mem|em chan|om chan|vua chan|bam chan|lot giay|lot vao|de dieu chinh|khong dau chan|im ban chan|dai|day dan|tien loi|gon|dung tich|dung do|sac nhanh|sac on dinh|khong nong|nhan dien|dung on|dung tot|rat tot|chat luong tot|san pham tot|hang tot|hoat dong tot|dung duoc|y hinh|dung mo ta|de cuon|bao hanh)\b/u;
 const concreteFeedbackPattern = /\b(?:khong|ko|k|bi|loi|hong|rach|bung|dut|roi|rot|bong|nong|yeu|cham|nhanh|ben|chac|mem|em chan|om chan|vua chan|bam chan|lot giay|lot vao|de dieu chinh|khong dau chan|im ban chan|dai|mong|day|vai|nhua|kim loai|boc du|dau cam|bao hanh|\d+\s*(?:ngay|thang|nam|gio|phut|lan|\/10))\b/u;
+// Tránh từ đơn bị nhập nhằng sau khi bỏ dấu (ổn/ồn, chất/chật, đầu/đau,
+// đẹp/dép...). Các trường hợp đó chỉ được chấp nhận bằng cụm có ngữ cảnh.
+// "không" đứng riêng cũng không đủ: "không nóng/không lỏng" là lời khen.
+const negativeDefectCuePattern = /\b(?:(?:khong|ko|k)\s+(?:dung duoc|hoat dong|len nguon|nhan sac|vao dien|dinh|ben|chac|vua|giong(?:\s+hinh)?|dung(?:\s+mo ta|\s+mau|\s+size)?)|chang\s+(?:dung duoc|hoat dong)|hong|rach|bung|dut|long leo|kho dung|dau chan|qua chat|qua rong|sai mau|thieu(?:\s+hang|\s+phu kien)?|mop meo|be vo|vo nat|rat te|bi loi|bao loi|loi san pham|kem chat luong|mui hoi|tieng on|ro ri|het pin|xu long|that vong|phi tien)\b/u;
 
 function logisticsOnlyReview(text) {
   if (!logisticsCuePattern.test(text) || productExperiencePattern.test(text)) return false;
@@ -348,6 +353,13 @@ function normalizeLayer2Label(candidate, review, layer1, product = {}) {
       reason_code: !categories.length ? 'INVALID_DEFECT_CATEGORY' : 'DEFECT_QUOTE_NOT_VERBATIM'
     };
   }
+  if (candidate.has_defect && quote) {
+    const quoteHasDefectEvidence = defectMatches(quote).length > 0
+      || negativeDefectCuePattern.test(normalizeVietnamese(quote));
+    if (!quoteHasDefectEvidence) {
+      return { decision: 'abstain', confidence, reason_code: 'DEFECT_EVIDENCE_NOT_NEGATIVE' };
+    }
+  }
   const lockedLowValue = layer1.reason_codes.some((code) => ['LOW_VALUE_GIBBERISH', 'LOW_VALUE_LOGISTICS_ONLY', 'LOW_VALUE_REPETITION'].includes(code));
   // Các tín hiệu deterministic này không được để LLM mở khóa bằng một category
   // defect được suy diễn. Review lỗi thật đã được Layer 1 ưu tiên defect và sẽ
@@ -423,7 +435,7 @@ export async function classifyBatchWithGemini(batch, product, options = {}) {
     id: layer1.id,
     rating: Number(review.rating) || 0,
     text: String(review.text || '').slice(0, 1000),
-    verified: Boolean(review.verified),
+    verified: typeof review.verified === 'boolean' ? review.verified : null,
     layer1: {
       is_seeding: layer1.is_seeding,
       is_low_value: layer1.is_low_value,
@@ -559,8 +571,24 @@ function chunks(items, size) {
 export async function labelReviewsTwoLayer(reviews = [], options = {}) {
   const layer2StartedAt = Date.now();
   const prepared = reviews.map((review, index) => ({ review, layer1: labelReviewLayer1(review, index, options.product) }));
+  // Phát hiện bản sao trước khi gọi Gemini để một nội dung lặp không tiêu hao
+  // nhiều request/token. Bản đại diện đầu tiên vẫn đi qua đủ hai lớp.
+  const duplicateAudit = annotateReviewDuplicates(prepared.map(({ review, layer1 }) => ({
+    ...review,
+    labelId: layer1.id,
+    labels: baseLabels(layer1)
+  })));
+  const duplicateById = new Map(duplicateAudit.reviews
+    .filter((review) => review.labels?.is_duplicate)
+    .map((review) => [String(review.labelId), {
+      is_duplicate: true,
+      duplicate_of: review.labels.duplicate_of,
+      duplicate_similarity: review.labels.duplicate_similarity,
+      reason_code: 'DUPLICATE_CONTENT'
+    }]));
+  const uniquePrepared = prepared.filter(({ layer1 }) => !duplicateById.has(String(layer1.id)));
   const mode = options.mode || process.env.LABELER_LLM_MODE || 'uncertain';
-  const selected = mode === 'off' ? [] : mode === 'uncertain' ? prepared.filter((item) => item.layer1.requires_llm) : prepared;
+  const selected = mode === 'off' ? [] : mode === 'uncertain' ? uniquePrepared.filter((item) => item.layer1.requires_llm) : uniquePrepared;
   const selectedIds = new Set(selected.map((item) => String(item.layer1.id)));
   const batchSize = Math.min(8, Math.max(5, Number.parseInt(process.env.LABELER_LLM_BATCH_SIZE || '6', 10) || 6));
   const warnings = [];
@@ -652,7 +680,7 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
     const accepted = layer2 && layer2.decision !== 'abstain';
     const safeLayer1Fallback = Boolean(selectedIds.has(String(layer1.id)) && !accepted && canUseSafeLayer1Fallback(layer1));
     const layer2Unavailable = Boolean(layer1.requires_llm && !accepted && !safeLayer1Fallback);
-    const final = accepted ? {
+    const semanticFinal = accepted ? {
       is_seeding: layer2.is_seeding,
       is_low_value: layer2.is_low_value,
       is_vague: layer2.is_vague,
@@ -672,11 +700,13 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
       layer2_fallback_accepted: safeLayer1Fallback,
       reviewed_by: safeLayer1Fallback ? 'layer1-safe-fallback' : 'layer1'
     };
+    const duplicate = duplicateById.get(String(layer1.id));
+    const final = duplicate ? { ...semanticFinal, ...duplicate } : semanticFinal;
     return {
       ...review,
       labelId: layer1.id,
       labels: final,
-      labeling: { layer1, layer2, final, pipelineVersion: '2.3.0' }
+      labeling: { layer1, layer2, final, pipelineVersion: layer2Document.version }
     };
   });
 
@@ -711,6 +741,7 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
       layer2Retry: { retryAttempts, credentialSwitches, modelsUsed: [...modelsUsed] },
       layer2DurationMs,
       layer2CacheHits: cacheHits,
+      duplicateContentCount: duplicateAudit.duplicateCount,
       corrected,
       abstained,
       engine: layer2ById.size ? 'layer1+gemini-layer2' : 'layer1-only',

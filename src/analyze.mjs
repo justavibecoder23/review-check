@@ -6,6 +6,7 @@ import { saveReviewDatasets } from './review-dataset-storage.mjs';
 import { createProgressReporter } from './sse.mjs';
 import { assertEnoughReviews } from './analysis-eligibility.mjs';
 import { throwIfAborted } from './abort.mjs';
+import { annotateReviewDuplicates } from './review-deduplication.mjs';
 
 const issueDefinitions = ISSUE_DEFINITIONS.map(({ id, label, words }) => ({ id, label, words }));
 const lowValuePatterns = [/^ok+([.! ]*)$/i, /tốt([.! ]*)$/i, /^đẹp([.! ]*)$/i, /^5\s*sao/i, /chưa.{0,12}(dùng|thử)/i];
@@ -39,6 +40,9 @@ export function shouldKeep(review) {
   const hasUsefulEvidence = informationValue === 'medium' || informationValue === 'high';
   const reasonCodes = [review.labels?.reason_code, ...(review.labeling?.layer1?.reason_codes || [])].filter(Boolean);
   const lowValueReason = reasonCodes.map((code) => exclusionReasonByCode[code]).find(Boolean);
+  if (review.labels?.is_duplicate) {
+    return { keep: false, reason: 'Nội dung trùng hoặc gần trùng với một review khác trong cùng mẫu' };
+  }
   if (review.labels?.relevance === 'off_topic' || review.labels?.is_off_topic) {
     return { keep: false, reason: 'Nội dung mô tả một sản phẩm khác với sản phẩm đang phân tích' };
   }
@@ -89,7 +93,12 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   };
   const labeling = await labelReviewsTwoLayer(reviews, { product, geminiContext, signal: options.signal });
   progress('filtering', 76, 'Đang phân tích reviews...');
-  const checked = labeling.reviews.map((review) => ({ ...review, filter: shouldKeep(review) }));
+  const deduplication = annotateReviewDuplicates(labeling.reviews);
+  const labelingStats = { ...labeling.stats, duplicateContentCount: deduplication.duplicateCount };
+  if (deduplication.duplicateCount) {
+    warnings.push(`Đã loại ${deduplication.duplicateCount} review có nội dung trùng hoặc gần trùng trong cùng mẫu.`);
+  }
+  const checked = deduplication.reviews.map((review) => ({ ...review, filter: shouldKeep(review) }));
   const genuine = checked.filter((review) => review.filter.keep);
   const excluded = checked.filter((review) => !review.filter.keep);
   const grouped = new Map(issueDefinitions.map((issue) => [issue.id, { ...issue, count: 0, reviews: [] }]));
@@ -106,7 +115,7 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
     .sort((a, b) => b.count - a.count)
     .map(({ id, label, count, reviews: relatedReviews }) => ({
       id, label, count,
-      level: count >= 3 ? 'Nên cân nhắc' : 'Có ghi nhận',
+      level: 'Ghi nhận trong mẫu',
       examples: relatedReviews.map(({ text, rating, date }) => ({ text, rating, date }))
     }));
 
@@ -122,7 +131,9 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   if (reviews.length && unverifiedCount / reviews.length > 0.2) {
     warnings.push(`Có ${unverifiedCount}/${reviews.length} review chưa được Layer 2 kiểm định; các review này không tham gia TrustScore.`);
   }
-  const trustSample = processedReviews.filter((review) => !classifyReviewSignals(review).seeding).length;
+  const fallbackTrustSample = processedReviews.filter((review) => (
+    review.included !== false && !classifyReviewSignals(review).seeding
+  )).length;
   progress('saving', 84, 'Đang hoàn thiện kết quả...');
   throwIfAborted(options.signal);
   const dataset = await saveReviewDatasets({
@@ -130,7 +141,7 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
     labeledReviews: processedReviews,
     product,
     source,
-    labeling: labeling.stats
+    labeling: labelingStats
   });
   if (dataset.warning) warnings.push(dataset.warning);
   warnings.push(...labeling.warnings);
@@ -147,9 +158,9 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
       level: 'info',
       event: 'gemini_pipeline_complete',
       durationMs: Date.now() - geminiStartedAt,
-      layer2DurationMs: labeling.stats.layer2DurationMs,
+      layer2DurationMs: labelingStats.layer2DurationMs,
       narrativeDurationMs: Date.now() - narrativeStartedAt,
-      layer2Status: labeling.stats.layer2Status,
+      layer2Status: labelingStats.layer2Status,
       narrativeEngine: trust.engine,
       failedRoutes: geminiContext.failedRouteIds.size
     }));
@@ -158,7 +169,7 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
     product,
     source,
     warnings,
-    labeling: labeling.stats,
+    labeling: labelingStats,
     dataset: { saved: dataset.saved, runId: dataset.runId, provider: dataset.provider },
     stats: {
       scanned: reviews.length,
@@ -167,15 +178,17 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
       excluded: excluded.length,
       unverified: unverifiedCount,
       lowRatings,
-      trustSample: trust.method?.sample?.afterSeedingRemoval ?? trustSample,
-      algorithmSample: trust.method?.sample?.afterSeedingRemoval ?? trustSample,
-      seedingExcluded: trust.method?.sample?.seedingCount ?? (reviews.length - trustSample)
+      trustSample: trust.method?.sample?.afterSeedingRemoval ?? fallbackTrustSample,
+      algorithmSample: trust.method?.sample?.afterSeedingRemoval ?? fallbackTrustSample,
+      evidenceRejected: trust.method?.sample?.rejectedFromEvidence ?? (reviews.length - fallbackTrustSample),
+      samplingDesignExcluded: trust.method?.sample?.excludedBySamplingDesign ?? 0,
+      duplicateContentExcluded: deduplication.duplicateCount,
+      seedingExcluded: trust.method?.sample?.totalSeedingCount
+        ?? processedReviews.filter((review) => classifyReviewSignals(review).seeding).length
     },
-    verdict: issues.some((issue) => issue.count >= 3)
-      ? `Cần cân nhắc: nhiều phản hồi thật đề cập “${signal.toLowerCase()}”.`
-      : issues.length
-        ? `Có một số phản hồi cần lưu ý về ${signal.toLowerCase()}.`
-        : 'Chưa đủ tín hiệu tiêu cực đáng tin để kết luận sản phẩm có vấn đề.',
+    verdict: issues.length
+      ? `Trong mẫu đã thu thập, ${issues[0].count} review đáng tham khảo đề cập “${signal.toLowerCase()}”. Hãy đọc các dẫn chứng để tự đánh giá sản phẩm.`
+      : 'Trong mẫu đã thu thập, chưa ghi nhận nhược điểm cụ thể lặp lại. Kết quả này không khẳng định sản phẩm không có vấn đề.',
     issues,
     trust,
     reviews: processedReviews

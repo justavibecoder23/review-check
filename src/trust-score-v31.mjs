@@ -1,5 +1,7 @@
 const ALPHA_FAMILY = 0.01;
 const FISHER_ALPHA = 0.025;
+const STANDARD_RATINGS = Object.freeze([1, 3, 5]);
+const TARGET_EFFECTIVE_SAMPLE = 60;
 
 export const ISSUE_DEFINITIONS = [
   { id: 'chat-lieu', label: 'Chất liệu / độ bền', severity: 1.5, words: ['vai mong', 'mong', 'xu', 'bong', 'rach', 'son', 'mui', 'cung', 'tho', 'nhao', 'kem chat luong', 'de hong'] },
@@ -63,7 +65,9 @@ export function findReviewIssues(text = '') {
 export function classifyReviewSignals(review = {}) {
   const text = fold(review.text);
   if (review.labels && typeof review.labels === 'object') {
-    const categoryIds = Array.isArray(review.labels.defect_categories) ? review.labels.defect_categories : [];
+    const categoryIds = review.labels.has_defect === false
+      ? []
+      : Array.isArray(review.labels.defect_categories) ? review.labels.defect_categories : [];
     const issues = ISSUE_DEFINITIONS.filter((issue) => categoryIds.includes(issue.id));
     return {
       text,
@@ -71,6 +75,9 @@ export function classifyReviewSignals(review = {}) {
       seeding: Boolean(review.labels.is_seeding),
       vague: Boolean(review.labels.is_vague),
       lowValue: Boolean(review.labels.is_low_value),
+      offTopic: Boolean(review.labels.is_off_topic || review.labels.relevance === 'off_topic'),
+      duplicate: Boolean(review.labels.is_duplicate),
+      informationValue: String(review.labels.information_value || '').toLowerCase(),
       source: review.labels.reviewed_by || 'two-layer-labeler'
     };
   }
@@ -80,7 +87,7 @@ export function classifyReviewSignals(review = {}) {
   const vague = Number(review.rating) <= 2
     && issues.length === 0
     && (text.length < 35 || VAGUE_PATTERNS.some((pattern) => pattern.test(text)));
-  return { text, issues, seeding, vague, lowValue: false, source: 'legacy-rules' };
+  return { text, issues, seeding, vague, lowValue: false, offTopic: false, duplicate: false, informationValue: '', source: 'legacy-rules' };
 }
 
 function logFactorials(n) {
@@ -172,7 +179,7 @@ function inferCategory(product = {}) {
   const descriptor = fold(`${product.category || ''} ${product.title || ''}`);
   if (/dien thoai|camera|pin|sac|cap|tai nghe|may|dien tu|iphone|android/.test(descriptor)) return 'electronics';
   if (/my pham|kem|serum|son|duong|sua rua mat|lam dep/.test(descriptor)) return 'beauty';
-  if (/(^|\s)(ao|quan|vay|giay|dep|tui|non)(\s|$)|size|thoi trang/.test(descriptor)) return 'fashion';
+  if (/(^|\s)(ao|quan|vay|giay|tui|non)(\s|$)|doi dep|dep quai|dep sandal|giay dep|size|thoi trang/.test(descriptor)) return 'fashion';
   return 'general';
 }
 
@@ -190,7 +197,7 @@ function parseReviewDate(value) {
 function temporalScore(reviews) {
   const dates = reviews.map((review) => parseReviewDate(review.date)).filter(Number.isFinite).sort((a, b) => a - b);
   const coverage = ratio(dates.length, reviews.length);
-  if (dates.length < 5) return { score: 70, coverage, maxWindowShare: null, status: 'limited' };
+  if (dates.length < 5) return { score: null, coverage, maxWindowShare: null, status: 'unavailable' };
   let maximumSevenDayCount = 1;
   let left = 0;
   for (let right = 0; right < dates.length; right += 1) {
@@ -199,9 +206,9 @@ function temporalScore(reviews) {
   }
   const maxWindowShare = ratio(maximumSevenDayCount, dates.length);
   const burstPenalty = clamp((maxWindowShare - 0.55) / 0.45, 0, 1);
-  const observedScore = 100 * (1 - burstPenalty);
+  const observedScore = clamp(100 * (1 - burstPenalty));
   return {
-    score: clamp(70 * (1 - coverage) + observedScore * coverage),
+    score: coverage >= 0.7 ? observedScore : null,
     coverage,
     maxWindowShare,
     status: coverage >= 0.7 ? 'available' : 'limited'
@@ -214,84 +221,142 @@ function isExplicitlyIncluded(review) {
 
 function samplingPolicy(sampling = {}) {
   const stratifiedByRating = sampling?.strategy === 'parallel-star-filters';
+  const randomized = sampling?.randomized === true;
   return {
     strategy: sampling?.strategy || 'unknown',
     stratifiedByRating,
     distributionMode: stratifiedByRating ? 'excluded-controlled-sample' : 'observed-sample',
     defectMode: stratifiedByRating ? 'standardized-controlled-sample' : 'observed-sample',
-    populationInferenceEnabled: !stratifiedByRating
+    randomized,
+    // Ngẫu nhiên bên trong từng tầng sao không khôi phục phân bố tự nhiên.
+    // Chỉ mẫu ngẫu nhiên không chia tầng mới được phép suy luận tổng thể.
+    populationInferenceEnabled: randomized && !stratifiedByRating,
+    standardRatings: STANDARD_RATINGS
   };
 }
 
-function statisticalSamples(reviews) {
+function statisticalSamples(reviews, policy) {
   const annotated = reviews.map((review, index) => ({ review, index, signal: classifyReviewSignals(review) }));
-  const evidence = annotated.filter(({ review, signal }) => isExplicitlyIncluded(review) && !signal.seeding);
-  // Fisher cần giữ lại review nghi seeding/vague để phát hiện quan hệ bất thường.
-  // Off-topic và low-value thuần túy không được phép tác động vào thống kê.
-  const audit = annotated.filter(({ review, signal }) => {
-    if (signal.source === 'legacy-rules' && review?.included === undefined) return true;
-    if (review?.labels?.is_off_topic || review?.labels?.relevance === 'off_topic') return false;
-    return isExplicitlyIncluded(review) || signal.seeding || signal.vague;
-  });
-  return { evidence, audit };
+  // Khi chủ động chia tầng, Shopee và TikTok chỉ có thiết kế chung ở 1★/3★/5★.
+  // Cùng một population được dùng cho cả bốn thành phần để tránh thiên lệch nền tảng.
+  const audit = policy.stratifiedByRating
+    ? annotated.filter(({ review }) => STANDARD_RATINGS.includes(Number(review.rating)))
+    : annotated;
+  const evidence = audit.filter(({ review, signal }) => isExplicitlyIncluded(review) && !signal.seeding && !signal.duplicate);
+  return { annotated, evidence, audit, excludedByDesign: annotated.length - audit.length };
 }
 
-function reviewDefectSeverity(signal) {
-  return signal.issues.reduce((sum, issue) => sum + issue.severity, 0);
+const MAX_ISSUE_SEVERITY = Math.max(...ISSUE_DEFINITIONS.map((issue) => issue.severity));
+
+// Defect là thống kê nội dung để người dùng đọc ưu/nhược điểm, không phải thước
+// đo review đáng tin hay không. Dùng mức nghiêm trọng cao nhất để không đếm
+// chồng nhiều category có thể cùng mô tả một lỗi.
+function reviewDefectBurden(signal) {
+  const uniqueIssues = [...new Map(signal.issues.map((issue) => [issue.id, issue])).values()];
+  return uniqueIssues.length
+    ? clamp(Math.max(...uniqueIssues.map((issue) => issue.severity)) / MAX_ISSUE_SEVERITY, 0, 1)
+    : 0;
 }
 
-function defectPenaltyForSample(evidence, policy) {
-  if (!evidence.length) return 0;
+function meanDefectBurden(entries) {
+  return entries.length
+    ? entries.reduce((sum, { signal }) => sum + reviewDefectBurden(signal), 0) / entries.length
+    : 0;
+}
+
+function defectEstimateForSample(evidence, policy) {
+  if (!evidence.length) {
+    return { risk: null, method: 'no-evidence', strata: [], comparableAcrossPlatforms: false };
+  }
+  const pooledRisk = meanDefectBurden(evidence);
   if (!policy.stratifiedByRating) {
-    return evidence.reduce((sum, { signal }) => sum + reviewDefectSeverity(signal), 0) / evidence.length;
+    return { risk: pooledRisk, method: 'observed-descriptive', strata: [], comparableAcrossPlatforms: false };
   }
-  const strata = new Map();
-  for (const entry of evidence) {
-    const rating = Number(entry.review.rating);
-    if (rating < 1 || rating > 5) continue;
-    if (!strata.has(rating)) strata.set(rating, []);
-    strata.get(rating).push(entry);
-  }
-  if (!strata.size) return 0;
-  const perStratum = [...strata.values()].map((entries) => (
-    entries.reduce((sum, { signal }) => sum + reviewDefectSeverity(signal), 0) / entries.length
-  ));
-  return perStratum.reduce((sum, value) => sum + value, 0) / perStratum.length;
+
+  const strata = STANDARD_RATINGS.map((rating) => {
+    const entries = evidence.filter((entry) => Number(entry.review.rating) === rating);
+    if (!entries.length) return null;
+    const observedRisk = meanDefectBurden(entries);
+    return { rating, count: entries.length, observedRisk };
+  }).filter(Boolean);
+  const complete = strata.length === STANDARD_RATINGS.length;
+  const risk = complete
+    ? strata.reduce((sum, stratum) => sum + stratum.observedRisk, 0) / STANDARD_RATINGS.length
+    : pooledRisk;
+  return {
+    risk: clamp(risk, 0, 1),
+    method: complete ? 'equal-anchor-ratings' : 'incomplete-anchor-ratings',
+    strata,
+    pooledRisk,
+    standardRatings: STANDARD_RATINGS,
+    comparableAcrossPlatforms: false,
+    comparableUnderCommonDesign: complete
+  };
 }
 
-function componentScores(distributionReviews, distributionSignals, evidence, defectPenalty, policy) {
-  const seedingRate = ratio(distributionSignals.filter((item) => item.seeding).length, distributionReviews.length);
-  const fiveStarRate = ratio(distributionReviews.filter((review) => Number(review.rating) === 5).length, distributionReviews.length);
-  const oneStarRate = ratio(distributionReviews.filter((review) => Number(review.rating) === 1).length, distributionReviews.length);
-  const saturationPenalty = clamp((fiveStarRate - 0.85) / 0.15, 0, 1);
-  const attackPenalty = clamp((oneStarRate - 0.5) / 0.5, 0, 1);
-  // Năm Apify run chủ động lấy gần bằng nhau ở từng mức sao. Phân bố đó là
-  // thiết kế lấy mẫu, không phải phân bố rating tự nhiên của sản phẩm.
-  const distribution = policy.stratifiedByRating
-    ? null
-    : clamp(100 * (1 - 0.5 * seedingRate - 0.3 * saturationPenalty - 0.2 * attackPenalty));
+function sampleAdequacy(evidence, policy) {
+  if (!evidence.length) return { effectiveSize: 0, score: 0, status: 'insufficient', missingRatings: [...STANDARD_RATINGS] };
+  if (!policy.stratifiedByRating) {
+    const effectiveSize = evidence.length;
+    return {
+      effectiveSize,
+      score: clamp(100 * effectiveSize / TARGET_EFFECTIVE_SAMPLE),
+      status: effectiveSize < 10 ? 'insufficient' : effectiveSize < 20 ? 'provisional' : 'valid',
+      missingRatings: []
+    };
+  }
+  const counts = new Map(STANDARD_RATINGS.map((rating) => [
+    rating,
+    evidence.filter(({ review }) => Number(review.rating) === rating).length
+  ]));
+  const missingRatings = STANDARD_RATINGS.filter((rating) => !counts.get(rating));
+  const effectiveSize = missingRatings.length
+    ? 0
+    : 1 / STANDARD_RATINGS.reduce((sum, rating) => sum + (1 / STANDARD_RATINGS.length) ** 2 / counts.get(rating), 0);
+  return {
+    effectiveSize,
+    score: clamp(100 * effectiveSize / TARGET_EFFECTIVE_SAMPLE),
+    status: missingRatings.length || effectiveSize < 10 ? 'insufficient' : effectiveSize < 20 ? 'provisional' : 'valid',
+    missingRatings
+  };
+}
 
+function componentScores(audit, evidence, adequacy) {
   const textValues = evidence.map(({ review, signal }) => {
-    const detail = clamp(signal.text.length / 120, 0, 1);
-    const specificity = Number(signal.issues.length > 0 || signal.text.length >= 60);
-    const verified = Number(Boolean(review.verified));
-    const base = 100 * (0.45 * detail + 0.35 * specificity + 0.2 * verified);
-    const negative = scoreNegativeReview(review);
-    return negative === null ? base : 0.6 * base + 0.4 * negative;
+    const detail = clamp(signal.text.length / 80, 0, 1);
+    const informationMap = { high: 1, medium: 0.75, low: 0.35, none: 0 };
+    const information = Object.hasOwn(informationMap, signal.informationValue)
+      ? informationMap[signal.informationValue]
+      : detail;
+    const verificationKnown = typeof review.verified === 'boolean';
+    const verified = Number(review.verified === true);
+    // Thiếu trường xác minh không đồng nghĩa với chưa xác minh. Khi provider
+    // không cung cấp tín hiệu này, chuẩn hóa lại hai trọng số còn lại.
+    return verificationKnown
+      ? 100 * (0.5 * information + 0.3 * detail + 0.2 * verified)
+      : 100 * (0.625 * information + 0.375 * detail);
   });
   const text = textValues.length ? textValues.reduce((sum, value) => sum + value, 0) / textValues.length : 0;
-  const observedDefect = clamp(100 * (1 - 2.5 * defectPenalty));
+  const seedingRate = ratio(audit.filter(({ signal }) => signal.seeding).length, audit.length);
+  const vagueRate = ratio(audit.filter(({ signal }) => signal.vague).length, audit.length);
+  const lowValueRate = ratio(audit.filter(({ signal }) => signal.lowValue).length, audit.length);
+  const offTopicRate = ratio(audit.filter(({ signal }) => signal.offTopic).length, audit.length);
+  const duplicateRate = ratio(audit.filter(({ signal }) => signal.duplicate).length, audit.length);
+  // Mỗi review nhiễu chỉ bị tính một lần, dù có thể đồng thời mang nhiều nhãn.
+  const cleanCount = audit.filter(({ signal }) => !signal.seeding && !signal.vague && !signal.lowValue && !signal.offTopic && !signal.duplicate).length;
+  const authenticity = audit.length ? 100 * ratio(cleanCount, audit.length) : 0;
+  const unavailableRate = ratio(audit.filter(({ review }) => review?.labels?.layer2_unavailable).length, audit.length);
+  const labeling = audit.length ? 100 * (1 - unavailableRate) : 0;
   return {
-    distribution,
-    distributionStatus: policy.distributionMode,
     text,
-    defect: observedDefect,
-    defectStatus: policy.defectMode,
-    observedDefect
+    authenticity,
+    labeling,
+    adequacy: adequacy.score,
+    rates: { seeding: seedingRate, vague: vagueRate, lowValue: lowValueRate, offTopic: offTopicRate, duplicate: duplicateRate, layer2Unavailable: unavailableRate }
   };
 }
 
-function fisherComponent(signals, reviews) {
+function fisherComponent(signals, reviews, inferenceEnabled = false) {
   const build = (predicateRow, predicateColumn) => {
     const table = { a: 0, b: 0, c: 0, d: 0 };
     reviews.forEach((review, index) => {
@@ -302,10 +367,10 @@ function fisherComponent(signals, reviews) {
       else if (column) table.c += 1;
       else table.d += 1;
     });
-    const pValue = fisherExactTwoSided(table);
+    const pValue = inferenceEnabled ? fisherExactTwoSided(table) : null;
     const oddsRatio = correctedOddsRatio(table);
-    const penalty = pValue < FISHER_ALPHA ? Math.min(3, Math.max(0, Math.log(oddsRatio))) : 0;
-    return { table, pValue, oddsRatio, significant: pValue < FISHER_ALPHA, penalty };
+    const penalty = pValue !== null && pValue < FISHER_ALPHA ? Math.min(3, Math.max(0, Math.log(oddsRatio))) : 0;
+    return { table, pValue, oddsRatio, significant: pValue !== null && pValue < FISHER_ALPHA, penalty, inferenceEnabled };
   };
   const positive = build((signal) => signal.seeding, (_signal, review) => Number(review.rating) === 5);
   const negative = build((signal) => signal.vague, (_signal, review) => Number(review.rating) === 1);
@@ -329,48 +394,29 @@ function resolveBaselines(options, category) {
 }
 
 export function combineTrustComponents(componentScores, options = {}) {
-  const distributionActive = componentScores.distribution !== null && componentScores.distribution !== undefined;
   const weighted = {
-    distribution: {
-      score: clamp(componentScores.distribution),
-      weight: 0.15,
-      active: distributionActive,
-      label: 'Phân bố rating',
-      status: componentScores.distributionStatus || 'observed-distribution'
-    },
-    text: { score: clamp(componentScores.text), weight: 0.20, active: true, label: 'Chất lượng nội dung' },
-    fisher: { score: clamp(componentScores.fisher), weight: 0.20, active: true, label: 'Fisher 2×2' },
-    defect: {
-      score: clamp(componentScores.defect),
-      weight: 0.30,
-      active: true,
-      label: 'Rủi ro khuyết tật',
-      status: componentScores.defectStatus || 'observed-prevalence'
-    },
-    temporal: { score: clamp(componentScores.temporal), weight: 0.15, active: true, label: 'Tính ổn định thời gian' }
+    text: { score: clamp(componentScores.text), weight: 0.25, active: true, label: 'Chất lượng bằng chứng' },
+    authenticity: { score: clamp(componentScores.authenticity), weight: 0.25, active: true, label: 'Mức ít nhiễu' },
+    labeling: { score: clamp(componentScores.labeling), weight: 0.25, active: true, label: 'Độ phủ kiểm định' },
+    adequacy: { score: clamp(componentScores.adequacy), weight: 0.25, active: true, label: 'Độ đầy đủ của mẫu' }
   };
   const activeWeight = Object.values(weighted).reduce((sum, component) => sum + (component.active ? component.weight : 0), 0);
   const rawScore = activeWeight
     ? Object.values(weighted).reduce((sum, component) => sum + (component.active ? component.score * component.weight : 0), 0) / activeWeight
     : 0;
-  const caps = {
-    fisher: weighted.fisher.score < 40 ? 55 : 100,
-    defect: weighted.defect.score < 25 ? 39 : 100,
-    high: weighted.fisher.score < 60 || weighted.defect.score < 60 ? 79 : 100
-  };
-  const applied = Object.entries(caps).filter(([, value]) => value < 100).map(([id, value]) => ({ id, value }));
   return {
-    score: Math.round(Math.min(rawScore, caps.fisher, caps.defect, caps.high)),
+    score: Math.round(clamp(rawScore)),
     rawScore,
     components: weighted,
-    caps: { ...caps, applied }
+    guardrails: { method: 'none', totalPenalty: 0, applied: [] },
+    caps: { fisher: 100, defect: 100, high: 100, applied: [], deprecated: true }
   };
 }
 
 export function calculateTrustScoreV31(reviews = [], options = {}) {
   const normalizedReviews = Array.isArray(reviews) ? reviews : [];
   const policy = samplingPolicy(options.sampling);
-  const samples = statisticalSamples(normalizedReviews);
+  const samples = statisticalSamples(normalizedReviews, policy);
   const evidenceReviews = samples.evidence.map(({ review }) => review);
   const auditReviews = samples.audit.map(({ review }) => review);
   const auditSignals = samples.audit.map(({ signal }) => signal);
@@ -383,11 +429,12 @@ export function calculateTrustScoreV31(reviews = [], options = {}) {
     ...issue,
     count: samples.evidence.filter(({ signal }) => signal.issues.some((match) => match.id === issue.id)).length
   }));
-  const defectPenalty = defectPenaltyForSample(samples.evidence, policy);
+  const defectEstimate = defectEstimateForSample(samples.evidence, policy);
   const defectTests = issueCounts.map((issue) => {
     const p0 = Number(baseline.values?.[issue.id]);
     const hasBaseline = Number.isFinite(p0) && p0 >= 0 && p0 <= 1;
-    const pValue = hasBaseline && policy.populationInferenceEnabled
+    const decisionEnabled = baseline.calibrated && hasBaseline && policy.populationInferenceEnabled;
+    const pValue = decisionEnabled
       ? exactBinomialSurvival(evidenceReviews.length, issue.count, p0)
       : null;
     return {
@@ -398,7 +445,7 @@ export function calculateTrustScoreV31(reviews = [], options = {}) {
       p0: hasBaseline ? p0 : null,
       pValue,
       significantBonferroni: pValue !== null && pValue <= ALPHA_FAMILY / ISSUE_DEFINITIONS.length,
-      decisionEnabled: baseline.calibrated && hasBaseline && policy.populationInferenceEnabled
+      decisionEnabled
     };
   });
   const completeDefectFamily = defectTests.every((item) => Number.isFinite(item.pValue));
@@ -408,43 +455,40 @@ export function calculateTrustScoreV31(reviews = [], options = {}) {
     .map((item) => ({
       ...item,
       multipleTestingMethod: completeDefectFamily ? 'holm-bonferroni' : 'bonferroni-fixed',
-      significantAdjusted: completeDefectFamily ? item.significantHolm : item.significantBonferroni
+      significantAdjusted: item.decisionEnabled && (completeDefectFamily ? item.significantHolm : item.significantBonferroni)
     }));
 
-  const fisher = fisherComponent(auditSignals, auditReviews);
-  const components = componentScores(auditReviews, auditSignals, samples.evidence, defectPenalty, policy);
+  const fisher = fisherComponent(auditSignals, auditReviews, policy.populationInferenceEnabled);
+  const adequacy = sampleAdequacy(samples.evidence, policy);
+  const components = componentScores(samples.audit, samples.evidence, adequacy);
   const temporal = temporalScore(evidenceReviews);
   const combined = combineTrustComponents({
-    distribution: components.distribution,
-    distributionStatus: components.distributionStatus,
     text: components.text,
-    fisher: fisher.score,
-    defect: components.defect,
-    defectStatus: components.defectStatus,
-    temporal: temporal.score
+    authenticity: components.authenticity,
+    labeling: components.labeling,
+    adequacy: components.adequacy
   });
   const dateCoverage = temporal.coverage;
-  const baselineCoverage = policy.populationInferenceEnabled
-    ? ratio(defects.filter((item) => item.p0 !== null).length, defects.length)
-    : 0;
-  const adequacyScore = Math.round(100 * (
-    0.75 * Math.min(1, evidenceReviews.length / 100)
-    + 0.15 * dateCoverage
-    + 0.10 * baselineCoverage
-  ));
+  const scoreAvailable = adequacy.status !== 'insufficient';
 
   return {
-    version: '3.1',
-    score: combined.score,
-    rawScore: combined.rawScore,
+    version: '4.0',
+    scope: 'review-set-reliability',
+    scoreType: 'composite-index-not-probability',
+    score: scoreAvailable ? combined.score : null,
+    rawScore: scoreAvailable ? combined.rawScore : null,
+    scoreStatus: adequacy.status,
     components: combined.components,
     caps: combined.caps,
+    guardrails: combined.guardrails,
     sample: {
       total: normalizedReviews.length,
       statisticalPopulation: auditReviews.length,
       afterSeedingRemoval: evidenceReviews.length,
-      rejectedFromEvidence: normalizedReviews.length - evidenceReviews.length,
-      seedingCount: normalizedReviews.filter((review) => classifyReviewSignals(review).seeding).length
+      rejectedFromEvidence: auditReviews.length - evidenceReviews.length,
+      excludedBySamplingDesign: samples.excludedByDesign,
+      seedingCount: samples.audit.filter(({ signal }) => signal.seeding).length,
+      totalSeedingCount: samples.annotated.filter(({ signal }) => signal.seeding).length
     },
     sampling: {
       strategy: policy.strategy,
@@ -452,20 +496,30 @@ export function calculateTrustScoreV31(reviews = [], options = {}) {
       distributionMode: policy.distributionMode,
       defectMode: policy.defectMode,
       populationInferenceEnabled: policy.populationInferenceEnabled,
+      randomized: policy.randomized,
+      standardRatings: policy.standardRatings,
       perStarLimit: Number(options.sampling?.perStarLimit) || null
     },
     adequacy: {
-      score: adequacyScore,
-      label: adequacyScore >= 80 ? 'Tốt' : adequacyScore >= 55 ? 'Khá' : 'Hạn chế',
-      targetSample: 100,
+      score: Math.round(adequacy.score),
+      label: adequacy.status === 'valid' ? 'Đủ dùng' : adequacy.status === 'provisional' ? 'Tạm thời' : 'Không đủ bằng chứng',
+      targetSample: TARGET_EFFECTIVE_SAMPLE,
+      balancedEvidenceSize: adequacy.effectiveSize,
+      effectiveSampleSize: adequacy.effectiveSize,
+      effectiveSampleSizeDeprecated: true,
+      missingRatings: adequacy.missingRatings,
       dateCoverage
     },
     fisher,
     defects: {
-      score: components.defect,
-      observedScore: components.observedDefect,
-      status: components.defectStatus,
-      penalty: defectPenalty,
+      diagnosticOnly: true,
+      affectsTrustScore: false,
+      score: defectEstimate.risk === null ? null : 100 * (1 - defectEstimate.risk),
+      observedScore: defectEstimate.risk === null ? null : 100 * (1 - defectEstimate.risk),
+      status: policy.defectMode,
+      penalty: defectEstimate.risk,
+      risk: defectEstimate.risk,
+      estimator: defectEstimate,
       tests: defects,
       alphaFamily: ALPHA_FAMILY,
       bonferroniAlpha: ALPHA_FAMILY / ISSUE_DEFINITIONS.length,
@@ -479,17 +533,20 @@ export function calculateTrustScoreV31(reviews = [], options = {}) {
       .filter((item) => item.score !== null),
     notes: [
       'Fisher exact dùng số đếm nguyên gốc; hiệu chỉnh +0,5 chỉ dùng để ổn định odds ratio.',
+      'TrustScore đo độ tin cậy của tập review; defectScore chỉ mô tả nội dung ưu/nhược điểm và không tham gia tổng điểm.',
       baseline.calibrated && policy.populationInferenceEnabled
         ? `Kiểm định khuyết tật dùng baseline đã hiệu chuẩn: ${baseline.source}.`
         : policy.populationInferenceEnabled
           ? 'Các p0 mặc định chỉ là ví dụ từ tài liệu; p-value khuyết tật chỉ để tham khảo cho tới khi baseline được hiệu chuẩn.'
-          : 'Không chạy suy luận tỷ lệ khuyết tật theo p0 vì dữ liệu được chủ động chia tầng theo mức sao.',
-      evidenceReviews.length < 100
-        ? `Mẫu bằng chứng có ${evidenceReviews.length}/100 review mục tiêu; cần đọc kết quả với mức thận trọng cao hơn.`
-        : 'Mẫu đạt ngưỡng thiết kế 100 review.',
+          : policy.stratifiedByRating
+            ? 'Không chạy suy luận tỷ lệ khuyết tật theo p0 vì dữ liệu được chủ động chia tầng theo mức sao.'
+            : 'Không chạy suy luận tỷ lệ khuyết tật theo p0 vì nguồn thu thập không bảo đảm chọn mẫu ngẫu nhiên.',
+      adequacy.status === 'insufficient'
+        ? `Cỡ mẫu bằng chứng cân bằng là ${adequacy.effectiveSize.toFixed(1)}; không trả TrustScore vì chưa đủ bằng chứng.`
+        : `Cỡ mẫu bằng chứng cân bằng là ${adequacy.effectiveSize.toFixed(1)}/${TARGET_EFFECTIVE_SAMPLE} theo thiết kế hiện tại.`,
       policy.stratifiedByRating
-        ? 'Mẫu được cân bằng theo mức sao: thành phần phân bố rating được loại khỏi phép cộng và các trọng số còn lại được chuẩn hóa. Nhược điểm được tính cân bằng giữa các tầng sao, không diễn giải là tỷ lệ của toàn bộ sản phẩm.'
-        : 'Tỷ lệ nhược điểm được quan sát trên mẫu không chia tầng theo mức sao.'
+        ? 'Mẫu chia tầng dùng chung ba mốc 1★, 3★ và 5★ cho mọi thành phần thống kê; review 2★ và 4★ vẫn được giữ để hiển thị và diễn giải. Đây là chỉ số theo thiết kế mẫu chung, không phải tỷ lệ đại diện cho toàn bộ nền tảng.'
+        : 'Nhược điểm chỉ được mô tả trên mẫu đã lấy, không suy rộng thành tỷ lệ của toàn bộ sản phẩm.'
     ]
   };
 }

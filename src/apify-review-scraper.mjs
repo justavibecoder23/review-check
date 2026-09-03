@@ -29,6 +29,7 @@ function reviewKey(review) {
 }
 
 function normalizeReview(review) {
+  const verificationValue = review.isVerifiedPurchase ?? review.isVerified ?? review.verified;
   return {
     reviewId: review.reviewId !== undefined && review.reviewId !== null ? String(review.reviewId) : null,
     itemId: review.itemId !== undefined && review.itemId !== null ? String(review.itemId) : null,
@@ -37,7 +38,8 @@ function normalizeReview(review) {
     text: String(review.comment || '').trim(),
     date: review.createdAt ? new Date(review.createdAt).toLocaleDateString('vi-VN') : 'Không rõ ngày',
     createdAt: review.createdAt || null,
-    verified: true,
+    // Không được biến dữ liệu thiếu thành “đã xác minh”.
+    verified: typeof verificationValue === 'boolean' ? verificationValue : null,
     author: review.author || 'Khách đã mua'
   };
 }

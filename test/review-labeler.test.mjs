@@ -321,6 +321,70 @@ test('Layer 2 không được mở khóa review logistics-only bằng defect suy
   }
 });
 
+test('Layer 2 từ chối gắn nhãn khuyết tật cho lời khen dù quote là nguyên văn', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  try {
+    const text = 'Lót vào đi rất êm và ôm chân, rất hài lòng';
+    const result = await labelReviewsTwoLayer([{ rating: 5, text }], {
+      mode: 'all',
+      product: { title: 'Miếng lót giày êm chân' },
+      fetchImpl: async () => ({
+        ok: true,
+        async json() {
+          return {
+            candidates: [{ content: { parts: [{ text: JSON.stringify({ labels: [{
+              id: 'r0001', decision: 'correct', is_seeding: false, is_low_value: false,
+              is_vague: false, is_off_topic: false, relevance: 'on_topic',
+              information_value: 'high', has_defect: true, defect_categories: ['su-dung'],
+              defect_quote: 'rất êm và ôm chân', evidence_quote: 'rất êm và ôm chân',
+              confidence: 0.99, reason_code: 'WRONG_DEFECT'
+            }] }) }] } }]
+          };
+        }
+      })
+    });
+    assert.equal(result.reviews[0].labels.has_defect, false);
+    assert.deepEqual(result.reviews[0].labels.defect_categories, []);
+    assert.equal(result.reviews[0].labeling.layer2.decision, 'abstain');
+    assert.equal(result.reviews[0].labeling.layer2.reason_code, 'DEFECT_EVIDENCE_NOT_NEGATIVE');
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
+test('Layer 2 không hiểu nhầm phủ định lỗi như “không nóng” thành khuyết tật', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  try {
+    const text = 'Sạc ổn định không nóng máy, đầu cắm chắc chắn';
+    const result = await labelReviewsTwoLayer([{ rating: 5, text }], {
+      mode: 'all',
+      product: { title: 'Cáp sạc nhanh' },
+      fetchImpl: async () => ({
+        ok: true,
+        async json() {
+          return {
+            candidates: [{ content: { parts: [{ text: JSON.stringify({ labels: [{
+              id: 'r0001', decision: 'correct', is_seeding: false, is_low_value: false,
+              is_vague: false, is_off_topic: false, relevance: 'on_topic',
+              information_value: 'high', has_defect: true, defect_categories: ['su-dung'],
+              defect_quote: 'không nóng máy', evidence_quote: 'không nóng máy',
+              confidence: 0.99, reason_code: 'WRONG_NEGATION'
+            }] }) }] } }]
+          };
+        }
+      })
+    });
+    assert.equal(result.reviews[0].labels.has_defect, false);
+    assert.equal(result.reviews[0].labeling.layer2.reason_code, 'DEFECT_EVIDENCE_NOT_NEGATIVE');
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
 test('Layer 2 xác nhận off-topic chỉ khi trích dẫn nguyên văn nêu sản phẩm khác', async () => {
   const previousKey = process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY = 'test-key';
@@ -414,4 +478,44 @@ test('Layer 2 hedge sang key khác khi request đầu phản hồi chậm', asyn
   assert.deepEqual(calls, [0, 1]);
   assert.deepEqual(result.labels, labels);
   assert.equal(result.retry.credentialAttempts, 1);
+});
+
+test('review trùng nội dung không tiêu hao thêm lượt kiểm định Layer 2', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  let sentReviews = 0;
+  const text = 'Dây sạc chắc chắn, sạc nhanh ổn định và không làm nóng máy khi sử dụng.';
+  try {
+    const result = await labelReviewsTwoLayer([
+      { reviewId: 'actor-a', rating: 5, text, verified: true },
+      { reviewId: 'actor-b', rating: 5, text, verified: true }
+    ], {
+      mode: 'all',
+      product: { title: 'Cáp sạc nhanh Baseus' },
+      fetchImpl: async (_url, options) => {
+        const body = JSON.parse(options.body);
+        const prompt = body.contents[0].parts[0].text;
+        sentReviews = JSON.parse(prompt.split('Dữ liệu cần kiểm định: ')[1]).length;
+        return {
+          ok: true,
+          async json() {
+            return { candidates: [{ content: { parts: [{ text: JSON.stringify({ labels: [{
+              id: 'r0001', decision: 'confirm', is_seeding: false, is_low_value: false,
+              is_vague: false, is_off_topic: false, relevance: 'on_topic', information_value: 'high',
+              has_defect: false, defect_categories: [], defect_quote: null,
+              evidence_quote: text, confidence: 0.99, reason_code: 'USEFUL_EXPERIENCE'
+            }] }) }] } }] };
+          }
+        };
+      }
+    });
+    assert.equal(sentReviews, 1);
+    assert.equal(result.stats.layer2Requested, 1);
+    assert.equal(result.stats.duplicateContentCount, 1);
+    assert.equal(result.reviews[1].labels.is_duplicate, true);
+    assert.equal(result.reviews[1].labels.duplicate_of, 'r0001');
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
 });

@@ -49,7 +49,7 @@ function rawReview(review) {
     text: String(review.text || ''),
     date: review.date || null,
     createdAt: review.createdAt || null,
-    verified: Boolean(review.verified),
+    verified: typeof review.verified === 'boolean' ? review.verified : null,
     author: review.author || null
   };
 }

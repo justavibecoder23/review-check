@@ -148,7 +148,7 @@ Mỗi lượt thu thập review chạy theo thứ tự:
 
 1. `src/review-labeler.mjs` áp dụng labeling functions trong `src/layer1_rules.json`. Rule tách riêng `relevance` (mức liên quan) và `information_value` (giá trị thông tin), đồng thời có các nhãn độc lập cho `seeding`, `low_value`, `vague` và nhóm lỗi. Layer 1 chỉ tạo ứng viên off-topic, không tự loại review dựa trên từ khóa mơ hồ.
 2. Nếu có `GEMINI_API_KEY`, Layer 2 kiểm tra các trường hợp chưa chắc chắn theo batch bằng schema trong `src/sample_ai_payload.json`. LLM chỉ được `confirm`, `correct` hoặc `abstain`; mọi lần sửa nhãn phải kèm trích dẫn nguyên văn. Nhãn off-topic còn phải trích đúng đoạn nêu một sản phẩm khác; kết quả sai ID, category lạ, quote không nguyên văn hoặc vi phạm bất biến sẽ bị backend từ chối.
-3. TrustScore v3.1 đọc nhãn cuối cùng. Nếu Layer 2 lỗi hoặc không có khóa, hệ thống vẫn chạy bằng Layer 1 và ghi rõ provenance.
+3. Sau Layer 2, backend loại bản sao nội dung theo exact/near-duplicate dù review có ID khác. TrustScore v4.0 đọc nhãn cuối cùng và chỉ đo độ tin cậy của tập review bằng bốn thành phần có trọng số bằng nhau: chất lượng bằng chứng, mức ít nhiễu, độ phủ kiểm định và độ đầy đủ của mẫu. `defectScore` là thống kê riêng để tạo ưu/nhược điểm cho người dùng tự đánh giá sản phẩm; phản hồi tiêu cực chân thực không làm TrustScore giảm. Với lượt lấy chia tầng, mọi thành phần chỉ dùng thiết kế chung 1★/3★/5★; review 2★/4★ vẫn hiển thị nhưng không làm điểm lệch giữa Shopee và TikTok. Đây là chỉ số tổng hợp, không phải xác suất và không đại diện cho phân bố toàn bộ sản phẩm. Nếu cỡ mẫu không đủ, API trả `score: null` thay vì mặc định một điểm cao. Nếu Layer 2 lỗi hoặc không có khóa, hệ thống vẫn chạy bằng Layer 1 và ghi rõ provenance.
 
 `LABELER_LLM_MODE=uncertain` là mặc định tiết kiệm: chỉ gửi ứng viên off-topic, trường hợp xung đột hoặc độ tin cậy thấp; `all` dùng để audit toàn bộ review; `off` tắt Layer 2.
 
@@ -167,6 +167,6 @@ Mỗi lượt phân tích tạo đúng hai file có chung `runId`:
 - `reviews.raw.json`: dữ liệu vừa thu thập, chưa gắn nhãn;
 - `reviews.labeled.json`: dữ liệu kèm nhãn Layer 1, phản biện Layer 2, nhãn cuối, evidence, phiên bản pipeline, quyết định lọc cuối `included` và `exclusionReason`.
 
-API phân biệt rõ `stats.included` (review được giữ làm bằng chứng hiển thị) với `stats.trustSample` (mẫu `N_genuine` của TrustScore sau khi loại seeding theo tài liệu v3.1). Trường cũ `genuine` và `algorithmSample` vẫn được giữ để tương thích client cũ.
+API phân biệt rõ `stats.included` (review được giữ làm bằng chứng hiển thị) với `stats.trustSample` (mẫu bằng chứng của TrustScore sau khi loại nội dung không đủ điều kiện). Trường cũ `genuine` và `algorithmSample` vẫn được giữ để tương thích client cũ.
 
 Khi chạy local, file nằm trong `data/review-runs/YYYY/MM/DD/<product>/<runId>/`. Khi chạy trên Vercel, filesystem của Function không phải storage bền vững; ứng dụng lưu hai file vào **private Vercel Blob** tại `review-datasets/YYYY/MM/DD/<product>/<runId>/` nếu có `BLOB_READ_WRITE_TOKEN`. Kết nối một Blob Store trong Vercel Storage với project để Vercel cấp biến này, rồi redeploy. Nếu chưa nối Blob Store, lượt phân tích vẫn trả kết quả nhưng `dataset.saved=false` và có warning rõ ràng.

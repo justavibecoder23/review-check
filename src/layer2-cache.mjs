@@ -11,7 +11,7 @@ function cacheKey(item, product = {}) {
     category: String(product?.category || '').trim().toLowerCase(),
     platform: String(product?.platform || '').trim().toLowerCase(),
     rating: Number(item?.review?.rating) || 0,
-    verified: Boolean(item?.review?.verified),
+    verified: typeof item?.review?.verified === 'boolean' ? item.review.verified : null,
     text: String(item?.review?.text || '').replace(/\s+/g, ' ').trim().toLowerCase()
   });
   return `${CACHE_PREFIX}${createHash('sha256').update(fingerprint).digest('hex')}`;

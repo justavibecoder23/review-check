@@ -31,12 +31,25 @@ function percentage(part, whole) {
   return whole > 0 ? part / whole * 100 : 0;
 }
 
+function hasNonNegatedPhrase(text, phrase) {
+  let offset = 0;
+  while (offset < text.length) {
+    const index = text.indexOf(phrase, offset);
+    if (index < 0) return false;
+    const prefix = text.slice(Math.max(0, index - 32), index);
+    const negated = /(?:không|ko|chẳng|chưa|\bk)\s+(?:\S+\s+){0,2}$/iu.test(prefix);
+    if (!negated) return true;
+    offset = index + phrase.length;
+  }
+  return false;
+}
+
 function countThemes(reviews, definitions) {
   return definitions
     .map((definition) => {
       const matching = reviews.filter((review) => {
         const text = normalise(review.text);
-        return definition.words.some((word) => text.includes(word));
+        return definition.words.some((word) => hasNonNegatedPhrase(text, normalise(word)));
       });
       return { ...definition, count: matching.length, example: matching[0]?.text || '' };
     })
@@ -108,6 +121,7 @@ function fallbackCopy(reviews, included, excluded) {
 }
 
 export function trustTone(score) {
+  if (!Number.isFinite(score)) return { id: 'neutral', label: 'Chưa đủ bằng chứng' };
   if (score >= 80) return { id: 'green', label: 'Mức tin cậy rất cao' };
   if (score >= 60) return { id: 'yellow', label: 'Mức tin cậy khá tốt' };
   if (score >= 40) return { id: 'orange', label: 'Mức tin cậy trung bình' };
@@ -123,8 +137,10 @@ function configuredBaselines() {
   }
 }
 
-function plainTrustSummary(score, includedCount) {
-  if (!includedCount) return 'Chưa có đủ review hữu ích để đánh giá đáng tin cậy.';
+function plainTrustSummary(score, includedCount, scoreStatus = 'valid') {
+  if (!Number.isFinite(score) || scoreStatus === 'insufficient') {
+    return 'Chưa có đủ review hữu ích và đủ độ phủ mẫu để tính TrustScore đáng tin cậy. Bạn vẫn có thể đọc các review đã được phân loại, nhưng chưa nên suy rộng kết quả.';
+  }
   const meaning = score >= 80
     ? 'Các review đủ điều kiện hiện khá nhất quán, có nội dung dễ đối chiếu và ít dấu hiệu bất thường.'
     : score >= 60
@@ -147,20 +163,19 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
   const tone = trustTone(score);
   const mostFrequentDefect = [...method.defects.tests].sort((left, right) => right.count - left.count)[0];
   const controlledDefectSample = method.defects.status === 'standardized-controlled-sample';
-  const appliedCap = method.caps.applied[0];
   const detailedCount = included.filter((review) => normalise(review.text).length >= 45).length;
   const verifiedCount = included.filter((review) => review.verified).length;
   const excludedRate = reviews.length ? Math.round(excluded.length / reviews.length * 100) : 0;
   const drivers = [
     {
-      impact: method.fisher.score >= 60 ? 'up' : 'down',
-      title: method.fisher.score >= 60 ? 'Chưa thấy liên hệ nội dung bất thường rõ ràng' : 'Một số đánh giá cực đoan cần được thận trọng',
-      detail: method.fisher.score >= 60
-        ? 'Trong chính mẫu đã thu thập, review 5 sao không tập trung bất thường ở nội dung mang dấu hiệu quảng bá và review 1 sao không chủ yếu là lời phàn nàn quá mơ hồ.'
-        : 'Một số review 5 sao hoặc 1 sao đi kèm nội dung khó kiểm chứng hay có dấu hiệu bất thường. Hệ thống vì thế thận trọng hơn và giảm mức tin cậy của tập review.'
+      impact: method.components.authenticity.score >= 70 ? 'up' : 'down',
+      title: method.components.authenticity.score >= 70 ? 'Phần lớn review không mang dấu hiệu nhiễu rõ ràng' : 'Tập review còn nhiều nội dung cần thận trọng',
+      detail: method.components.authenticity.score >= 70
+        ? 'Tỷ lệ nội dung bị nhận diện là seeding, quá mơ hồ hoặc ít giá trị hiện ở mức thấp trong mẫu đã thu thập.'
+        : 'Mẫu hiện có tỷ lệ đáng kể review seeding, quá mơ hồ hoặc ít thông tin; những nội dung này không được dùng như bằng chứng chính.'
     },
     {
-      impact: method.defects.score >= 60 ? 'up' : 'down',
+      impact: 'neutral',
       title: controlledDefectSample
         ? (mostFrequentDefect?.count ? `${mostFrequentDefect.label} xuất hiện trong nhóm review cần cân nhắc` : 'Chưa thấy một nhược điểm cụ thể lặp lại')
         : mostFrequentDefect?.count
@@ -168,11 +183,11 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
           : 'Chưa thấy một lỗi cụ thể bị nhắc lặp lại',
       detail: controlledDefectSample
         ? (mostFrequentDefect?.count
-          ? `${mostFrequentDefect.count} review đáng tham khảo cùng đề cập đến “${mostFrequentDefect.label.toLowerCase()}”. Vì mẫu được lấy gần đều theo mức sao, thuật toán cân bằng mức lỗi giữa từng nhóm sao trước khi tính điểm; con số này không được diễn giải là tỷ lệ lỗi của toàn bộ sản phẩm.`
+          ? `${mostFrequentDefect.count} review đáng tham khảo cùng đề cập đến “${mostFrequentDefect.label.toLowerCase()}”. Vì mẫu được lấy gần đều theo mức sao, hệ thống cân bằng mức lỗi giữa các nhóm sao khi tổng hợp nhược điểm; con số này không được diễn giải là tỷ lệ lỗi của toàn bộ sản phẩm và không tham gia TrustScore.`
           : `Trong ${method.sample.afterSeedingRemoval} review sau bước lọc nhiễu, chưa có một nhược điểm cụ thể được nhắc lặp lại rõ ràng. Với mẫu chia tầng, thuật toán so sánh cân bằng giữa các mức sao thay vì giả định đây là phân bố tự nhiên.`)
         : mostFrequentDefect?.count
-          ? `${mostFrequentDefect.count} review đáng tham khảo cùng đề cập đến “${mostFrequentDefect.label.toLowerCase()}”. Khi nhiều người mua độc lập lặp lại cùng một vấn đề trong mẫu không chia tầng, đây là tín hiệu cần thận trọng về độ tin cậy của tập review.`
-          : `Trong ${method.sample.afterSeedingRemoval} review còn lại sau bước lọc nhiễu, chưa có một nhóm lỗi nào được người mua nhắc lại đủ rõ. Điều này giúp TrustScore không bị kéo xuống bởi một vấn đề lặp lại.`
+          ? `${mostFrequentDefect.count} review đáng tham khảo cùng đề cập đến “${mostFrequentDefect.label.toLowerCase()}”. Đây là thông tin để người dùng cân nhắc về sản phẩm; bản thân việc nêu lỗi rõ ràng không làm review kém đáng tin.`
+          : `Trong ${method.sample.afterSeedingRemoval} review còn lại sau bước lọc nhiễu, chưa có một nhóm lỗi nào được người mua nhắc lại đủ rõ. Thống kê này không trực tiếp tăng hoặc giảm TrustScore.`
     },
     {
       impact: method.components.text.score >= 60 ? 'up' : 'down',
@@ -180,22 +195,16 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
       detail: `Trong ${included.length} review được giữ lại, ${detailedCount} review mô tả trải nghiệm đủ chi tiết và ${verifiedCount} review có tín hiệu đã mua hàng. ${method.components.text.score >= 60 ? 'Những thông tin này giúp người mua hiểu rõ lý do khen hoặc chê thay vì chỉ nhìn số sao.' : 'Khi review quá ngắn hoặc khó kiểm chứng, kết luận cần được đọc thận trọng hơn.'}`
     },
     {
-      impact: method.sampling.controlledStarStrata ? 'neutral' : method.components.distribution.score >= 70 ? 'up' : 'down',
-      title: method.sampling.controlledStarStrata
-        ? 'Phân bố số sao là do thiết kế lấy mẫu'
-        : method.components.distribution.score >= 70 ? 'Phân bố số sao không quá dồn về một phía' : 'Số sao đang nghiêng mạnh về một phía',
+      impact: 'neutral',
+      title: method.sampling.controlledStarStrata ? 'Phân bố số sao là do thiết kế lấy mẫu' : 'Phân bố sao chỉ mang tính mô tả',
       detail: method.sampling.controlledStarStrata
-        ? 'Hệ thống chủ động lấy tối đa cùng số review ở mỗi mức từ 5 sao đến 1 sao để tránh trùng và giữ độ trễ thấp. Vì đây không phải phân bố tự nhiên của toàn bộ review sản phẩm, thành phần phân bố sao được loại khỏi phép tính và các trọng số còn lại được chuẩn hóa.'
-        : method.components.distribution.score >= 70
-        ? 'Các mức đánh giá không bị dồn bất thường vào chỉ 5 sao hoặc chỉ 1 sao. Sự đa dạng này giúp kết quả phản ánh nhiều trải nghiệm hơn thay vì chỉ một luồng ý kiến.'
-        : 'Khi phần lớn review cùng tập trung ở một mức sao, hệ thống sẽ thận trọng hơn vì một nhóm đánh giá có thể đang lấn át các trải nghiệm khác.'
+        ? 'Hệ thống chủ động lọc theo sao để thu thập nhiều góc nhìn. Vì đây không phải phân bố tự nhiên của toàn bộ sản phẩm, tỷ lệ sao không được dùng để tăng hoặc giảm TrustScore.'
+        : 'Actor không cam kết chọn review ngẫu nhiên, vì vậy tỷ lệ sao trong mẫu chỉ được hiển thị để tham khảo và không được suy rộng ra toàn bộ sản phẩm.'
     },
     {
-      impact: method.temporal.score >= 70 ? 'up' : 'neutral',
-      title: method.temporal.score >= 70 ? 'Tín hiệu review khá ổn định theo thời gian' : 'Ngày đăng review chưa đủ để củng cố kết luận',
-      detail: method.temporal.coverage >= 0.7
-        ? `Có thể đối chiếu ngày đăng của khoảng ${Math.round(method.temporal.coverage * 100)}% review được giữ lại. Các ý kiến không chỉ xuất hiện dồn vào một thời điểm, nên kết quả có cơ sở ổn định hơn.`
-        : `Chỉ khoảng ${Math.round(method.temporal.coverage * 100)}% review có ngày đăng đủ rõ để kiểm tra. Vì vậy yếu tố thời gian chưa thể củng cố mạnh cho TrustScore và người mua nên đọc thêm review cụ thể.`
+      impact: 'neutral',
+      title: 'Thời gian đăng chỉ dùng để tham khảo',
+      detail: `Có thể đọc ngày đăng của khoảng ${Math.round(method.temporal.coverage * 100)}% review được giữ lại. Do actor có thể sắp xếp theo đề xuất, tín hiệu thời gian không tham gia TrustScore.`
     },
     {
       impact: excludedRate > 0 && excludedRate <= 35 ? 'up' : 'neutral',
@@ -205,29 +214,25 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
         : `Toàn bộ ${reviews.length} review hiện đủ điều kiện làm bằng chứng chính. Đây là tín hiệu tốt, nhưng TrustScore vẫn chỉ nói về độ tin cậy của review chứ không thay thế việc kiểm tra sản phẩm.`
     },
     {
-      impact: reviews.length >= method.adequacy.targetSample ? 'up' : 'neutral',
-      title: reviews.length >= method.adequacy.targetSample ? 'Dữ liệu đã đủ rộng để củng cố kết luận' : 'Số review hiện có còn ít so với mốc tham chiếu',
-      detail: reviews.length >= method.adequacy.targetSample
-        ? `Hệ thống đã phân tích ${reviews.length} review, đạt mốc tham chiếu ${method.adequacy.targetSample} review. Vì vậy kết luận có cơ sở dữ liệu rộng hơn để đối chiếu.`
-        : `Hệ thống mới phân tích ${reviews.length}/${method.adequacy.targetSample} review so với mốc dữ liệu mục tiêu. Số review còn ít không trực tiếp làm TrustScore thấp đi, nhưng người mua vẫn nên đọc thêm các review cụ thể trước khi quyết định.`
+      impact: method.scoreStatus === 'valid' ? 'up' : 'neutral',
+      title: method.scoreStatus === 'valid' ? 'Mẫu bằng chứng đạt mức sử dụng' : 'Mẫu bằng chứng còn hạn chế',
+      detail: method.scoreStatus === 'valid'
+        ? `Cỡ mẫu bằng chứng cân bằng đạt ${method.adequacy.balancedEvidenceSize.toFixed(1)} review trên mốc ${method.adequacy.targetSample}.`
+        : `Cỡ mẫu bằng chứng cân bằng hiện là ${method.adequacy.balancedEvidenceSize.toFixed(1)}/${method.adequacy.targetSample}; hệ thống ${method.scoreStatus === 'insufficient' ? 'không công bố TrustScore' : 'đánh dấu kết quả là tạm thời'}.`
     },
-    ...(appliedCap ? [{
-      impact: 'neutral',
-      title: 'Điểm đang được giới hạn để tránh kết luận quá mức',
-      detail: `Dù một số tín hiệu đang tích cực, vẫn có điều kiện kiểm tra quan trọng chưa đủ mạnh nên hệ thống tạm không cho TrustScore vượt ${appliedCap.value}/100. Giới hạn này giúp tránh tạo cảm giác chắc chắn hơn mức dữ liệu thực sự cho phép.`
-    }] : [])
   ];
 
   return {
     score,
     label: tone.label,
     tone: tone.id,
-    summary: plainTrustSummary(score, included.length),
+    scoreStatus: method.scoreStatus,
+    summary: plainTrustSummary(score, included.length, method.scoreStatus),
     pros,
     cons,
     drivers,
     method,
-    engine: 'statistical-v3.1'
+    engine: 'statistical-v4.0'
   };
 }
 
@@ -289,7 +294,7 @@ function compactEvidence(review, index) {
   return {
     id: index + 1,
     rating: ratingLevel(review),
-    verified: Boolean(review.verified),
+    verified: typeof review.verified === 'boolean' ? review.verified : null,
     included: review.included !== false,
     exclusionReason: review.exclusionReason || null,
     defectCategories: defectCategories(review),
@@ -369,7 +374,11 @@ export function buildGeminiNarrativePayload(reviews = [], fallback) {
       total: reviews.length,
       included: included.length,
       excluded: excluded.length,
-      verified: reviews.filter((review) => review.verified).length,
+      verification: {
+        verified: reviews.filter((review) => review.verified === true).length,
+        unverified: reviews.filter((review) => review.verified === false).length,
+        unknown: reviews.filter((review) => typeof review.verified !== 'boolean').length
+      },
       detailed: reviews.filter((review) => normalise(review.text).length >= 45).length,
       ratings: countRatings(reviews),
       includedRatings: countRatings(included),
@@ -434,12 +443,14 @@ async function analyzeWithGemini(reviews, fallback, options = {}) {
     'representativeEvidence chỉ là các ví dụ minh họa được chọn từ toàn bộ mẫu. Không suy ra số lượt đề cập hoặc tỷ lệ từ tập ví dụ này.',
     'Chỉ dùng dữ liệu được cung cấp; không suy đoán đặc tính sản phẩm hoặc bịa số lượt đề cập.',
     'Review included=false đã bị giảm ưu tiên: dùng chúng để đánh giá chất lượng dữ liệu, không dùng làm bằng chứng ưu/nhược điểm sản phẩm.',
-    'Điểm đã được backend tính bằng thuật toán RealView v3.1 gồm Fisher exact, binomial exact, hiệu chỉnh đa kiểm định và hard cap.',
-    'Nội dung hiển thị cho người dùng tuyệt đối không được nhắc Fisher, p-value, odds ratio, binomial, logistic, Bonferroni, hard cap, điểm thành phần hoặc công thức.',
+    'Điểm đã được backend tính bằng thuật toán RealView v4.0 để đo độ tin cậy của tập review từ chất lượng bằng chứng, mức ít nhiễu, độ phủ kiểm định và độ đầy đủ mẫu. Nhược điểm sản phẩm không trực tiếp làm giảm TrustScore.',
+    'Nội dung hiển thị cho người dùng tuyệt đối không được nhắc Fisher, p-value, odds ratio, binomial, logistic, Bonferroni, guardrail, điểm thành phần hoặc công thức.',
     'Summary cần giải thích ý nghĩa kết quả bằng lời trong 2 câu và nhắc rõ TrustScore đo độ đáng tin của tập review, không phải điểm chất lượng tuyệt đối của sản phẩm.',
     'Mỗi ưu/nhược điểm phải nêu rõ người mua thích hoặc chưa hài lòng điều gì, ảnh hưởng thực tế ra sao và có bao nhiêu review cùng đề cập; tránh câu chung chung như “ghi nhận tín hiệu tích cực”.',
     'Trả về 6 đến 8 driver khác nhau. Mỗi driver phải dịch tín hiệu kỹ thuật thành ngôn ngữ đời thường: điều gì được quan sát thấy trong review, vì sao điều đó làm kết quả đáng tin hơn hoặc cần thận trọng hơn.',
-    `Điểm cố định phải giữ nguyên: ${fallback.score}/100.`,
+    Number.isFinite(fallback.score)
+      ? `Điểm cố định phải giữ nguyên: ${fallback.score}/100.`
+      : 'Backend xác định chưa đủ bằng chứng nên không được tự tạo hoặc suy đoán TrustScore.',
     `Dữ liệu diễn giải: ${JSON.stringify(narrativePayload)}`
   ].join('\n');
   const geminiResult = await requestGeminiWithFallback({

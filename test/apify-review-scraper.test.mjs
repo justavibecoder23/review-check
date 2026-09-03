@@ -45,7 +45,25 @@ test('chỉ chạy một account, giữ written comments và không gửi starFi
   assert.equal(result.collection.strategy, 'single-unfiltered');
   assert.equal(result.collection.targetMaximum, 20);
   assert.equal(result.credential.keys.length, 1);
+  assert.equal(result.reviews[0].verified, null);
   assert.equal(JSON.stringify(result).includes('apify_api_token_active'), false);
+});
+
+test('Shopee chỉ ghi đã xác minh khi actor cung cấp tín hiệu rõ ràng', async () => {
+  const result = await collectShopeeReviews('https://shopee.vn/product-i.1.2', {
+    credential: credential(),
+    fetchImpl: async () => ({
+      ok: true,
+      async json() {
+        return [
+          { reviewId: 'yes', ratingStar: 5, comment: 'Dùng tốt', isVerifiedPurchase: true },
+          { reviewId: 'no', ratingStar: 2, comment: 'Không dùng được', isVerifiedPurchase: false },
+          { reviewId: 'unknown', ratingStar: 3, comment: 'Dùng tạm ổn' }
+        ];
+      }
+    })
+  });
+  assert.deepEqual(result.reviews.map((review) => review.verified), [true, false, null]);
 });
 
 test('nhận mọi mức sao, bỏ review trống và review trùng', async () => {

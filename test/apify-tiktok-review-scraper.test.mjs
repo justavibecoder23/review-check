@@ -54,7 +54,7 @@ test('TikTok chia 100 review thành 5 star filter chạy song song và không l�
   assert.equal(JSON.stringify(result).includes('apify_api_test_token'), false);
 });
 
-test('TikTok bỏ bình luận trống và chống trùng review giữa các run', async () => {
+test('TikTok hậu kiểm mức sao, bỏ bình luận trống và chống trùng nội dung cùng ID', async () => {
   const result = await collectTikTokReviews('1729384756102938475', {
     allocation: allocation(),
     fetchImpl: async (_url, init) => {
@@ -62,9 +62,11 @@ test('TikTok bỏ bình luận trống và chống trùng review giữa các run
       return {
         ok: true,
         async json() {
+          const unique = { review_id: `unique-${filter}`, review_rating: Number(filter[0]), review_text: `Nội dung riêng ${filter}` };
           return [
             { review_id: 'shared', review_rating: 5, review_text: 'Review bị trả trùng' },
-            { review_id: `unique-${filter}`, review_rating: Number(filter[0]), review_text: `Nội dung riêng ${filter}` },
+            unique,
+            { ...unique },
             { review_id: `empty-${filter}`, review_rating: 3, review_text: '   ' }
           ];
         }
@@ -72,9 +74,27 @@ test('TikTok bỏ bình luận trống và chống trùng review giữa các run
     }
   });
   assert.equal(result.reviews.length, 6);
-  assert.equal(result.collection.duplicateCount, 4);
-  assert.equal(result.collection.emptyCommentCount, 5);
+  assert.equal(result.collection.duplicateCount, 5);
+  assert.equal(result.collection.emptyCommentCount, 1);
+  assert.equal(result.collection.wrongRatingCount, 8);
+  assert.ok(result.collection.runs.every((run) => run.filter === 'all'
+    || result.reviews.filter((review) => review.rating === Number(run.filter[0])).length > 0));
+  assert.ok(result.warnings.some((warning) => warning.includes('không khớp bộ lọc sao')));
   assert.ok(result.warnings.some((warning) => warning.includes('không có bình luận viết')));
+  assert.ok(result.warnings.some((warning) => warning.includes('review TikTok trùng')));
+});
+
+test('TikTok giữ trạng thái xác minh là không rõ khi actor không cung cấp', async () => {
+  const result = await collectTikTokReviews('1729384756102938475', {
+    allocation: allocation(1),
+    fetchImpl: async () => ({
+      ok: true,
+      async json() {
+        return [{ review_id: 'unknown-verification', review_rating: 5, review_text: 'Sản phẩm chắc chắn và dùng ổn.' }];
+      }
+    })
+  });
+  assert.equal(result.reviews[0].verified, null);
 });
 
 test('TikTok dùng một account unfiltered khi allocation chỉ có một key', async () => {
