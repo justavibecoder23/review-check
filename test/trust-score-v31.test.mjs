@@ -79,6 +79,15 @@ test('điểm review tiêu cực riêng thưởng chi tiết và phạt nội du
   const vague = scoreNegativeReview({ rating: 1, text: 'Quá tệ' });
   const detailed = scoreNegativeReview({ rating: 1, text: 'Sản phẩm không hoạt động sau hai ngày, pin yếu và máy nóng bất thường.' });
   assert.ok(vague < detailed);
+  assert.equal(scoreNegativeReview({ rating: 0, text: 'Không có rating hợp lệ' }), null);
+});
+
+test('một tài khoản lặp nhiều review không làm cỡ mẫu bằng chứng tăng giả', () => {
+  const reviews = Array.from({ length: 20 }, (_, index) => usefulReview(index, { authorId: 'same-buyer' }));
+  const result = calculateTrustScoreV31(reviews);
+  assert.equal(result.sample.independentEvidenceSize, 1);
+  assert.equal(result.scoreStatus, 'insufficient');
+  assert.equal(result.score, null);
 });
 
 test('mẫu chia tầng không được giả là phân bố rating tự nhiên', () => {
@@ -196,19 +205,28 @@ test('cờ randomized không bật suy luận tổng thể khi mẫu vẫn chia 
   assert.ok(result.defects.tests.every((item) => item.pValue === null));
 });
 
-test('thiếu tín hiệu xác minh không bị tính như xác minh thất bại', () => {
+test('trạng thái xác minh không làm lệch điểm nội dung giữa các provider', () => {
   const base = Array.from({ length: 20 }, (_, index) => usefulReview(index, {
     text: 'Trải nghiệm sử dụng đủ rõ về độ bền và cách vận hành sản phẩm.',
     labels: { information_value: 'high' }
   }));
   const unknown = calculateTrustScoreV31(base.map((review) => ({ ...review, verified: null })));
   const explicitlyUnverified = calculateTrustScoreV31(base.map((review) => ({ ...review, verified: false })));
-  assert.ok(unknown.components.text.score > explicitlyUnverified.components.text.score);
+  assert.equal(unknown.components.text.score, explicitlyUnverified.components.text.score);
+  assert.equal(unknown.sample.verification.unknown, 20);
+  assert.equal(explicitlyUnverified.sample.verification.unverified, 20);
 });
 
 test('không đủ dữ liệu ngày thì không gán điểm thời gian mặc định', () => {
   const reviews = Array.from({ length: 20 }, (_, index) => usefulReview(index));
   const result = calculateTrustScoreV31(reviews);
   assert.equal(result.temporal.score, null);
+  assert.equal(result.temporal.status, 'unavailable');
+});
+
+test('ngày không tồn tại không được tính vào độ phủ thời gian', () => {
+  const reviews = Array.from({ length: 20 }, (_, index) => usefulReview(index, { date: '31/02/2025' }));
+  const result = calculateTrustScoreV31(reviews);
+  assert.equal(result.temporal.coverage, 0);
   assert.equal(result.temporal.status, 'unavailable');
 });

@@ -4,6 +4,7 @@ import { isRedisConfigured } from './redis-rest.mjs';
 import { readLayer2Cache, writeLayer2Cache } from './layer2-cache.mjs';
 import { combineAbortSignals } from './abort.mjs';
 import { annotateReviewDuplicates } from './review-deduplication.mjs';
+import { REVIEW_PIPELINE_VERSION } from './review-pipeline-version.mjs';
 
 const require = createRequire(import.meta.url);
 const rulesDocument = require('./layer1_rules.json');
@@ -225,6 +226,7 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
   const tooShort = text.length < Number(rules.spam_and_low_value.min_character_length)
     || tokens.length < Number(rules.spam_and_low_value.min_token_count);
   const repeated = repeatedCharacterSpam(text);
+  const deterministicHardReject = gibberish || iconOnly || repeated;
   const relevanceAssessment = assessProductRelevance(originalText, product);
   const offTopicCandidate = relevanceAssessment.state === 'needs_review';
   const meaningfulFeedback = !generic && meaningfulFeedbackPattern.test(text);
@@ -295,9 +297,14 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
     reason_codes: reasonCodes.length ? reasonCodes : ['NO_RULE_MATCH'],
     evidence,
     conflicts,
-    // Review đã bị loại chắc chắn vì rác/low-value không cần tốn thêm một lượt
-    // Gemini; mọi trường hợp còn lại chưa chắc chắn vẫn bắt buộc qua Layer 2.
-    requires_llm: !isLowValue && (offTopicCandidate || conflicts.length > 0 || confidence < Number(policy.llm_review_confidence_below))
+    hard_reject: deterministicHardReject,
+    // Chỉ chuỗi rác/emoji/lặp ký tự chắc chắn mới bị khóa ở Layer 1. Review ngắn,
+    // generic hoặc chỉ nhắc logistics vẫn qua Gemini để tránh loại oan nội dung
+    // hữu ích nằm ngoài từ điển heuristic.
+    requires_llm: !deterministicHardReject && (
+      isLowValue || offTopicCandidate || conflicts.length > 0
+      || confidence < Number(policy.llm_review_confidence_below)
+    )
   };
   return result;
 }
@@ -360,7 +367,7 @@ function normalizeLayer2Label(candidate, review, layer1, product = {}) {
       return { decision: 'abstain', confidence, reason_code: 'DEFECT_EVIDENCE_NOT_NEGATIVE' };
     }
   }
-  const lockedLowValue = layer1.reason_codes.some((code) => ['LOW_VALUE_GIBBERISH', 'LOW_VALUE_LOGISTICS_ONLY', 'LOW_VALUE_REPETITION'].includes(code));
+  const lockedLowValue = layer1.reason_codes.some((code) => ['LOW_VALUE_GIBBERISH', 'LOW_VALUE_ICON_ONLY', 'LOW_VALUE_REPETITION'].includes(code));
   // Các tín hiệu deterministic này không được để LLM mở khóa bằng một category
   // defect được suy diễn. Review lỗi thật đã được Layer 1 ưu tiên defect và sẽ
   // không mang lockedLowValue ngay từ đầu.
@@ -706,7 +713,7 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
       ...review,
       labelId: layer1.id,
       labels: final,
-      labeling: { layer1, layer2, final, pipelineVersion: layer2Document.version }
+      labeling: { layer1, layer2, final, pipelineVersion: REVIEW_PIPELINE_VERSION }
     };
   });
 
@@ -746,7 +753,8 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
       abstained,
       engine: layer2ById.size ? 'layer1+gemini-layer2' : 'layer1-only',
       rulesVersion: rulesDocument.version,
-      promptVersion: layer2Document.version
+      promptVersion: layer2Document.version,
+      pipelineVersion: REVIEW_PIPELINE_VERSION
     },
     warnings: [...new Set(warnings)]
   };

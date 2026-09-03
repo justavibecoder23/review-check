@@ -40,13 +40,17 @@ export function annotateReviewDuplicates(reviews = [], options = {}) {
   const threshold = Number.isFinite(Number(options.threshold)) ? Number(options.threshold) : 0.86;
   const minimumLength = Number.isFinite(Number(options.minimumLength)) ? Number(options.minimumLength) : 30;
   const representatives = [];
+  const exactRepresentatives = new Map();
   let duplicateCount = 0;
 
   const annotated = reviews.map((review, index) => {
     const normalized = normalizeContent(review?.text);
     const current = { normalized, shingles: wordShingles(normalized) };
     let duplicate = null;
-    if (normalized.length >= minimumLength) {
+    const exactIndex = normalized ? exactRepresentatives.get(normalized) : undefined;
+    if (exactIndex !== undefined) {
+      duplicate = { index: exactIndex, similarity: 1 };
+    } else if (normalized.length >= minimumLength) {
       for (const representative of representatives) {
         const similarity = duplicateSimilarity(current, representative);
         if (similarity >= threshold) {
@@ -57,6 +61,7 @@ export function annotateReviewDuplicates(reviews = [], options = {}) {
     }
 
     if (!duplicate) {
+      if (normalized) exactRepresentatives.set(normalized, index);
       if (normalized.length >= minimumLength) representatives.push({ ...current, index });
       return review;
     }

@@ -29,6 +29,13 @@ test('cache Layer 2 lưu theo nội dung và gắn lại ID của lần phân t�
     const next = [{ ...original[0], layer1: { id: 'r0042' } }];
     const cached = await readLayer2Cache(next, { title: 'Miếng lót giày' }, { fetchImpl });
     assert.deepEqual(cached.get('r0042'), { ...label, id: 'r0042' });
+
+    const relabeled = [{
+      ...original[0],
+      layer1: { id: 'r0043', is_low_value: true, reason_codes: ['LOW_VALUE_GENERIC'] }
+    }];
+    const stale = await readLayer2Cache(relabeled, { title: 'Miếng lót giày' }, { fetchImpl });
+    assert.equal(stale.has('r0043'), false, 'không tái sử dụng cache khi quyết định Layer 1 đã đổi');
   } finally {
     if (previousUrl) process.env.UPSTASH_REDIS_REST_URL = previousUrl;
     else delete process.env.UPSTASH_REDIS_REST_URL;

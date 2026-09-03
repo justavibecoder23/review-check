@@ -33,6 +33,12 @@ test('nội dung giống hệt với ID khác chỉ giữ bản đầu tiên', (
   assert.equal(shouldKeep(result.reviews[1]).keep, false);
 });
 
+test('bản sao exact ngắn vẫn bị loại dù chưa đủ độ dài so khớp near-duplicate', () => {
+  const result = annotateReviewDuplicates([labeled('Rất tốt', 'r1'), labeled('Rất tốt', 'r2')]);
+  assert.equal(result.duplicateCount, 1);
+  assert.equal(result.reviews[1].labels.duplicate_of, 'r1');
+});
+
 test('near-duplicate dài bị phát hiện nhưng hai trải nghiệm khác nhau không bị gộp', () => {
   const original = 'Cáp sạc Baseus dùng rất tốt, sạc nhanh, đầu cắm chắc chắn và dây dày dặn.';
   const copied = 'Cáp sạc Baseus dùng rất tốt, sạc nhanh, đầu cắm chắc chắn và dây dày dặn nhé.';

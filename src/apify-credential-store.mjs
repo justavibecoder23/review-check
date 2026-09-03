@@ -8,9 +8,13 @@ export const APIFY_TIKTOK_RUN_COUNTERS_KEY = 'realview:apify:credential-pool:v2:
 export const APIFY_TIKTOK_REVIEW_COUNTERS_KEY = 'realview:apify:credential-pool:v2:tiktok:reviews';
 export const APIFY_TIKTOK_RESERVED_REVIEWS_KEY = 'realview:apify:credential-pool:v2:tiktok:reserved';
 export const APIFY_TIKTOK_USED_KEY = 'realview:apify:credential-pool:v2:tiktok:used';
+export const APIFY_TIKTOK_FINALIZED_RESERVATIONS_KEY = 'realview:apify:credential-pool:v2:tiktok:finalized';
 export const DEFAULT_MAX_USES_PER_KEY = 10;
-export const DEFAULT_TIKTOK_MAX_REVIEWS_PER_KEY = 6200;
 export const APIFY_STARS = Object.freeze([5, 4, 3, 2, 1]);
+export const APIFY_FREE_USAGE_MICRO_USD = 5_000_000;
+export const SHOPEE_USAGE_MICRO_USD_PER_REVIEW = 3_990;
+export const TIKTOK_USAGE_MICRO_USD_PER_REVIEW = 400;
+export const SHOPEE_MAX_REVIEWS_PER_RUN = 20;
 
 // TikTok được tính theo số review, không dùng chung bộ đếm lượt của Shopee.
 // Việc giữ một hash reservation riêng ngăn hai request đồng thời cùng tiêu
@@ -23,13 +27,51 @@ local pool = cjson.decode(raw)
 local desired = tonumber(ARGV[1]) or 1
 local requestedPerKey = tonumber(ARGV[2]) or 1
 local maxReviews = tonumber(ARGV[3]) or 6200
+local nowMs = tonumber(ARGV[5]) or 0
+local freeUsage = tonumber(ARGV[6]) or 5000000
+local shopeeCostPerReview = tonumber(ARGV[7]) or 3990
+local tiktokCostPerReview = tonumber(ARGV[8]) or 400
+local shopeeMaxUses = tonumber(ARGV[9]) or 10
+local shopeeReviewsPerRun = tonumber(ARGV[10]) or 20
+local leaseMs = tonumber(ARGV[11]) or 180000
 local selected = {}
+
+local function readReservationState(credentialId)
+  local state = {leases={}}
+  local rawReserved = redis.call('HGET', KEYS[4], credentialId)
+  if rawReserved then
+    local decodedOk, decoded = pcall(cjson.decode, rawReserved)
+    if decodedOk and type(decoded) == 'table' and type(decoded.leases) == 'table' then
+      state = decoded
+    else
+      local legacyAmount = math.max(0, tonumber(rawReserved) or 0)
+      if legacyAmount > 0 then
+        state.leases.legacy = {amount=legacyAmount, expiresAtMs=nowMs + leaseMs}
+      end
+    end
+  end
+  local reserved = 0
+  for reservationId, lease in pairs(state.leases) do
+    if tonumber(lease.expiresAtMs or 0) <= nowMs then
+      state.leases[reservationId] = nil
+    else
+      reserved = reserved + math.max(0, tonumber(lease.amount) or 0)
+    end
+  end
+  redis.call('HSET', KEYS[4], credentialId, cjson.encode(state))
+  return state, reserved
+end
 
 for _, group in ipairs(pool.groups or {}) do
   for _, credential in ipairs(group.credentials or {}) do
     local reviews = tonumber(redis.call('HGET', KEYS[3], credential.id) or '0')
-    local reserved = tonumber(redis.call('HGET', KEYS[4], credential.id) or '0')
-    local remaining = maxReviews - reviews - reserved
+    local reservationState, reserved = readReservationState(credential.id)
+    local shopeeUses = math.min(shopeeMaxUses, math.max(0, tonumber(redis.call('HGET', KEYS[5], credential.id) or '0')))
+    local shopeeSpent = shopeeUses * shopeeReviewsPerRun * shopeeCostPerReview
+    local shopeeReserved = math.max(0, shopeeMaxUses - shopeeUses) * shopeeReviewsPerRun * shopeeCostPerReview
+    local usageRemaining = math.max(0, freeUsage - shopeeSpent - shopeeReserved - (reviews + reserved) * tiktokCostPerReview)
+    local usageReviewCapacity = math.floor(usageRemaining / tiktokCostPerReview)
+    local remaining = math.min(maxReviews - reviews - reserved, usageReviewCapacity)
     if remaining > 0 and #selected < desired then
       table.insert(selected, {
         credential=credential,
@@ -37,7 +79,11 @@ for _, group in ipairs(pool.groups or {}) do
         groupLabel=group.label,
         reviews=reviews,
         reserved=reserved,
-        planned=math.min(requestedPerKey, remaining)
+        planned=math.min(requestedPerKey, remaining),
+        shopeeUses=shopeeUses,
+        shopeeReservedUsage=shopeeReserved,
+        usageRemaining=usageRemaining,
+        reservationState=reservationState
       })
     end
   end
@@ -50,7 +96,11 @@ end
 local allocation = {ok=true, source='redis-vault', maxReviewsPerKey=maxReviews, credentials={}, reservedAt=ARGV[4]}
 for _, candidate in ipairs(selected) do
   local runCount = tonumber(redis.call('HINCRBY', KEYS[2], candidate.credential.id, 1))
-  local reservedAfter = tonumber(redis.call('HINCRBY', KEYS[4], candidate.credential.id, candidate.planned))
+  local reservationId = candidate.credential.id .. ':' .. tostring(runCount) .. ':' .. tostring(nowMs)
+  local expiresAtMs = nowMs + leaseMs
+  candidate.reservationState.leases[reservationId] = {amount=candidate.planned, expiresAtMs=expiresAtMs}
+  redis.call('HSET', KEYS[4], candidate.credential.id, cjson.encode(candidate.reservationState))
+  local reservedAfter = candidate.reserved + candidate.planned
   local allocated = {}
   for key, value in pairs(candidate.credential) do allocated[key] = value end
   allocated.groupId = candidate.groupId
@@ -59,6 +109,11 @@ for _, candidate in ipairs(selected) do
   allocated.reviewCount = candidate.reviews
   allocated.plannedReviews = candidate.planned
   allocated.reservedReviews = reservedAfter
+  allocated.shopeeUses = candidate.shopeeUses
+  allocated.shopeeReservedUsageMicroUsd = candidate.shopeeReservedUsage
+  allocated.usageRemainingMicroUsd = candidate.usageRemaining - candidate.planned * tiktokCostPerReview
+  allocated.reservationId = reservationId
+  allocated.reservationExpiresAtMs = expiresAtMs
   table.insert(allocation.credentials, allocated)
 end
 return cjson.encode(allocation)
@@ -70,8 +125,25 @@ local planned = tonumber(ARGV[1]) or 0
 local actual = tonumber(ARGV[2]) or 0
 local maxReviews = tonumber(ARGV[3]) or 6200
 local exhausted = ARGV[4] == '1'
-local currentReserved = tonumber(redis.call('HGET', KEYS[2], ARGV[5]) or '0')
-redis.call('HSET', KEYS[2], ARGV[5], math.max(0, currentReserved - planned))
+local reservationId = ARGV[8]
+local nowMs = tonumber(ARGV[9]) or 0
+-- Giữ cửa sổ idempotency 24 giờ và tự dọn dữ liệu cũ để key Redis không tăng vô hạn.
+redis.call('ZREMRANGEBYSCORE', KEYS[4], '-inf', nowMs - 86400000)
+if reservationId and reservationId ~= '' and redis.call('ZSCORE', KEYS[4], reservationId) then
+  local currentReviews = tonumber(redis.call('HGET', KEYS[1], ARGV[5]) or '0')
+  return cjson.encode({ok=true, reviewCount=currentReviews, exhausted=(currentReviews >= maxReviews), alreadyFinalized=true})
+end
+local state = {leases={}}
+local rawReserved = redis.call('HGET', KEYS[2], ARGV[5])
+if rawReserved then
+  local decodedOk, decoded = pcall(cjson.decode, rawReserved)
+  if decodedOk and type(decoded) == 'table' and type(decoded.leases) == 'table' then state = decoded end
+end
+if reservationId and reservationId ~= '' then state.leases[reservationId] = nil end
+for id, lease in pairs(state.leases) do
+  if tonumber(lease.expiresAtMs or 0) <= nowMs then state.leases[id] = nil end
+end
+redis.call('HSET', KEYS[2], ARGV[5], cjson.encode(state))
 local reviewCount = tonumber(redis.call('HINCRBY', KEYS[1], ARGV[5], actual))
 if exhausted and reviewCount < maxReviews then
   reviewCount = maxReviews
@@ -83,7 +155,8 @@ if reviewCount >= maxReviews then
     maxReviewsPerKey=maxReviews, usedAt=ARGV[7]
   }))
 end
-return cjson.encode({ok=true, reviewCount=reviewCount, exhausted=(reviewCount >= maxReviews)})
+if reservationId and reservationId ~= '' then redis.call('ZADD', KEYS[4], nowMs, reservationId) end
+return cjson.encode({ok=true, reviewCount=reviewCount, exhausted=(reviewCount >= maxReviews), alreadyFinalized=false})
 `;
 
 // Chọn số key còn hạn mức theo yêu cầu và cộng bộ đếm trong cùng một lệnh Redis.
@@ -309,10 +382,28 @@ function cleanMaxUses(value, fallback = DEFAULT_MAX_USES_PER_KEY) {
   return parsed;
 }
 
-function cleanTikTokMaxReviews(value = process.env.TIKTOK_MAX_REVIEWS_PER_KEY) {
-  const parsed = Number.parseInt(String(value ?? DEFAULT_TIKTOK_MAX_REVIEWS_PER_KEY), 10);
-  if (!Number.isInteger(parsed) || parsed < 200 || parsed > 100_000) return DEFAULT_TIKTOK_MAX_REVIEWS_PER_KEY;
-  return parsed;
+function cleanUsageInteger(value, fallback) {
+  const parsed = Number.parseInt(String(value ?? fallback), 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function apifyUsageConfig() {
+  const freeUsageMicroUsd = cleanUsageInteger(process.env.APIFY_FREE_USAGE_MICRO_USD, APIFY_FREE_USAGE_MICRO_USD);
+  const shopeeCostPerReviewMicroUsd = cleanUsageInteger(process.env.SHOPEE_USAGE_MICRO_USD_PER_REVIEW, SHOPEE_USAGE_MICRO_USD_PER_REVIEW);
+  const tiktokCostPerReviewMicroUsd = cleanUsageInteger(process.env.TIKTOK_USAGE_MICRO_USD_PER_REVIEW, TIKTOK_USAGE_MICRO_USD_PER_REVIEW);
+  const shopeeReviewsPerRun = SHOPEE_MAX_REVIEWS_PER_RUN;
+  const shopeeReservedUsageMicroUsd = DEFAULT_MAX_USES_PER_KEY * shopeeReviewsPerRun * shopeeCostPerReviewMicroUsd;
+  const safeTikTokReviewsPerKey = Math.max(0, Math.floor(
+    (freeUsageMicroUsd - shopeeReservedUsageMicroUsd) / tiktokCostPerReviewMicroUsd
+  ));
+  return {
+    freeUsageMicroUsd,
+    shopeeCostPerReviewMicroUsd,
+    tiktokCostPerReviewMicroUsd,
+    shopeeReviewsPerRun,
+    shopeeReservedUsageMicroUsd,
+    safeTikTokReviewsPerKey
+  };
 }
 
 function normalizeInputCredentials(group, groupIndex) {
@@ -416,12 +507,32 @@ function parseHashReply(value) {
   return result;
 }
 
+function activeTikTokReservedReviews(value, nowMs = Date.now()) {
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return Math.max(0, numeric);
+  try {
+    const state = typeof value === 'string' ? JSON.parse(value) : value;
+    return Object.values(state?.leases || {}).reduce((sum, lease) => (
+      Number(lease?.expiresAtMs) > nowMs ? sum + Math.max(0, Number(lease?.amount) || 0) : sum
+    ), 0);
+  } catch {
+    return 0;
+  }
+}
+
 function publicCredential(credential, counters, maxUsesPerKey, tiktok = {}) {
   const usageCount = Number(counters[credential.id]) || 0;
   const tiktokRunCount = Number(tiktok.runs?.[credential.id]) || 0;
   const tiktokReviewCount = Number(tiktok.reviews?.[credential.id]) || 0;
-  const tiktokReservedReviews = Number(tiktok.reserved?.[credential.id]) || 0;
-  const tiktokMaxReviewsPerKey = cleanTikTokMaxReviews(tiktok.maxReviewsPerKey);
+  const tiktokReservedReviews = activeTikTokReservedReviews(tiktok.reserved?.[credential.id]);
+  const usage = apifyUsageConfig();
+  const shopeeUses = Math.min(DEFAULT_MAX_USES_PER_KEY, usageCount);
+  const shopeeSpentUsageMicroUsd = shopeeUses * usage.shopeeReviewsPerRun * usage.shopeeCostPerReviewMicroUsd;
+  const shopeeReservedUsageMicroUsd = Math.max(0, DEFAULT_MAX_USES_PER_KEY - shopeeUses)
+    * usage.shopeeReviewsPerRun * usage.shopeeCostPerReviewMicroUsd;
+  const tiktokUsageMicroUsd = (tiktokReviewCount + tiktokReservedReviews) * usage.tiktokCostPerReviewMicroUsd;
+  const usageRemainingMicroUsd = Math.max(0, usage.freeUsageMicroUsd - shopeeSpentUsageMicroUsd - shopeeReservedUsageMicroUsd - tiktokUsageMicroUsd);
+  const effectiveTikTokLimit = usage.safeTikTokReviewsPerKey;
   return {
     id: credential.id,
     label: credential.label,
@@ -438,9 +549,12 @@ function publicCredential(credential, counters, maxUsesPerKey, tiktok = {}) {
       runCount: tiktokRunCount,
       reviewCount: tiktokReviewCount,
       reservedReviews: tiktokReservedReviews,
-      remainingReviews: Math.max(0, tiktokMaxReviewsPerKey - tiktokReviewCount - tiktokReservedReviews),
-      maxReviewsPerKey: tiktokMaxReviewsPerKey,
-      status: tiktokReviewCount >= tiktokMaxReviewsPerKey ? 'used' : 'available'
+      remainingReviews: Math.max(0, effectiveTikTokLimit - tiktokReviewCount - tiktokReservedReviews),
+      maxReviewsPerKey: effectiveTikTokLimit,
+      safeUsageMaxReviewsPerKey: usage.safeTikTokReviewsPerKey,
+      usageRemainingMicroUsd,
+      shopeeReservedUsageMicroUsd,
+      status: tiktokReviewCount >= effectiveTikTokLimit ? 'used' : 'available'
     }
   };
 }
@@ -450,7 +564,7 @@ function emptyPoolStatus(provider = 'none') {
     version: 2,
     provider,
     maxUsesPerKey: DEFAULT_MAX_USES_PER_KEY,
-    tiktokMaxReviewsPerKey: cleanTikTokMaxReviews(),
+    tiktokMaxReviewsPerKey: apifyUsageConfig().safeTikTokReviewsPerKey,
     updatedAt: null,
     active: null,
     reserve: [],
@@ -473,7 +587,7 @@ function buildPoolStatus(config, counterReply, usedReply, tiktokReplies = {}) {
     runs: parseHashReply(tiktokReplies.runs),
     reviews: parseHashReply(tiktokReplies.reviews),
     reserved: parseHashReply(tiktokReplies.reserved),
-    maxReviewsPerKey: cleanTikTokMaxReviews()
+    maxReviewsPerKey: apifyUsageConfig().safeTikTokReviewsPerKey
   };
   const maxUsesPerKey = cleanMaxUses(config.maxUsesPerKey);
   let activeAssigned = false;
@@ -501,7 +615,8 @@ function buildPoolStatus(config, counterReply, usedReply, tiktokReplies = {}) {
   }).sort((left, right) => String(right.usedAt || '').localeCompare(String(left.usedAt || '')));
   const tiktokUsedHistory = Object.values(parseHashReply(tiktokReplies.used)).flatMap((value) => {
     try { return [typeof value === 'string' ? JSON.parse(value) : value]; } catch { return []; }
-  }).sort((left, right) => String(right.usedAt || '').localeCompare(String(left.usedAt || '')));
+  }).filter((entry) => Number(entry?.reviewCount) >= tiktok.maxReviewsPerKey)
+    .sort((left, right) => String(right.usedAt || '').localeCompare(String(left.usedAt || '')));
   const pending = (config.pendingCredentials || []).map(({ id, label }) => ({ id, label, status: 'pending' }));
   return {
     version: config.version || 2,
@@ -667,6 +782,11 @@ function decryptTikTokAllocation(allocation) {
       reviewCount: Number(credential.reviewCount),
       plannedReviews: Number(credential.plannedReviews),
       reservedReviews: Number(credential.reservedReviews),
+      reservationId: credential.reservationId || null,
+      reservationExpiresAtMs: Number(credential.reservationExpiresAtMs) || null,
+      maxReviewsPerKey: Number(allocation.maxReviewsPerKey),
+      usageRemainingMicroUsd: Number(credential.usageRemainingMicroUsd) || 0,
+      shopeeReservedUsageMicroUsd: Number(credential.shopeeReservedUsageMicroUsd) || 0,
       token: decryptToken(credential)
     }))
   };
@@ -677,11 +797,21 @@ export async function reserveTikTokCredentials({ count = 5, reviewsPerCredential
   if (!process.env.APIFY_TOKEN_VAULT_KEY) throw new Error('Chưa cấu hình APIFY_TOKEN_VAULT_KEY.');
   const desired = Math.min(5, Math.max(1, Number.parseInt(String(count), 10) || 1));
   const planned = Math.min(200, Math.max(1, Number.parseInt(String(reviewsPerCredential), 10) || 40));
-  const maxReviewsPerKey = cleanTikTokMaxReviews(options.maxReviewsPerKey);
+  const usage = apifyUsageConfig();
+  const maxReviewsPerKey = usage.safeTikTokReviewsPerKey;
+  if (maxReviewsPerKey < 1) {
+    const error = new Error('Usage Apify hiện không đủ để vừa chạy TikTok vừa chừa đủ 10 lượt Shopee cho mỗi key.');
+    error.code = 'APIFY_USAGE_RESERVED_FOR_SHOPEE';
+    error.statusCode = 503;
+    throw error;
+  }
   const raw = await redisCommand([
-    'EVAL', RESERVE_TIKTOK_CREDENTIALS_SCRIPT, '4',
-    APIFY_POOL_KEY, APIFY_TIKTOK_RUN_COUNTERS_KEY, APIFY_TIKTOK_REVIEW_COUNTERS_KEY, APIFY_TIKTOK_RESERVED_REVIEWS_KEY,
-    String(desired), String(planned), String(maxReviewsPerKey), new Date().toISOString()
+    'EVAL', RESERVE_TIKTOK_CREDENTIALS_SCRIPT, '5',
+    APIFY_POOL_KEY, APIFY_TIKTOK_RUN_COUNTERS_KEY, APIFY_TIKTOK_REVIEW_COUNTERS_KEY, APIFY_TIKTOK_RESERVED_REVIEWS_KEY, APIFY_POOL_COUNTERS_KEY,
+    String(desired), String(planned), String(maxReviewsPerKey), new Date().toISOString(), String(Date.now()),
+    String(usage.freeUsageMicroUsd), String(usage.shopeeCostPerReviewMicroUsd), String(usage.tiktokCostPerReviewMicroUsd),
+    String(DEFAULT_MAX_USES_PER_KEY), String(usage.shopeeReviewsPerRun),
+    String(Math.max(120_000, Number.parseInt(String(options.reservationLeaseMs || 180_000), 10) || 180_000))
   ], options);
   const allocation = typeof raw === 'string' ? JSON.parse(raw) : raw;
   if (!allocation?.ok) {
@@ -700,13 +830,16 @@ export async function finalizeTikTokCredential(credential, result = {}, options 
   if (!credential?.id) throw new Error('Thiếu mã Apify key để chốt bộ đếm TikTok.');
   const plannedReviews = Math.max(0, Number(credential.plannedReviews) || 0);
   const actualReviews = Math.max(0, Number(result.reviewCount) || 0);
-  const maxReviewsPerKey = cleanTikTokMaxReviews(options.maxReviewsPerKey);
+  const maxReviewsPerKey = Number.isInteger(Number(credential.maxReviewsPerKey))
+    ? Number(credential.maxReviewsPerKey)
+    : apifyUsageConfig().safeTikTokReviewsPerKey;
   const forceExhausted = Boolean(result.quotaExhausted);
   const raw = await redisCommand([
-    'EVAL', FINALIZE_TIKTOK_CREDENTIAL_SCRIPT, '3',
-    APIFY_TIKTOK_REVIEW_COUNTERS_KEY, APIFY_TIKTOK_RESERVED_REVIEWS_KEY, APIFY_TIKTOK_USED_KEY,
+    'EVAL', FINALIZE_TIKTOK_CREDENTIAL_SCRIPT, '4',
+    APIFY_TIKTOK_REVIEW_COUNTERS_KEY, APIFY_TIKTOK_RESERVED_REVIEWS_KEY, APIFY_TIKTOK_USED_KEY, APIFY_TIKTOK_FINALIZED_RESERVATIONS_KEY,
     String(plannedReviews), String(actualReviews), String(maxReviewsPerKey), forceExhausted ? '1' : '0',
-    credential.id, credential.label || credential.id, new Date().toISOString()
+    credential.id, credential.label || credential.id, new Date().toISOString(),
+    credential.reservationId || '', String(Date.now())
   ], options);
   return typeof raw === 'string' ? JSON.parse(raw) : raw;
 }

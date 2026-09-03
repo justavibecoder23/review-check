@@ -4,7 +4,7 @@ import { classifyReviewSignals, findReviewIssues, ISSUE_DEFINITIONS } from './tr
 import { labelReviewsTwoLayer } from './review-labeler.mjs';
 import { saveReviewDatasets } from './review-dataset-storage.mjs';
 import { createProgressReporter } from './sse.mjs';
-import { assertEnoughReviews } from './analysis-eligibility.mjs';
+import { assertEnoughReviews, assertSamplingCoverage } from './analysis-eligibility.mjs';
 import { throwIfAborted } from './abort.mjs';
 import { annotateReviewDuplicates } from './review-deduplication.mjs';
 
@@ -79,6 +79,7 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   });
   try {
     assertEnoughReviews(reviews);
+    assertSamplingCoverage(reviews, source?.collection);
   } catch (error) {
     progress('eligibility', 64, 'Sản phẩm chưa đủ đánh giá để phân tích.');
     throw error;

@@ -72,7 +72,7 @@ test('Layer 1 giữ review hộp đựng đồ có nhận xét chất lượng d
   }
 });
 
-test('chế độ mặc định chỉ gửi trường hợp chưa chắc chắn sang Gemini', async () => {
+test('chế độ mặc định gửi cả review ngắn/low-value chưa chắc chắn sang Gemini', async () => {
   const previousKey = process.env.GEMINI_API_KEY;
   delete process.env.GEMINI_API_KEY;
   try {
@@ -82,7 +82,7 @@ test('chế độ mặc định chỉ gửi trường hợp chưa chắc chắn 
       { rating: 5, text: 'Tốt' },
       { rating: 4, text: 'Mình đã sử dụng một thời gian và cảm nhận nhìn chung ổn.' }
     ], { product: { title: 'Cáp sạc nhanh Baseus' } });
-    assert.equal(result.stats.layer2Requested, 1);
+    assert.equal(result.stats.layer2Requested, 2);
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
   }

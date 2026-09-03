@@ -1,4 +1,5 @@
 export const MINIMUM_REVIEWS_FOR_ANALYSIS = 20;
+export const TRUST_SCORE_ANCHOR_RATINGS = Object.freeze([1, 3, 5]);
 
 export function assertEnoughReviews(reviews, minimum = MINIMUM_REVIEWS_FOR_ANALYSIS) {
   const count = Array.isArray(reviews) ? reviews.length : 0;
@@ -14,6 +15,21 @@ export function assertEnoughReviews(reviews, minimum = MINIMUM_REVIEWS_FOR_ANALY
   error.statusCode = 422;
   error.code = 'INSUFFICIENT_REVIEWS';
   error.details = { reviewCount: count, minimumReviews: required };
+  throw error;
+}
+
+export function assertSamplingCoverage(reviews, collection = {}) {
+  if (collection?.strategy !== 'parallel-star-filters') return true;
+  const ratings = new Set((Array.isArray(reviews) ? reviews : [])
+    .map((review) => Number(review?.rating))
+    .filter((rating) => Number.isInteger(rating)));
+  const missingRatings = TRUST_SCORE_ANCHOR_RATINGS.filter((rating) => !ratings.has(rating));
+  if (!missingRatings.length) return true;
+
+  const error = new Error(`Mẫu review chưa đủ ba tầng chuẩn 1★, 3★ và 5★; đang thiếu ${missingRatings.map((rating) => `${rating}★`).join(', ')}. Hãy thử lại để tránh phân tích một mẫu bị lệch.`);
+  error.statusCode = 422;
+  error.code = 'INCOMPLETE_RATING_STRATA';
+  error.details = { missingRatings, requiredRatings: [...TRUST_SCORE_ANCHOR_RATINGS] };
   throw error;
 }
 

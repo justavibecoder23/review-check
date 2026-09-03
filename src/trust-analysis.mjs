@@ -232,7 +232,7 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
     cons,
     drivers,
     method,
-    engine: 'statistical-v4.0'
+    engine: `statistical-v${method.version}`
   };
 }
 
@@ -443,7 +443,7 @@ async function analyzeWithGemini(reviews, fallback, options = {}) {
     'representativeEvidence chỉ là các ví dụ minh họa được chọn từ toàn bộ mẫu. Không suy ra số lượt đề cập hoặc tỷ lệ từ tập ví dụ này.',
     'Chỉ dùng dữ liệu được cung cấp; không suy đoán đặc tính sản phẩm hoặc bịa số lượt đề cập.',
     'Review included=false đã bị giảm ưu tiên: dùng chúng để đánh giá chất lượng dữ liệu, không dùng làm bằng chứng ưu/nhược điểm sản phẩm.',
-    'Điểm đã được backend tính bằng thuật toán RealView v4.0 để đo độ tin cậy của tập review từ chất lượng bằng chứng, mức ít nhiễu, độ phủ kiểm định và độ đầy đủ mẫu. Nhược điểm sản phẩm không trực tiếp làm giảm TrustScore.',
+    'Điểm đã được backend tính bằng thuật toán RealView v4.1 để đo độ tin cậy của tập review từ chất lượng bằng chứng, mức ít nhiễu, độ phủ kiểm định và độ đầy đủ mẫu. Nhược điểm sản phẩm không trực tiếp làm giảm TrustScore.',
     'Nội dung hiển thị cho người dùng tuyệt đối không được nhắc Fisher, p-value, odds ratio, binomial, logistic, Bonferroni, guardrail, điểm thành phần hoặc công thức.',
     'Summary cần giải thích ý nghĩa kết quả bằng lời trong 2 câu và nhắc rõ TrustScore đo độ đáng tin của tập review, không phải điểm chất lượng tuyệt đối của sản phẩm.',
     'Mỗi ưu/nhược điểm phải nêu rõ người mua thích hoặc chưa hài lòng điều gì, ảnh hưởng thực tế ra sao và có bao nhiêu review cùng đề cập; tránh câu chung chung như “ghi nhận tín hiệu tích cực”.',

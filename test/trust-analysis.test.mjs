@@ -81,8 +81,8 @@ test('tự dùng kết quả quy tắc khi Gemini không được cấu hình', 
   delete process.env.GEMINI_API_KEY;
   try {
     const trust = await buildTrustAnalysis(reviews);
-    assert.equal(trust.engine, 'statistical-v4.0');
-    assert.equal(trust.method.version, '4.0');
+    assert.equal(trust.engine, 'statistical-v4.1');
+    assert.equal(trust.method.version, '4.1');
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
   }

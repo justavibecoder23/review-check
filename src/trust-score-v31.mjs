@@ -168,7 +168,8 @@ export function holmAdjust(items, alpha = ALPHA_FAMILY) {
 }
 
 export function scoreNegativeReview(review) {
-  if (Number(review.rating) > 2) return null;
+  const rating = Number(review.rating);
+  if (!Number.isInteger(rating) || rating < 1 || rating > 2) return null;
   const signals = classifyReviewSignals(review);
   const lengthSignal = Math.log(signals.text.length + 1);
   const logistic = 100 / (1 + Math.exp(-1.5 * (lengthSignal - Math.log(36))));
@@ -187,8 +188,16 @@ function parseReviewDate(value) {
   const text = String(value || '').trim();
   const vietnamese = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (vietnamese) {
-    const time = Date.UTC(Number(vietnamese[3]), Number(vietnamese[2]) - 1, Number(vietnamese[1]));
-    return Number.isFinite(time) ? time : null;
+    const day = Number(vietnamese[1]);
+    const month = Number(vietnamese[2]);
+    const year = Number(vietnamese[3]);
+    const time = Date.UTC(year, month - 1, day);
+    const parsed = new Date(time);
+    return parsed.getUTCFullYear() === year
+      && parsed.getUTCMonth() === month - 1
+      && parsed.getUTCDate() === day
+      ? time
+      : null;
   }
   const time = Date.parse(text);
   return Number.isFinite(time) ? time : null;
@@ -294,10 +303,21 @@ function defectEstimateForSample(evidence, policy) {
   };
 }
 
+function independentEvidenceCount(entries) {
+  const authors = new Set();
+  let anonymous = 0;
+  for (const { review } of entries) {
+    const authorId = String(review?.authorId || '').trim();
+    if (authorId) authors.add(authorId);
+    else anonymous += 1;
+  }
+  return authors.size + anonymous;
+}
+
 function sampleAdequacy(evidence, policy) {
   if (!evidence.length) return { effectiveSize: 0, score: 0, status: 'insufficient', missingRatings: [...STANDARD_RATINGS] };
   if (!policy.stratifiedByRating) {
-    const effectiveSize = evidence.length;
+    const effectiveSize = independentEvidenceCount(evidence);
     return {
       effectiveSize,
       score: clamp(100 * effectiveSize / TARGET_EFFECTIVE_SAMPLE),
@@ -307,7 +327,7 @@ function sampleAdequacy(evidence, policy) {
   }
   const counts = new Map(STANDARD_RATINGS.map((rating) => [
     rating,
-    evidence.filter(({ review }) => Number(review.rating) === rating).length
+    independentEvidenceCount(evidence.filter(({ review }) => Number(review.rating) === rating))
   ]));
   const missingRatings = STANDARD_RATINGS.filter((rating) => !counts.get(rating));
   const effectiveSize = missingRatings.length
@@ -328,13 +348,10 @@ function componentScores(audit, evidence, adequacy) {
     const information = Object.hasOwn(informationMap, signal.informationValue)
       ? informationMap[signal.informationValue]
       : detail;
-    const verificationKnown = typeof review.verified === 'boolean';
-    const verified = Number(review.verified === true);
-    // Thiếu trường xác minh không đồng nghĩa với chưa xác minh. Khi provider
-    // không cung cấp tín hiệu này, chuẩn hóa lại hai trọng số còn lại.
-    return verificationKnown
-      ? 100 * (0.5 * information + 0.3 * detail + 0.2 * verified)
-      : 100 * (0.625 * information + 0.375 * detail);
+    // Provider không có độ phủ verification giống nhau. Giữ TrustScore so sánh
+    // được bằng cách chấm nội dung theo cùng một công thức; verification chỉ là
+    // thống kê chẩn đoán và không được biến missing thành verified=true/false.
+    return 100 * (0.625 * information + 0.375 * detail);
   });
   const text = textValues.length ? textValues.reduce((sum, value) => sum + value, 0) / textValues.length : 0;
   const seedingRate = ratio(audit.filter(({ signal }) => signal.seeding).length, audit.length);
@@ -343,8 +360,9 @@ function componentScores(audit, evidence, adequacy) {
   const offTopicRate = ratio(audit.filter(({ signal }) => signal.offTopic).length, audit.length);
   const duplicateRate = ratio(audit.filter(({ signal }) => signal.duplicate).length, audit.length);
   // Mỗi review nhiễu chỉ bị tính một lần, dù có thể đồng thời mang nhiều nhãn.
-  const cleanCount = audit.filter(({ signal }) => !signal.seeding && !signal.vague && !signal.lowValue && !signal.offTopic && !signal.duplicate).length;
-  const authenticity = audit.length ? 100 * ratio(cleanCount, audit.length) : 0;
+  const classifiedAudit = audit.filter(({ review }) => !review?.labels?.layer2_unavailable);
+  const cleanCount = classifiedAudit.filter(({ signal }) => !signal.seeding && !signal.vague && !signal.lowValue && !signal.offTopic && !signal.duplicate).length;
+  const authenticity = classifiedAudit.length ? 100 * ratio(cleanCount, classifiedAudit.length) : 0;
   const unavailableRate = ratio(audit.filter(({ review }) => review?.labels?.layer2_unavailable).length, audit.length);
   const labeling = audit.length ? 100 * (1 - unavailableRate) : 0;
   return {
@@ -472,7 +490,7 @@ export function calculateTrustScoreV31(reviews = [], options = {}) {
   const scoreAvailable = adequacy.status !== 'insufficient';
 
   return {
-    version: '4.0',
+    version: '4.1',
     scope: 'review-set-reliability',
     scoreType: 'composite-index-not-probability',
     score: scoreAvailable ? combined.score : null,
@@ -488,7 +506,13 @@ export function calculateTrustScoreV31(reviews = [], options = {}) {
       rejectedFromEvidence: auditReviews.length - evidenceReviews.length,
       excludedBySamplingDesign: samples.excludedByDesign,
       seedingCount: samples.audit.filter(({ signal }) => signal.seeding).length,
-      totalSeedingCount: samples.annotated.filter(({ signal }) => signal.seeding).length
+      totalSeedingCount: samples.annotated.filter(({ signal }) => signal.seeding).length,
+      independentEvidenceSize: independentEvidenceCount(samples.evidence),
+      verification: {
+        verified: samples.audit.filter(({ review }) => review.verified === true).length,
+        unverified: samples.audit.filter(({ review }) => review.verified === false).length,
+        unknown: samples.audit.filter(({ review }) => typeof review.verified !== 'boolean').length
+      }
     },
     sampling: {
       strategy: policy.strategy,

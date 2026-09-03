@@ -1,12 +1,24 @@
 import { createHash } from 'node:crypto';
 import { isRedisConfigured, redisCommand, redisTransaction } from './redis-rest.mjs';
+import { REVIEW_PIPELINE_VERSION } from './review-pipeline-version.mjs';
 
-const CACHE_PREFIX = 'realview:layer2:v2.3.0:';
+const CACHE_PREFIX = `realview:layer2:v${REVIEW_PIPELINE_VERSION}:`;
 const CACHE_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 function cacheKey(item, product = {}) {
   const fingerprint = JSON.stringify({
-    promptVersion: '2.3.0',
+    pipelineVersion: REVIEW_PIPELINE_VERSION,
+    layer1Version: String(item?.layer1?.version || ''),
+    layer1Decision: {
+      isSeeding: Boolean(item?.layer1?.is_seeding),
+      isLowValue: Boolean(item?.layer1?.is_low_value),
+      isVague: Boolean(item?.layer1?.is_vague),
+      relevance: String(item?.layer1?.relevance || ''),
+      informationValue: String(item?.layer1?.information_value || ''),
+      hasDefect: Boolean(item?.layer1?.has_defect),
+      defectCategories: [...(item?.layer1?.defect_categories || [])].sort(),
+      reasonCodes: [...(item?.layer1?.reason_codes || [])].sort()
+    },
     title: String(product?.title || '').trim().toLowerCase(),
     category: String(product?.category || '').trim().toLowerCase(),
     platform: String(product?.platform || '').trim().toLowerCase(),
