@@ -17,6 +17,7 @@ function allocation() {
 test('chỉ chạy một account, giữ written comments và không gửi starFilter', async () => {
   const inputs = [];
   const result = await collectShopeeReviews('https://shopee.vn/product-i.1.2', {
+    mode: 'demo',
     allocation: allocation(),
     reviewLimit: 20,
     fetchImpl: async (_url, init) => {
@@ -51,6 +52,7 @@ test('chỉ chạy một account, giữ written comments và không gửi starFi
 
 test('Shopee chỉ ghi đã xác minh khi actor cung cấp tín hiệu rõ ràng', async () => {
   const result = await collectShopeeReviews('https://shopee.vn/product-i.1.2', {
+    mode: 'demo',
     credential: credential(),
     fetchImpl: async () => ({
       ok: true,
@@ -68,6 +70,7 @@ test('Shopee chỉ ghi đã xác minh khi actor cung cấp tín hiệu rõ ràng
 
 test('nhận mọi mức sao, bỏ review trống và review trùng', async () => {
   const result = await collectShopeeReviews('https://shopee.vn/product-i.1.2', {
+    mode: 'demo',
     credential: credential(),
     fetchImpl: async () => ({
       ok: true,
@@ -91,6 +94,7 @@ test('nhận mọi mức sao, bỏ review trống và review trùng', async () =
 test('không tự đổi credential giữa một lượt khi account bị từ chối hạn mức', async () => {
   await assert.rejects(
     collectShopeeReviews('https://shopee.vn/product-i.1.2', {
+      mode: 'demo',
       credential: credential(),
       fetchImpl: async () => ({ ok: false, status: 402, async text() { return 'quota exceeded'; } })
     }),
@@ -98,7 +102,7 @@ test('không tự đổi credential giữa một lượt khi account bị từ c
   );
 });
 
-test('chế độ production lấy tối đa 60 review bằng 3 filter sao song song và khử trùng', async () => {
+test('mặc định production lấy tối đa 60 review bằng 3 filter sao song song và khử trùng', async () => {
   const inputs = [];
   const credentialSet = {
     groupId: 'group-production', groupLabel: 'production', source: 'test', maxUsesPerKey: 10,
@@ -108,7 +112,6 @@ test('chế độ production lấy tối đa 60 review bằng 3 filter sao song 
     }))
   };
   const result = await collectShopeeReviews('https://shopee.vn/product-i.1.2', {
-    mode: 'production-60',
     credentialSet,
     fetchImpl: async (_url, init) => {
       const input = JSON.parse(init.body);

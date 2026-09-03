@@ -14,9 +14,9 @@ Mở `http://localhost:3000`, dán một link sản phẩm. Không cần cài pa
 
 ## Nguồn dữ liệu thực tế
 
-Với Shopee, ứng dụng gọi Actor Apify `zen-studio/shopee-product-reviews-scraper` từ backend. Ở chế độ test hiện tại, mỗi lượt phân tích chỉ cấp phát **một tài khoản** và khởi động một Actor run, không gửi `starFilter`. Request vẫn dùng `contentFilter: "with comments"` và lấy tối đa 20 review có nội dung viết. Kết quả được chống trùng theo `reviewId` (hoặc fingerprint nội dung khi thiếu ID), rồi mới chuyển sang pipeline gắn nhãn và TrustScore.
+Với Shopee, ứng dụng gọi Actor Apify `zen-studio/shopee-product-reviews-scraper` từ backend. Mỗi lượt production cấp phát **ba tài khoản** và chạy song song ba Actor ở các tầng 5★/3★/1★. Mỗi request dùng `contentFilter: "with comments"` và lấy tối đa 20 review có nội dung viết, tổng tối đa 60 review. Kết quả được hậu kiểm đúng mức sao và chống trùng trước khi chuyển sang pipeline gắn nhãn và TrustScore.
 
-Thiết kế này trả tối đa **20 review** từ phân bố tự nhiên mà Apify trả về. Vì mẫu test nhỏ hơn mục tiêu thống kê 100 review, chỉ số adequacy tiếp tục phản ánh mức độ thận trọng tương ứng; hệ thống không giả định đây là mẫu lấy đều theo mức sao.
+Thiết kế này trả tối đa **60 review** theo ba tầng kiểm soát. Đây không phải phân bố sao tự nhiên của toàn bộ sản phẩm; TrustScore chỉ dùng thiết kế chung 1★/3★/5★ và không suy rộng tỷ lệ trong mẫu thành tỷ lệ tổng thể.
 
 Backend chấp nhận cả link sản phẩm đầy đủ và link được chia sẻ/rút gọn từ Shopee, gồm `s.shopee.vn`, `vn.shp.ee` và `shope.ee`. Với link rút gọn, máy chủ sẽ:
 
@@ -33,7 +33,6 @@ Tại Vercel → **Settings → Environment Variables**, thêm biến:
 
 ```text
 APIFY_ACTOR_ID=zen-studio/shopee-product-reviews-scraper
-SHOPEE_COLLECTION_MODE=demo
 SHOPEE_REVIEWS_PER_STAR=20
 APIFY_RUN_TIMEOUT_MS=70000
 APIFY_TOKEN_VAULT_KEY=<base64 32 byte>
@@ -42,7 +41,7 @@ UPSTASH_REDIS_REST_URL=<Upstash REST URL>
 UPSTASH_REDIS_REST_TOKEN=<Upstash REST token>
 ```
 
-Mặc định `SHOPEE_COLLECTION_MODE=demo`: hệ thống dùng một account, không ép phân bố sao và lấy tối đa 20 review có bình luận. Khi chuyển sang `SHOPEE_COLLECTION_MODE=production-60`, hệ thống dùng 3 account song song cho ba tầng 5★/3★/1★, lấy đúng mức tối đa 20 review mỗi account (tổng tối đa 60), kiểm tra đúng mức sao và khử trùng trước khi phân tích. Actor chỉ hỗ trợ một mức sao cho mỗi run, nên mẫu 60 review là mẫu chia tầng đại diện ba cực và không được diễn giải như phân bố rating tự nhiên của toàn bộ sản phẩm. TikTok vẫn giữ nguyên cơ chế 5 account cho 5 mức sao. Các Apify token không nằm trong environment của Vercel: chúng được cập nhật tập trung qua API quản trị và mã hóa trong Redis. Không đưa file chứa token vào GitHub hoặc JavaScript trình duyệt.
+Shopee production luôn dùng 3 account song song cho ba tầng 5★/3★/1★, tối đa 20 review mỗi account (tổng tối đa 60), kiểm tra đúng mức sao và khử trùng trước khi phân tích. Chế độ demo một account chỉ còn có thể bật tường minh bằng `options.mode='demo'` trong test/local; biến môi trường demo cũ không thể vô tình hạ production về 20 review. Actor chỉ hỗ trợ một mức sao cho mỗi run, nên mẫu 60 review là mẫu chia tầng đại diện ba cực và không được diễn giải như phân bố rating tự nhiên của toàn bộ sản phẩm. TikTok vẫn giữ nguyên cơ chế 5 account cho 5 mức sao. Các Apify token không nằm trong environment của Vercel: chúng được cập nhật tập trung qua API quản trị và mã hóa trong Redis. Không đưa file chứa token vào GitHub hoặc JavaScript trình duyệt.
 
 ### Cấu hình và tự động xoay vòng Apify key
 

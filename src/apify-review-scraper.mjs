@@ -305,8 +305,11 @@ async function collectShopeeReviewsProduction(url, options = {}) {
 }
 
 export async function collectShopeeReviews(url, options = {}) {
-  const mode = String(options.mode || process.env.SHOPEE_COLLECTION_MODE || 'demo').toLowerCase();
-  return mode === 'production-60'
-    ? collectShopeeReviewsProduction(url, options)
-    : collectShopeeReviewsDemo(url, options);
+  // Website luôn dùng thiết kế production 60 review. Chế độ demo chỉ còn là
+  // tùy chọn tường minh cho test/local, tránh một env cũ vô tình kéo production
+  // trở lại một account và 20 review.
+  const mode = String(options.mode || 'production-60').toLowerCase();
+  return mode === 'demo'
+    ? collectShopeeReviewsDemo(url, options)
+    : collectShopeeReviewsProduction(url, options);
 }
