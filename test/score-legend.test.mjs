@@ -22,11 +22,9 @@ function legendHarness() {
       removeAttribute(name) { delete attributes[name]; }
     };
   });
-  const caption = { textContent: '' };
   const context = vm.createContext({
     document: {
       querySelector(selector) {
-        if (selector === '#trust-current-range') return caption;
         if (selector === '#results-empty') return { classList: { remove() {} } };
         return null;
       },
@@ -36,7 +34,7 @@ function legendHarness() {
     sessionStorage: { getItem() { return null; } }
   });
   vm.runInContext(script, context);
-  return { items, caption, render: context.renderScoreLegend };
+  return { items, render: context.renderScoreLegend };
 }
 
 test('thang điểm nằm cùng vòng tròn TrustScore, không còn ở phần giải thích bên dưới', () => {
@@ -50,7 +48,7 @@ test('thang điểm nằm cùng vòng tròn TrustScore, không còn ở phần g
 });
 
 test('đánh dấu đúng khung ở mọi ranh giới, bao gồm 80 thuộc mức xanh', () => {
-  const { items, caption, render } = legendHarness();
+  const { items, render } = legendHarness();
   for (const [score, tone, range] of [
     [0, 'red', '0–49'], [49, 'red', '0–49'],
     [50, 'orange', '50–59'], [59, 'orange', '50–59'],
@@ -63,20 +61,24 @@ test('đánh dấu đúng khung ở mọi ranh giới, bao gồm 80 thuộc mứ
     assert.equal(current[0].dataset.scoreTone, tone);
     assert.equal(current[0].attributes['aria-current'], 'true');
     assert.equal(items.filter(item => item.attributes['aria-current']).length, 1);
-    assert.equal(caption.textContent, `${score}/100 · Thuộc khung ${range}`);
     assert.ok(html.includes(`data-score-tone="${tone}" data-score-range="${range}"`));
   }
 });
 
 test('thiếu điểm thì không đánh dấu sai thành khung đỏ', () => {
-  const { items, caption, render } = legendHarness();
+  const { items, render } = legendHarness();
   render(67);
   for (const score of [null, undefined, NaN]) {
     render(score);
     assert.equal(items.filter(item => item.classes.has('is-current')).length, 0);
     assert.equal(items.filter(item => item.attributes['aria-current']).length, 0);
-    assert.equal(caption.textContent, 'Chưa đủ bằng chứng để xếp mức điểm');
   }
+});
+
+test('chỉ giữ thang màu, không có dòng chú thích khung điểm hoặc khoảng trống dành cho nó', () => {
+  assert.doesNotMatch(html, /trust-current-range/);
+  assert.doesNotMatch(script, /trust-current-range|Thuộc khung/);
+  assert.doesNotMatch(css, /\.trust-current-range/);
 });
 
 test('thang điểm co giãn theo chiều rộng và cỡ chữ, không yêu cầu cuộn ngang', () => {
@@ -86,4 +88,3 @@ test('thang điểm co giãn theo chiều rộng và cỡ chữ, không yêu c�
   assert.doesNotMatch(css, /\.score-legend\s*\{[^}]*overflow-x:\s*auto/);
   assert.match(script, /renderScoreLegend\(scoreAvailable \? score : null\)/);
 });
-
