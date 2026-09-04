@@ -52,21 +52,15 @@ function toneForScore(score) {
 
 function renderScoreLegend(score) {
   const tone = toneForScore(score);
-  let currentRange = '';
   document.querySelectorAll('[data-score-tone]').forEach((item) => {
     const current = item.dataset.scoreTone === tone.id;
     item.classList.toggle('is-current', current);
     if (current) {
       item.setAttribute('aria-current', 'true');
-      currentRange = item.dataset.scoreRange;
     } else {
       item.removeAttribute('aria-current');
     }
   });
-  const caption = document.querySelector('#trust-current-range');
-  if (caption) caption.textContent = currentRange
-    ? `${score}/100 · Thuộc khung ${currentRange}`
-    : 'Chưa đủ bằng chứng để xếp mức điểm';
 }
 
 function fallbackTrust(data, reviews) {
