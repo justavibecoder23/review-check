@@ -175,6 +175,8 @@ function fallbackReason(error) {
   if (error?.code === 'GEMINI_NOT_CONFIGURED' || error?.code === 'POOL_NOT_CONFIGURED') return 'not_configured';
   if (error?.code === 'POOL_EXHAUSTED' || error?.statusCode === 429 || error?.code === 'RPD_LIMIT') return 'quota_exhausted';
   if ([401, 403].includes(error?.statusCode)) return 'authentication_failed';
+  if (error?.statusCode === 400) return 'request_rejected';
+  if (error?.statusCode === 404) return 'model_unavailable';
   if (error?.code === 'GEMINI_KEYS_PENDING' || ['RPM_LIMIT', 'TPM_LIMIT', 'COOLDOWN'].includes(error?.code)) return 'temporarily_busy';
   if (error?.name === 'TimeoutError' || error?.name === 'AbortError') return 'timeout';
   if (error?.code === 'GEMINI_INVALID_RESPONSE') return 'invalid_response';
@@ -195,6 +197,8 @@ export async function answerWebsiteQuestion(messages, options = {}) {
   const dedicatedKey = String(process.env.CHATBOT_GEMINI_API_KEY || '').trim();
   const apiKey = dedicatedKey || process.env.GEMINI_API_KEY;
   const model = CHATBOT_GEMINI_MODEL;
+  let providerStatus = null;
+  let providerAttempted = false;
   // Khi cách diễn đạt chưa khớp từ khóa, để Gemini tìm ý trong kho chính thức.
   const contextEntries = matches.length ? matches : knowledgeBase;
   const prompt = `
@@ -219,7 +223,12 @@ ${formatKnowledgeEntries(contextEntries)}
 
   try {
     const geminiResult = await requestGeminiWithFallback({
-      fetchImpl: options.fetchImpl || fetch,
+      fetchImpl: async (url, init) => {
+        providerAttempted = true;
+        const response = await (options.fetchImpl || fetch)(url, init);
+        providerStatus = Number(response.status) || null;
+        return response;
+      },
       redisFetchImpl: options.redisFetchImpl,
       apiKey,
       ...(dedicatedKey ? {
@@ -265,7 +274,7 @@ ${formatKnowledgeEntries(contextEntries)}
         status: Number(error?.statusCode) || null
       });
     }
-    return { answer: fallbackAnswer(matches), engine: 'rules', model, fallbackReason: fallbackReason(error) };
+    return { answer: fallbackAnswer(matches), engine: 'rules', model, fallbackReason: fallbackReason(error), providerAttempted, providerStatus };
   }
 }
 
