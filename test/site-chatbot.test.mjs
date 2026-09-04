@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   answerWebsiteQuestion,
+  CHATBOT_GEMINI_MODEL,
   knowledgeBase,
   OUT_OF_SCOPE_REPLY,
   retrieveKnowledge,
@@ -24,8 +25,8 @@ test('bộ tìm kiếm chọn đúng dữ liệu liên quan và ưu tiên thông
 
   const platformMatches = retrieveKnowledge('RealView hỗ trợ nền tảng nào?');
   assert.equal(platformMatches[0].id, 'about_003');
-  assert.match(platformMatches[0].answer, /chỉ hỗ trợ liên kết sản phẩm Shopee/i);
-  assert.match(platformMatches[0].answer, /chưa hỗ trợ TikTok Shop/i);
+  assert.match(platformMatches[0].answer, /Shopee và TikTok Shop/i);
+  assert.doesNotMatch(siteKnowledge, /chưa hỗ trợ TikTok Shop/i);
 });
 
 test('chatbot dùng Gemini ở backend và chấp nhận câu hỏi thuộc phạm vi', async () => {
@@ -33,9 +34,11 @@ test('chatbot dùng Gemini ở backend và chấp nhận câu hỏi thuộc ph�
   process.env.GEMINI_API_KEY = 'test-only-key';
   let receivedKey;
   let requestPayload;
+  let receivedUrl;
   try {
     const result = await answerWebsiteQuestion([{ role: 'user', content: 'TrustScore là gì?' }], {
       fetchImpl: async (_url, options) => {
+        receivedUrl = _url;
         receivedKey = options.headers['x-goog-api-key'];
         requestPayload = JSON.parse(options.body);
         return {
@@ -47,6 +50,10 @@ test('chatbot dùng Gemini ở backend và chấp nhận câu hỏi thuộc ph�
       }
     });
     assert.equal(receivedKey, 'test-only-key');
+    assert.match(receivedUrl, /models\/gemini-3\.5-flash-lite:generateContent$/);
+    assert.equal(result.model, CHATBOT_GEMINI_MODEL);
+    assert.match(requestPayload.systemInstruction.parts[0].text, /Chỉ được dùng/);
+    assert.equal(requestPayload.contents.at(-1).parts[0].text, 'TrustScore là gì?');
     assert.equal(requestPayload.generationConfig.temperature, undefined);
     assert.equal(requestPayload.generationConfig.thinkingConfig.thinkingLevel, 'minimal');
     assert.ok(requestPayload.generationConfig.maxOutputTokens >= 1024);
@@ -75,7 +82,8 @@ test('chatbot log lỗi Gemini an toàn rồi fallback khi response bị cắt',
     });
     assert.equal(result.engine, 'rules');
     assert.equal(logged.length, 1);
-    assert.match(logged[0][1].error, /MAX_TOKENS/);
+    assert.equal(logged[0][1].reason, 'invalid_response');
+    assert.equal(result.fallbackReason, 'invalid_response');
     assert.doesNotMatch(JSON.stringify(logged), /test-only-key/);
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
@@ -121,9 +129,9 @@ test('chatbot có câu trả lời dự phòng khi Gemini chưa được cấu h
     const result = await answerWebsiteQuestion([{ role: 'user', content: 'Cách dùng RealView?' }]);
     assert.equal(result.engine, 'rules');
     assert.match(result.answer, /dán liên kết sản phẩm Shopee/i);
-    assert.match(result.answer, /15–45 giây/);
+    assert.match(result.answer, /TikTok Shop/);
+    assert.equal(result.fallbackReason, 'not_configured');
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
   }
 });
-
