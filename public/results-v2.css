@@ -171,7 +171,6 @@
 .trust-score-panel { width: 100%; min-width: 0; display: grid; justify-items: center; gap: 24px; }
 .trust-scale { width: 100%; max-width: 16rem; min-width: 0; display: grid; gap: 10px; text-align: center; container-type: inline-size; }
 .trust-scale-caption { margin: 0; color: #575751; font-size: .75rem; font-weight: 750; line-height: 1.5; }
-.trust-current-range { min-height: 1.5em; margin: 0; color: var(--ink); font-size: .75rem; font-weight: 700; line-height: 1.5; overflow-wrap: anywhere; }
 
 .trust-gauge {
   position: relative;
