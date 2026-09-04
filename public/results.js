@@ -50,6 +50,25 @@ function toneForScore(score) {
   return { id: 'red', label: 'Độ tin cậy thấp' };
 }
 
+function renderScoreLegend(score) {
+  const tone = toneForScore(score);
+  let currentRange = '';
+  document.querySelectorAll('[data-score-tone]').forEach((item) => {
+    const current = item.dataset.scoreTone === tone.id;
+    item.classList.toggle('is-current', current);
+    if (current) {
+      item.setAttribute('aria-current', 'true');
+      currentRange = item.dataset.scoreRange;
+    } else {
+      item.removeAttribute('aria-current');
+    }
+  });
+  const caption = document.querySelector('#trust-current-range');
+  if (caption) caption.textContent = currentRange
+    ? `${score}/100 · Thuộc khung ${currentRange}`
+    : 'Chưa đủ bằng chứng để xếp mức điểm';
+}
+
 function fallbackTrust(data, reviews) {
   const included = reviews.filter((review) => review.included !== false);
   const excluded = reviews.filter((review) => review.included === false);
@@ -228,6 +247,7 @@ function renderResult(data) {
   document.querySelector('#trust-score').textContent = scoreText;
   document.querySelector('#action-score').textContent = scoreText;
   document.querySelector('#trust-label').textContent = trust.label || tone.label;
+  renderScoreLegend(scoreAvailable ? score : null);
   document.querySelector('#trust-summary').textContent = trust.summary || data.verdict;
   document.querySelector('#analysis-source').textContent = trust.engine === 'gemini' ? 'Gemini AI + bộ lọc RealView' : 'Bộ lọc minh bạch RealView';
 
@@ -282,3 +302,4 @@ if (backToTop) {
   window.addEventListener('scroll', updateBackToTop, { passive: true });
   updateBackToTop();
 }
+
