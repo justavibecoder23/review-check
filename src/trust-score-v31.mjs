@@ -1,6 +1,6 @@
 const ALPHA_FAMILY = 0.01;
 const FISHER_ALPHA = 0.025;
-const STANDARD_RATINGS = Object.freeze([1, 3, 5]);
+const DEFAULT_RATING_STRATA = Object.freeze([1, 3, 5]);
 const TARGET_EFFECTIVE_SAMPLE = 60;
 
 export const ISSUE_DEFINITIONS = [
@@ -231,6 +231,13 @@ function isExplicitlyIncluded(review) {
 function samplingPolicy(sampling = {}) {
   const stratifiedByRating = sampling?.strategy === 'parallel-star-filters';
   const randomized = sampling?.randomized === true;
+  const configuredStrata = Array.isArray(sampling?.ratingStrata)
+    ? [...new Set(sampling.ratingStrata.map(Number)
+      .filter((rating) => Number.isInteger(rating) && rating >= 1 && rating <= 5))].sort((a, b) => a - b)
+    : [];
+  const ratingStrata = stratifiedByRating && configuredStrata.length
+    ? configuredStrata
+    : [...DEFAULT_RATING_STRATA];
   return {
     strategy: sampling?.strategy || 'unknown',
     stratifiedByRating,
@@ -240,16 +247,17 @@ function samplingPolicy(sampling = {}) {
     // Ngẫu nhiên bên trong từng tầng sao không khôi phục phân bố tự nhiên.
     // Chỉ mẫu ngẫu nhiên không chia tầng mới được phép suy luận tổng thể.
     populationInferenceEnabled: randomized && !stratifiedByRating,
-    standardRatings: STANDARD_RATINGS
+    ratingStrata,
+    standardRatings: ratingStrata
   };
 }
 
 function statisticalSamples(reviews, policy) {
   const annotated = reviews.map((review, index) => ({ review, index, signal: classifyReviewSignals(review) }));
-  // Khi chủ động chia tầng, Shopee và TikTok chỉ có thiết kế chung ở 1★/3★/5★.
-  // Cùng một population được dùng cho cả bốn thành phần để tránh thiên lệch nền tảng.
+  // Mỗi provider công bố chính xác các tầng mà scraper đã chủ động lấy.
+  // Shopee dùng 1★/3★/5★; TikTok dùng đủ 1★–5★.
   const audit = policy.stratifiedByRating
-    ? annotated.filter(({ review }) => STANDARD_RATINGS.includes(Number(review.rating)))
+    ? annotated.filter(({ review }) => policy.ratingStrata.includes(Number(review.rating)))
     : annotated;
   const evidence = audit.filter(({ review, signal }) => isExplicitlyIncluded(review) && !signal.seeding && !signal.duplicate);
   return { annotated, evidence, audit, excludedByDesign: annotated.length - audit.length };
@@ -282,22 +290,22 @@ function defectEstimateForSample(evidence, policy) {
     return { risk: pooledRisk, method: 'observed-descriptive', strata: [], comparableAcrossPlatforms: false };
   }
 
-  const strata = STANDARD_RATINGS.map((rating) => {
+  const strata = policy.ratingStrata.map((rating) => {
     const entries = evidence.filter((entry) => Number(entry.review.rating) === rating);
     if (!entries.length) return null;
     const observedRisk = meanDefectBurden(entries);
     return { rating, count: entries.length, observedRisk };
   }).filter(Boolean);
-  const complete = strata.length === STANDARD_RATINGS.length;
+  const complete = strata.length === policy.ratingStrata.length;
   const risk = complete
-    ? strata.reduce((sum, stratum) => sum + stratum.observedRisk, 0) / STANDARD_RATINGS.length
+    ? strata.reduce((sum, stratum) => sum + stratum.observedRisk, 0) / policy.ratingStrata.length
     : pooledRisk;
   return {
     risk: clamp(risk, 0, 1),
     method: complete ? 'equal-anchor-ratings' : 'incomplete-anchor-ratings',
     strata,
     pooledRisk,
-    standardRatings: STANDARD_RATINGS,
+    standardRatings: policy.ratingStrata,
     comparableAcrossPlatforms: false,
     comparableUnderCommonDesign: complete
   };
@@ -315,7 +323,7 @@ function independentEvidenceCount(entries) {
 }
 
 function sampleAdequacy(evidence, policy) {
-  if (!evidence.length) return { effectiveSize: 0, score: 0, status: 'insufficient', missingRatings: [...STANDARD_RATINGS] };
+  if (!evidence.length) return { effectiveSize: 0, score: 0, status: 'insufficient', missingRatings: [...policy.ratingStrata] };
   if (!policy.stratifiedByRating) {
     const effectiveSize = independentEvidenceCount(evidence);
     return {
@@ -325,14 +333,14 @@ function sampleAdequacy(evidence, policy) {
       missingRatings: []
     };
   }
-  const counts = new Map(STANDARD_RATINGS.map((rating) => [
+  const counts = new Map(policy.ratingStrata.map((rating) => [
     rating,
     independentEvidenceCount(evidence.filter(({ review }) => Number(review.rating) === rating))
   ]));
-  const missingRatings = STANDARD_RATINGS.filter((rating) => !counts.get(rating));
+  const missingRatings = policy.ratingStrata.filter((rating) => !counts.get(rating));
   const effectiveSize = missingRatings.length
     ? 0
-    : 1 / STANDARD_RATINGS.reduce((sum, rating) => sum + (1 / STANDARD_RATINGS.length) ** 2 / counts.get(rating), 0);
+    : 1 / policy.ratingStrata.reduce((sum, rating) => sum + (1 / policy.ratingStrata.length) ** 2 / counts.get(rating), 0);
   return {
     effectiveSize,
     score: clamp(100 * effectiveSize / TARGET_EFFECTIVE_SAMPLE),

@@ -40,6 +40,9 @@ export function shouldKeep(review) {
   const hasUsefulEvidence = informationValue === 'medium' || informationValue === 'high';
   const reasonCodes = [review.labels?.reason_code, ...(review.labeling?.layer1?.reason_codes || [])].filter(Boolean);
   const lowValueReason = reasonCodes.map((code) => exclusionReasonByCode[code]).find(Boolean);
+  if (review.labels?.hard_reject || review.labeling?.layer1?.hard_reject) {
+    return { keep: false, reason: lowValueReason || 'Nội dung là chuỗi ký tự rác, không đủ làm bằng chứng' };
+  }
   if (review.labels?.is_duplicate) {
     return { keep: false, reason: 'Nội dung trùng hoặc gần trùng với một review khác trong cùng mẫu' };
   }

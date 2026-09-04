@@ -1,5 +1,5 @@
 {
-  "version": "2.3.1",
+  "version": "2.4.0",
   "description": "Cấu hình Layer 2: LLM kiểm định độc lập mức liên quan và giá trị thông tin, có quyền confirm/correct/abstain và không được tạo nhãn ngoài taxonomy.",
   "layer2_config": {
     "system_instruction": "Bạn là bộ kiểm định nhãn review tiếng Việt của RealView. Đọc ngữ nghĩa review trong ngữ cảnh title/category sản phẩm và kiểm định độc lập kết quả Layer 1. Không suy đoán danh tính, ý định gian dối hay chất lượng ngoài văn bản. Trả JSON đúng schema.",
@@ -15,7 +15,7 @@
       "Nếu có lỗi cụ thể, has_defect=true, vague=false và quote phải là chuỗi con nguyên văn của review.",
       "defect_quote phải mô tả một vấn đề tiêu cực cụ thể hoặc tác động xấu. Lời khen như tốt, bền, chắc chắn, êm, mềm, dễ dùng hoặc hài lòng không phải khuyết tật.",
       "Nếu decision=correct, evidence_quote phải là chuỗi con nguyên văn chứng minh cho thay đổi; không có bằng chứng thì abstain.",
-      "Một review có thể có nhiều defect_categories; không gắn category nếu không có quote hỗ trợ.",
+      "Một review có thể có nhiều defect_categories; mỗi category bắt buộc có một phần tử defect_evidence riêng với category và quote nguyên văn hỗ trợ. Không dùng một quote chung để suy diễn nhiều category không liên quan.",
       "Giao chậm/hộp móp thuộc giao-hang; giao sai/thiếu sản phẩm hoặc phụ kiện thuộc dung-mo-ta.",
       "Dùng reason_code ổn định: LOW_VALUE_GIBBERISH, LOW_VALUE_LOGISTICS_ONLY, LOW_VALUE_REPETITION, LOW_VALUE_ICON_ONLY, LOW_VALUE_GENERIC, LOW_VALUE_SHORT, OFF_TOPIC_PRODUCT_MISMATCH, SEEDING_EVIDENCE, VAGUE_WITHOUT_DEFECT, DEFECT_EVIDENCE, ON_TOPIC_USEFUL hoặc NO_CHANGE.",
       "Nếu không đủ bằng chứng để sửa Layer 1, decision=abstain."
@@ -33,6 +33,7 @@
       "has_defect": "boolean",
       "defect_categories": "array of allowed category ids",
       "defect_quote": "exact substring of review or null",
+      "defect_evidence": "array of { category, quote } with one verbatim quote for every defect category",
       "evidence_quote": "exact substring supporting any correction, or null for confirm/abstain",
       "confidence": "number from 0 to 1",
       "reason_code": "short enum-like code"

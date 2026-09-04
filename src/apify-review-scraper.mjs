@@ -292,6 +292,7 @@ async function collectShopeeReviewsProduction(url, options = {}) {
     },
     collection: {
       strategy: 'parallel-star-filters',
+      ratingStrata: SHOPEE_STAR_FILTERS.map(Number).sort((a, b) => a - b),
       contentFilter: 'with comments',
       filters: [...SHOPEE_STAR_FILTERS],
       perStarLimit,

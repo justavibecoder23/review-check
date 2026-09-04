@@ -241,6 +241,7 @@ export async function collectTikTokReviews(productId, options = {}) {
     },
     collection: {
       strategy,
+      ratingStrata: strategy === 'parallel-star-filters' ? [1, 2, 3, 4, 5] : null,
       filters: strategy === 'parallel-star-filters' ? STAR_FILTERS : ['all'],
       writtenCommentsOnly: true,
       perStarLimit: strategy === 'parallel-star-filters' ? REVIEWS_PER_STAR : null,

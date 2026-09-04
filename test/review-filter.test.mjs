@@ -54,3 +54,13 @@ test('bộ lọc cuối không dùng review mơ hồ khi Layer 2 đã lỗi', ()
   assert.equal(result.keep, false);
   assert.match(result.reason, /Chưa đủ dữ liệu/u);
 });
+
+test('bộ lọc cuối luôn loại hard reject dù tiền tố trông có vẻ hữu ích', () => {
+  const result = shouldKeep({
+    rating: 4,
+    text: 'Chất lượng sản phẩm: Okkkkkkkkkkkkkkkkkkkkkkkkkkkk',
+    labels: { hard_reject: true, information_value: 'none', reason_code: 'LOW_VALUE_REPETITION' }
+  });
+  assert.equal(result.keep, false);
+  assert.match(result.reason, /lặp ký tự|rác/i);
+});

@@ -48,6 +48,7 @@ test('TikTok chia 100 review thành 5 star filter chạy song song và không l�
   assert.ok(inputs.every((input) => input.region === 'VN'));
   assert.equal(result.reviews.length, 100);
   assert.equal(result.collection.strategy, 'parallel-star-filters');
+  assert.deepEqual(result.collection.ratingStrata, [1, 2, 3, 4, 5]);
   assert.equal(result.collection.perStarLimit, 20);
   assert.equal(result.productMeta.title, 'Tai nghe thử nghiệm');
   assert.equal(result.reviews[0].createdAt, '2026-08-30T00:00:00.000Z');

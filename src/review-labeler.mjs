@@ -2,7 +2,6 @@ import { createRequire } from 'node:module';
 import { geminiThinkingConfig, parseGeminiJson, requestGeminiWithFallback } from './gemini-response.mjs';
 import { isRedisConfigured } from './redis-rest.mjs';
 import { readLayer2Cache, writeLayer2Cache } from './layer2-cache.mjs';
-import { combineAbortSignals } from './abort.mjs';
 import { annotateReviewDuplicates } from './review-deduplication.mjs';
 import { REVIEW_PIPELINE_VERSION } from './review-pipeline-version.mjs';
 
@@ -13,6 +12,9 @@ const rules = rulesDocument.layer1_rules;
 const policy = rulesDocument.policy;
 const layer2Config = layer2Document.layer2_config;
 const allowedCategories = new Set(policy.allowed_defect_categories);
+const LAYER2_MAX_CONCURRENCY = 2;
+const LAYER2_MAX_ROUTE_ATTEMPTS = 2;
+const LAYER2_DEFAULT_BATCH_SIZE = 10;
 
 export function normalizeVietnamese(value = '') {
   return String(value)
@@ -88,15 +90,15 @@ function matchAny(patterns, text) {
 
 function repeatedCharacterSpam(text) {
   const maximum = Number(rules.spam_and_low_value.max_repeated_chars_allowed) || 5;
-  return new RegExp(`(.)\\1{${maximum},}`, 'u').test(text);
+  // Chỉ khóa chuỗi chữ kéo dài. Số serial/SKU hoặc dấu phân cách dài không
+  // được xem là spam chỉ vì có ký tự lặp.
+  return new RegExp(`([a-z])\\1{${maximum},}`, 'u').test(text);
 }
 
 function gibberishSpam(text) {
   const tokens = String(text).match(/[a-z0-9]+/gu) || [];
   return tokens.some((token) => {
-    if (token.length >= 24) return true;
     if (token.length < 14) return false;
-    if (/\d/u.test(token) && /[a-z]/u.test(token)) return true;
     if (/[bcdfghjklmnpqrstvwxyz]{7,}/u.test(token)) return true;
     const bigrams = new Map();
     for (let index = 0; index < token.length - 1; index += 1) {
@@ -186,6 +188,7 @@ function assessInformationValue(text, defects, flags = {}) {
 
 function baseLabels(layer1) {
   return {
+    hard_reject: layer1.hard_reject,
     is_seeding: layer1.is_seeding,
     is_low_value: layer1.is_low_value,
     is_vague: layer1.is_vague,
@@ -231,7 +234,10 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
   const offTopicCandidate = relevanceAssessment.state === 'needs_review';
   const meaningfulFeedback = !generic && meaningfulFeedbackPattern.test(text);
   const lowValueCandidate = !text || generic || iconOnly || repeated || gibberish || logisticsOnly || tooShort;
-  const isLowValue = defects.length === 0 && lowValueCandidate && !meaningfulFeedback;
+  // Tín hiệu rác chắc chắn không được phép bị một tiền tố chung như
+  // "Chất lượng sản phẩm:" mở khóa.
+  const isLowValue = defects.length === 0
+    && (deterministicHardReject || (lowValueCandidate && !meaningfulFeedback));
   const informationValue = assessInformationValue(text, defects, {
     generic, iconOnly, repeated, gibberish, logisticsOnly, tooShort
   });
@@ -328,11 +334,23 @@ const layer2ResponseSchema = {
           has_defect: { type: 'boolean' },
           defect_categories: { type: 'array', items: { type: 'string', enum: [...allowedCategories] }, maxItems: 5 },
           defect_quote: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+          defect_evidence: {
+            type: 'array',
+            maxItems: 5,
+            items: {
+              type: 'object',
+              properties: {
+                category: { type: 'string', enum: [...allowedCategories] },
+                quote: { type: 'string' }
+              },
+              required: ['category', 'quote']
+            }
+          },
           evidence_quote: { anyOf: [{ type: 'string' }, { type: 'null' }] },
           confidence: { type: 'number', minimum: 0, maximum: 1 },
           reason_code: { type: 'string' }
         },
-        required: ['id', 'decision', 'is_seeding', 'is_low_value', 'is_vague', 'is_off_topic', 'relevance', 'information_value', 'has_defect', 'defect_categories', 'defect_quote', 'evidence_quote', 'confidence', 'reason_code']
+        required: ['id', 'decision', 'is_seeding', 'is_low_value', 'is_vague', 'is_off_topic', 'relevance', 'information_value', 'has_defect', 'defect_categories', 'defect_quote', 'defect_evidence', 'evidence_quote', 'confidence', 'reason_code']
       }
     }
   },
@@ -350,14 +368,30 @@ function normalizeLayer2Label(candidate, review, layer1, product = {}) {
   const quote = typeof candidate.defect_quote === 'string' && text.includes(candidate.defect_quote.trim())
     ? candidate.defect_quote.trim()
     : null;
+  const evidenceByCategory = new Map();
+  for (const item of Array.isArray(candidate.defect_evidence) ? candidate.defect_evidence : []) {
+    const category = String(item?.category || '');
+    const itemQuote = typeof item?.quote === 'string' ? item.quote.trim() : '';
+    if (allowedCategories.has(category) && itemQuote && text.includes(itemQuote)) {
+      evidenceByCategory.set(category, itemQuote);
+    }
+  }
+  // Tương thích cache cũ chỉ khi LLM gắn đúng một category.
+  if (categories.length === 1 && quote && !evidenceByCategory.has(categories[0])) {
+    evidenceByCategory.set(categories[0], quote);
+  }
   const evidenceQuote = typeof candidate.evidence_quote === 'string' && text.includes(candidate.evidence_quote.trim())
     ? candidate.evidence_quote.trim()
     : null;
-  if (candidate.has_defect && (!categories.length || !quote)) {
+  if (candidate.has_defect && (!categories.length || !quote || categories.some((category) => !evidenceByCategory.has(category)))) {
     return {
       decision: 'abstain',
       confidence,
-      reason_code: !categories.length ? 'INVALID_DEFECT_CATEGORY' : 'DEFECT_QUOTE_NOT_VERBATIM'
+      reason_code: !categories.length
+        ? 'INVALID_DEFECT_CATEGORY'
+        : !quote
+          ? 'DEFECT_QUOTE_NOT_VERBATIM'
+          : 'DEFECT_CATEGORY_EVIDENCE_MISSING'
     };
   }
   if (candidate.has_defect && quote) {
@@ -365,6 +399,28 @@ function normalizeLayer2Label(candidate, review, layer1, product = {}) {
       || negativeDefectCuePattern.test(normalizeVietnamese(quote));
     if (!quoteHasDefectEvidence) {
       return { decision: 'abstain', confidence, reason_code: 'DEFECT_EVIDENCE_NOT_NEGATIVE' };
+    }
+    const unsupportedCategory = categories.find((category) => {
+      const categoryQuote = evidenceByCategory.get(category);
+      return defectMatches(categoryQuote).length === 0
+        && !negativeDefectCuePattern.test(normalizeVietnamese(categoryQuote));
+    });
+    if (unsupportedCategory) {
+      return { decision: 'abstain', confidence, reason_code: 'DEFECT_CATEGORY_EVIDENCE_NOT_NEGATIVE' };
+    }
+    const categoriesByQuote = new Map();
+    for (const category of categories) {
+      const categoryQuote = evidenceByCategory.get(category);
+      if (!categoriesByQuote.has(categoryQuote)) categoriesByQuote.set(categoryQuote, []);
+      categoriesByQuote.get(categoryQuote).push(category);
+    }
+    const reusedUnsupportedQuote = [...categoriesByQuote.entries()].some(([categoryQuote, quoteCategories]) => {
+      if (quoteCategories.length < 2) return false;
+      const deterministicCategories = new Set(defectMatches(categoryQuote).map((item) => item.id));
+      return quoteCategories.some((category) => !deterministicCategories.has(category));
+    });
+    if (reusedUnsupportedQuote) {
+      return { decision: 'abstain', confidence, reason_code: 'DEFECT_EVIDENCE_REUSED_ACROSS_CATEGORIES' };
     }
   }
   const lockedLowValue = layer1.reason_codes.some((code) => ['LOW_VALUE_GIBBERISH', 'LOW_VALUE_ICON_ONLY', 'LOW_VALUE_REPETITION'].includes(code));
@@ -401,7 +457,9 @@ function normalizeLayer2Label(candidate, review, layer1, product = {}) {
         reason_code: 'OFF_TOPIC_EVIDENCE_DOES_NOT_NAME_OTHER_PRODUCT'
       };
     }
-    if (!titleHasKnownFamily && confidence < 0.9) {
+    // Khi taxonomy không nhận diện được loại sản phẩm từ title, một quote bất
+    // kỳ không đủ chứng minh mismatch. Chọn abstain để không loại oan.
+    if (!titleHasKnownFamily) {
       return { decision: 'abstain', confidence, reason_code: 'OFF_TOPIC_UNKNOWN_PRODUCT_CONTEXT' };
     }
   }
@@ -505,58 +563,9 @@ export async function classifyBatchWithGemini(batch, product, options = {}) {
       signal
     })
   });
-  const primaryController = new AbortController();
-  const primary = run(0, combineAbortSignals(options.signal, primaryController.signal));
-  let hedgeTimer;
-  const first = await Promise.race([
-    primary.then((value) => ({ type: 'success', value }), (error) => ({ type: 'error', error })),
-    new Promise((resolve) => {
-      hedgeTimer = setTimeout(() => resolve({ type: 'hedge' }), Number(options.hedgeDelayMs) || 1_800);
-    })
-  ]);
-  clearTimeout(hedgeTimer);
-  let geminiResult;
-  if (first.type === 'success') {
-    geminiResult = first.value;
-  } else if (first.type === 'error') {
-    geminiResult = await run(1, options.signal);
-  } else {
-    const hedgeController = new AbortController();
-    const hedge = run(1, combineAbortSignals(options.signal, hedgeController.signal), true);
-    try {
-      const winner = await Promise.any([
-        primary.then((value) => ({ source: 'primary', value })),
-        hedge.then((value) => ({ source: 'hedge', value }))
-      ]);
-      const cancellation = Object.assign(new Error('Hedged request đã có kết quả hợp lệ từ route khác.'), {
-        name: 'AbortError',
-        code: 'GEMINI_HEDGE_CANCELLED'
-      });
-      if (winner.source === 'primary') hedgeController.abort(cancellation);
-      else primaryController.abort(cancellation);
-      geminiResult = winner.value;
-    } catch (aggregate) {
-      const errors = aggregate?.errors || [];
-      const error = errors.at(-1) || errors[0] || aggregate;
-      error.attemptedModels = errors.flatMap((item) => item?.attemptedModels || []);
-      error.attemptedCredentialIds = [...new Set(errors.flatMap((item) => item?.attemptedCredentialIds || []))];
-      error.attemptedRouteIds = [...new Set(errors.flatMap((item) => item?.attemptedRouteIds || []))];
-      const attemptsRemaining = Math.max(0, 3 - error.attemptedRouteIds.length);
-      const hasTime = !Number.isFinite(Number(options.deadlineAt)) || Date.now() < Number(options.deadlineAt);
-      if (!options.signal?.aborted && attemptsRemaining > 0 && hasTime) {
-        try {
-          geminiResult = await run(attemptsRemaining - 1, options.signal);
-        } catch (finalError) {
-          finalError.attemptedModels = [...error.attemptedModels, ...(finalError?.attemptedModels || [])];
-          finalError.attemptedCredentialIds = [...new Set([...error.attemptedCredentialIds, ...(finalError?.attemptedCredentialIds || [])])];
-          finalError.attemptedRouteIds = [...new Set([...error.attemptedRouteIds, ...(finalError?.attemptedRouteIds || [])])];
-          throw finalError;
-        }
-      } else {
-        throw error;
-      }
-    }
-  }
+  // Hai route tuần tự: tránh hedge tạo burst khiến mọi key cùng chạm RPM.
+  // requestGeminiWithFallback luôn ưu tiên route có bộ đếm thấp nhất.
+  const geminiResult = await run(LAYER2_MAX_ROUTE_ATTEMPTS - 1, options.signal, true);
   return {
     labels: geminiResult.value,
     retry: {
@@ -573,6 +582,20 @@ function chunks(items, size) {
   const result = [];
   for (let index = 0; index < items.length; index += size) result.push(items.slice(index, index + size));
   return result;
+}
+
+async function mapWithConcurrency(items, concurrency, mapper) {
+  const results = new Array(items.length);
+  let cursor = 0;
+  async function worker() {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await mapper(items[index], index);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+  return results;
 }
 
 export async function labelReviewsTwoLayer(reviews = [], options = {}) {
@@ -597,7 +620,9 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
   const mode = options.mode || process.env.LABELER_LLM_MODE || 'uncertain';
   const selected = mode === 'off' ? [] : mode === 'uncertain' ? uniquePrepared.filter((item) => item.layer1.requires_llm) : uniquePrepared;
   const selectedIds = new Set(selected.map((item) => String(item.layer1.id)));
-  const batchSize = Math.min(8, Math.max(5, Number.parseInt(process.env.LABELER_LLM_BATCH_SIZE || '6', 10) || 6));
+  const batchSize = Math.min(12, Math.max(8, Number.parseInt(
+    process.env.LABELER_LLM_BATCH_SIZE || String(LAYER2_DEFAULT_BATCH_SIZE), 10
+  ) || LAYER2_DEFAULT_BATCH_SIZE));
   const warnings = [];
   const layer2ById = await readLayer2Cache(selected, options.product, { fetchImpl: options.redisFetchImpl });
   const cacheHits = layer2ById.size;
@@ -611,7 +636,7 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
   const modelsUsed = new Set();
   const batchDurationsMs = [];
   if (uncached.length && (process.env.GEMINI_API_KEY || isRedisConfigured())) {
-    const results = await Promise.all(batches.map(async (batch, batchIndex) => {
+    const results = await mapWithConcurrency(batches, LAYER2_MAX_CONCURRENCY, async (batch, batchIndex) => {
       try {
         const result = await classifyBatchWithGemini(batch, options.product, {
           fetchImpl: options.fetchImpl || fetch,
@@ -619,7 +644,6 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
           routeContext: options.geminiContext,
           signal: options.signal,
           redisFetchImpl: options.redisFetchImpl,
-          hedgeDelayMs: options.hedgeDelayMs,
           requestGeminiImpl: options.requestGeminiImpl
         });
         await writeLayer2Cache(batch, result.labels, options.product, { fetchImpl: options.redisFetchImpl });
@@ -660,7 +684,7 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
         }
         return { labels: [], warning };
       }
-    }));
+    });
     for (const result of results) {
       if (result.warning) warnings.push(result.warning);
       for (const candidate of result.labels) layer2ById.set(String(candidate.id), candidate);

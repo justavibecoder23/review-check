@@ -448,7 +448,7 @@ test('Layer 2 không được loại review đúng sản phẩm bằng trích d�
   }
 });
 
-test('Layer 2 hedge sang key khác khi request đầu phản hồi chậm', async () => {
+test('Layer 2 dùng tối đa hai route tuần tự, không tạo hedge song song', async () => {
   const text = 'Êm chân và dễ điều chỉnh';
   const batch = [{
     review: { rating: 5, text, verified: true },
@@ -462,22 +462,98 @@ test('Layer 2 hedge sang key khác khi request đầu phản hồi chậm', asyn
   }];
   const calls = [];
   const result = await classifyBatchWithGemini(batch, { title: 'Miếng lót giày' }, {
-    hedgeDelayMs: 5,
     requestGeminiImpl: async ({ maxRetries }) => {
       calls.push(maxRetries);
-      if (maxRetries === 0) await new Promise((resolve) => setTimeout(resolve, 40));
       return {
         value: labels,
         model: 'gemini-3.5-flash-lite',
         attemptedModels: ['gemini-3.5-flash-lite'],
-        attemptedCredentialIds: [maxRetries === 0 ? 'slow-key' : 'fast-key'],
-        totalDurationMs: maxRetries === 0 ? 40 : 1
+        attemptedCredentialIds: ['healthy-key'],
+        totalDurationMs: 1
       };
     }
   });
-  assert.deepEqual(calls, [0, 1]);
+  assert.deepEqual(calls, [1]);
   assert.deepEqual(result.labels, labels);
   assert.equal(result.retry.credentialAttempts, 1);
+});
+
+test('Layer 1 khóa chuỗi kéo dài dù có tiền tố “Chất lượng sản phẩm”', () => {
+  const label = labelReviewLayer1({ rating: 4, text: 'Chất lượng sản phẩm: Okkkkkkkkkkkkkkkkkkkkkkkkkkkk' });
+  assert.equal(label.hard_reject, true);
+  assert.equal(label.is_low_value, true);
+  assert.equal(label.requires_llm, false);
+  assert.ok(label.reason_codes.some((code) => ['LOW_VALUE_REPETITION', 'LOW_VALUE_GIBBERISH'].includes(code)));
+});
+
+test('Layer 1 không coi mã model dài là chuỗi rác', () => {
+  const label = labelReviewLayer1({
+    rating: 5,
+    text: 'Mã model A234567890123456789012345 nhận sạc nhanh ổn định và dùng tốt.'
+  });
+  assert.equal(label.hard_reject, false);
+  assert.equal(label.is_low_value, false);
+});
+
+test('Layer 2 không nhận nhiều category nếu thiếu quote riêng cho từng category', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  const text = 'Dây bị đứt sau hai ngày và shop giao thiếu đầu chuyển.';
+  try {
+    const result = await labelReviewsTwoLayer([{ rating: 1, text }], {
+      mode: 'all',
+      product: { title: 'Cáp sạc kèm đầu chuyển' },
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        async json() {
+          return { candidates: [{ content: { parts: [{ text: JSON.stringify({ labels: [{
+            id: 'r0001', decision: 'correct', is_seeding: false, is_low_value: false,
+            is_vague: false, is_off_topic: false, relevance: 'on_topic', information_value: 'high',
+            has_defect: true, defect_categories: ['chat-lieu', 'dung-mo-ta'],
+            defect_quote: 'Dây bị đứt sau hai ngày',
+            defect_evidence: [{ category: 'chat-lieu', quote: 'Dây bị đứt sau hai ngày' }],
+            evidence_quote: text, confidence: 0.97, reason_code: 'DEFECT_EVIDENCE'
+          }] }) }] } }] };
+        }
+      })
+    });
+    assert.equal(result.reviews[0].labeling.layer2.decision, 'abstain');
+    assert.equal(result.reviews[0].labeling.layer2.reason_code, 'DEFECT_CATEGORY_EVIDENCE_MISSING');
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
+test('Layer 2 giới hạn tối đa hai batch Gemini chạy đồng thời', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  let active = 0;
+  let maximumActive = 0;
+  let calls = 0;
+  try {
+    await labelReviewsTwoLayer(Array.from({ length: 30 }, (_, index) => ({
+      rating: 5,
+      text: `Review thử nghiệm ${index + 1} mô tả sản phẩm sử dụng ổn định và tiện lợi.`
+    })), {
+      mode: 'all',
+      product: { title: 'Sản phẩm thử nghiệm' },
+      requestGeminiImpl: async () => {
+        calls += 1;
+        active += 1;
+        maximumActive = Math.max(maximumActive, active);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        active -= 1;
+        return { value: [], model: 'gemini-3.5-flash-lite', attemptedModels: ['gemini-3.5-flash-lite'] };
+      }
+    });
+    assert.equal(calls, 3);
+    assert.equal(maximumActive, 2);
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
 });
 
 test('review trùng nội dung không tiêu hao thêm lượt kiểm định Layer 2', async () => {

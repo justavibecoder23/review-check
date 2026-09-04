@@ -134,6 +134,7 @@ test('mặc định production lấy tối đa 60 review bằng 3 filter sao son
   assert.ok(inputs.every((input) => input.maxReviewsPerProduct === 20));
   assert.equal(result.reviews.length, 60);
   assert.equal(result.collection.strategy, 'parallel-star-filters');
+  assert.deepEqual(result.collection.ratingStrata, [1, 3, 5]);
   assert.equal(result.collection.targetMaximum, 60);
   assert.equal(JSON.stringify(result).includes('token-'), false);
 });

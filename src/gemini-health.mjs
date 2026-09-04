@@ -39,6 +39,9 @@ local currentReservedTokens = math.max(0, tonumber(state.reservedTokens or 0))
 if tonumber(state.cooldownUntilMs or 0) > nowMs then
   return cjson.encode({ok=false, code='COOLDOWN', state=state})
 end
+if tonumber(state.inFlight or 0) > 0 then
+  return cjson.encode({ok=false, code='BUSY', state=state})
+end
 if rpm > 0 and #starts >= rpm then
   return cjson.encode({ok=false, code='RPM_LIMIT', state=state})
 end
@@ -207,7 +210,7 @@ export function geminiRoutePressure(state, model, nowMs = Date.now()) {
 
 export function geminiRouteScore(state, model, nowMs = Date.now()) {
   const pressure = geminiRoutePressure(state, model, nowMs);
-  if (pressure.cooldown || pressure.minuteLimited || pressure.dailyLimited) return Number.POSITIVE_INFINITY;
+  if (pressure.cooldown || pressure.minuteLimited || pressure.dailyLimited || pressure.inFlight > 0) return Number.POSITIVE_INFINITY;
   return pressure.value;
 }
 

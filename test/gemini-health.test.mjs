@@ -10,6 +10,11 @@ test('route đang cooldown không được chọn trước route khỏe', () => 
   assert.ok(healthy < cooling);
 });
 
+test('route đang xử lý request không được cấp thêm batch đồng thời', () => {
+  const nowMs = Date.now();
+  assert.equal(geminiRouteScore({ inFlight: 1, lastStartedAtMs: nowMs }, 'gemini-3.5-flash-lite', nowMs), Number.POSITIVE_INFINITY);
+});
+
 test('health router tăng áp lực theo tải gần đây, độ trễ và request đang chạy', () => {
   const nowMs = Date.now();
   const quiet = geminiRoutePressure({ events: [], ewmaLatencyMs: 500, inFlight: 0 }, 'gemini-3.5-flash-lite', nowMs);

@@ -134,6 +134,18 @@ test('mẫu chia tầng dùng mốc 1,3,5 và review 2,4 không làm lệch defe
   assert.equal(result.defects.estimator.comparableUnderCommonDesign, true);
 });
 
+test('TikTok dùng đủ năm tầng 1–5 theo đúng thiết kế lấy mẫu riêng', () => {
+  const reviews = [1, 2, 3, 4, 5].flatMap((rating) => Array.from({ length: 20 }, (_, index) => usefulReview(index, { rating })));
+  const result = calculateTrustScoreV31(reviews, {
+    sampling: { strategy: 'parallel-star-filters', ratingStrata: [1, 2, 3, 4, 5], perStarLimit: 20 }
+  });
+  assert.deepEqual(result.sampling.standardRatings, [1, 2, 3, 4, 5]);
+  assert.equal(result.sample.statisticalPopulation, 100);
+  assert.equal(result.sample.excludedBySamplingDesign, 0);
+  assert.ok(Math.abs(result.adequacy.balancedEvidenceSize - 100) < 1e-10);
+  assert.deepEqual(result.defects.estimator.strata.map((item) => item.rating), [1, 2, 3, 4, 5]);
+});
+
 test('thiếu một tầng chuẩn thì không công bố TrustScore', () => {
   const reviews = [3, 5].flatMap((rating) => Array.from({ length: 20 }, (_, index) => usefulReview(index, { rating })));
   const result = calculateTrustScoreV31(reviews, { sampling: { strategy: 'parallel-star-filters', perStarLimit: 20 } });
