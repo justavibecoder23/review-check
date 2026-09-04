@@ -109,19 +109,29 @@ function gibberishSpam(text) {
   });
 }
 
+const SHOPEE_TEMPLATE_HEADER_PATTERN = /\b(?:dung\s+voi\s+mo\s+ta|chat\s+luong\s+san\s+pham|tinh\s+nang\s+noi\s+bat|do\s+ben|mau\s+sac|chat\s+lieu|kich\s+thuoc|mui\s+huong|kha\s+nang\s+tuong\s+thich|hieu\s+qua\s+su\s+dung|thiet\s+ke|tinh\s+nang)\s*[:：]\s*/giu;
+
+export function stripShopeeTemplateHeaders(text = '') {
+  return normalizeVietnamese(text)
+    .replace(SHOPEE_TEMPLATE_HEADER_PATTERN, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const explicitNoUsagePattern = /\b(?:chua\s+(?:su\s+dung|dung|xai|trai\s+nghiem|mo|boc|thu|test)|(?:phai\s+)?(?:dung|thu|xai)\s+moi\s+biet|chua\s+biet(?:\s+chat\s+luong|\s+the\s+nao)?)\b/iu;
 const logisticsCuePattern = /\b(?:giao|ship|van chuyen|dong goi|goi ky|goi ki|nhan hang|shop)\b/u;
-const productExperiencePattern = /\b(?:san pham|chat luong|chat lieu|dung|su dung|xai|mac|uong|giu nhiet|ben|sac|pin|mau|size|form|mui|vi|cong nang|hoat dong)\b/u;
+const productExperiencePattern = /\b(?:san pham|chat luong|chat lieu|su dung|dung (?:thu|on|tot|ben|duoc|lau|hang|ngay|san pham|thoi gian|vai|rat)|da dung|xai|mac|uong|giu nhiet|ben|sac|pin|size|form|mui|vi|cong nang|hoat dong)\b/u;
 const meaningfulFeedbackPattern = /\b(?:chat luong|chat lieu|do ben|chac chan|mem mai|mem|em chan|om chan|vua chan|bam chan|lot giay|lot vao|de dieu chinh|khong dau chan|im ban chan|dai|day dan|tien loi|gon|dung tich|dung do|sac nhanh|sac on dinh|khong nong|nhan dien|dung on|dung tot|rat tot|chat luong tot|san pham tot|hang tot|hoat dong tot|dung duoc|y hinh|dung mo ta|de cuon|bao hanh)\b/u;
 const concreteFeedbackPattern = /\b(?:khong|ko|k|bi|loi|hong|rach|bung|dut|roi|rot|bong|nong|yeu|cham|nhanh|ben|chac|mem|em chan|om chan|vua chan|bam chan|lot giay|lot vao|de dieu chinh|khong dau chan|im ban chan|dai|mong|day|vai|nhua|kim loai|boc du|dau cam|bao hanh|\d+\s*(?:ngay|thang|nam|gio|phut|lan|\/10))\b/u;
 // Tránh từ đơn bị nhập nhằng sau khi bỏ dấu (ổn/ồn, chất/chật, đầu/đau,
 // đẹp/dép...). Các trường hợp đó chỉ được chấp nhận bằng cụm có ngữ cảnh.
 // "không" đứng riêng cũng không đủ: "không nóng/không lỏng" là lời khen.
-const negativeDefectCuePattern = /\b(?:(?:khong|ko|k)\s+(?:dung duoc|hoat dong|len nguon|nhan sac|vao dien|dinh|ben|chac|vua|giong(?:\s+hinh)?|dung(?:\s+mo ta|\s+mau|\s+size)?)|chang\s+(?:dung duoc|hoat dong)|hong|rach|bung|dut|long leo|kho dung|dau chan|qua chat|qua rong|sai mau|thieu(?:\s+hang|\s+phu kien)?|mop meo|be vo|vo nat|rat te|bi loi|bao loi|loi san pham|kem chat luong|mui hoi|tieng on|ro ri|het pin|xu long|that vong|phi tien)\b/u;
+const negativeDefectCuePattern = /\b(?:(?:khong|ko|k)\s+(?:dung duoc|dung dc|hoat dong|len nguon|nhan sac|vao dien|dinh|ben|chac|vua|giong(?:\s+hinh)?|dung(?:\s+mo ta|\s+mau|\s+size)?|nhu mong doi|hai long|ung y|uy tin)|chang\s+(?:dung duoc|dung dc|hoat dong)|giao\s+(?:sai|nham|khac|lon)|hong|rach|bung|dut|long leo|kho dung|kho ngoi|kho chiu|dau (?:chan|lung|mong|tay)|qua chat|qua rong|sai mau|nham mau|thieu(?:\s+hang|\s+phu kien|\s+chot|\s+oc|\s+vit|\s+nut)?|mop(?:\s+meo)?|be vo|vo nat|rat te|bi loi|bao loi|loi san pham|hang loi|kem chat luong|mui hoi|tieng on|ro ri|het pin|xu long|that vong|phi tien|xuoc|tray|bi gay|gay|venh|kenh venh|cap kenh|tua vai|vai tua|bi xon|tut(?:\s+ra)?|tuot(?:\s+ra)?|bavia|chua (?:tot|ve sinh|hoan thien)|rat ban)\b/u;
 
 function logisticsOnlyReview(text) {
   if (!logisticsCuePattern.test(text) || productExperiencePattern.test(text)) return false;
   const stripped = text
-    .replace(/\b(?:giao|hang|nhanh|ship|van chuyen|dong goi|goi|ky|ki|can than|dep|tot|ok|oke|oki|shop|nhan|duoc|sai|sài|xai)\b/gu, ' ')
+    .replace(/\b(?:giao|hang|nhanh|ship|van chuyen|dong goi|goi|ky|ki|can than|dep|tot|ok|oke|oki|shop|nhan|duoc|sai|sài|xai|dung)\b/gu, ' ')
     .replace(/[^a-z0-9]+/gu, ' ')
     .trim();
   return stripped.split(/\s+/u).filter(Boolean).length <= 3;
@@ -180,7 +190,7 @@ function assessProductRelevance(reviewText, product = {}) {
 
 function assessInformationValue(text, defects, flags = {}) {
   if (flags.gibberish || flags.iconOnly || flags.repeated) return 'none';
-  if (flags.logisticsOnly || flags.generic || !text) return 'low';
+  if (flags.logisticsOnly || flags.generic || flags.noUsageExperience || !text) return 'low';
   if (defects.length || (meaningfulFeedbackPattern.test(text) && concreteFeedbackPattern.test(text))) return 'high';
   if (meaningfulFeedbackPattern.test(text)) return 'medium';
   return 'low';
@@ -216,32 +226,47 @@ function canUseSafeLayer1Fallback(layer1) {
 export function labelReviewLayer1(review = {}, index = 0, product = {}) {
   const originalText = String(review.text || '').trim();
   const text = normalizeVietnamese(originalText);
+  const cleanText = stripShopeeTemplateHeaders(text);
   const defects = defectMatches(originalText);
+  const rating = Number(review.rating) || 0;
   const exactSeeding = rules.seeding_detection.exact_phrases.find((phrase) => text.includes(normalizeVietnamese(phrase)));
   const strongSeeding = exactSeeding ? null : matchAny(strongSeedingPatterns, text);
   const weakSeeding = matchAny(weakSeedingPatterns, text);
-  const isSeeding = Boolean(exactSeeding || strongSeeding);
-  const tokens = text ? text.split(/\s+/u) : [];
-  const generic = rules.spam_and_low_value.generic_short_phrases.some((phrase) => text === normalizeVietnamese(phrase));
+
+  // Review chê/đánh giá thấp (<= 3 sao) hoặc phản ánh lỗi hỏng cụ thể dù có kèm disclaimer
+  // "hình ảnh nhận xu" hay "bình luận lấy xu" KHÔNG PHẢI là seeding mà là review lỗi thật.
+  const hasNegativeDefectSignals = defects.length > 0
+    || (rating <= 3 && (negativeDefectCuePattern.test(cleanText) || negativeDefectCuePattern.test(text)));
+  const seedingDisclaimedOnNegative = Boolean((exactSeeding || strongSeeding) && hasNegativeDefectSignals);
+  const isSeeding = Boolean((exactSeeding || strongSeeding) && !seedingDisclaimedOnNegative);
+
+  const effectiveText = cleanText || text;
+  const tokens = effectiveText ? effectiveText.split(/\s+/u) : [];
+  const generic = rules.spam_and_low_value.generic_short_phrases.some((phrase) => effectiveText === normalizeVietnamese(phrase));
   const iconOnly = Boolean(originalText && iconOnlyPattern.test(originalText));
-  const gibberish = gibberishSpam(text);
-  const logisticsOnly = logisticsOnlyReview(text);
-  const tooShort = text.length < Number(rules.spam_and_low_value.min_character_length)
+  const gibberish = gibberishSpam(effectiveText);
+  const logisticsOnly = logisticsOnlyReview(effectiveText);
+  const tooShort = effectiveText.length < Number(rules.spam_and_low_value.min_character_length)
     || tokens.length < Number(rules.spam_and_low_value.min_token_count);
-  const repeated = repeatedCharacterSpam(text);
+  const repeated = repeatedCharacterSpam(effectiveText);
   const deterministicHardReject = gibberish || iconOnly || repeated;
   const relevanceAssessment = assessProductRelevance(originalText, product);
   const offTopicCandidate = relevanceAssessment.state === 'needs_review';
-  const meaningfulFeedback = !generic && meaningfulFeedbackPattern.test(text);
-  const lowValueCandidate = !text || generic || iconOnly || repeated || gibberish || logisticsOnly || tooShort;
+
+  // Không dùng template header "Chất lượng sản phẩm:" để tự kích hoạt meaningfulFeedback
+  const meaningfulFeedback = !generic && meaningfulFeedbackPattern.test(effectiveText);
+  const hasConcreteEvidence = defects.length > 0
+    || (meaningfulFeedback && concreteFeedbackPattern.test(effectiveText));
+  const noUsageExperience = !hasConcreteEvidence && explicitNoUsagePattern.test(effectiveText);
+
+  const lowValueCandidate = !effectiveText || generic || iconOnly || repeated || gibberish || logisticsOnly || tooShort || noUsageExperience;
   // Tín hiệu rác chắc chắn không được phép bị một tiền tố chung như
   // "Chất lượng sản phẩm:" mở khóa.
   const isLowValue = defects.length === 0
     && (deterministicHardReject || (lowValueCandidate && !meaningfulFeedback));
-  const informationValue = assessInformationValue(text, defects, {
-    generic, iconOnly, repeated, gibberish, logisticsOnly, tooShort
+  const informationValue = assessInformationValue(effectiveText, defects, {
+    generic, iconOnly, repeated, gibberish, logisticsOnly, tooShort, noUsageExperience
   });
-  const rating = Number(review.rating) || 0;
   const rantKeyword = rules.vague_rant_detection.rant_keywords.find((keyword) => text.includes(normalizeVietnamese(keyword)));
   const vagueRating = rules.vague_rant_detection.trigger_ratings.includes(rating);
   const isVague = vagueRating
@@ -250,14 +275,29 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
   const reasonCodes = [];
   const evidence = [];
   if (exactSeeding || strongSeeding) {
-    reasonCodes.push(exactSeeding ? 'SEEDING_EXACT_PHRASE' : 'SEEDING_STRONG_PATTERN');
-    evidence.push({ label: 'seeding', rule: exactSeeding || strongSeeding, quote: originalText.slice(0, 180) });
+    if (isSeeding) {
+      reasonCodes.push(exactSeeding ? 'SEEDING_EXACT_PHRASE' : 'SEEDING_STRONG_PATTERN');
+      evidence.push({ label: 'seeding', rule: exactSeeding || strongSeeding, quote: originalText.slice(0, 180) });
+    } else if (seedingDisclaimedOnNegative) {
+      reasonCodes.push('NEGATIVE_REVIEW_WITH_COIN_DISCLAIMER');
+      evidence.push({ label: 'negative_with_coin_disclaimer', rule: exactSeeding || strongSeeding, quote: originalText.slice(0, 180) });
+    }
   }
-  if (weakSeeding) {
+  if (weakSeeding && !seedingDisclaimedOnNegative) {
     reasonCodes.push('SEEDING_WEAK_CUE');
     evidence.push({ label: 'seeding_candidate', rule: weakSeeding, quote: originalText.slice(0, 180) });
   }
-  if (isLowValue) reasonCodes.push(gibberish ? 'LOW_VALUE_GIBBERISH' : logisticsOnly ? 'LOW_VALUE_LOGISTICS_ONLY' : generic ? 'LOW_VALUE_GENERIC' : iconOnly ? 'LOW_VALUE_ICON_ONLY' : repeated ? 'LOW_VALUE_REPETITION' : 'LOW_VALUE_SHORT');
+  if (isLowValue) {
+    reasonCodes.push(
+      gibberish ? 'LOW_VALUE_GIBBERISH'
+        : logisticsOnly ? 'LOW_VALUE_LOGISTICS_ONLY'
+        : noUsageExperience ? 'LOW_VALUE_NO_USAGE_EXPERIENCE'
+        : generic ? 'LOW_VALUE_GENERIC'
+        : iconOnly ? 'LOW_VALUE_ICON_ONLY'
+        : repeated ? 'LOW_VALUE_REPETITION'
+        : 'LOW_VALUE_SHORT'
+    );
+  }
   if (offTopicCandidate) {
     reasonCodes.push('OFF_TOPIC_CANDIDATE');
     evidence.push({
@@ -274,7 +314,8 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
 
   const conflicts = [];
   if (isSeeding && defects.length) conflicts.push('SEEDING_WITH_CONCRETE_DEFECT');
-  if (weakSeeding && !isSeeding) conflicts.push('WEAK_SEEDING_CUE_ONLY');
+  if (seedingDisclaimedOnNegative) conflicts.push('SEEDING_WITH_NEGATIVE_DEFECT');
+  if (weakSeeding && !isSeeding && !seedingDisclaimedOnNegative) conflicts.push('WEAK_SEEDING_CUE_ONLY');
   const signalConfidence = gibberish ? 0.97
     : exactSeeding ? 0.99
     : strongSeeding ? 0.94
@@ -542,7 +583,7 @@ export async function classifyBatchWithGemini(batch, product, options = {}) {
     primaryModel: model,
     context: 'Gemini labeler',
     deadlineAt: options.deadlineAt,
-    attemptTimeoutMs: 7_500,
+    attemptTimeoutMs: 25_000,
     maxRetries,
     retryOnTimeout: true,
     routeContext: options.routeContext,
@@ -554,7 +595,7 @@ export async function classifyBatchWithGemini(batch, product, options = {}) {
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: {
-          maxOutputTokens: 2048,
+          maxOutputTokens: 4096,
           thinkingConfig: geminiThinkingConfig('minimal', selectedModel),
           responseMimeType: 'application/json',
           responseSchema: layer2ResponseSchema

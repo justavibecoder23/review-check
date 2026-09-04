@@ -191,7 +191,7 @@ test('Layer 2 có thể sửa nhãn nhưng không được thay quote không có
     });
     assert.equal(requestPayload.generationConfig.temperature, undefined);
     assert.equal(requestPayload.generationConfig.thinkingConfig.thinkingLevel, 'minimal');
-    assert.equal(requestPayload.generationConfig.maxOutputTokens, 2048);
+    assert.equal(requestPayload.generationConfig.maxOutputTokens, 4096);
     assert.equal(result.stats.engine, 'layer1+gemini-layer2');
     assert.equal(result.reviews[0].labels.reviewed_by, 'gemini-layer2');
     assert.deepEqual(result.reviews[0].labels.defect_categories, ['dung-mo-ta']);
@@ -595,3 +595,55 @@ test('review trùng nội dung không tiêu hao thêm lượt kiểm định Lay
     else delete process.env.GEMINI_API_KEY;
   }
 });
+
+test('hàng nhận bị xước không bị nhầm thành seeding và nhận đúng lỗi chất liệu', () => {
+  const text = 'Đóng gói ko cẩn thận, bọc mỗi lớp túi mỏng, hàng nhận bị xước tùm lum  Giao hàng nhanh, vì cần gấp nên dùng tạm ko trả hàng';
+  const label = labelReviewLayer1({ rating: 3, text });
+  assert.equal(label.is_seeding, false);
+  assert.equal(label.has_defect, true);
+  assert.equal(label.defect_categories.includes('chat-lieu'), true);
+});
+
+test('review 3 sao kèm câu lấy xu nhưng phản ánh lỗi thực tế không bị gán seeding', () => {
+  const text = 'Liên hệ shop về vấn đề hàng bị lỗi nhưng shop k thèm rep như kiểu biết trước cái bàn lỗi này rồi í, kiểu móp như này chắc bị sẵn từ trước khi gửi mà vẫn gửi phải , thái độ chán chảnh dễ sợ . bình luận lấy xu ạ';
+  const label = labelReviewLayer1({ rating: 3, text });
+  assert.equal(label.is_seeding, false);
+  assert.equal(label.has_defect, true);
+  assert.equal(label.conflicts.includes('SEEDING_WITH_NEGATIVE_DEFECT'), true);
+  assert.equal(label.reason_codes.includes('NEGATIVE_REVIEW_WITH_COIN_DISCLAIMER'), true);
+});
+
+test('review hình ảnh nhận xu kèm lỗi rách ở 3 sao không bị coi là seeding', () => {
+  const text = 'Hình ảnh mang tính chất nhận xu. Hàng mã đẹp, dùng 1 tuần rách hết vải. Đã vứt vào kho';
+  const label = labelReviewLayer1({ rating: 3, text });
+  assert.equal(label.is_seeding, false);
+  assert.equal(label.has_defect, true);
+  assert.equal(label.defect_categories.includes('chat-lieu'), true);
+  assert.equal(label.conflicts.includes('SEEDING_WITH_NEGATIVE_DEFECT'), true);
+});
+
+test('review ghi rõ chưa sử dụng không có lỗi bị gán LOW_VALUE_NO_USAGE_EXPERIENCE', () => {
+  const text = 'Đúng với mô tả:ddungs mauf\nChất lượng sản phẩm:chưa sử dụng\n\nTạm được. Mua 1 cái phí ship rẻ hơn mua hai cái.';
+  const label = labelReviewLayer1({ rating: 4, text });
+  assert.equal(label.has_defect, false);
+  assert.equal(label.is_low_value, true);
+  assert.equal(label.reason_codes.includes('LOW_VALUE_NO_USAGE_EXPERIENCE'), true);
+  assert.equal(label.information_value, 'low');
+});
+
+test('văn mẫu triết lý kèm template Shopee bị bóc tách header, không nhận feedback hữu ích và chuyển Layer 2', () => {
+  const text = 'Chất lượng sản phẩm:bt\nĐúng với mô tả:bt\n\nMỗi người chúng ta đều trải qua quá trình trưởng thành, và qua những năm tháng đó, mỗi người tự xây dựng một tương lai, một không gian riêng của mình. Nhưng khi chúng ta nhìn lại quãng đường đã đi, liệu có giữ được những kí ức quý báu của quá khứ? Tôi hi vọng rằng sau 10 năm nữa, tôi sẽ trở nên mạnh mẽ và trưởng thành hơn, đã tìm thấy ước mơ của mình.';
+  const label = labelReviewLayer1({ rating: 3, text });
+  assert.equal(label.has_defect, false);
+  assert.equal(label.information_value, 'low');
+  assert.equal(label.requires_llm, true);
+});
+
+test('template Shopee với nội dung thuần giao hàng bị gán LOW_VALUE_LOGISTICS_ONLY', () => {
+  const text = 'Đúng với mô tả: đúng\nChất lượng sản phẩm: ok\n\nGiao hàng nhanh, shipper nhiệt tình đóng gói cẩn thận';
+  const label = labelReviewLayer1({ rating: 5, text });
+  assert.equal(label.has_defect, false);
+  assert.equal(label.is_low_value, true);
+  assert.equal(label.reason_codes.includes('LOW_VALUE_LOGISTICS_ONLY'), true);
+});
+

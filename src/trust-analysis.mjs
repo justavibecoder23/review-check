@@ -459,7 +459,7 @@ async function analyzeWithGemini(reviews, fallback, options = {}) {
     primaryModel: model,
     context: 'Gemini TrustScore',
     deadlineAt: options.geminiContext?.deadlineAt,
-    attemptTimeoutMs: 5_000,
+    attemptTimeoutMs: 30_000,
     maxRetries: 2,
     retryOnTimeout: true,
     routeContext: options.geminiContext,

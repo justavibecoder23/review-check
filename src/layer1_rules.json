@@ -14,12 +14,12 @@
     "seeding_detection": {
       "description": "Chỉ gắn seeding khi có bằng chứng về động cơ nhận thưởng/chưa trải nghiệm/copy boilerplate; không suy ra seeding chỉ vì review ngắn hoặc tích cực.",
       "strong_regex_patterns": [
-        "(nhan|lay|kiem|tich).{0,8}(xu|coin|diem).{0,24}(danh gia|review|cmt|comment|5 sao|nam sao)?",
-        "(danh gia|review|cmt|comment).{0,18}(de|lay|nhan|kiem).{0,8}(xu|coin|diem|thuong)",
-        "(hinh anh|video).{0,18}(mang tinh chat|chi de|de).{0,10}(nhan xu|lay xu|minh hoa)",
+        "(nhan|lay|kiem|tich).{0,8}\\b(xu|coin|diem)\\b.{0,24}(danh gia|review|cmt|comment|5 sao|nam sao)?",
+        "(danh gia|review|cmt|comment).{0,18}(de|lay|nhan|kiem).{0,8}\\b(xu|coin|diem|thuong)\\b",
+        "(hinh anh|video).{0,18}(mang tinh chat|chi de|de).{0,10}\\b(nhan xu|lay xu|minh hoa)\\b",
         "chua.{0,18}(dung|su dung|mo|thu|xai|boc).{0,30}(5 sao|nam sao|cho shop)",
         "nhan du hang.{0,22}chua.{0,10}(dung|thu|xai).{0,20}(5 sao|nam sao)",
-        "cho shop.{0,8}(5 sao|nam sao).{0,18}(nhan xu|lay xu|kiem xu)"
+        "cho shop.{0,8}(5 sao|nam sao).{0,18}\\b(nhan xu|lay xu|kiem xu)\\b"
       ],
       "weak_regex_patterns": [
         "giao hang nhanh.{0,24}dong goi.{0,18}(ky|can than|tot)",
@@ -78,7 +78,11 @@
           "hoen gi", "kem chat luong", "de hong", "khong dinh", "k dinh chac", "ko dinh chac", "khong dinh chac",
           "dan khong dinh", "dan k dinh", "dan ko dinh", "dinh k vao", "dinh ko vao", "dinh khong vao",
           "khong dan duoc", "dan khong duoc", "ko dan dc", "k dan dc", "roi mat", "roi ra", "rot ra",
-          "de roi", "de bong", "de rot", "do ben duoc 2 ngay", "do ben kem"
+          "de roi", "de bong", "de rot", "do ben duoc 2 ngay", "do ben kem",
+          "bi xuoc", "tray xuoc", "xuoc tum lum", "xuoc xat", "bi gay", "gay chan", "gay khung", "gay doi",
+          "bi mop", "mop meo", "dap bep", "buc chi", "tua vai", "vai tua", "bi xon",
+          "kenh venh", "cong venh", "bi venh", "cap kenh", "khap khieng",
+          "thieu vit", "thieu oc", "thieu chot", "thieu nut", "khong gan vit", "khong bat vit"
         ]
       },
       "kich-co": {
@@ -95,8 +99,9 @@
         "severity_weight": 1.2,
         "keywords": [
           "khac hinh", "khong giong hinh", "khong giong mau", "mau khong giong", "khac xa quang cao", "sai mau", "mau khac", "mau toi hon", "toi hon hinh",
-          "mau nhat hon", "lech mau", "giao thieu", "thieu phu kien", "thieu hang", "thieu qua",
-          "khong dung mau", "khong dung mau ma", "khong dung mo ta", "khong dung mau", "sai mau",
+          "mau nhat hon", "lech mau", "nham mau", "giao khac mau", "giao sai mau", "giao sai", "giao khac", "giao lon", "sai mau ma", "giao thieu", "thieu phu kien", "thieu hang", "thieu qua",
+          "thieu chot", "thieu nut", "thieu oc", "thieu vit",
+          "khong dung mau", "khong dung mau ma", "khong dung mo ta", "khong dung phan loai",
           "giao nham", "hang gia", "hang nhai", "fake"
         ]
       },
@@ -106,6 +111,7 @@
         "keywords": [
           "giao cham", "giao lau", "mai moi nhan duoc", "ngam don", "om hang", "hop mop", "mop meo",
           "hop bep", "rach hop", "be vo", "nut vo", "be nap", "dong goi so sai", "khong boc chong soc",
+          "dong goi au", "dong goi qua au",
           "hop nat", "shipper thai do", "shipper chui", "giao tre"
         ]
       },
@@ -113,9 +119,10 @@
         "label": "Công năng & trải nghiệm sử dụng",
         "severity_weight": 1.5,
         "keywords": [
-          "khong dung duoc", "khong hoat dong", "khong len nguon", "bat khong len", "chap chon", "liet phim",
+          "khong dung duoc", "khong dung dc", "ko dung dc", "k dung dc", "khong hoat dong", "khong len nguon", "bat khong len", "chap chon", "liet phim",
           "ket nut", "hong nguon", "chay nguon", "pin yeu", "pin tut nhanh", "chai pin", "sac khong vao",
-          "khong nhan sac", "nong ran", "tieng re", "mat am", "keu to", "ro ri nuoc", "chay nuoc", "kho dung"
+          "khong nhan sac", "nong ran", "tieng re", "mat am", "keu to", "ro ri nuoc", "chay nuoc", "kho dung",
+          "chua dung da hong", "moi dung da hong", "dung vai hom thi hong", "bi loi", "hang loi", "loi san pham"
         ]
       }
     }

@@ -14,7 +14,7 @@ function truncate(value, maxLength = 240) {
 }
 
 export const GEMINI_MODEL = 'gemini-3.5-flash-lite';
-export const GEMINI_ATTEMPT_TIMEOUT_MS = 10_000;
+export const GEMINI_ATTEMPT_TIMEOUT_MS = 25_000;
 
 async function fetchGemini(fetchImpl, url, init, context, model) {
   const startedAt = Date.now();

@@ -51,8 +51,8 @@ test('router chỉ sử dụng Gemini 3.5 Flash Lite dù đầu vào yêu cầu 
   assert.deepEqual(models, [GEMINI_MODEL, GEMINI_MODEL, GEMINI_MODEL]);
 });
 
-test('Flash Lite dùng thinking minimal và timeout mỗi attempt tối đa 10 giây', () => {
-  assert.equal(GEMINI_ATTEMPT_TIMEOUT_MS, 10_000);
+test('Flash Lite dùng thinking minimal và timeout mỗi attempt tối đa 25 giây', () => {
+  assert.equal(GEMINI_ATTEMPT_TIMEOUT_MS, 25_000);
   assert.deepEqual(geminiThinkingConfig('minimal', GEMINI_MODEL), { thinkingLevel: 'minimal' });
 });
 

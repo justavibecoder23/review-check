@@ -41,7 +41,7 @@ test('health router chỉ quản lý quota của Gemini 3.5 Flash Lite', () => {
   assert.deepEqual(GEMINI_MODEL_LIMITS, {
     'gemini-3.5-flash-lite': { rpm: 15, tpm: 250_000, rpd: 500 }
   });
-  assert.equal(GEMINI_TIMEOUT_COOLDOWN_MS, 120_000);
+  assert.equal(GEMINI_TIMEOUT_COOLDOWN_MS, 5_000);
 });
 
 test('Flash Lite chuyển pending khi chạm giới hạn 15 RPM', () => {

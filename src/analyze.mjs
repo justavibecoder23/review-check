@@ -14,6 +14,8 @@ const lowValuePatterns = [/^ok+([.! ]*)$/i, /tốt([.! ]*)$/i, /^đẹp([.! ]*)$
 const exclusionReasonByCode = Object.freeze({
   LOW_VALUE_GIBBERISH: 'Nội dung là chuỗi ký tự ngẫu nhiên hoặc không có nghĩa',
   LOW_VALUE_LOGISTICS_ONLY: 'Chỉ đề cập giao hàng hoặc đóng gói, không đánh giá sản phẩm',
+  LOW_VALUE_NO_USAGE_EXPERIENCE: 'Chưa sử dụng hoặc chưa trải nghiệm sản phẩm, không đủ thông tin đánh giá',
+  LOW_VALUE_NO_USAGE: 'Chưa sử dụng hoặc chưa trải nghiệm sản phẩm, không đủ thông tin đánh giá',
   LOW_VALUE_REPETITION: 'Nội dung lặp ký tự hoặc biểu tượng, không đủ làm bằng chứng',
   LOW_VALUE_ICON_ONLY: 'Chỉ có biểu tượng, không có nhận xét về sản phẩm',
   LOW_VALUE_GENERIC: 'Nhận xét quá chung chung, không có thông tin về sản phẩm',
@@ -90,8 +92,8 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   progress('labeling', 66, 'Đang phân tích reviews...');
   const geminiStartedAt = Date.now();
   const geminiContext = {
-    deadlineAt: geminiStartedAt + 14_500,
-    layer2DeadlineAt: geminiStartedAt + 10_000,
+    deadlineAt: geminiStartedAt + 75_000,
+    layer2DeadlineAt: geminiStartedAt + 45_000,
     busyRouteIds: new Set(),
     failedRouteIds: new Set()
   };

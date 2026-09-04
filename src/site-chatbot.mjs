@@ -239,7 +239,7 @@ export async function answerWebsiteQuestion(messages, options = {}) {
   }
 
   const dedicatedKey = String(process.env.CHATBOT_GEMINI_API_KEY || '').trim();
-  const apiKey = dedicatedKey || process.env.GEMINI_API_KEY;
+  const fallbackApiKey = String(process.env.GEMINI_API_KEY || '').trim();
   const model = CHATBOT_GEMINI_MODEL;
   let providerStatus = null;
   let providerAttempted = false;
@@ -272,8 +272,7 @@ CÁC MỤC LIÊN QUAN TRONG KHO DỮ LIỆU:
 ${contextEntries.map(entry => `[${entry.id}] ${entry.title}\n${entry.answer}`).join('\n\n')}
 `.trim();
 
-  try {
-    const geminiResult = await requestGeminiWithFallback({
+  const requestGemini = ({ credentials, maxRetries, attemptTimeoutMs, standaloneApiKey = fallbackApiKey }) => requestGeminiWithFallback({
       fetchImpl: async (url, init) => {
         providerAttempted = true;
         const response = await boundedFetch(options.fetchImpl || fetch)(url, init);
@@ -281,13 +280,11 @@ ${contextEntries.map(entry => `[${entry.id}] ${entry.title}\n${entry.answer}`).j
         return response;
       },
       redisFetchImpl: boundedFetch(options.redisFetchImpl || fetch),
-      apiKey,
-      ...(dedicatedKey ? {
-        listCredentialsImpl: async () => [{ id: geminiCredentialId(dedicatedKey), apiKey: dedicatedKey, exhaustedModels: [] }]
-      } : {}),
+      apiKey: standaloneApiKey,
+      ...(credentials ? { listCredentialsImpl: async () => credentials } : {}),
       deadlineAt,
-      attemptTimeoutMs: 4_000,
-      maxRetries: 0,
+      attemptTimeoutMs,
+      maxRetries,
       context: 'Gemini chatbot',
       validateResponse: async (response) => {
         const payload = await response.json();
@@ -315,6 +312,32 @@ ${contextEntries.map(entry => `[${entry.id}] ${entry.title}\n${entry.answer}`).j
         })
       })
     });
+
+  try {
+    let geminiResult;
+    if (dedicatedKey) {
+      try {
+        geminiResult = await requestGemini({
+          credentials: [{ id: geminiCredentialId(dedicatedKey), apiKey: dedicatedKey, exhaustedModels: [] }],
+          maxRetries: 0,
+          attemptTimeoutMs: 3_200,
+          standaloneApiKey: dedicatedKey
+        });
+      } catch (dedicatedError) {
+        if (requestSignal.aborted) throw dedicatedError;
+        // Key chatbot là route chính. Khi route này lỗi, chỉ thử thêm một
+        // route khỏe nhất từ pool/GEMINI_API_KEY trong ngân sách 5,5 giây.
+        try {
+          geminiResult = await requestGemini({ maxRetries: 0, attemptTimeoutMs: 2_200 });
+        } catch (backupError) {
+          if (['GEMINI_NOT_CONFIGURED', 'POOL_NOT_CONFIGURED'].includes(backupError?.code)) throw dedicatedError;
+          throw backupError;
+        }
+      }
+    } else {
+      // Không có key riêng: pool được phép đổi sang đúng một key dự phòng.
+      geminiResult = await requestGemini({ maxRetries: 1, attemptTimeoutMs: 2_700 });
+    }
     const parsed = geminiResult.value;
     if (parsed?.supported !== true) return { answer: OUT_OF_SCOPE_REPLY, engine: 'gemini', model };
     const answer = String(parsed.answer || '').trim().slice(0, 1200);

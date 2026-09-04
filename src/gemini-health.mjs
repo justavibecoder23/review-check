@@ -3,7 +3,7 @@ import { isRedisConfigured, redisCommand } from './redis-rest.mjs';
 export const GEMINI_HEALTH_KEY = 'realview:gemini:route-health:v1';
 const MINUTE_MS = 60_000;
 const MAX_EVENT_AGE_MS = 5 * MINUTE_MS;
-export const GEMINI_TIMEOUT_COOLDOWN_MS = 120_000;
+export const GEMINI_TIMEOUT_COOLDOWN_MS = 5_000;
 export const GEMINI_MODEL_LIMITS = Object.freeze({
   'gemini-3.5-flash-lite': { rpm: 15, tpm: 250_000, rpd: 500 }
 });

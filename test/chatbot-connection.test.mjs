@@ -46,6 +46,40 @@ test('key riêng chatbot được ưu tiên và không thay key/model của back
   assert.doesNotMatch(JSON.stringify(result), /chatbot-test-key|analysis-test-key/);
 }));
 
+test('key chatbot lỗi thì chuyển đúng một lần sang key dự phòng trong pool', () => withEnv({
+  CHATBOT_GEMINI_API_KEY: 'chatbot-primary-key',
+  UPSTASH_REDIS_REST_URL: 'https://redis.test', UPSTASH_REDIS_REST_TOKEN: 'redis-test-token',
+  GEMINI_API_KEY_VAULT_KEY: Buffer.alloc(32, 1).toString('base64')
+}, async () => {
+  const iv = Buffer.alloc(12, 9);
+  const cipher = createCipheriv('aes-256-gcm', Buffer.alloc(32, 1), iv);
+  const encrypted = Buffer.concat([cipher.update('chatbot-backup-key', 'utf8'), cipher.final()]);
+  const credentials = [{
+    id: 'backup-0', label: 'backup-0', iv: iv.toString('base64'),
+    tag: cipher.getAuthTag().toString('base64'), ciphertext: encrypted.toString('base64')
+  }];
+  const calls = [];
+  const result = await answerWebsiteQuestion(question('Giải thích giúp tôi quy trình RealView thật dễ hiểu nhé'), {
+    redisFetchImpl: async (url, init) => {
+      const command = JSON.parse(init.body);
+      if (url.endsWith('/multi-exec')) return new Response(JSON.stringify([{ result: JSON.stringify({ credentials }) }, { result: [] }]));
+      if (command[0] === 'HMGET') return new Response(JSON.stringify({ result: command.slice(2).map(() => null) }));
+      if (command[0] === 'EVAL') return new Response(JSON.stringify({ result: JSON.stringify({ ok: true, state: {} }) }));
+      throw new Error('Unexpected Redis command');
+    },
+    fetchImpl: async (_url, init) => {
+      const key = init.headers['x-goog-api-key'];
+      calls.push(key);
+      return key === 'chatbot-primary-key'
+        ? new Response(JSON.stringify({ error: { message: 'temporary failure' } }), { status: 503 })
+        : success('RealView thu thập và tổng hợp review công khai.');
+    }
+  });
+  assert.deepEqual(calls, ['chatbot-primary-key', 'chatbot-backup-key']);
+  assert.equal(result.engine, 'gemini');
+  assert.doesNotMatch(JSON.stringify(result), /chatbot-(?:primary|backup)-key/);
+}));
+
 test('câu hỏi chủ đề mới không bị lịch sử rating lấn át', () => withEnv({ GEMINI_API_KEY: 'test-key' }, async () => {
   const messages = [...question('Rating cao có đồng nghĩa TrustScore cao không?'), { role: 'assistant', content: 'Hai chỉ số khác nhau.' }, ...question('Giải thích giúp tôi quy trình RealView thật dễ hiểu nhé')];
   const result = await answerWebsiteQuestion(messages, {
