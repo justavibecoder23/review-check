@@ -302,4 +302,3 @@ if (backToTop) {
   window.addEventListener('scroll', updateBackToTop, { passive: true });
   updateBackToTop();
 }
-
