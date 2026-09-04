@@ -3,6 +3,7 @@ import { geminiThinkingConfig, parseGeminiJson, requestGeminiWithFallback } from
 import { geminiCredentialId } from './gemini-credential-store.mjs';
 
 export const CHATBOT_GEMINI_MODEL = 'gemini-3.5-flash-lite';
+export const CHATBOT_RESPONSE_BUDGET_MS = 5_500;
 
 const OUT_OF_SCOPE_REPLY = 'Mình chưa có thông tin này trong kho dữ liệu RealView. Bạn có thể liên hệ đội ngũ để được hỗ trợ.';
 
@@ -19,6 +20,15 @@ THÔNG TIN VẬN HÀNH HIỆN TẠI (ƯU TIÊN CAO NHẤT)
 `.trim();
 
 const currentAnswerOverrides = {
+  about_001: 'RealView hỗ trợ người mua hiểu các đánh giá sản phẩm trước khi quyết định. Hệ thống tổng hợp ưu điểm, nhược điểm, trình bày TrustScore về độ tin cậy của tập review và cho phép xem các review đáng tham khảo hoặc bị loại.',
+  about_007: 'Trang kết quả gồm thông tin sản phẩm, TrustScore, ưu điểm, nhược điểm, lý do ảnh hưởng độ tin cậy, review đáng tham khảo và review bị loại. Phiên bản hiện tại không hiển thị Confidence.',
+  usage_005: 'Phần đầu trang kết quả hiển thị thông tin sản phẩm và TrustScore. TrustScore đo độ tin cậy của tập review, không phải điểm chất lượng sản phẩm; Confidence không còn hiển thị.',
+  usage_006: 'Sau TrustScore, bạn có thể xem ưu điểm và nhược điểm được tổng hợp từ review đáng tham khảo. Đây là bản tóm tắt phản hồi, không phải cam kết tuyệt đối về chất lượng sản phẩm.',
+  usage_010: 'Hãy đọc TrustScore cùng ưu điểm, nhược điểm, lý do ảnh hưởng điểm số và các review cụ thể. Bạn cần đối chiếu với nhu cầu của mình, không quyết định mua chỉ vì TrustScore cao.',
+  trustscore_014: 'Không nên quyết định mua chỉ vì TrustScore cao. Chỉ số này đo độ tin cậy của tập review, không khẳng định sản phẩm phù hợp với bạn. Hãy đọc ưu điểm, nhược điểm và review đáng tham khảo để cân nhắc.',
+  analysis_010: 'Không. Kết quả phụ thuộc vào tập review khả dụng và chỉ mang tính hỗ trợ. RealView cung cấp các lý do ảnh hưởng độ tin cậy cùng review cụ thể để người dùng tự đối chiếu.',
+  error_003: 'Khi có quá ít review, dữ liệu có thể chưa đủ để phân tích khách quan hoặc đưa ra kết luận ổn định. RealView không tự bổ sung thông tin còn thiếu; bạn nên tìm thêm đánh giá và đối chiếu trực tiếp trên sàn.',
+  review_008: 'RealView có thể loại hoặc giảm ảnh hưởng của review quá ngắn, ít thông tin; không mô tả trải nghiệm sản phẩm hoặc chỉ nói về giao hàng/shop; nội dung trùng lặp bất thường; hoặc số sao mâu thuẫn rõ với lời nhận xét. Review chê sản phẩm hoặc chấm ít sao không bị loại chỉ vì tiêu cực nếu có trải nghiệm cụ thể, liên quan đến sản phẩm. Bị loại không đồng nghĩa review đó chắc chắn là giả.',
   about_003: 'RealView hỗ trợ liên kết sản phẩm Shopee và TikTok Shop. Các nền tảng khác chưa được hỗ trợ.',
   usage_001: 'Bạn sao chép rồi dán liên kết sản phẩm Shopee hoặc TikTok Shop vào ô phân tích của RealView. Hệ thống thu thập review công khai, lọc nội dung ít thông tin hoặc trùng lặp, rồi tổng hợp ưu điểm, nhược điểm và tính TrustScore. Trang kết quả cung cấp các lý do ảnh hưởng điểm số cùng review đáng tham khảo và review bị loại để bạn đối chiếu. TrustScore thể hiện độ tin cậy của tập review, không phải điểm chất lượng sản phẩm.',
   usage_002: 'Bạn cần mở đúng trang sản phẩm trên Shopee hoặc TikTok Shop và sao chép liên kết của sản phẩm muốn kiểm tra.',
@@ -34,6 +44,9 @@ const currentAnswerOverrides = {
 };
 
 const currentQuestionVariants = {
+  review_008: ['Review bị loại theo tiêu chí nào?', 'Tiêu chí lọc review là gì?', 'Đánh giá bị loại theo tiêu chí nào?', 'Vì sao review bị loại?', 'Tại sao đánh giá bị loại?', 'RealView loại review như thế nào?', 'Những review nào bị loại?', 'Tiêu chí loại bỏ đánh giá là gì?'],
+  review_006: ['Review bị loại có phải là review giả không?', 'Review bị loại có chắc là giả không?'],
+  review_009: ['RealView có loại mọi review 1 sao không?', 'Đánh giá tiêu cực có bị loại không?'],
   usage_001: ['RealView hoạt động thế nào?', 'RealView hoạt động như thế nào?', 'Website hoạt động ra sao?', 'Quy trình RealView là gì?', 'Cách dùng RealView?']
 };
 
@@ -46,7 +59,8 @@ function loadKnowledgeBase() {
     const id = String(entry?.id || '').trim();
     const category = String(entry?.category || '').trim();
     const title = String(entry?.title || '').trim();
-    const answer = String(currentAnswerOverrides[id] || entry?.answer || '').replace(/\s+/g, ' ').trim();
+    let answer = String(currentAnswerOverrides[id] || entry?.answer || '').replace(/\s+/g, ' ').trim();
+    if (id.startsWith('confidence_')) answer = `Confidence không còn hiển thị trên trang kết quả hiện tại. Trong phiên bản trước, ${answer.charAt(0).toLocaleLowerCase('vi')}${answer.slice(1)}`;
     const questionVariants = Array.isArray(entry?.question_variants)
       ? entry.question_variants.map((value) => String(value || '').replace(/\s+/g, ' ').trim()).filter(Boolean)
       : [];
@@ -89,6 +103,33 @@ function tokenize(value) {
   return [...new Set(normalizeText(value).split(/\s+/).filter((token) => token.length > 1 && !STOP_WORDS.has(token)))];
 }
 
+function canonicalQuestion(value) {
+  return normalizeText(value)
+    .replace(/\breal view\b/g, 'realview')
+    .replace(/\btrust score\b/g, 'trustscore')
+    .replace(/^(?:xin chao|chao ban|ban oi)\s+/, '')
+    .replace(/^(?:cho (?:minh|toi) hoi|(?:minh|toi) muon hoi)\s+/, '')
+    .replace(/^giai thich giup (?:minh|toi)\s+/, '')
+    .replace(/\s+that de hieu(?: nhe)?$/, '')
+    .replace(/\s+(?:a|nhe|nha|voi a|cam on)$/, '').trim();
+}
+
+const exactKnowledge = new Map();
+for (const entry of knowledgeBase) {
+  for (const variant of [entry.title, ...entry.questionVariants]) {
+    const key = canonicalQuestion(variant);
+    const entries = exactKnowledge.get(key) || new Map();
+    entries.set(entry.id, entry);
+    exactKnowledge.set(key, entries);
+  }
+}
+
+export function directKnowledgeAnswer(question) {
+  const entries = exactKnowledge.get(canonicalQuestion(question));
+  // Chỉ trả trực tiếp khi khớp trọn câu và duy nhất một mục, không đoán theo từ khóa.
+  return entries?.size === 1 ? [...entries.values()][0] : null;
+}
+
 const searchableKnowledge = knowledgeBase.map((entry) => ({
   entry,
   title: normalizeText(entry.title),
@@ -104,8 +145,8 @@ function countTokenMatches(queryTokens, fieldTokens) {
 }
 
 function retrieveKnowledge(question, limit = 8) {
-  const normalizedQuestion = normalizeText(question);
-  const queryTokens = tokenize(question);
+  const normalizedQuestion = canonicalQuestion(question);
+  const queryTokens = tokenize(normalizedQuestion);
   if (!normalizedQuestion || !queryTokens.length) return [];
 
   return searchableKnowledge
@@ -166,9 +207,10 @@ function cleanMessages(messages) {
 }
 
 function fallbackAnswer(matches) {
-  const best = matches[0];
-  // Chỉ dùng FAQ khớp rõ ràng khi Gemini lỗi, không đoán từ một từ đơn lẻ.
-  return best && (best.score >= 100 || best.coverage === 1) ? best.answer : OUT_OF_SCOPE_REPLY;
+  const topics = matches.slice(0, 2).map(entry => `“${entry.title}”`).join(' hoặc ');
+  return topics
+    ? `Mình chưa thể diễn giải câu hỏi này vì kết nối AI đang gián đoạn. Bạn muốn hỏi về ${topics}?`
+    : 'Kết nối AI đang tạm thời gián đoạn. Bạn vẫn có thể hỏi “RealView hoạt động thế nào?”, “TrustScore là gì?” hoặc “Review bị loại theo tiêu chí nào?” để xem câu trả lời từ kho dữ liệu chính thức.';
 }
 
 function fallbackReason(error) {
@@ -187,6 +229,8 @@ export async function answerWebsiteQuestion(messages, options = {}) {
   const cleaned = cleanMessages(messages);
   const latestQuestion = cleaned.at(-1).content;
   if (isClearlyProductAdvice(latestQuestion)) return { answer: OUT_OF_SCOPE_REPLY, engine: 'rules' };
+  const direct = directKnowledgeAnswer(latestQuestion);
+  if (direct) return { answer: direct.answer, engine: 'knowledge-base', sourceId: direct.id };
   // Câu hỏi mới quyết định chủ đề; không trộn câu hỏi trước vào mọi lượt.
   let matches = retrieveKnowledge(latestQuestion);
   if (!matches.length && /^(con |vay |the |no |cai do |chi so do )/.test(normalizeText(latestQuestion))) {
@@ -200,7 +244,14 @@ export async function answerWebsiteQuestion(messages, options = {}) {
   let providerStatus = null;
   let providerAttempted = false;
   // Khi cách diễn đạt chưa khớp từ khóa, để Gemini tìm ý trong kho chính thức.
-  const contextEntries = matches.length ? matches : knowledgeBase;
+  const contextEntries = matches.length ? matches.slice(0, 6) : knowledgeBase;
+  const budgetMs = Math.min(CHATBOT_RESPONSE_BUDGET_MS, Math.max(25, Number(options.timeoutMs) || CHATBOT_RESPONSE_BUDGET_MS));
+  const deadlineAt = Date.now() + budgetMs;
+  const requestSignal = AbortSignal.timeout(budgetMs);
+  const boundedFetch = (implementation) => async (url, init = {}) => {
+    requestSignal.throwIfAborted();
+    return implementation(url, { ...init, signal: init.signal ? AbortSignal.any([init.signal, requestSignal]) : requestSignal });
+  };
   const prompt = `
 Bạn là Trợ lý RealView. Hãy trả lời bằng tiếng Việt, thân thiện, ngắn gọn và dễ hiểu.
 
@@ -218,24 +269,25 @@ QUY TẮC BẮT BUỘC:
 ${currentWebsiteFacts}
 
 CÁC MỤC LIÊN QUAN TRONG KHO DỮ LIỆU:
-${formatKnowledgeEntries(contextEntries)}
+${contextEntries.map(entry => `[${entry.id}] ${entry.title}\n${entry.answer}`).join('\n\n')}
 `.trim();
 
   try {
     const geminiResult = await requestGeminiWithFallback({
       fetchImpl: async (url, init) => {
         providerAttempted = true;
-        const response = await (options.fetchImpl || fetch)(url, init);
+        const response = await boundedFetch(options.fetchImpl || fetch)(url, init);
         providerStatus = Number(response.status) || null;
         return response;
       },
-      redisFetchImpl: options.redisFetchImpl,
+      redisFetchImpl: boundedFetch(options.redisFetchImpl || fetch),
       apiKey,
       ...(dedicatedKey ? {
         listCredentialsImpl: async () => [{ id: geminiCredentialId(dedicatedKey), apiKey: dedicatedKey, exhaustedModels: [] }]
       } : {}),
-      deadlineAt: Date.now() + 22_000,
-      maxRetries: 1,
+      deadlineAt,
+      attemptTimeoutMs: 4_000,
+      maxRetries: 0,
       context: 'Gemini chatbot',
       validateResponse: async (response) => {
         const payload = await response.json();
@@ -247,6 +299,7 @@ ${formatKnowledgeEntries(contextEntries)}
       buildRequest: (selectedModel, selectedApiKey) => ({
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-goog-api-key': selectedApiKey },
+        signal: requestSignal,
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: prompt }] },
           contents: cleaned.map((message) => ({
