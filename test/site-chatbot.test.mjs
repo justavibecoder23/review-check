@@ -36,7 +36,7 @@ test('chatbot dùng Gemini ở backend và chấp nhận câu hỏi thuộc ph�
   let requestPayload;
   let receivedUrl;
   try {
-    const result = await answerWebsiteQuestion([{ role: 'user', content: 'TrustScore là gì?' }], {
+    const result = await answerWebsiteQuestion([{ role: 'user', content: 'Giải thích giúp tôi ý nghĩa TrustScore thật dễ hiểu nhé' }], {
       fetchImpl: async (_url, options) => {
         receivedUrl = _url;
         receivedKey = options.headers['x-goog-api-key'];
@@ -53,7 +53,7 @@ test('chatbot dùng Gemini ở backend và chấp nhận câu hỏi thuộc ph�
     assert.match(receivedUrl, /models\/gemini-3\.5-flash-lite:generateContent$/);
     assert.equal(result.model, CHATBOT_GEMINI_MODEL);
     assert.match(requestPayload.systemInstruction.parts[0].text, /Chỉ được dùng/);
-    assert.equal(requestPayload.contents.at(-1).parts[0].text, 'TrustScore là gì?');
+    assert.equal(requestPayload.contents.at(-1).parts[0].text, 'Giải thích giúp tôi ý nghĩa TrustScore thật dễ hiểu nhé');
     assert.equal(requestPayload.generationConfig.temperature, undefined);
     assert.equal(requestPayload.generationConfig.thinkingConfig.thinkingLevel, 'minimal');
     assert.ok(requestPayload.generationConfig.maxOutputTokens >= 1024);
@@ -70,7 +70,7 @@ test('chatbot log lỗi Gemini an toàn rồi fallback khi response bị cắt',
   process.env.GEMINI_API_KEY = 'test-only-key';
   const logged = [];
   try {
-    const result = await answerWebsiteQuestion([{ role: 'user', content: 'TrustScore là gì?' }], {
+    const result = await answerWebsiteQuestion([{ role: 'user', content: 'Giải thích giúp tôi ý nghĩa TrustScore thật dễ hiểu nhé' }], {
       logGeminiErrors: true,
       logger: { error: (...args) => logged.push(args) },
       fetchImpl: async () => ({
@@ -122,15 +122,15 @@ test('chatbot quy tắc không tư vấn sản phẩm khi Gemini chưa được 
   }
 });
 
-test('chatbot có câu trả lời dự phòng khi Gemini chưa được cấu hình', async () => {
+test('FAQ trả lời trực tiếp ngay cả khi Gemini chưa được cấu hình', async () => {
   const previousKey = process.env.GEMINI_API_KEY;
   delete process.env.GEMINI_API_KEY;
   try {
     const result = await answerWebsiteQuestion([{ role: 'user', content: 'Cách dùng RealView?' }]);
-    assert.equal(result.engine, 'rules');
+    assert.equal(result.engine, 'knowledge-base');
     assert.match(result.answer, /dán liên kết sản phẩm Shopee/i);
     assert.match(result.answer, /TikTok Shop/);
-    assert.equal(result.fallbackReason, 'not_configured');
+    assert.equal(result.sourceId, 'usage_001');
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
   }
