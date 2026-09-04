@@ -94,7 +94,7 @@
     messagesRoot.scrollTo({ top: messagesRoot.scrollHeight, behavior: 'smooth' });
   }
 
-  function addMessage(role, content) {
+  function addMessage(role, content, engine) {
     const message = document.createElement('article');
     message.className = `chatbot-message chatbot-message--${role}`;
     if (role === 'assistant') {
@@ -110,7 +110,7 @@
     body.append(text);
     if (role === 'assistant') {
       const label = document.createElement('time');
-      label.textContent = 'Trợ lý RealView';
+      label.textContent = engine === 'knowledge-base' ? 'Kho dữ liệu RealView' : 'Trợ lý RealView';
       body.append(label);
     }
     message.append(body);
@@ -145,13 +145,14 @@
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ messages: conversation.slice(-8) })
+        body: JSON.stringify({ messages: conversation.slice(-8) }),
+        signal: AbortSignal.timeout(12_000)
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Không thể kết nối Trợ lý RealView.');
       const answer = String(data.answer || 'Mình chưa có thông tin này trong kho dữ liệu RealView. Bạn có thể liên hệ đội ngũ để được hỗ trợ.');
       loading.remove();
-      addMessage('assistant', answer);
+      addMessage('assistant', answer, data.engine);
       conversation.push({ role: 'assistant', content: answer });
       if (conversation.length > 8) conversation.splice(0, conversation.length - 8);
     } catch {
@@ -191,4 +192,3 @@
     if (event.key === 'Escape' && trigger.getAttribute('aria-expanded') === 'true') setOpen(false);
   });
 })();
-

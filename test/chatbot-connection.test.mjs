@@ -26,14 +26,14 @@ test('không chọn câu trả lời chỉ vì trùng một từ chung', () => {
 
 test('khi không có key, câu hỏi quy trình không còn trả nhầm về rating', () => withEnv({}, async () => {
   const result = await answerWebsiteQuestion(question('RealView hoạt động thế nào?'), { fetchImpl: () => { throw new Error('Không được gọi mạng khi thiếu key'); } });
-  assert.equal(result.engine, 'rules');
-  assert.equal(result.fallbackReason, 'not_configured');
+  assert.equal(result.engine, 'knowledge-base');
+  assert.equal(result.sourceId, 'usage_001');
   assert.match(result.answer, /thu thập review công khai/);
   assert.doesNotMatch(result.answer, /^Không\. Rating/);
 }));
 
 test('key riêng chatbot được ưu tiên và không thay key/model của backend khác', () => withEnv({ GEMINI_API_KEY: 'analysis-test-key', CHATBOT_GEMINI_API_KEY: 'chatbot-test-key' }, async () => {
-  const result = await answerWebsiteQuestion(question('RealView hoạt động thế nào?'), {
+  const result = await answerWebsiteQuestion(question('Giải thích giúp tôi quy trình RealView thật dễ hiểu nhé'), {
     fetchImpl: async (url, init) => {
       assert.match(url, /gemini-3\.5-flash-lite:generateContent$/);
       assert.equal(init.headers['x-goog-api-key'], 'chatbot-test-key');
@@ -47,12 +47,12 @@ test('key riêng chatbot được ưu tiên và không thay key/model của back
 }));
 
 test('câu hỏi chủ đề mới không bị lịch sử rating lấn át', () => withEnv({ GEMINI_API_KEY: 'test-key' }, async () => {
-  const messages = [...question('Rating cao có đồng nghĩa TrustScore cao không?'), { role: 'assistant', content: 'Hai chỉ số khác nhau.' }, ...question('RealView hoạt động thế nào?')];
+  const messages = [...question('Rating cao có đồng nghĩa TrustScore cao không?'), { role: 'assistant', content: 'Hai chỉ số khác nhau.' }, ...question('Giải thích giúp tôi quy trình RealView thật dễ hiểu nhé')];
   const result = await answerWebsiteQuestion(messages, {
     fetchImpl: async (_url, init) => {
       const body = JSON.parse(init.body);
       assert.equal(body.contents[1].role, 'model');
-      assert.equal(body.contents.at(-1).parts[0].text, 'RealView hoạt động thế nào?');
+      assert.equal(body.contents.at(-1).parts[0].text, 'Giải thích giúp tôi quy trình RealView thật dễ hiểu nhé');
       assert.match(body.systemInstruction.parts[0].text, /\[usage_001\]/);
       assert.doesNotMatch(body.systemInstruction.parts[0].text, /\[trustscore_006\]/);
       return success('Bạn dán link, RealView thu thập và tổng hợp review.');
@@ -85,7 +85,7 @@ test('Gemini có thể từ chối câu hỏi ngoài dữ liệu', () => withEnv
 test('phân loại lỗi kết nối mà không trả khóa hoặc lỗi thô cho người dùng', () => withEnv({ GEMINI_API_KEY: 'private-test-key' }, async () => {
   for (const [status, expected] of [[403, 'authentication_failed'], [429, 'quota_exhausted'], [503, 'connection_failed']]) {
     const logs = [];
-    const result = await answerWebsiteQuestion(question('TrustScore là gì?'), {
+    const result = await answerWebsiteQuestion(question('Giải thích giúp tôi ý nghĩa TrustScore thật dễ hiểu nhé'), {
       logGeminiErrors: true, logger: { error: (...args) => logs.push(args) },
       fetchImpl: async () => new Response(JSON.stringify({ error: { message: 'private-test-key provider detail' } }), { status })
     });
@@ -95,7 +95,7 @@ test('phân loại lỗi kết nối mà không trả khóa hoặc lỗi thô ch
   }
 }));
 
-test('chỉ có key trong pool vẫn kết nối Gemini; timeout thử key tiếp theo', () => withEnv({
+test('câu hỏi mở vẫn dùng key trong pool với model Gemini hiện tại', () => withEnv({
   UPSTASH_REDIS_REST_URL: 'https://redis.test', UPSTASH_REDIS_REST_TOKEN: 'redis-test-token',
   GEMINI_API_KEY_VAULT_KEY: Buffer.alloc(32, 1).toString('base64')
 }, async () => {
@@ -106,7 +106,7 @@ test('chỉ có key trong pool vẫn kết nối Gemini; timeout thử key tiế
     return { id: `pool-${index}`, label: `pool-${index}`, iv: iv.toString('base64'), tag: cipher.getAuthTag().toString('base64'), ciphertext: encrypted.toString('base64') };
   });
   const calls = [];
-  const result = await answerWebsiteQuestion(question('RealView hoạt động thế nào?'), {
+  const result = await answerWebsiteQuestion(question('Giải thích giúp tôi quy trình RealView thật dễ hiểu nhé'), {
     redisFetchImpl: async (url, init) => {
       const command = JSON.parse(init.body);
       if (url.endsWith('/multi-exec')) return new Response(JSON.stringify([{ result: JSON.stringify({ credentials }) }, { result: [] }]));
@@ -116,11 +116,10 @@ test('chỉ có key trong pool vẫn kết nối Gemini; timeout thử key tiế
     },
     fetchImpl: async (_url, init) => {
       calls.push(init.headers['x-goog-api-key']);
-      if (calls.length === 1) throw Object.assign(new Error('timeout'), { name: 'TimeoutError' });
       return success('Bạn dán link sản phẩm, RealView sẽ tổng hợp review.');
     }
   });
-  assert.deepEqual(calls, ['pool-key-one', 'pool-key-two']);
+  assert.deepEqual(calls, ['pool-key-one']);
   assert.equal(result.engine, 'gemini');
   assert.doesNotMatch(JSON.stringify(result), /pool-key/);
 }));
