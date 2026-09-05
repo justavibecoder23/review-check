@@ -55,7 +55,7 @@
           <div class="criteria-art-frame">
             <img src="/assets/illustrations/undraw-online-review.svg" alt="" />
           </div>
-          <span class="criteria-art-tag">How We Evaluate</span>
+          <span class="criteria-art-tag">Cách chúng tôi đánh giá</span>
         </div>
         <div class="criteria-hero-copy criteria-reveal">
           <p class="criteria-purpose"><span aria-hidden="true">♥</span> Vì quyền lợi người tiêu dùng</p>
