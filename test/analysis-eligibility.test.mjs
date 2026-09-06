@@ -27,7 +27,7 @@ test('mẫu chia tầng không bị chặn khi thiếu một số tầng sao', (
   const reviews = [1, 3].flatMap((rating) => Array.from({ length: 10 }, () => ({ rating, text: 'Review' })));
   const coverage = checkSamplingCoverage(reviews, { strategy: 'parallel-star-filters' });
   assert.equal(coverage.complete, false);
-  assert.deepEqual(coverage.missingRatings, [5]);
+  assert.deepEqual(coverage.missingRatings, [2, 4, 5]);
   assert.doesNotThrow(() => assertSamplingCoverage(reviews, { strategy: 'parallel-star-filters' }));
   assert.equal(assertSamplingCoverage(reviews, { strategy: 'unfiltered' }), true);
 });

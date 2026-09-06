@@ -102,12 +102,12 @@ test('không tự đổi credential giữa một lượt khi account bị từ c
   );
 });
 
-test('mặc định production lấy tối đa 60 review bằng 3 filter sao song song và khử trùng', async () => {
+test('mặc định production lấy tối đa 100 review bằng 5 filter sao song song và khử trùng', async () => {
   const inputs = [];
   const credentialSet = {
     groupId: 'group-production', groupLabel: 'production', source: 'test', maxUsesPerKey: 10,
     retiresAfterReservation: false,
-    credentials: [5, 3, 1].map((star) => ({
+    credentials: [5, 4, 3, 2, 1].map((star) => ({
       id: `key-${star}`, label: `account-${star}`, token: `token-${star}`, star, usageCount: 1
     }))
   };
@@ -128,13 +128,13 @@ test('mặc định production lấy tối đa 60 review bằng 3 filter sao son
       };
     }
   });
-  assert.equal(inputs.length, 3);
-  assert.deepEqual(inputs.map((input) => input.starFilter), ['5', '3', '1']);
+  assert.equal(inputs.length, 5);
+  assert.deepEqual(inputs.map((input) => input.starFilter), ['5', '4', '3', '2', '1']);
   assert.ok(inputs.every((input) => input.contentFilter === 'with comments'));
   assert.ok(inputs.every((input) => input.maxReviewsPerProduct === 20));
-  assert.equal(result.reviews.length, 60);
+  assert.equal(result.reviews.length, 100);
   assert.equal(result.collection.strategy, 'parallel-star-filters');
-  assert.deepEqual(result.collection.ratingStrata, [1, 3, 5]);
-  assert.equal(result.collection.targetMaximum, 60);
+  assert.deepEqual(result.collection.ratingStrata, [1, 2, 3, 4, 5]);
+  assert.equal(result.collection.targetMaximum, 100);
   assert.equal(JSON.stringify(result).includes('token-'), false);
 });

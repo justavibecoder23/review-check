@@ -1,5 +1,5 @@
 export const MINIMUM_REVIEWS_FOR_ANALYSIS = 20;
-export const TRUST_SCORE_ANCHOR_RATINGS = Object.freeze([1, 3, 5]);
+export const TRUST_SCORE_ANCHOR_RATINGS = Object.freeze([1, 2, 3, 4, 5]);
 
 function requiredRatingStrata(collection = {}) {
   const configured = Array.isArray(collection?.ratingStrata)

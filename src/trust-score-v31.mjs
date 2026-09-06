@@ -1,6 +1,6 @@
 const ALPHA_FAMILY = 0.01;
 const FISHER_ALPHA = 0.025;
-const DEFAULT_RATING_STRATA = Object.freeze([1, 3, 5]);
+const DEFAULT_RATING_STRATA = Object.freeze([1, 2, 3, 4, 5]);
 const TARGET_EFFECTIVE_SAMPLE = 60;
 
 export const ISSUE_DEFINITIONS = [
@@ -254,8 +254,7 @@ function samplingPolicy(sampling = {}) {
 
 function statisticalSamples(reviews, policy) {
   const annotated = reviews.map((review, index) => ({ review, index, signal: classifyReviewSignals(review) }));
-  // Mỗi provider công bố chính xác các tầng mà scraper đã chủ động lấy.
-  // Shopee dùng 1★/3★/5★; TikTok dùng đủ 1★–5★.
+  // Cả Shopee và TikTok đều dùng đủ 5 tầng 1★–5★ theo thiết kế chuẩn.
   const audit = policy.stratifiedByRating
     ? annotated.filter(({ review }) => policy.ratingStrata.includes(Number(review.rating)))
     : annotated;

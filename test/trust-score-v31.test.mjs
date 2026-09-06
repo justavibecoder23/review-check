@@ -97,10 +97,10 @@ test('mẫu chia tầng không được giả là phân bố rating tự nhiên'
   assert.equal(result.sampling.populationInferenceEnabled, false);
   assert.equal(result.fisher.positive.pValue, null);
   assert.equal(result.fisher.negative.pValue, null);
-  assert.ok(Math.abs(result.adequacy.balancedEvidenceSize - 60) < 1e-10);
+  assert.ok(Math.abs(result.adequacy.balancedEvidenceSize - 100) < 1e-10);
   assert.equal(result.adequacy.effectiveSampleSizeDeprecated, true);
-  assert.equal(result.sample.statisticalPopulation, 60);
-  assert.equal(result.sample.excludedBySamplingDesign, 40);
+  assert.equal(result.sample.statisticalPopulation, 100);
+  assert.equal(result.sample.excludedBySamplingDesign, 0);
   assert.deepEqual(result.adequacy.missingRatings, []);
 });
 
@@ -125,7 +125,7 @@ test('mẫu chia tầng dùng mốc 1,3,5 và review 2,4 không làm lệch defe
     rating, labels: { has_defect: true, defect_categories: ['su-dung'] }
   }));
   const result = calculateTrustScoreV31([...clean(1), ...defective(2), ...clean(3), ...defective(4), ...clean(5)], {
-    sampling: { strategy: 'parallel-star-filters', perStarLimit: 20 }
+    sampling: { strategy: 'parallel-star-filters', ratingStrata: [1, 3, 5], perStarLimit: 20 }
   });
   assert.equal(result.defects.estimator.method, 'equal-anchor-ratings');
   assert.deepEqual(result.defects.estimator.strata.map((item) => item.rating), [1, 3, 5]);
@@ -147,7 +147,7 @@ test('TikTok dùng đủ năm tầng 1–5 theo đúng thiết kế lấy mẫu 
 });
 
 test('thiếu một tầng chuẩn thì không công bố TrustScore', () => {
-  const reviews = [3, 5].flatMap((rating) => Array.from({ length: 20 }, (_, index) => usefulReview(index, { rating })));
+  const reviews = [2, 3, 4, 5].flatMap((rating) => Array.from({ length: 20 }, (_, index) => usefulReview(index, { rating })));
   const result = calculateTrustScoreV31(reviews, { sampling: { strategy: 'parallel-star-filters', perStarLimit: 20 } });
   assert.equal(result.score, null);
   assert.equal(result.rawScore, null);
@@ -208,7 +208,7 @@ test('suy luận chỉ bật khi mẫu ngẫu nhiên và baseline đã hiệu ch
 });
 
 test('cờ randomized không bật suy luận tổng thể khi mẫu vẫn chia tầng sao', () => {
-  const reviews = [1, 3, 5].flatMap((rating) => Array.from({ length: 20 }, (_, index) => usefulReview(index, { rating })));
+  const reviews = [1, 2, 3, 4, 5].flatMap((rating) => Array.from({ length: 20 }, (_, index) => usefulReview(index, { rating })));
   const result = calculateTrustScoreV31(reviews, {
     sampling: { strategy: 'parallel-star-filters', randomized: true, perStarLimit: 20 }
   });

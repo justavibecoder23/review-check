@@ -5,10 +5,10 @@ import { timeoutAbortSignal } from './abort.mjs';
 
 const DEFAULT_ACTOR_ID = 'zen-studio/shopee-product-reviews-scraper';
 export const SHOPEE_DEMO_REVIEW_LIMIT = 20;
-export const SHOPEE_PRODUCTION_REVIEW_LIMIT = 60;
-// Actor chỉ hỗ trợ một mức sao mỗi run. Ba tầng 5★, 3★ và 1★ giữ được
-// ba cực tích cực/trung tính/tiêu cực mà không tạo phần giao nhau.
-export const SHOPEE_STAR_FILTERS = Object.freeze(['5', '3', '1']);
+export const SHOPEE_PRODUCTION_REVIEW_LIMIT = 100;
+// Actor chỉ hỗ trợ một mức sao mỗi run. Đủ 5 tầng 5★, 4★, 3★, 2★ và 1★
+// tối đa 100 review, đồng bộ kiến trúc với TikTok Shop.
+export const SHOPEE_STAR_FILTERS = Object.freeze(['5', '4', '3', '2', '1']);
 
 function actorPath(actorId) {
   return encodeURIComponent(String(actorId || DEFAULT_ACTOR_ID).trim().replace('/', '~'));
@@ -246,7 +246,7 @@ async function collectShopeeReviewsProduction(url, options = {}) {
   const successful = runs.filter((run) => run.ok);
   if (!successful.length) {
     const detail = runs.map((run) => `${run.star}★: ${run.error}`).join(' | ');
-    const error = new Error(`Không lấy được reviews Shopee từ 3 nhóm sao. ${detail}`);
+    const error = new Error(`Không lấy được reviews Shopee từ 5 nhóm sao. ${detail}`);
     error.statusCode = 502;
     throw error;
   }
