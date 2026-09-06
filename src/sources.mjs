@@ -475,7 +475,7 @@ export async function getReviews(url, options = {}) {
     : null;
   const productUrl = shopeeProduct?.canonicalUrl || tiktokProduct?.productUrl || parsed.href;
   const perStarLimit = platform === 'Shopee' ? getShopeeReviewsPerStar() : null;
-  const reviewLimit = platform === 'Shopee' ? perStarLimit : 100;
+  const reviewLimit = 100;
 
   if (shopeeProduct?.wasShortened) {
     warnings.push('Đã mở link chia sẻ Shopee và chuẩn hóa về đúng sản phẩm trước khi thu thập review.');
@@ -506,7 +506,7 @@ export async function getReviews(url, options = {}) {
   try {
     progress('collecting', 14, 'Đang khởi tạo hệ thống lấy reviews...');
     const collected = platform === 'Shopee'
-      ? await collectShopeeReviews(productUrl, { reviewLimit: perStarLimit, onProgress: options.onProgress, signal: options.signal })
+      ? await collectShopeeReviews(productUrl, { onProgress: options.onProgress, signal: options.signal })
       : await collectTikTokReviews(tiktokProduct.productId, { productUrl, onProgress: options.onProgress, signal: options.signal });
     const reviews = collected.reviews;
     const pageMeta = await productMetaPromise;

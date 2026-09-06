@@ -146,12 +146,12 @@ test('TikTok dùng đủ năm tầng 1–5 theo đúng thiết kế lấy mẫu 
   assert.deepEqual(result.defects.estimator.strata.map((item) => item.rating), [1, 2, 3, 4, 5]);
 });
 
-test('thiếu một tầng chuẩn thì không công bố TrustScore', () => {
+test('thiếu một số tầng chuẩn vẫn tính TrustScore nếu cỡ mẫu hiệu dụng đạt yêu cầu', () => {
   const reviews = [2, 3, 4, 5].flatMap((rating) => Array.from({ length: 20 }, (_, index) => usefulReview(index, { rating })));
   const result = calculateTrustScoreV31(reviews, { sampling: { strategy: 'parallel-star-filters', perStarLimit: 20 } });
-  assert.equal(result.score, null);
-  assert.equal(result.rawScore, null);
-  assert.equal(result.scoreStatus, 'insufficient');
+  assert.ok(typeof result.score === 'number' && result.score > 0);
+  assert.ok(typeof result.rawScore === 'number');
+  assert.equal(result.scoreStatus, 'valid');
   assert.deepEqual(result.adequacy.missingRatings, [1]);
 });
 

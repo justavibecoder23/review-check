@@ -298,7 +298,9 @@ function defectEstimateForSample(evidence, policy) {
   const complete = strata.length === policy.ratingStrata.length;
   const risk = complete
     ? strata.reduce((sum, stratum) => sum + stratum.observedRisk, 0) / policy.ratingStrata.length
-    : pooledRisk;
+    : strata.length
+      ? strata.reduce((sum, stratum) => sum + stratum.observedRisk, 0) / strata.length
+      : pooledRisk;
   return {
     risk: clamp(risk, 0, 1),
     method: complete ? 'equal-anchor-ratings' : 'incomplete-anchor-ratings',
@@ -337,13 +339,14 @@ function sampleAdequacy(evidence, policy) {
     independentEvidenceCount(evidence.filter(({ review }) => Number(review.rating) === rating))
   ]));
   const missingRatings = policy.ratingStrata.filter((rating) => !counts.get(rating));
-  const effectiveSize = missingRatings.length
-    ? 0
-    : 1 / policy.ratingStrata.reduce((sum, rating) => sum + (1 / policy.ratingStrata.length) ** 2 / counts.get(rating), 0);
+  const presentRatings = policy.ratingStrata.filter((rating) => (counts.get(rating) || 0) > 0);
+  const effectiveSize = presentRatings.length
+    ? 1 / presentRatings.reduce((sum, rating) => sum + (1 / presentRatings.length) ** 2 / counts.get(rating), 0)
+    : 0;
   return {
     effectiveSize,
     score: clamp(100 * effectiveSize / TARGET_EFFECTIVE_SAMPLE),
-    status: missingRatings.length || effectiveSize < 10 ? 'insufficient' : effectiveSize < 20 ? 'provisional' : 'valid',
+    status: effectiveSize < 10 ? 'insufficient' : effectiveSize < 20 ? 'provisional' : 'valid',
     missingRatings
   };
 }
@@ -576,7 +579,7 @@ export function calculateTrustScoreV31(reviews = [], options = {}) {
         ? `Cỡ mẫu bằng chứng cân bằng là ${adequacy.effectiveSize.toFixed(1)}; không trả TrustScore vì chưa đủ bằng chứng.`
         : `Cỡ mẫu bằng chứng cân bằng là ${adequacy.effectiveSize.toFixed(1)}/${TARGET_EFFECTIVE_SAMPLE} theo thiết kế hiện tại.`,
       policy.stratifiedByRating
-        ? 'Mẫu chia tầng dùng chung ba mốc 1★, 3★ và 5★ cho mọi thành phần thống kê; review 2★ và 4★ vẫn được giữ để hiển thị và diễn giải. Đây là chỉ số theo thiết kế mẫu chung, không phải tỷ lệ đại diện cho toàn bộ nền tảng.'
+        ? 'Mẫu chia tầng theo 5 mức sao (1★–5★) cho các thành phần thống kê. Đây là chỉ số theo thiết kế mẫu chuẩn, không phải tỷ lệ đại diện cho toàn bộ nền tảng.'
         : 'Nhược điểm chỉ được mô tả trên mẫu đã lấy, không suy rộng thành tỷ lệ của toàn bộ sản phẩm.'
     ]
   };

@@ -131,7 +131,7 @@ function validateCredentialSet(credentialSet) {
   const credentials = Array.isArray(credentialSet?.credentials) ? credentialSet.credentials : [];
   const byStar = new Map(credentials.map((credential) => [String(credential.star), credential]));
   if (credentials.length !== SHOPEE_STAR_FILTERS.length || SHOPEE_STAR_FILTERS.some((star) => !byStar.get(star)?.token)) {
-    throw new Error('Cần đủ 3 Apify key để chạy chế độ Shopee 60 review có lọc sao.');
+    throw new Error('Cần đủ 5 Apify key để chạy chế độ Shopee 100 review có lọc 5 sao.');
   }
   return { ...credentialSet, credentials: SHOPEE_STAR_FILTERS.map((star) => byStar.get(star)) };
 }
@@ -306,10 +306,10 @@ async function collectShopeeReviewsProduction(url, options = {}) {
 }
 
 export async function collectShopeeReviews(url, options = {}) {
-  // Website luôn dùng thiết kế production 60 review. Chế độ demo chỉ còn là
+  // Website luôn dùng thiết kế production 100 review với đủ 5 tầng sao. Chế độ demo chỉ còn là
   // tùy chọn tường minh cho test/local, tránh một env cũ vô tình kéo production
   // trở lại một account và 20 review.
-  const mode = String(options.mode || 'production-60').toLowerCase();
+  const mode = String(options.mode || 'production-100').toLowerCase();
   return mode === 'demo'
     ? collectShopeeReviewsDemo(url, options)
     : collectShopeeReviewsProduction(url, options);

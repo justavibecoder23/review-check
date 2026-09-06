@@ -473,7 +473,7 @@ test('chế độ test chỉ tăng một key và giữ bốn key còn lại làm
   }
 });
 
-test('Shopee production-60 chỉ cấp 3 key cho các tầng 5★, 3★ và 1★', async () => {
+test('Shopee production cấp đủ 5 key cho các tầng 5★, 4★, 3★, 2★ và 1★', async () => {
   const previous = {
     url: process.env.UPSTASH_REDIS_REST_URL,
     token: process.env.UPSTASH_REDIS_REST_TOKEN,
@@ -486,15 +486,15 @@ test('Shopee production-60 chỉ cấp 3 key cho các tầng 5★, 3★ và 1★
   try {
     await saveApifyCredentialPool({ maxUsesPerKey: 10, groups: [group('primary', 'primary')] }, { fetchImpl: redis.fetchImpl });
     const allocation = await reserveApifyCredentialSet({
-      count: 3,
-      stars: [5, 3, 1],
+      count: 5,
+      stars: [5, 4, 3, 2, 1],
       fetchImpl: redis.fetchImpl
     });
-    assert.equal(allocation.credentials.length, 3);
-    assert.deepEqual(allocation.credentials.map((credential) => credential.star), [5, 3, 1]);
+    assert.equal(allocation.credentials.length, 5);
+    assert.deepEqual(allocation.credentials.map((credential) => credential.star), [5, 4, 3, 2, 1]);
     const status = await getApifyCredentialPoolStatus({ fetchImpl: redis.fetchImpl });
-    assert.equal(status.active.credentials.filter((credential) => credential.shopee.usageCount === 1).length, 3);
-    assert.equal(status.active.credentials.filter((credential) => credential.shopee.usageCount === 0).length, 2);
+    assert.equal(status.active.credentials.filter((credential) => credential.shopee.usageCount === 1).length, 5);
+    assert.equal(status.active.credentials.filter((credential) => credential.shopee.usageCount === 0).length, 0);
     assert.ok(status.active.credentials.every((credential) => credential.tiktok.runCount === 0));
   } finally {
     for (const [key, value] of Object.entries(previous)) {

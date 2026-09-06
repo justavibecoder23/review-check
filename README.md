@@ -14,9 +14,9 @@ Mở `http://localhost:3000`, dán một link sản phẩm. Không cần cài pa
 
 ## Nguồn dữ liệu thực tế
 
-Với Shopee, ứng dụng gọi Actor Apify `zen-studio/shopee-product-reviews-scraper` từ backend. Mỗi lượt production cấp phát **ba tài khoản** và chạy song song ba Actor ở các tầng 5★/3★/1★. Mỗi request dùng `contentFilter: "with comments"` và lấy tối đa 20 review có nội dung viết, tổng tối đa 60 review. Kết quả được hậu kiểm đúng mức sao và chống trùng trước khi chuyển sang pipeline gắn nhãn và TrustScore.
+Với Shopee, ứng dụng gọi Actor Apify `zen-studio/shopee-product-reviews-scraper` từ backend. Mỗi lượt production cấp phát **năm tài khoản** và chạy song song năm Actor ở các tầng 5★/4★/3★/2★/1★. Mỗi request dùng `contentFilter: "with comments"` và lấy tối đa 20 review có nội dung viết, tổng tối đa 100 review. Kết quả được hậu kiểm đúng mức sao và chống trùng trước khi chuyển sang pipeline gắn nhãn và TrustScore.
 
-Thiết kế này trả tối đa **60 review** theo ba tầng kiểm soát. Đây không phải phân bố sao tự nhiên của toàn bộ sản phẩm; TrustScore chỉ dùng thiết kế chung 1★/3★/5★ và không suy rộng tỷ lệ trong mẫu thành tỷ lệ tổng thể.
+Thiết kế này trả tối đa **100 review** theo năm tầng kiểm soát. Đây không phải phân bố sao tự nhiên của toàn bộ sản phẩm; TrustScore dùng thiết kế chuẩn 5 tầng 1★–5★ và không suy rộng tỷ lệ trong mẫu thành tỷ lệ tổng thể.
 
 Backend chấp nhận cả link sản phẩm đầy đủ và link được chia sẻ/rút gọn từ Shopee, gồm `s.shopee.vn`, `vn.shp.ee` và `shope.ee`. Với link rút gọn, máy chủ sẽ:
 
@@ -41,11 +41,11 @@ UPSTASH_REDIS_REST_URL=<Upstash REST URL>
 UPSTASH_REDIS_REST_TOKEN=<Upstash REST token>
 ```
 
-Shopee production luôn dùng 3 account song song cho ba tầng 5★/3★/1★, tối đa 20 review mỗi account (tổng tối đa 60), kiểm tra đúng mức sao và khử trùng trước khi phân tích. Chế độ demo một account chỉ còn có thể bật tường minh bằng `options.mode='demo'` trong test/local; biến môi trường demo cũ không thể vô tình hạ production về 20 review. Actor chỉ hỗ trợ một mức sao cho mỗi run, nên mẫu 60 review là mẫu chia tầng đại diện ba cực và không được diễn giải như phân bố rating tự nhiên của toàn bộ sản phẩm. TikTok vẫn giữ nguyên cơ chế 5 account cho 5 mức sao. Các Apify token không nằm trong environment của Vercel: chúng được cập nhật tập trung qua API quản trị và mã hóa trong Redis. Không đưa file chứa token vào GitHub hoặc JavaScript trình duyệt.
+Shopee production luôn dùng 5 account song song cho 5 tầng 5★/4★/3★/2★/1★, tối đa 20 review mỗi account (tổng tối đa 100), kiểm tra đúng mức sao và khử trùng trước khi phân tích. Chế độ demo một account chỉ còn có thể bật tường minh bằng `options.mode='demo'` trong test/local; biến môi trường demo cũ không thể vô tình hạ production về 20 review. Actor chỉ hỗ trợ một mức sao cho mỗi run, nên mẫu 100 review là mẫu chia tầng đại diện 5 tầng và không được diễn giải như phân bố rating tự nhiên của toàn bộ sản phẩm. TikTok cũng dùng cơ chế 5 account cho 5 mức sao tương tự. Các Apify token không nằm trong environment của Vercel: chúng được cập nhật tập trung qua API quản trị và mã hóa trong Redis. Không đưa file chứa token vào GitHub hoặc JavaScript trình duyệt.
 
 ### Cấu hình và tự động xoay vòng Apify key
 
-Pool vẫn được lưu theo nhóm 5 key để tương thích với file quản trị hiện có. Shopee và TikTok dùng chung token nhưng có bộ đếm riêng. Shopee production cấp 3 key còn lượt và tăng bộ đếm lượt của từng key bằng một lệnh Redis nguyên tử; mỗi key được dùng tối đa 10 lượt. Khi một key đủ 10 lượt, trạng thái `used` chỉ áp dụng cho Shopee—key đó vẫn có thể phục vụ TikTok.
+Pool vẫn được lưu theo nhóm 5 key để tương thích với file quản trị hiện có. Shopee và TikTok dùng chung token nhưng có bộ đếm riêng. Shopee production cấp đủ 5 key còn lượt và tăng bộ đếm lượt của từng key bằng một lệnh Redis nguyên tử; mỗi key được dùng tối đa 10 lượt. Khi một key đủ 10 lượt, trạng thái `used` chỉ áp dụng cho Shopee—key đó vẫn có thể phục vụ TikTok.
 
 TikTok được quản lý theo số review đã trả về, không trừ bộ đếm lượt Shopee. Với mỗi key có $5 usage, bộ cấp phát luôn dành trước chi phí tối đa cho `10 lượt × 20 review` Shopee rồi mới cấp phần usage còn lại cho TikTok. Reservation TikTok có thời hạn và finalize idempotent để request lỗi hoặc retry không giữ usage vĩnh viễn hay cộng hai lần. Giới hạn TikTok theo key được tính từ usage còn lại, không còn dùng một trần review cố định tách rời ngân sách.
 
