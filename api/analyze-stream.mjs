@@ -26,6 +26,12 @@ export default async function handler(request, response) {
     });
     stream.send('result', result);
   } catch (error) {
+    console.error('[analyze-stream] Analysis error:', {
+      message: error?.message,
+      code: error?.code,
+      statusCode: error?.statusCode,
+      details: error?.details
+    });
     stream.send('error', {
       error: error?.message || 'Có lỗi khi phân tích sản phẩm.',
       statusCode: error?.statusCode || 500,

@@ -26,19 +26,26 @@ export function assertEnoughReviews(reviews, minimum = MINIMUM_REVIEWS_FOR_ANALY
   throw error;
 }
 
-export function assertSamplingCoverage(reviews, collection = {}) {
-  if (collection?.strategy !== 'parallel-star-filters') return true;
+export function checkSamplingCoverage(reviews, collection = {}) {
+  if (collection?.strategy !== 'parallel-star-filters') {
+    return { complete: true, missingRatings: [], requiredRatings: [] };
+  }
   const ratings = new Set((Array.isArray(reviews) ? reviews : [])
     .map((review) => Number(review?.rating))
     .filter((rating) => Number.isInteger(rating)));
   const requiredRatings = requiredRatingStrata(collection);
   const missingRatings = requiredRatings.filter((rating) => !ratings.has(rating));
-  if (!missingRatings.length) return true;
+  return {
+    complete: missingRatings.length === 0,
+    missingRatings,
+    requiredRatings
+  };
+}
 
-  const error = new Error(`Mẫu review chưa đủ các tầng sao theo thiết kế ${requiredRatings.map((rating) => `${rating}★`).join(', ')}; đang thiếu ${missingRatings.map((rating) => `${rating}★`).join(', ')}. Hãy thử lại để tránh phân tích một mẫu bị lệch.`);
-  error.statusCode = 422;
-  error.code = 'INCOMPLETE_RATING_STRATA';
-  error.details = { missingRatings, requiredRatings };
-  throw error;
+export function assertSamplingCoverage(reviews, collection = {}) {
+  // Không chặn cứng (không throw error) khi thiếu tầng sao.
+  // Mẫu review vẫn được lấy và phân tích bình thường nếu đạt tối thiểu review.
+  const coverage = checkSamplingCoverage(reviews, collection);
+  return coverage.complete;
 }
 

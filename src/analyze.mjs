@@ -4,7 +4,7 @@ import { classifyReviewSignals, findReviewIssues, ISSUE_DEFINITIONS } from './tr
 import { labelReviewsTwoLayer } from './review-labeler.mjs';
 import { saveReviewDatasets } from './review-dataset-storage.mjs';
 import { createProgressReporter } from './sse.mjs';
-import { assertEnoughReviews, assertSamplingCoverage } from './analysis-eligibility.mjs';
+import { assertEnoughReviews, checkSamplingCoverage } from './analysis-eligibility.mjs';
 import { throwIfAborted } from './abort.mjs';
 import { annotateReviewDuplicates } from './review-deduplication.mjs';
 
@@ -84,10 +84,13 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   });
   try {
     assertEnoughReviews(reviews);
-    assertSamplingCoverage(reviews, source?.collection);
   } catch (error) {
     progress('eligibility', 64, 'Sản phẩm chưa đủ đánh giá để phân tích.');
     throw error;
+  }
+  const coverage = checkSamplingCoverage(reviews, source?.collection);
+  if (!coverage.complete && coverage.missingRatings?.length) {
+    warnings.push(`Mẫu review chưa có đủ các tầng sao thiết kế (thiếu ${coverage.missingRatings.map((rating) => `${rating}★`).join(', ')}); hệ thống vẫn phân tích trên ${reviews.length} review thu thập được.`);
   }
   progress('labeling', 66, 'Đang phân tích reviews...');
   const geminiStartedAt = Date.now();

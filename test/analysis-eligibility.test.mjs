@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   assertEnoughReviews,
   assertSamplingCoverage,
+  checkSamplingCoverage,
   MINIMUM_REVIEWS_FOR_ANALYSIS
 } from '../src/analysis-eligibility.mjs';
 
@@ -22,26 +23,21 @@ test('không phân tích sản phẩm có dưới 20 review', () => {
   );
 });
 
-test('mẫu chia tầng phải có đủ các mốc 1★, 3★ và 5★', () => {
+test('mẫu chia tầng không bị chặn khi thiếu một số tầng sao', () => {
   const reviews = [1, 3].flatMap((rating) => Array.from({ length: 10 }, () => ({ rating, text: 'Review' })));
-  assert.throws(
-    () => assertSamplingCoverage(reviews, { strategy: 'parallel-star-filters' }),
-    (error) => error.code === 'INCOMPLETE_RATING_STRATA'
-      && error.statusCode === 422
-      && error.details.missingRatings.length === 1
-      && error.details.missingRatings[0] === 5
-  );
+  const coverage = checkSamplingCoverage(reviews, { strategy: 'parallel-star-filters' });
+  assert.equal(coverage.complete, false);
+  assert.deepEqual(coverage.missingRatings, [5]);
+  assert.doesNotThrow(() => assertSamplingCoverage(reviews, { strategy: 'parallel-star-filters' }));
   assert.equal(assertSamplingCoverage(reviews, { strategy: 'unfiltered' }), true);
 });
 
-test('TikTok bắt buộc đủ cả năm tầng sao đã khai báo', () => {
+test('TikTok không bị chặn cứng khi thiếu tầng sao trong 5 tầng', () => {
   const reviews = [1, 2, 3, 5].flatMap((rating) => Array.from({ length: 5 }, () => ({ rating, text: 'Review' })));
-  assert.throws(
-    () => assertSamplingCoverage(reviews, { strategy: 'parallel-star-filters', ratingStrata: [1, 2, 3, 4, 5] }),
-    (error) => error.code === 'INCOMPLETE_RATING_STRATA'
-      && error.details.missingRatings.length === 1
-      && error.details.missingRatings[0] === 4
-  );
+  const coverage = checkSamplingCoverage(reviews, { strategy: 'parallel-star-filters', ratingStrata: [1, 2, 3, 4, 5] });
+  assert.equal(coverage.complete, false);
+  assert.deepEqual(coverage.missingRatings, [4]);
+  assert.doesNotThrow(() => assertSamplingCoverage(reviews, { strategy: 'parallel-star-filters', ratingStrata: [1, 2, 3, 4, 5] }));
 });
 
 test('cho phép phân tích từ đúng ngưỡng 20 review', () => {
