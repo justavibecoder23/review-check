@@ -258,6 +258,33 @@ test('Layer 2 lỗi vẫn giữ quyết định Layer 1 khi review có bằng ch
   }
 });
 
+test('Layer 1 giữ review dài có thông số và trải nghiệm cụ thể dù từ điển chưa có ngành hàng', async () => {
+  const text = 'Đúng 200hz (đầy đủ), mẫu đẹp và thực không bị quá rực, 4 chế độ màu phù hợp các nhu cầu chính. +- độ sáng dễ dàng = nút. Canh chỉnh độ cao và xoay dễ. Có jack 3.5. Điểm trừ duy nhất: màn không dán miếng bảo vệ nên bị màng bọc in vết lên màn rất nhiều. Bạn nào yêu cầu cao hơn thì mua mẫu 640a-b.';
+  const product = { title: 'Màn hình máy tính 200Hz' };
+  const label = labelReviewLayer1({ rating: 5, text }, 0, product);
+
+  assert.equal(label.is_low_value, false);
+  assert.equal(label.is_seeding, false);
+  assert.equal(label.information_value, 'high');
+  assert.equal(label.requires_llm, false);
+  assert.ok(label.confidence >= 0.9);
+
+  const result = await labelReviewsTwoLayer([{ rating: 5, text }], { product });
+  assert.equal(result.stats.layer2Requested, 0);
+  assert.equal(result.reviews[0].labels.layer2_unavailable, false);
+  assert.equal(result.reviews[0].labels.reviewed_by, 'layer1');
+});
+
+test('đánh giá độ cụ thể theo cấu trúc không mở khóa nội dung dài nhưng chỉ nói logistics', () => {
+  const label = labelReviewLayer1({
+    rating: 5,
+    text: 'Giao hàng rất nhanh, đóng gói kỹ và cẩn thận. Shipper giao đúng giờ, hộp còn nguyên vẹn, shop phản hồi tin nhắn nhanh.'
+  });
+
+  assert.equal(label.information_value, 'low');
+  assert.equal(label.requires_llm, true);
+});
+
 test('Layer 2 phải abstain khi bằng chứng lỗi không phải trích dẫn nguyên văn', async () => {
   const previousKey = process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY = 'test-key';
