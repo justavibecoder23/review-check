@@ -184,6 +184,10 @@ function plainTrustSummary(score, scoreStatus = 'valid') {
   return `${meaning} Vì vậy, tập review đạt TrustScore ${score}/100. Đây là điểm về độ đáng tin của thông tin review, không phải điểm chất lượng tuyệt đối của sản phẩm.`;
 }
 
+function componentImpact(score) {
+  return Number(score) >= 99.5 ? 'up' : 'down';
+}
+
 export function buildRuleBasedTrust(reviews = [], options = {}) {
   const included = reviews.filter((review) => review.included !== false);
   const excluded = reviews.filter((review) => review.included === false);
@@ -200,14 +204,16 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
   const controlledDefectSample = method.defects.status === 'standardized-controlled-sample';
   const detailedCount = included.filter((review) => normalise(review.text).length >= 45).length;
   const verifiedCount = included.filter((review) => review.verified).length;
+  const labelingUnavailableCount = reviews.filter((review) => review.labels?.layer2_unavailable).length;
   const excludedRate = reviews.length ? Math.round(excluded.length / reviews.length * 100) : 0;
+  const coverageLowersScore = method.guardrails.applied.includes('sample-coverage');
   const drivers = [
     {
-      impact: method.components.authenticity.score >= 70 ? 'up' : 'down',
-      title: method.components.authenticity.score >= 70 ? 'Phần lớn review không mang dấu hiệu nhiễu rõ ràng' : 'Tập review còn nhiều nội dung cần thận trọng',
-      detail: method.components.authenticity.score >= 70
-        ? 'Tỷ lệ nội dung bị nhận diện là seeding, quá mơ hồ hoặc ít giá trị hiện ở mức thấp trong mẫu đã thu thập.'
-        : 'Mẫu hiện có tỷ lệ đáng kể review seeding, quá mơ hồ hoặc ít thông tin; những nội dung này không được dùng như bằng chứng chính.'
+      impact: componentImpact(method.components.authenticity.score),
+      title: componentImpact(method.components.authenticity.score) === 'up' ? 'Mẫu không còn tín hiệu nhiễu đáng kể' : 'Một phần review không đủ tin cậy để dùng',
+      detail: componentImpact(method.components.authenticity.score) === 'up'
+        ? 'Các review trong mẫu kiểm định đều đủ điều kiện làm bằng chứng chính sau bước giảm nhiễu.'
+        : `${excluded.length}/${reviews.length} review không được dùng làm bằng chứng chính vì có dấu hiệu seeding, quảng cáo, trùng lặp, quá mơ hồ hoặc ít thông tin. Phần thiếu hụt này trực tiếp làm giảm mức ít nhiễu của tập review.`
     },
     {
       impact: 'neutral',
@@ -225,9 +231,16 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
           : `Trong ${method.sample.afterSeedingRemoval} review còn lại sau bước lọc nhiễu, chưa có một nhóm lỗi nào được người mua nhắc lại đủ rõ. Thống kê này không trực tiếp tăng hoặc giảm TrustScore.`
     },
     {
-      impact: method.components.text.score >= 60 ? 'up' : 'down',
-      title: method.components.text.score >= 60 ? 'Review có nội dung đủ rõ để đối chiếu' : 'Nhiều review còn thiếu chi tiết trải nghiệm',
-      detail: `Trong ${included.length} review được giữ lại, ${detailedCount} review mô tả trải nghiệm đủ chi tiết và ${verifiedCount} review có tín hiệu đã mua hàng. ${method.components.text.score >= 60 ? 'Những thông tin này giúp người mua hiểu rõ lý do khen hoặc chê thay vì chỉ nhìn số sao.' : 'Khi review quá ngắn hoặc khó kiểm chứng, kết luận cần được đọc thận trọng hơn.'}`
+      impact: componentImpact(method.components.text.score),
+      title: componentImpact(method.components.text.score) === 'up' ? 'Bằng chứng review rõ và đủ chi tiết' : 'Độ chi tiết của review chưa đồng đều',
+      detail: `Trong ${included.length} review được giữ lại, ${detailedCount} review mô tả trải nghiệm đủ chi tiết và ${verifiedCount} review có tín hiệu đã mua hàng. ${componentImpact(method.components.text.score) === 'up' ? 'Các bằng chứng đều đạt mức chi tiết tối đa theo tiêu chí nội dung.' : 'Một số review còn ngắn hoặc thiếu mô tả trải nghiệm cụ thể nên chất lượng bằng chứng chưa đạt mức tối đa.'}`
+    },
+    {
+      impact: componentImpact(method.components.labeling.score),
+      title: componentImpact(method.components.labeling.score) === 'up' ? 'Toàn bộ review đã có kết quả kiểm định' : 'Một phần review chưa kiểm định được',
+      detail: componentImpact(method.components.labeling.score) === 'up'
+        ? 'Mọi review trong mẫu đều đã có quyết định từ bộ quy tắc hoặc lớp AI kiểm định, không còn mục ở trạng thái chưa xác định.'
+        : `${labelingUnavailableCount} review chưa nhận được kết quả kiểm định đầy đủ nên không được dùng làm bằng chứng; khoảng trống này trực tiếp làm giảm độ phủ kiểm định.`
     },
     {
       impact: 'neutral',
@@ -242,20 +255,22 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
       detail: `Có thể đọc ngày đăng của khoảng ${Math.round(method.temporal.coverage * 100)}% review được giữ lại. Do actor có thể sắp xếp theo đề xuất, tín hiệu thời gian không tham gia TrustScore.`
     },
     {
-      impact: excludedRate > 0 && excludedRate <= 35 ? 'up' : 'neutral',
+      impact: 'neutral',
       title: excluded.length ? 'Đã lọc review ngắn, trùng hoặc có dấu hiệu seeding' : 'Không phát hiện nhiều review cần loại khỏi bằng chứng chính',
       detail: excluded.length
         ? `Hệ thống đã giữ lại ${included.length}/${reviews.length} review và loại ${excluded.length} review (${excludedRate}%) vì thiếu thông tin, trùng lặp hoặc có dấu hiệu seeding. Việc công khai bước lọc giúp phần kết luận không bị dẫn dắt bởi những phản hồi kém giá trị.`
         : `Toàn bộ ${reviews.length} review hiện đủ điều kiện làm bằng chứng chính. Đây là tín hiệu tốt, nhưng TrustScore vẫn chỉ nói về độ tin cậy của review chứ không thay thế việc kiểm tra sản phẩm.`
     },
     {
-      impact: method.scoreStatus === 'valid' ? 'up' : 'neutral',
-      title: method.scoreStatus === 'valid' ? 'Mẫu bằng chứng đạt mức sử dụng' : 'Mẫu bằng chứng còn hạn chế',
-      detail: method.scoreStatus === 'valid'
+      impact: coverageLowersScore ? 'down' : method.adequacy.coverage >= 1 ? 'up' : 'neutral',
+      title: coverageLowersScore ? 'Độ phủ mẫu chưa đạt mục tiêu' : method.scoreStatus === 'valid' ? 'Mẫu bằng chứng đạt mức sử dụng' : 'Mẫu bằng chứng còn hạn chế',
+      detail: method.scoreStatus === 'valid' && !coverageLowersScore
         ? `Độ phủ mẫu đạt ${Math.round(method.adequacy.coverage * 100)}% theo thiết kế lấy review hiện tại.`
         : method.scoreStatus === 'insufficient'
           ? `Mẫu hiện có ${method.sample.total}/20 review; hệ thống chỉ không công bố TrustScore khi chưa đạt 20 review.`
-          : `Độ phủ mẫu hiện là ${Math.round(method.adequacy.coverage * 100)}%; TrustScore vẫn được công bố nhưng đi kèm trạng thái ${method.scoreStatus === 'limited' ? 'hạn chế' : 'tạm thời'}.`
+          : coverageLowersScore
+            ? `Độ phủ mẫu hiện là ${Math.round(method.adequacy.coverage * 100)}%; vì chưa đạt mục tiêu, thuật toán đã kéo phần điểm trên mức trung lập về mức thận trọng hơn.`
+            : `Độ phủ mẫu hiện là ${Math.round(method.adequacy.coverage * 100)}%; TrustScore vẫn được công bố nhưng đi kèm trạng thái ${method.scoreStatus === 'limited' ? 'hạn chế' : 'tạm thời'}.`
     },
   ];
 
@@ -453,9 +468,9 @@ function validateGeminiTrust(value, fallback) {
   if (!value || typeof value !== 'object') throw new Error('Gemini không trả về kết quả JSON hợp lệ.');
   const pros = Array.isArray(value.pros) ? value.pros.slice(0, MAX_SUMMARY_ITEMS).map((item, index) => cleanItem(item, fallback.pros[index] || fallback.pros[0])) : fallback.pros;
   const cons = Array.isArray(value.cons) ? value.cons.slice(0, MAX_SUMMARY_ITEMS).map((item, index) => cleanItem(item, fallback.cons[index] || fallback.cons[0])) : fallback.cons;
-  const drivers = Array.isArray(value.drivers) && value.drivers.length >= 6
-    ? value.drivers.slice(0, 8).map((item, index) => cleanDriver(item, fallback.drivers[index] || fallback.drivers[0]))
-    : fallback.drivers;
+  // Nhóm up/down/neutral phải phản ánh đúng các thành phần đã tính ở backend.
+  // Gemini chỉ diễn giải summary và ưu/nhược điểm, không được đổi tác động điểm.
+  const drivers = fallback.drivers;
   const summary = String(value.summary || fallback.summary).slice(0, 420);
   const preserveStatisticalSummary = fallback.method.scoreStatus !== 'valid';
   return {
@@ -485,7 +500,7 @@ async function analyzeWithGemini(reviews, fallback, options = {}) {
     'Nội dung hiển thị cho người dùng tuyệt đối không được nhắc Fisher, p-value, odds ratio, binomial, logistic, Bonferroni, guardrail, điểm thành phần hoặc công thức.',
     'Summary cần giải thích ý nghĩa kết quả bằng lời trong 2 câu và nhắc rõ TrustScore đo độ đáng tin của tập review, không phải điểm chất lượng tuyệt đối của sản phẩm.',
     'Mỗi ưu/nhược điểm phải nêu rõ người mua thích hoặc chưa hài lòng điều gì, ảnh hưởng thực tế ra sao và có bao nhiêu review cùng đề cập; tránh câu chung chung như “ghi nhận tín hiệu tích cực”.',
-    'Trả về 6 đến 8 driver khác nhau. Mỗi driver phải dịch tín hiệu kỹ thuật thành ngôn ngữ đời thường: điều gì được quan sát thấy trong review, vì sao điều đó làm kết quả đáng tin hơn hoặc cần thận trọng hơn.',
+    'Danh sách drivers trong fixedBackendDraft đã được backend xác định và sẽ được giữ nguyên; không đổi impact, thứ tự, tiêu đề hoặc nội dung của các driver.',
     Number.isFinite(fallback.score)
       ? `Điểm cố định phải giữ nguyên: ${fallback.score}/100.`
       : 'Backend xác định chưa đủ bằng chứng nên không được tự tạo hoặc suy đoán TrustScore.',
