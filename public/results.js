@@ -42,6 +42,21 @@ function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, Number(value) || 0));
 }
 
+function conciseSummary(value, limit = 175) {
+  const text = String(value || '').trim();
+  if (!text || text.length <= limit) return text;
+  const firstSentence = text.match(/^.*?[.!?](?:\s|$)/u)?.[0]?.trim();
+  if (firstSentence && firstSentence.length <= limit) return firstSentence;
+  const clipped = text.slice(0, limit);
+  const boundary = clipped.lastIndexOf(' ');
+  return `${clipped.slice(0, boundary > 90 ? boundary : limit).trim()}…`;
+}
+
+function methodScore(value, suffix = '/100') {
+  if (value === null || value === undefined || value === '') return '—';
+  return Number.isFinite(Number(value)) ? `${Math.round(Number(value))}${suffix}` : '—';
+}
+
 function toneForScore(score) {
   if (typeof score !== 'number' || !Number.isFinite(score)) return { id: 'neutral', label: 'Chưa đủ bằng chứng' };
   if (score >= 80) return { id: 'green', label: 'Độ tin cậy cao' };
@@ -134,7 +149,7 @@ function renderSentimentList(selector, items, totalReviews) {
     return `
     <article class="sentiment-item">
       <span class="sentiment-check" aria-hidden="true">${selector.includes('pros') ? '✓' : '!'}</span>
-      <div><h4>${escapeHtml(item.title)}</h4><p>${escapeHtml(item.detail)}</p></div>
+      <div><h4>${escapeHtml(item.title)}</h4><details class="sentiment-detail"><summary>Xem chi tiết</summary><p>${escapeHtml(item.detail)}</p></details></div>
       ${mentions > 0 ? `<span class="sentiment-mentions" aria-label="${mentions} trên ${sampleSize} review đáng tham khảo đề cập chủ đề này"><b>${mentions}</b><small>/${sampleSize} review</small></span>` : ''}
     </article>`;
   }).join('');
@@ -188,7 +203,7 @@ function renderDriverGroups(drivers) {
         <article class="driver-card" data-impact="${group.impact}">
           <span class="driver-number">${String(driverNumber).padStart(2, '0')}</span>
           <span class="driver-impact" aria-hidden="true">${driverIcon(group.impact)}</span>
-          <div><small>${group.eyebrow}</small><h4>${escapeHtml(driver.title)}</h4><p>${escapeHtml(driver.detail)}</p></div>
+          <div><small>${group.eyebrow}</small><h4>${escapeHtml(driver.title)}</h4><details class="driver-detail"><summary>Xem chi tiết</summary><p>${escapeHtml(driver.detail)}</p></details></div>
         </article>`;
     }).join('');
 
@@ -309,8 +324,22 @@ function renderResult(data) {
   document.querySelector('#action-score').textContent = scoreText;
   document.querySelector('#trust-label').textContent = trust.label || tone.label;
   renderScoreLegend(scoreAvailable ? score : null);
-  document.querySelector('#trust-summary').textContent = trust.summary || data.verdict;
+  const fullSummary = String(trust.summary || data.verdict || '');
+  const shortSummary = conciseSummary(fullSummary);
+  const summaryDetail = fullSummary.slice(shortSummary.endsWith('…') ? 0 : shortSummary.length).trim();
+  document.querySelector('#trust-summary').textContent = shortSummary;
+  document.querySelector('#trust-summary-detail').textContent = summaryDetail || fullSummary;
+  document.querySelector('#trust-summary-more').hidden = !fullSummary || fullSummary === shortSummary;
   document.querySelector('#analysis-source').textContent = trust.engine === 'gemini' ? 'Gemini AI + bộ lọc RealView' : 'Bộ lọc minh bạch RealView';
+
+  const method = trust.method || {};
+  document.querySelector('#method-text-score').textContent = methodScore(method.components?.text?.score);
+  document.querySelector('#method-auth-score').textContent = methodScore(method.components?.authenticity?.score);
+  document.querySelector('#method-label-score').textContent = methodScore(method.components?.labeling?.score);
+  document.querySelector('#method-coverage-score').textContent = methodScore(
+    Number.isFinite(Number(method.adequacy?.coverage)) ? Number(method.adequacy.coverage) * 100 : null,
+    '%'
+  );
 
   const scanned = Number(stats.scanned ?? reviews.length) || 0;
   const kept = Number(stats.included ?? stats.genuine ?? keptReviews.length) || 0;
@@ -336,6 +365,8 @@ function renderResult(data) {
 
   content.classList.remove('hidden');
   document.querySelector('#result-action-bar').classList.remove('hidden');
+  const introDialog = document.querySelector('#trust-intro-dialog');
+  if (introDialog?.showModal && !introDialog.open) requestAnimationFrame(() => introDialog.showModal());
 }
 
 let data;
@@ -347,6 +378,21 @@ try {
 
 if (data?.reviews && data?.product) renderResult(data);
 else emptyState.classList.remove('hidden');
+
+const trustIntroDialog = document.querySelector('#trust-intro-dialog');
+trustIntroDialog?.querySelector('.trust-intro-close')?.addEventListener('click', () => trustIntroDialog.close());
+trustIntroDialog?.querySelector('.trust-intro-primary')?.addEventListener('click', () => trustIntroDialog.close());
+trustIntroDialog?.addEventListener('click', (event) => {
+  if (event.target === trustIntroDialog) trustIntroDialog.close();
+});
+document.querySelector('#trust-intro-method')?.addEventListener('click', () => {
+  trustIntroDialog?.close();
+  const method = document.querySelector('#trust-method');
+  if (method) {
+    method.open = true;
+    method.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+});
 
 // Setup scroll to top button
 const backToTop = document.querySelector('.back-to-top');
