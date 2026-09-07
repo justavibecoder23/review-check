@@ -685,7 +685,8 @@ test('Layer 1 giữ các review mỹ phẩm có trải nghiệm cụ thể thay 
     { rating: 2, text: 'Ko giống như quảng cáo, màu không chuẩn và không bám chút nào.', defect: true },
     { rating: 5, text: 'Dỡn mặt hả, tại sao lại bán son đẹp và thơm như vậy.', defect: false },
     { rating: 2, text: 'Son ni bôi lên ăn phát hết cha son cả, thất vọng.', defect: true },
-    { rating: 1, text: 'Không đúng quảng cáo, bôi giống nước lọc, son k bán vào môi.', defect: true }
+    { rating: 1, text: 'Không đúng quảng cáo, bôi giống nước lọc, son k bán vào môi.', defect: true },
+    { rating: 2, text: 'Mình tưởng xoan khô ai dè xoan nước, mình không thích lắm và màu cũng không đẹp.', defect: true }
   ];
 
   for (const [index, sample] of samples.entries()) {

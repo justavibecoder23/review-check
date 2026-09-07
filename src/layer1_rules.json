@@ -106,7 +106,8 @@
           "khong li nhu quang cao", "ko li nhu quang cao", "k li nhu quang cao", "khong ly nhu quang cao", "ko ly nhu quang cao",
           "khong dung nhu quang cao", "khong nhu quang cao", "ko nhu quang cao", "khong giong nhu quang cao", "ko giong nhu quang cao", "mau k he nhu quang cao", "khac quang cao",
           "khong chuan mau", "ko chuan mau", "mau khong chuan", "mau ko chuan", "khong giong tren hinh", "ko giong tren hinh",
-          "hang da su dung", "da qua su dung", "hang dung roi", "su dung gui lai", "su dung goi lai", "su dung gui di lai", "su dung goi di lai"
+          "hang da su dung", "da qua su dung", "hang dung roi", "su dung gui lai", "su dung goi lai", "su dung gui di lai", "su dung goi di lai",
+          "tuong xoan kho", "ai de xoan nuoc"
         ]
       },
       "giao-hang": {
