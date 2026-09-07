@@ -55,6 +55,9 @@ export function shouldKeep(review) {
   }
   if (seeding && !hasIssue) return { keep: false, reason: 'Có dấu hiệu nhận xu / seeding' };
   if (seeding) return { keep: false, reason: 'Có bằng chứng seeding dù review có nhắc đến lỗi' };
+  // Khi Layer 2 không thể kết luận sau retry, giữ review không bị Layer 1 khóa
+  // cứng và đánh dấu fallback trong audit thay vì biến sự cố AI thành loại oan.
+  if (review.labels?.layer2_fallback_accepted) return { keep: true, reason: null };
   if (review.labels?.is_vague) return { keep: false, reason: 'Phản hồi tiêu cực mơ hồ, chưa nêu lỗi cụ thể' };
   if (review.labels?.is_low_value && !hasIssue) {
     return { keep: false, reason: lowValueReason || 'Nội dung ít thông tin, không đủ làm bằng chứng' };
