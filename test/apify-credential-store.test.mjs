@@ -16,6 +16,7 @@ import {
   reserveTikTokCredentials,
   saveApifyCredentialPool
 } from '../src/apify-credential-store.mjs';
+import { SHOPEE_CACHE_HITS_KEY, SHOPEE_TOTAL_SERVED_KEY } from '../src/product-cache.mjs';
 
 function flattenHash(hash) {
   return Object.entries(hash).flat();
@@ -322,11 +323,14 @@ test('pool mã hóa token, đếm nguyên tử và tự chuyển nhóm sau lư�
     assert.ok(rotated.credentials.every((credential) => credential.usageCount === 1));
     assert.equal(redis.evalCalls, 11);
 
+    redis.values.set(SHOPEE_CACHE_HITS_KEY, '7');
+    redis.values.set(SHOPEE_TOTAL_SERVED_KEY, '10');
     const status = await getApifyCredentialPoolStatus({ fetchImpl: redis.fetchImpl });
     assert.equal(status.active.label, 'backup');
     assert.equal(status.used[0].label, 'primary');
     assert.equal(status.usedHistory.length, 5);
     assert.ok(status.used[0].credentials.every((credential) => credential.usageCount === 10));
+    assert.deepEqual(status.platforms.shopee.cache, { hits: 7, totalServed: 10, hitRate: 0.7 });
     assert.equal(JSON.stringify(status).includes('super_secret_token'), false);
 
     await assert.rejects(

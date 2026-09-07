@@ -12,7 +12,7 @@ test('mỗi lượt local lưu đúng cặp file raw và labeled có chung runId
   const saved = await saveReviewDatasets({
     rawReviews: [review],
     labeledReviews: [{ ...review, labelId: 'r0001', included: false, exclusionReason: 'Dữ liệu kiểm thử' }],
-    product: { platform: 'Shopee', itemId: '123', title: 'Sạc dự phòng' },
+    product: { platform: 'Shopee', itemId: '123', title: 'Sạc dự phòng', image: 'https://example.com/product.jpg' },
     source: { type: 'test' },
     labeling: { engine: 'layer1-only' }
   }, { localRoot: root, runId: 'test-run', now: new Date('2026-08-27T10:00:00.000Z') });
@@ -21,6 +21,8 @@ test('mỗi lượt local lưu đúng cặp file raw và labeled có chung runId
   const raw = JSON.parse(await readFile(saved.rawPath, 'utf8'));
   const labeled = JSON.parse(await readFile(saved.labeledPath, 'utf8'));
   assert.equal(raw.runId, 'test-run');
+  assert.equal(saved.rawDataset.createdAt, '2026-08-27T10:00:00.000Z');
+  assert.equal(saved.rawDataset.product.image, 'https://example.com/product.jpg');
   assert.equal(labeled.runId, 'test-run');
   assert.equal(raw.reviews[0].labels, undefined);
   assert.equal(labeled.reviews[0].labels.has_defect, true);

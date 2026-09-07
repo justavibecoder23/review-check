@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import { isRedisConfigured, redisCommand, redisTransaction } from './redis-rest.mjs';
+import { SHOPEE_CACHE_HITS_KEY, SHOPEE_TOTAL_SERVED_KEY } from './product-cache.mjs';
 
 export const APIFY_POOL_KEY = 'realview:apify:credential-pool:v2';
 export const APIFY_POOL_COUNTERS_KEY = 'realview:apify:credential-pool:v2:counters';
@@ -574,14 +575,14 @@ function emptyPoolStatus(provider = 'none') {
     pendingCount: 0,
     neededForNextGroup: 5,
     platforms: {
-      shopee: { usedHistory: [] },
+      shopee: { usedHistory: [], cache: { hits: 0, totalServed: 0, hitRate: 0 } },
       tiktok: { usedHistory: [] }
     },
     totals: { groups: 0, active: 0, reserve: 0, used: 0, credentials: 0, pending: 0 }
   };
 }
 
-function buildPoolStatus(config, counterReply, usedReply, tiktokReplies = {}) {
+function buildPoolStatus(config, counterReply, usedReply, tiktokReplies = {}, shopeeCache = {}) {
   const counters = parseHashReply(counterReply);
   const tiktok = {
     runs: parseHashReply(tiktokReplies.runs),
@@ -618,6 +619,8 @@ function buildPoolStatus(config, counterReply, usedReply, tiktokReplies = {}) {
   }).filter((entry) => Number(entry?.reviewCount) >= tiktok.maxReviewsPerKey)
     .sort((left, right) => String(right.usedAt || '').localeCompare(String(left.usedAt || '')));
   const pending = (config.pendingCredentials || []).map(({ id, label }) => ({ id, label, status: 'pending' }));
+  const cacheHits = Math.max(0, Number(shopeeCache.hits) || 0);
+  const shopeeTotalServed = Math.max(0, Number(shopeeCache.totalServed) || 0);
   return {
     version: config.version || 2,
     provider: 'upstash-redis',
@@ -632,7 +635,15 @@ function buildPoolStatus(config, counterReply, usedReply, tiktokReplies = {}) {
     pendingCount: pending.length,
     neededForNextGroup: pending.length ? APIFY_STARS.length - pending.length : APIFY_STARS.length,
     platforms: {
-      shopee: { maxUsesPerKey, usedHistory },
+      shopee: {
+        maxUsesPerKey,
+        usedHistory,
+        cache: {
+          hits: cacheHits,
+          totalServed: shopeeTotalServed,
+          hitRate: shopeeTotalServed ? cacheHits / shopeeTotalServed : 0
+        }
+      },
       tiktok: { maxReviewsPerKey: tiktok.maxReviewsPerKey, usedHistory: tiktokUsedHistory }
     },
     totals: {
@@ -846,14 +857,16 @@ export async function finalizeTikTokCredential(credential, result = {}, options 
 
 export async function getApifyCredentialPoolStatus(options = {}) {
   if (!isRedisConfigured()) return emptyPoolStatus();
-  const [configValue, counters, used, tiktokRuns, tiktokReviews, tiktokReserved, tiktokUsed] = await redisTransaction([
+  const [configValue, counters, used, tiktokRuns, tiktokReviews, tiktokReserved, tiktokUsed, shopeeCacheHits, shopeeTotalServed] = await redisTransaction([
     ['GET', APIFY_POOL_KEY],
     ['HGETALL', APIFY_POOL_COUNTERS_KEY],
     ['HGETALL', APIFY_POOL_USED_KEY],
     ['HGETALL', APIFY_TIKTOK_RUN_COUNTERS_KEY],
     ['HGETALL', APIFY_TIKTOK_REVIEW_COUNTERS_KEY],
     ['HGETALL', APIFY_TIKTOK_RESERVED_REVIEWS_KEY],
-    ['HGETALL', APIFY_TIKTOK_USED_KEY]
+    ['HGETALL', APIFY_TIKTOK_USED_KEY],
+    ['GET', SHOPEE_CACHE_HITS_KEY],
+    ['GET', SHOPEE_TOTAL_SERVED_KEY]
   ], options);
   if (!configValue) return emptyPoolStatus('upstash-redis');
   const config = typeof configValue === 'string' ? JSON.parse(configValue) : configValue;
@@ -862,5 +875,8 @@ export async function getApifyCredentialPoolStatus(options = {}) {
     reviews: tiktokReviews,
     reserved: tiktokReserved,
     used: tiktokUsed
+  }, {
+    hits: shopeeCacheHits,
+    totalServed: shopeeTotalServed
   });
 }

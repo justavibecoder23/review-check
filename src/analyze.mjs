@@ -6,6 +6,7 @@ import { saveReviewDatasets } from './review-dataset-storage.mjs';
 import { createProgressReporter } from './sse.mjs';
 import { assertEnoughReviews, checkSamplingCoverage } from './analysis-eligibility.mjs';
 import { throwIfAborted } from './abort.mjs';
+import { setCachedShopeeDataset } from './product-cache.mjs';
 
 const issueDefinitions = ISSUE_DEFINITIONS.map(({ id, label, words }) => ({ id, label, words }));
 const lowValuePatterns = [/^ok+([.! ]*)$/i, /tốt([.! ]*)$/i, /^đẹp([.! ]*)$/i, /^5\s*sao/i, /chưa.{0,12}(dùng|thử)/i];
@@ -85,7 +86,11 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   progress('validating', 3, 'Đang khởi tạo hệ thống...');
   const { reviews, source, product, warnings } = await getReviews(rawUrl.trim(), {
     onProgress: options.onProgress,
-    signal: options.signal
+    signal: options.signal,
+    redisFetchImpl: options.redisFetchImpl,
+    blobGetImpl: options.blobGetImpl,
+    blobToken: options.blobToken,
+    now: options.now
   });
   try {
     assertEnoughReviews(reviews);
@@ -152,14 +157,29 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   )).length;
   progress('saving', 84, 'Đang hoàn thiện kết quả...');
   throwIfAborted(options.signal);
-  const dataset = await saveReviewDatasets({
-    rawReviews: reviews,
-    labeledReviews: processedReviews,
-    product,
-    source,
-    labeling: labelingStats
-  });
+  const dataset = source?.type === 'cached'
+    ? {
+        saved: false,
+        reused: true,
+        runId: source.cache?.runId || null,
+        provider: 'vercel-blob-cache'
+      }
+    : await saveReviewDatasets({
+        rawReviews: reviews,
+        labeledReviews: processedReviews,
+        product,
+        source,
+        labeling: labelingStats
+      }, options.datasetOptions);
   if (dataset.warning) warnings.push(dataset.warning);
+  if (product.platform === 'Shopee' && source?.type === 'live'
+    && dataset.saved && dataset.provider === 'vercel-blob-private') {
+    const cached = await setCachedShopeeDataset(product.itemId, dataset, dataset.rawDataset, {
+      redisFetchImpl: options.redisFetchImpl,
+      now: options.now
+    }).catch((error) => ({ saved: false, reason: error?.message || 'UNKNOWN_CACHE_ERROR' }));
+    if (!cached.saved) warnings.push(`Dataset Shopee đã lưu nhưng chưa tạo được cache index: ${cached.reason}.`);
+  }
   warnings.push(...labeling.warnings);
   progress('scoring', 91, 'Đang hoàn thiện kết quả...');
   const narrativeStartedAt = Date.now();
@@ -186,7 +206,7 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
     source,
     warnings,
     labeling: labelingStats,
-    dataset: { saved: dataset.saved, runId: dataset.runId, provider: dataset.provider },
+    dataset: { saved: dataset.saved, reused: Boolean(dataset.reused), runId: dataset.runId, provider: dataset.provider },
     stats: {
       scanned: reviews.length,
       included: genuine.length,

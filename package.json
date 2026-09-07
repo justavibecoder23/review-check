@@ -8,6 +8,7 @@
     "dev": "node --watch tools/local-server.mjs",
     "generate:apify-pool": "node tools/generate-apify-pool.mjs",
     "generate:gemini-pool": "node tools/generate-gemini-pool.mjs",
+    "sync:shopee-cache": "node tools/sync-blob-to-redis.mjs",
     "test": "node --test"
   },
   "dependencies": {

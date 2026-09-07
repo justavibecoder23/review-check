@@ -30,8 +30,12 @@ function datasetEnvelope({ kind, runId, createdAt, product, source, reviews, lab
       originalUrl: product?.originalUrl || null,
       shopId: product?.shopId || null,
       itemId: product?.itemId || null,
+      productId: product?.productId || null,
       title: product?.title || null,
-      category: product?.category || null
+      category: product?.category || null,
+      image: product?.image || null,
+      price: product?.price || null,
+      rating: product?.rating || null
     },
     source: source || null,
     labeling: labeling || null,
@@ -135,7 +139,7 @@ export async function saveReviewDatasets({ rawReviews = [], labeledReviews = [],
         warning: 'Đang chạy trên Vercel nhưng chưa có BLOB_READ_WRITE_TOKEN; dataset không thể lưu bền vững.'
       };
     }
-    return { saved: true, runId, ...location };
+    return { saved: true, runId, createdAt, rawDataset, ...location };
   } catch (error) {
     return {
       saved: false,

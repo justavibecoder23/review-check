@@ -4,6 +4,7 @@ import { collectTikTokReviews } from './apify-tiktok-review-scraper.mjs';
 import { getTikTokProductId, isTikTokUrl, resolveTikTokProductUrl } from './tiktok-url.mjs';
 import { createProgressReporter } from './sse.mjs';
 import { combineAbortSignals, throwIfAborted } from './abort.mjs';
+import { getCachedShopeeDataset, recordShopeeCacheHit, recordShopeeServed } from './product-cache.mjs';
 
 const DEMO_REVIEWS = [
   { rating: 5, text: 'Nhận xu nên đánh giá cho shop 5 sao nha mọi người.', date: '12/08/2026', verified: false },
@@ -484,6 +485,48 @@ export async function getReviews(url, options = {}) {
     warnings.push('Đã mở link chia sẻ TikTok và khôi phục đúng mã sản phẩm trước khi thu thập review.');
   }
 
+  if (shopeeProduct?.itemId) {
+    progress('cache', 12, 'Đang kiểm tra dữ liệu Shopee gần đây...');
+    const cached = await getCachedShopeeDataset(shopeeProduct.itemId, {
+      redisFetchImpl: options.redisFetchImpl,
+      blobGetImpl: options.blobGetImpl,
+      blobToken: options.blobToken,
+      now: options.now
+    });
+    if (cached) {
+      await Promise.allSettled([
+        recordShopeeCacheHit({ redisFetchImpl: options.redisFetchImpl }),
+        recordShopeeServed({ redisFetchImpl: options.redisFetchImpl })
+      ]);
+      const cachedProduct = cached.dataset.product || {};
+      return {
+        reviews: cached.dataset.reviews,
+        source: {
+          type: 'cached',
+          label: 'Vercel Blob Cache · Shopee',
+          reviewLimit: cached.dataset.source?.collection?.targetMaximum || 100,
+          collection: cached.dataset.source?.collection,
+          cache: {
+            hit: true,
+            runId: cached.dataset.runId,
+            createdAt: cached.dataset.createdAt,
+            ageMs: cached.validation.ageMs
+          }
+        },
+        product: {
+          ...cachedProduct,
+          platform: 'Shopee',
+          url: productUrl,
+          originalUrl: parsed.href,
+          shopId: shopeeProduct.shopId,
+          itemId: shopeeProduct.itemId,
+          resolvedFromShortLink: shopeeProduct.wasShortened
+        },
+        warnings
+      };
+    }
+  }
+
   const metadataUrls = productMetadataUrls(productUrl, {
     platform,
     productId: tiktokProduct?.productId,
@@ -516,6 +559,9 @@ export async function getReviews(url, options = {}) {
     });
     const productMeta = mergeProductMetadata(pageMeta, collectedMeta, platform);
     if (Array.isArray(collected.warnings)) warnings.push(...collected.warnings);
+    if (platform === 'Shopee') {
+      await recordShopeeServed({ redisFetchImpl: options.redisFetchImpl }).catch(() => null);
+    }
     return {
       reviews,
       source: {
