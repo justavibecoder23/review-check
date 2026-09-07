@@ -6,7 +6,6 @@ import { saveReviewDatasets } from './review-dataset-storage.mjs';
 import { createProgressReporter } from './sse.mjs';
 import { assertEnoughReviews, checkSamplingCoverage } from './analysis-eligibility.mjs';
 import { throwIfAborted } from './abort.mjs';
-import { setCachedShopeeDataset } from './product-cache.mjs';
 
 const issueDefinitions = ISSUE_DEFINITIONS.map(({ id, label, words }) => ({ id, label, words }));
 const lowValuePatterns = [/^ok+([.! ]*)$/i, /tốt([.! ]*)$/i, /^đẹp([.! ]*)$/i, /^5\s*sao/i, /chưa.{0,12}(dùng|thử)/i];
@@ -17,6 +16,7 @@ const exclusionReasonByCode = Object.freeze({
   LOW_VALUE_RESALE_ONLY: 'Nội dung chủ yếu rao bán hoặc sang tay sản phẩm, không đánh giá chất lượng',
   LOW_VALUE_REWARD_CONTENT: 'Nội dung hoặc hình ảnh được đăng để nhận xu/thưởng, không dùng làm bằng chứng',
   LOW_VALUE_PROMOTIONAL_CONTENT: 'Nội dung quảng cáo cửa hàng hoặc liệt kê mặt hàng khác, không đánh giá sản phẩm',
+  LOW_VALUE_EXAGGERATED_LANGUAGE: 'Dùng nhiều lời khen/chê tuyệt đối nhưng thiếu trải nghiệm cụ thể để kiểm chứng',
   LOW_VALUE_NO_USAGE_EXPERIENCE: 'Chưa sử dụng hoặc chưa trải nghiệm sản phẩm, không đủ thông tin đánh giá',
   LOW_VALUE_NO_USAGE: 'Chưa sử dụng hoặc chưa trải nghiệm sản phẩm, không đủ thông tin đánh giá',
   LOW_VALUE_REPETITION: 'Nội dung lặp ký tự hoặc biểu tượng, không đủ làm bằng chứng',
@@ -56,9 +56,6 @@ export function shouldKeep(review) {
   }
   if (seeding && !hasIssue) return { keep: false, reason: 'Có dấu hiệu nhận xu / seeding' };
   if (seeding) return { keep: false, reason: 'Có bằng chứng seeding dù review có nhắc đến lỗi' };
-  // Khi Layer 2 không thể kết luận sau retry, giữ review không bị Layer 1 khóa
-  // cứng và đánh dấu fallback trong audit thay vì biến sự cố AI thành loại oan.
-  if (review.labels?.layer2_fallback_accepted) return { keep: true, reason: null };
   if (review.labels?.is_vague) return { keep: false, reason: 'Phản hồi tiêu cực mơ hồ, chưa nêu lỗi cụ thể' };
   if (review.labels?.is_low_value && !hasIssue) {
     return { keep: false, reason: lowValueReason || 'Nội dung ít thông tin, không đủ làm bằng chứng' };
@@ -86,11 +83,7 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   progress('validating', 3, 'Đang khởi tạo hệ thống...');
   const { reviews, source, product, warnings } = await getReviews(rawUrl.trim(), {
     onProgress: options.onProgress,
-    signal: options.signal,
-    redisFetchImpl: options.redisFetchImpl,
-    blobGetImpl: options.blobGetImpl,
-    blobToken: options.blobToken,
-    now: options.now
+    signal: options.signal
   });
   try {
     assertEnoughReviews(reviews);
@@ -157,29 +150,14 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   )).length;
   progress('saving', 84, 'Đang hoàn thiện kết quả...');
   throwIfAborted(options.signal);
-  const dataset = source?.type === 'cached'
-    ? {
-        saved: false,
-        reused: true,
-        runId: source.cache?.runId || null,
-        provider: 'vercel-blob-cache'
-      }
-    : await saveReviewDatasets({
-        rawReviews: reviews,
-        labeledReviews: processedReviews,
-        product,
-        source,
-        labeling: labelingStats
-      }, options.datasetOptions);
+  const dataset = await saveReviewDatasets({
+    rawReviews: reviews,
+    labeledReviews: processedReviews,
+    product,
+    source,
+    labeling: labelingStats
+  });
   if (dataset.warning) warnings.push(dataset.warning);
-  if (product.platform === 'Shopee' && source?.type === 'live'
-    && dataset.saved && dataset.provider === 'vercel-blob-private') {
-    const cached = await setCachedShopeeDataset(product.itemId, dataset, dataset.rawDataset, {
-      redisFetchImpl: options.redisFetchImpl,
-      now: options.now
-    }).catch((error) => ({ saved: false, reason: error?.message || 'UNKNOWN_CACHE_ERROR' }));
-    if (!cached.saved) warnings.push(`Dataset Shopee đã lưu nhưng chưa tạo được cache index: ${cached.reason}.`);
-  }
   warnings.push(...labeling.warnings);
   progress('scoring', 91, 'Đang hoàn thiện kết quả...');
   const narrativeStartedAt = Date.now();
@@ -206,7 +184,7 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
     source,
     warnings,
     labeling: labelingStats,
-    dataset: { saved: dataset.saved, reused: Boolean(dataset.reused), runId: dataset.runId, provider: dataset.provider },
+    dataset: { saved: dataset.saved, runId: dataset.runId, provider: dataset.provider },
     stats: {
       scanned: reviews.length,
       included: genuine.length,
@@ -232,4 +210,3 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   progress('complete', 100, 'Phân tích hoàn tất.');
   return result;
 }
-

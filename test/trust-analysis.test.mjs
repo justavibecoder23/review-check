@@ -19,7 +19,7 @@ test('mẫu quá nhỏ không công bố điểm nhưng vẫn trả ưu nhược
   assert.equal(trust.cons.length > 0, true);
   assert.equal(trust.drivers.length >= 6, true);
   assert.match(trust.summary, /chưa có đủ review/i);
-  assert.match(trust.pros[0].detail, /Dẫn chứng:/);
+  assert.doesNotMatch(trust.pros[0].detail, /Dẫn chứng:|review đáng tham khảo cùng đề cập/i);
   assert.doesNotMatch(trust.drivers.map((driver) => `${driver.title} ${driver.detail}`).join(' '), /Fisher|p\s*=|OR\*|logistic|hard cap|Bonferroni/i);
 });
 
@@ -124,7 +124,7 @@ test('nhược điểm màn hình không dùng câu mẫu chất liệu của qu
   const item = trust.cons.find((candidate) => candidate.mentions === 3);
 
   assert.equal(item.title, 'Độ hoàn thiện / độ bền phần cứng');
-  assert.match(item.detail, /Dẫn chứng:/);
+  assert.doesNotMatch(item.detail, /Dẫn chứng:|review đáng tham khảo cùng đề cập/i);
   assert.doesNotMatch(item.detail, /chất liệu mỏng|\bthô\b|có mùi/i);
 });
 
@@ -480,7 +480,7 @@ test('nhãn kích thước dùng mô tả trung tính cho sản phẩm điện t
   assert.match(sizeIssue.detail, /không gian sử dụng/i);
 });
 
-test('tóm tắt review mỹ phẩm hiển thị nhiều chủ đề có số đếm và bằng chứng cụ thể', () => {
+test('tóm tắt review mỹ phẩm ngắn gọn và giữ ID review nguồn cho từng chủ đề', () => {
   const useful = [
     { rating: 5, text: 'Màu đẹp, lên màu chuẩn và son lì lắm.', labels: { has_defect: false, defect_categories: [] } },
     { rating: 5, text: 'Son lỳ phết, nhẹ môi và mùi thơm.', labels: { has_defect: false, defect_categories: [] } },
@@ -491,7 +491,7 @@ test('tóm tắt review mỹ phẩm hiển thị nhiều chủ đề có số đ
     { rating: 3, text: 'Bôi lên bị khô môi và nóng rát.', labels: { has_defect: true, defect_categories: ['su-dung'] } },
     { rating: 2, text: 'Màu không chuẩn, không giống trên hình.', labels: { has_defect: true, defect_categories: ['dung-mo-ta'] } },
     { rating: 2, text: 'Giao chậm và hộp móp.', labels: { has_defect: true, defect_categories: ['giao-hang'] } }
-  ].map((review) => ({ ...review, included: true, verified: true }));
+  ].map((review, index) => ({ ...review, labelId: `r${index + 1}`, included: true, verified: true }));
 
   const trust = buildRuleBasedTrust(useful);
   assert.equal(trust.pros.length, 5);
@@ -502,7 +502,8 @@ test('tóm tắt review mỹ phẩm hiển thị nhiều chủ đề có số đ
   assert.ok(trust.cons.some((item) => item.title === 'Kết cấu và thao tác sử dụng'));
   assert.ok(trust.cons.some((item) => item.title === 'Cảm giác trên môi'));
   for (const item of [...trust.pros, ...trust.cons]) {
-    assert.match(item.detail, /review đáng tham khảo cùng đề cập/);
-    assert.match(item.detail, /Dẫn chứng:/);
+    assert.doesNotMatch(item.detail, /review đáng tham khảo cùng đề cập|Dẫn chứng:/i);
+    assert.equal(item.detail.length <= 190, true);
+    assert.equal(item.evidenceIds.length, item.mentions);
   }
 });

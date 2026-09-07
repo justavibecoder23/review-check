@@ -85,16 +85,19 @@ test('bố cục nhóm có chế độ một cột cho màn hình nhỏ', () => 
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.driver-grid \{ grid-template-columns: 1fr; \}/);
 });
 
-test('nội dung dài được thu gọn và có thể mở rộng để đọc chi tiết', () => {
+test('tóm tắt ưu nhược điểm hiển thị trực tiếp và số liệu liên kết review nguồn', () => {
   const { context, roots } = resultsHarness();
   context.renderSentimentList('#pros-list', [
-    { title: 'Chất liệu', detail: 'Nội dung giải thích chi tiết.', mentions: 3 }
+    { title: 'Chất liệu', detail: 'Nội dung giải thích ngắn gọn.', mentions: 3, evidenceIds: ['r1', 'r2', 'r3'] }
   ], 20);
   const driverMarkup = context.renderDriverGroups([
     { impact: 'up', title: 'Tín hiệu tốt', detail: 'Giải thích đầy đủ về tín hiệu.' }
   ]);
 
-  assert.match(roots['#pros-list'].innerHTML, /<details class="sentiment-detail">/);
+  assert.doesNotMatch(roots['#pros-list'].innerHTML, /sentiment-detail|Xem chi tiết/);
+  assert.match(roots['#pros-list'].innerHTML, /<p>Nội dung giải thích ngắn gọn\.<\/p>/);
+  assert.match(roots['#pros-list'].innerHTML, /<button class="sentiment-mentions"/);
+  assert.match(roots['#pros-list'].innerHTML, /data-evidence-ids="r1\|r2\|r3"/);
   assert.match(driverMarkup, /<details class="driver-detail">/);
   assert.match(driverMarkup, /Xem chi tiết/);
   assert.match(html, /id="trust-summary-more"/);

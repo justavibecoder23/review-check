@@ -60,7 +60,11 @@ function countThemes(reviews, definitions) {
         const text = normalise(review.text);
         return definition.words.some((word) => hasNonNegatedPhrase(text, normalise(word)));
       });
-      return { ...definition, count: matching.length, example: matching[0]?.text || '' };
+      return {
+        ...definition,
+        count: matching.length,
+        evidenceIds: matching.map((review) => String(review.labelId || '')).filter(Boolean)
+      };
     })
     .filter((theme) => theme.count > 0)
     .sort((left, right) => right.count - left.count);
@@ -77,7 +81,11 @@ function countDefectThemes(reviews) {
         const text = normalise(review.text);
         return definition.words.some((word) => text.includes(normalise(word)));
       });
-      return { ...definition, count: matching.length, example: matching[0]?.text || '' };
+      return {
+        ...definition,
+        count: matching.length,
+        evidenceIds: matching.map((review) => String(review.labelId || '')).filter(Boolean)
+      };
     })
     .filter((theme) => theme.count > 0)
     .sort((left, right) => right.count - left.count);
@@ -99,16 +107,10 @@ function contextualizeNegativeTheme(theme, product = {}) {
     return {
       ...theme,
       title: 'Độ hoàn thiện / độ bền phần cứng',
-      description: 'Những review này nêu vấn đề cụ thể về độ hoàn thiện hoặc độ bền của màn hình; xem dẫn chứng để biết lỗi thực tế.'
+      description: 'Người mua nêu vấn đề cụ thể về độ hoàn thiện hoặc độ bền phần cứng của màn hình.'
     };
   }
   return theme;
-}
-
-function reviewExcerpt(value, maximum = 105) {
-  const text = String(value || '').replace(/\s+/g, ' ').trim();
-  if (!text) return '';
-  return text.length <= maximum ? text : `${text.slice(0, maximum).trim()}…`;
 }
 
 function fallbackCopy(reviews, included, excluded, product = {}) {
@@ -116,8 +118,9 @@ function fallbackCopy(reviews, included, excluded, product = {}) {
     .slice(0, MAX_SUMMARY_ITEMS)
     .map((theme) => ({
       title: theme.title,
-      detail: `${theme.count} review đáng tham khảo cùng đề cập. ${theme.description}${theme.example ? ` Dẫn chứng: “${reviewExcerpt(theme.example)}”` : ''}`,
-      mentions: theme.count
+      detail: theme.description,
+      mentions: theme.count,
+      evidenceIds: theme.evidenceIds
     }));
   // Dùng đúng nhãn cuối của pipeline, cùng nguồn dữ liệu với công thức điểm.
   // Tránh UI đếm bằng keyword khác với số khuyết tật ở backend.
@@ -126,8 +129,9 @@ function fallbackCopy(reviews, included, excluded, product = {}) {
     .map((theme) => contextualizeNegativeTheme(theme, product))
     .map((theme) => ({
       title: theme.title,
-      detail: `${theme.count} review đáng tham khảo cùng đề cập. ${theme.description}${theme.example ? ` Dẫn chứng: “${reviewExcerpt(theme.example)}”` : ''}`,
-      mentions: theme.count
+      detail: theme.description,
+      mentions: theme.count,
+      evidenceIds: theme.evidenceIds
     }));
 
   if (!pros.length) {
@@ -135,9 +139,10 @@ function fallbackCopy(reviews, included, excluded, product = {}) {
     pros.push({
       title: positiveCount ? 'Có phản hồi tích cực' : 'Chưa có ưu điểm nổi trội',
       detail: positiveCount
-        ? `${positiveCount} review hữu ích chấm từ 4 sao, nhưng chưa cùng nhắc một ưu điểm đủ rõ.`
+        ? 'Có phản hồi tích cực, nhưng chưa có một ưu điểm cụ thể được lặp lại đủ rõ.'
         : 'Dữ liệu hiện tại chưa cho thấy một ưu điểm được lặp lại rõ ràng.',
-      mentions: positiveCount
+      mentions: positiveCount,
+      evidenceIds: included.filter((review) => Number(review.rating) >= 4).map((review) => String(review.labelId || '')).filter(Boolean)
     });
   }
   if (!cons.length) {
@@ -145,9 +150,10 @@ function fallbackCopy(reviews, included, excluded, product = {}) {
     cons.push({
       title: lowRatingCount ? 'Có phản hồi cần cân nhắc' : 'Chưa thấy nhược điểm lặp lại',
       detail: lowRatingCount
-        ? `${lowRatingCount} review hữu ích chấm từ 3 sao trở xuống, nhưng chưa cùng chỉ ra một vấn đề cụ thể.`
+        ? 'Có phản hồi chưa hài lòng, nhưng chưa có một vấn đề cụ thể được lặp lại đủ rõ.'
         : 'Không có nhược điểm cụ thể nào được nhiều review hữu ích cùng nhắc đến.',
-      mentions: lowRatingCount
+      mentions: lowRatingCount,
+      evidenceIds: included.filter((review) => Number(review.rating) <= 3).map((review) => String(review.labelId || '')).filter(Boolean)
     });
   }
 
@@ -479,10 +485,17 @@ export function buildGeminiNarrativePayload(reviews = [], fallback, options = {}
 
 function cleanItem(item, fallback) {
   if (!item || typeof item !== 'object') return fallback;
+  const rawDetail = String(item.detail || fallback?.detail || '')
+    .replace(/^\s*\d+\s+review\s+đáng tham khảo cùng đề cập\.?\s*/iu, '')
+    .replace(/\s*Dẫn chứng\s*:[\s\S]*$/iu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const detail = rawDetail.length <= 190 ? rawDetail : `${rawDetail.slice(0, 187).replace(/\s+\S*$/u, '')}…`;
   return {
     title: String(item.title || fallback?.title || '').slice(0, 90),
-    detail: String(item.detail || fallback?.detail || '').slice(0, 420),
-    mentions: Math.max(0, Math.round(Number(fallback?.mentions) || 0))
+    detail,
+    mentions: Math.max(0, Math.round(Number(fallback?.mentions) || 0)),
+    evidenceIds: Array.isArray(fallback?.evidenceIds) ? fallback.evidenceIds : []
   };
 }
 
@@ -536,7 +549,7 @@ async function analyzeWithGemini(reviews, fallback, options = {}) {
     'Điểm đã được backend tính bằng thuật toán RealView v4.2: ba thành phần chất lượng bằng chứng, mức ít nhiễu và độ phủ kiểm định tạo điểm chất lượng cơ sở; độ phủ mẫu chỉ điều chỉnh bảo thủ phần điểm trên 50 đúng một lần. Nhược điểm sản phẩm không trực tiếp làm giảm TrustScore.',
     'Nội dung hiển thị cho người dùng tuyệt đối không được nhắc Fisher, p-value, odds ratio, binomial, logistic, Bonferroni, guardrail, điểm thành phần hoặc công thức.',
     'Summary cần giải thích ý nghĩa kết quả bằng lời trong 2 câu và nhắc rõ TrustScore đo độ đáng tin của tập review, không phải điểm chất lượng tuyệt đối của sản phẩm.',
-    'Mỗi ưu/nhược điểm phải nêu rõ người mua thích hoặc chưa hài lòng điều gì, ảnh hưởng thực tế ra sao và có bao nhiêu review cùng đề cập; tránh câu chung chung như “ghi nhận tín hiệu tích cực”.',
+    'Mỗi ưu/nhược điểm chỉ viết một câu ngắn, cụ thể: người mua thích hoặc chưa hài lòng điều gì và ảnh hưởng thực tế ra sao. Không lặp số lượt review, không thêm câu “cùng đề cập” và không chèn dẫn chứng vì giao diện đã liên kết trực tiếp tới review nguồn.',
     'Danh sách drivers trong fixedBackendDraft đã được backend xác định và sẽ được giữ nguyên; không đổi impact, thứ tự, tiêu đề hoặc nội dung của các driver.',
     Number.isFinite(fallback.score)
       ? `Điểm cố định phải giữ nguyên: ${fallback.score}/100.`
