@@ -506,4 +506,3 @@ test('tóm tắt review mỹ phẩm hiển thị nhiều chủ đề có số đ
     assert.match(item.detail, /Dẫn chứng:/);
   }
 });
-
