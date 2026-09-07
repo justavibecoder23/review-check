@@ -74,7 +74,7 @@ test('Layer 1 giữ review hộp đựng đồ có nhận xét chất lượng d
   }
 });
 
-test('chế độ mặc định gửi cả review ngắn/low-value chưa chắc chắn sang Gemini', async () => {
+test('chế độ mặc định loại cứng review quá ngắn và chỉ gửi low-value chưa chắc chắn sang Gemini', async () => {
   const previousKey = process.env.GEMINI_API_KEY;
   delete process.env.GEMINI_API_KEY;
   try {
@@ -84,7 +84,8 @@ test('chế độ mặc định gửi cả review ngắn/low-value chưa chắc 
       { rating: 5, text: 'Tốt' },
       { rating: 4, text: 'Mình đã sử dụng một thời gian và cảm nhận nhìn chung ổn.' }
     ], { product: { title: 'Cáp sạc nhanh Baseus' } });
-    assert.equal(result.stats.layer2Requested, 2);
+    assert.equal(result.stats.layer2Requested, 1);
+    assert.equal(result.reviews[2].labels.hard_reject, true);
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
   }
@@ -204,11 +205,11 @@ test('Layer 2 có thể sửa nhãn nhưng không được thay quote không có
   }
 });
 
-test('Layer 2 lỗi thì pipeline fail-safe về Layer 1', async () => {
+test('Layer 2 lỗi thì pipeline fail-safe về Layer 1 cho review chưa chắc chắn', async () => {
   const previousKey = process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY = 'test-key';
   try {
-    const result = await labelReviewsTwoLayer([{ rating: 5, text: 'Tốt' }], {
+    const result = await labelReviewsTwoLayer([{ rating: 5, text: 'Mới nhận hàng nên chưa mở, chưa biết thế nào.' }], {
       mode: 'all',
       fetchImpl: async () => ({ ok: false, status: 503 })
     });
@@ -881,6 +882,78 @@ test('review chỉ nói hình ảnh sản phẩm đúng mô tả không bị hi�
   assert.equal(label.is_seeding, false);
   assert.equal(label.hard_reject, false);
   assert.equal(label.reason_codes.includes('LOW_VALUE_REWARD_CONTENT'), false);
+});
+
+test('quảng cáo cửa hàng liệt kê mặt hàng khác bị loại cứng khỏi sản phẩm bỉm', async () => {
+  const text = 'Shop “Siêu Thị Mini” có bán tất cả các mặt hàng gia dụng như: Chổi quét nhà, chổi quét bụi, chổi lông gà, cây lau nhà, cây cào nước, bàn chải chà sàn, cọ rửa toilet, thảm, quạt và các mặt hàng gia dụng khác. Khách yêu ghé tham khảo và ủng hộ shop ạ.';
+  const product = { title: 'Combo 100 bỉm Yorobbe form suông size M-3XL độ dày 2mm' };
+  const label = labelReviewLayer1({ rating: 5, text }, 0, product);
+
+  assert.equal(label.is_low_value, true);
+  assert.equal(label.hard_reject, true);
+  assert.equal(label.information_value, 'none');
+  assert.equal(label.relevance, 'needs_review');
+  assert.equal(label.reason_codes.includes('LOW_VALUE_PROMOTIONAL_CONTENT'), true);
+
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  try {
+    const result = await labelReviewsTwoLayer([{ rating: 5, text }], {
+      mode: 'all',
+      product,
+      fetchImpl: async () => { throw new Error('Hard reject không được gửi sang Gemini.'); }
+    });
+    assert.equal(result.stats.layer2Requested, 0);
+    assert.equal(shouldKeep(result.reviews[0]).keep, false);
+    assert.match(shouldKeep(result.reviews[0]).reason, /quảng cáo|mặt hàng khác/i);
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
+test('review thật có nhắc shop nhưng đánh giá đúng sản phẩm không bị coi là quảng cáo', () => {
+  const label = labelReviewLayer1({
+    rating: 4,
+    text: 'Bỉm mềm, thấm hút ổn và bé mặc không bị hằn; shop tư vấn size khá đúng.'
+  }, 0, { title: 'Bỉm Yorobbe size M' });
+  assert.equal(label.hard_reject, false);
+  assert.equal(label.reason_codes.includes('LOW_VALUE_PROMOTIONAL_CONTENT'), false);
+});
+
+test('review quá ngắn và không có bằng chứng chất lượng bị loại cứng', async () => {
+  const review = { text: 'Hàng ổn', rating: 5 };
+  const product = { title: 'Combo 100 bỉm Yorobbe' };
+  const label = labelReviewLayer1(review, 0, product);
+
+  assert.equal(label.hard_reject, true);
+  assert.equal(label.is_low_value, true);
+  assert.equal(label.reason_codes.includes('LOW_VALUE_SHORT'), true);
+
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  try {
+    const result = await labelReviewsTwoLayer([review], {
+      mode: 'all',
+      product,
+      fetchImpl: async () => { throw new Error('Hard reject không được gửi sang Gemini.'); }
+    });
+    assert.equal(result.stats.layer2Requested, 0);
+    assert.equal(shouldKeep(result.reviews[0]).keep, false);
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
+test('review ngắn nhưng nêu lỗi cụ thể vẫn được phép đi tiếp', () => {
+  const label = labelReviewLayer1({ text: 'Bỉm bị rò sau 2 giờ', rating: 2 }, 0, {
+    title: 'Combo 100 bỉm Yorobbe'
+  });
+
+  assert.equal(label.hard_reject, false);
+  assert.equal(label.has_defect, true);
+  assert.equal(label.is_low_value, false);
 });
 
 test('bài đăng pass lại sản phẩm kèm giá không được dùng làm bằng chứng chất lượng', () => {
