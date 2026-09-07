@@ -93,7 +93,8 @@ test('chế độ mặc định gửi cả review ngắn/low-value chưa chắc 
 test('rule nhận xu tạo nhãn seeding có evidence', () => {
   const label = labelReviewLayer1({ rating: 5, text: 'Hình ảnh mang tính chất nhận xu, chưa dùng sản phẩm.' });
   assert.equal(label.is_seeding, true);
-  assert.ok(label.evidence.some((item) => item.label === 'seeding'));
+  assert.equal(label.hard_reject, true);
+  assert.ok(label.evidence.some((item) => item.label === 'reward_motivated_content'));
   assert.ok(label.confidence >= 0.9);
 });
 
@@ -773,22 +774,27 @@ test('hàng nhận bị xước không bị nhầm thành seeding và nhận đ�
   assert.equal(label.defect_categories.includes('chat-lieu'), true);
 });
 
-test('review 3 sao kèm câu lấy xu nhưng phản ánh lỗi thực tế không bị gán seeding', () => {
+test('review 3 sao kèm câu lấy xu bị loại cứng dù có phản ánh lỗi thực tế', () => {
   const text = 'Liên hệ shop về vấn đề hàng bị lỗi nhưng shop k thèm rep như kiểu biết trước cái bàn lỗi này rồi í, kiểu móp như này chắc bị sẵn từ trước khi gửi mà vẫn gửi phải , thái độ chán chảnh dễ sợ . bình luận lấy xu ạ';
   const label = labelReviewLayer1({ rating: 3, text });
-  assert.equal(label.is_seeding, false);
+  assert.equal(label.is_seeding, true);
+  assert.equal(label.is_low_value, true);
+  assert.equal(label.hard_reject, true);
+  assert.equal(label.information_value, 'none');
   assert.equal(label.has_defect, true);
-  assert.equal(label.conflicts.includes('SEEDING_WITH_NEGATIVE_DEFECT'), true);
-  assert.equal(label.reason_codes.includes('NEGATIVE_REVIEW_WITH_COIN_DISCLAIMER'), true);
+  assert.equal(label.reason_codes.includes('LOW_VALUE_REWARD_CONTENT'), true);
 });
 
-test('review hình ảnh nhận xu kèm lỗi rách ở 3 sao không bị coi là seeding', () => {
+test('review hình ảnh nhận xu kèm lỗi rách ở 3 sao vẫn bị loại cứng', () => {
   const text = 'Hình ảnh mang tính chất nhận xu. Hàng mã đẹp, dùng 1 tuần rách hết vải. Đã vứt vào kho';
   const label = labelReviewLayer1({ rating: 3, text });
-  assert.equal(label.is_seeding, false);
+  assert.equal(label.is_seeding, true);
+  assert.equal(label.is_low_value, true);
+  assert.equal(label.hard_reject, true);
+  assert.equal(label.information_value, 'none');
   assert.equal(label.has_defect, true);
   assert.equal(label.defect_categories.includes('chat-lieu'), true);
-  assert.equal(label.conflicts.includes('SEEDING_WITH_NEGATIVE_DEFECT'), true);
+  assert.equal(label.reason_codes.includes('LOW_VALUE_REWARD_CONTENT'), true);
 });
 
 test('review ghi rõ chưa sử dụng không có lỗi bị gán LOW_VALUE_NO_USAGE_EXPERIENCE', () => {
@@ -841,7 +847,7 @@ test('Layer 1 giữ các review mỹ phẩm có trải nghiệm cụ thể thay 
   }
 });
 
-test('review mỹ phẩm có lỗi cụ thể vẫn được giữ an toàn khi câu minh họa làm Layer 2 thất bại', async () => {
+test('review mỹ phẩm có câu hình ảnh chỉ để nhận xu không được Layer 2 mở khóa', async () => {
   const previousKey = process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY = 'test-key';
   try {
@@ -853,14 +859,28 @@ test('review mỹ phẩm có lỗi cụ thể vẫn được giữ an toàn khi 
       product: { title: 'Son tint lì' },
       fetchImpl: async () => ({ ok: false, status: 503 })
     });
-    assert.equal(result.reviews[0].labels.has_defect, true);
+    assert.equal(result.reviews[0].labels.is_seeding, true);
+    assert.equal(result.reviews[0].labels.is_low_value, true);
+    assert.equal(result.reviews[0].labels.hard_reject, true);
+    assert.equal(result.reviews[0].labels.information_value, 'none');
     assert.equal(result.reviews[0].labels.layer2_unavailable, false);
-    assert.equal(result.reviews[0].labels.layer2_fallback_accepted, true);
-    assert.equal(result.reviews[0].labels.reviewed_by, 'layer1-safe-fallback');
+    assert.equal(result.stats.layer2Requested, 0);
+    assert.equal(shouldKeep(result.reviews[0]).keep, false);
+    assert.match(shouldKeep(result.reviews[0]).reason, /nhận xu|nhận thưởng|thưởng/i);
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
     else delete process.env.GEMINI_API_KEY;
   }
+});
+
+test('review chỉ nói hình ảnh sản phẩm đúng mô tả không bị hiểu nhầm là nội dung nhận xu', () => {
+  const label = labelReviewLayer1({
+    rating: 5,
+    text: 'Hình ảnh sản phẩm đúng mô tả, màu thực tế đẹp và chất liệu dùng chắc chắn.'
+  });
+  assert.equal(label.is_seeding, false);
+  assert.equal(label.hard_reject, false);
+  assert.equal(label.reason_codes.includes('LOW_VALUE_REWARD_CONTENT'), false);
 });
 
 test('bài đăng pass lại sản phẩm kèm giá không được dùng làm bằng chứng chất lượng', () => {
