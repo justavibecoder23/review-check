@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "version": "2.7.0",
+  "version": "2.8.0",
   "description": "Labeling functions cho review tiếng Việt. Relevance và giá trị thông tin là hai trục riêng; Layer 1 chỉ tạo ứng viên off-topic và Layer 2 phải xác nhận bằng bằng chứng nguyên văn.",
   "policy": {
     "allowed_defect_categories": ["chat-lieu", "kich-co", "dung-mo-ta", "giao-hang", "su-dung"],
@@ -16,7 +16,7 @@
       "strong_regex_patterns": [
         "(nhan|lay|kiem|tich).{0,8}\\b(xu|coin|diem)\\b.{0,24}(danh gia|review|cmt|comment|5 sao|nam sao)?",
         "(danh gia|review|cmt|comment).{0,18}(de|lay|nhan|kiem).{0,8}\\b(xu|coin|diem|thuong)\\b",
-        "(hinh anh|video).{0,18}(mang tinh chat|chi de|de).{0,10}\\b(nhan xu|lay xu|minh hoa)\\b",
+        "(hinh anh|video).{0,18}(mang tinh chat|chi de|de).{0,10}\\b(nhan xu|lay xu|kiem xu|nhan diem|lay diem|nhan thuong|lay thuong)\\b",
         "chua.{0,18}(dung|su dung|mo|thu|xai|boc).{0,30}(5 sao|nam sao|cho shop)",
         "nhan du hang.{0,22}chua.{0,10}(dung|thu|xai).{0,20}(5 sao|nam sao)",
         "cho shop.{0,8}(5 sao|nam sao).{0,18}\\b(nhan xu|lay xu|kiem xu)\\b"
@@ -139,3 +139,4 @@
     }
   }
 }
+

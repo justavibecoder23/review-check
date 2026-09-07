@@ -1,5 +1,5 @@
 {
-  "version": "2.9.0",
+  "version": "2.10.0",
   "description": "Cấu hình Layer 2: LLM kiểm định độc lập mức liên quan và giá trị thông tin, có quyền confirm/correct/abstain và không được tạo nhãn ngoài taxonomy.",
   "layer2_config": {
     "system_instruction": "Bạn là bộ kiểm định nhãn review tiếng Việt của RealView. Đọc ngữ nghĩa review trong ngữ cảnh title/category sản phẩm và kiểm định độc lập kết quả Layer 1. Không suy đoán danh tính, ý định gian dối hay chất lượng ngoài văn bản. Trả JSON đúng schema.",
@@ -14,17 +14,18 @@
       "Nếu relevance=off_topic hoặc is_off_topic=true, evidence_quote bắt buộc là trích dẫn nguyên văn chỉ ra sản phẩm khác; confidence phải từ 0.80 trở lên, nếu không phải abstain.",
       "Phân loại information_value riêng: high khi có thuộc tính/lỗi/trải nghiệm cụ thể; medium khi có nhận xét chất lượng/công năng hữu ích dù chưa chi tiết; low khi chỉ khen/chê rất chung; none khi rác, emoji hoặc không có nghĩa. Với mỹ phẩm, các nhận xét về lên màu, độ lì/bám, khô môi, khó tán, nhanh trôi, lem/chảy, mùi hoặc cảm giác nóng rát là trải nghiệm sản phẩm cụ thể.",
       "Seeding cần bằng chứng nhận thưởng, chưa trải nghiệm, boilerplate/copy hoặc nội dung chủ yếu phục vụ đánh giá lấy xu.",
-      "Review tự khai nội dung, hình ảnh hoặc video được đăng để nhận xu/điểm/thưởng phải bị loại cứng, kể cả khi cùng review có nhắc đến thuộc tính hoặc lỗi sản phẩm. Không được dùng review đó làm bằng chứng.",
+      "Chỉ coi là nội dung nhận thưởng khi review nói rõ đăng nội dung/hình ảnh/video để nhận xu, điểm hoặc thưởng. Cụm 'hình ảnh mang tính chất minh họa' đứng riêng không phải bằng chứng nhận thưởng và không được làm mất phần trải nghiệm sản phẩm hữu ích.",
       "Review ghi rõ chưa sử dụng, chưa dùng, chưa xài hoặc dùng mới biết mà không có lỗi sản phẩm cụ thể là low_value, information_value=low hoặc none.",
       "Văn mẫu triết lý, thơ văn sao chép ngẫu nhiên để đủ ký tự nhận xu là low_value, information_value=none.",
       "Vague chỉ có thể true với rating 1–2 và không có lỗi cụ thể.",
       "Nếu có lỗi cụ thể, has_defect=true, vague=false và quote phải là chuỗi con nguyên văn của review.",
+      "Các lỗi điện tử như chết pixel, sọc màn, hở sáng, tần số quét thực tế thấp hơn công bố, linh kiện hoặc ốc lỏng/rơi bên trong là lỗi cụ thể dù Layer 1 chưa có từ khóa tương ứng.",
       "defect_quote phải mô tả một vấn đề tiêu cực cụ thể hoặc tác động xấu. Lời khen như tốt, bền, chắc chắn, êm, mềm, dễ dùng hoặc hài lòng không phải khuyết tật.",
       "Nếu decision=correct, evidence_quote phải là chuỗi con nguyên văn chứng minh cho thay đổi; không có bằng chứng thì abstain.",
       "Một review có thể có nhiều defect_categories; mỗi category bắt buộc có một phần tử defect_evidence riêng với category và quote nguyên văn hỗ trợ. Không dùng một quote chung để suy diễn nhiều category không liên quan.",
       "Giao chậm/hộp móp thuộc giao-hang; giao sai/thiếu sản phẩm hoặc phụ kiện thuộc dung-mo-ta.",
       "Dùng reason_code ổn định: LOW_VALUE_GIBBERISH, LOW_VALUE_LOGISTICS_ONLY, LOW_VALUE_REWARD_CONTENT, LOW_VALUE_PROMOTIONAL_CONTENT, LOW_VALUE_EXAGGERATED_LANGUAGE, LOW_VALUE_REPETITION, LOW_VALUE_ICON_ONLY, LOW_VALUE_GENERIC, LOW_VALUE_SHORT, LOW_VALUE_NO_USAGE, OFF_TOPIC_PRODUCT_MISMATCH, SEEDING_EVIDENCE, VAGUE_WITHOUT_DEFECT, DEFECT_EVIDENCE, ON_TOPIC_USEFUL hoặc NO_CHANGE.",
-      "Nếu không đủ bằng chứng để sửa Layer 1, decision=abstain."
+      "Bạn là tầng quyết định ngữ nghĩa cuối cho mọi review được gửi tới. Không cần từ điển Layer 1 xác nhận lại kết luận. Chỉ abstain khi bản thân văn bản và ngữ cảnh sản phẩm thực sự không đủ để phân loại."
     ],
     "allowed_categories": ["chat-lieu", "kich-co", "dung-mo-ta", "giao-hang", "su-dung"],
     "output_schema": {
@@ -46,3 +47,4 @@
     }
   }
 }
+
