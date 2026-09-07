@@ -630,4 +630,3 @@ export async function buildTrustAnalysis(reviews = [], options = {}) {
     };
   }
 }
-
