@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "description": "Labeling functions cho review tiếng Việt. Relevance và giá trị thông tin là hai trục riêng; Layer 1 chỉ tạo ứng viên off-topic và Layer 2 phải xác nhận bằng bằng chứng nguyên văn.",
   "policy": {
     "allowed_defect_categories": ["chat-lieu", "kich-co", "dung-mo-ta", "giao-hang", "su-dung"],
@@ -37,7 +37,7 @@
       ]
     },
     "spam_and_low_value": {
-      "description": "Low-value là nhãn riêng, không đồng nghĩa với seeding. Một câu ngắn vẫn được giữ nếu có bằng chứng lỗi cụ thể.",
+      "description": "Low-value là nhãn riêng, không đồng nghĩa với seeding. Review dưới ngưỡng bị loại cứng nếu không có bằng chứng chất lượng cụ thể; câu ngắn có lỗi hoặc trải nghiệm cụ thể vẫn được giữ.",
       "min_character_length": 12,
       "min_token_count": 3,
       "max_repeated_chars_allowed": 5,
@@ -132,11 +132,11 @@
           "son qua long", "son long", "qua long", "rat long", "tran ra", "trao ra", "chay son", "chay vao rang", "chay vao mieng", "lem ban", "lem mau",
           "khong li", "ko li", "k li", "khong ly", "ko ly", "k ly", "khong ni", "khong co li", "ko co li", "khong co ly", "ko co ly",
           "nhanh troi", "mau troi", "troi nhanh", "cung troi", "khong con son", "ko con son", "chang con son", "khong con mieng son", "ko con mieng son", "chang con mieng son", "khong con ti nao", "het cha son", "an phat het", "giu mau khong lau", "giu mau ko lau", "khong giu mau lau", "ko giu mau lau",
-          "khong bam mau", "ko bam mau", "k bam mau", "khong bam", "ko bam", "k bam", "k ban vao moi", "khong ban vao moi", "giong nhu nuoc loc", "bam mau kem", "mau khong dep", "mau ko dep", "mau kg dep"
+          "khong bam mau", "ko bam mau", "k bam mau", "khong bam", "ko bam", "k bam", "k ban vao moi", "khong ban vao moi", "giong nhu nuoc loc", "bam mau kem", "mau khong dep", "mau ko dep", "mau kg dep",
+          "bim bi ro", "bi ro sau", "ro bim", "tham nguoc", "tran bim"
         ]
       }
     }
   }
 }
-
 

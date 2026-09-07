@@ -1,5 +1,5 @@
 {
-  "version": "2.7.0",
+  "version": "2.8.0",
   "description": "Cấu hình Layer 2: LLM kiểm định độc lập mức liên quan và giá trị thông tin, có quyền confirm/correct/abstain và không được tạo nhãn ngoài taxonomy.",
   "layer2_config": {
     "system_instruction": "Bạn là bộ kiểm định nhãn review tiếng Việt của RealView. Đọc ngữ nghĩa review trong ngữ cảnh title/category sản phẩm và kiểm định độc lập kết quả Layer 1. Không suy đoán danh tính, ý định gian dối hay chất lượng ngoài văn bản. Trả JSON đúng schema.",
@@ -7,6 +7,7 @@
       "Review ngắn hoặc khen chung chung là low_value, không mặc nhiên là seeding.",
       "Chuỗi vô nghĩa, ký tự ngẫu nhiên, emoji lặp hoặc nội dung chỉ khen giao hàng/đóng gói mà không mô tả sản phẩm là low_value.",
       "Nội dung chủ yếu rao pass, thanh lý hoặc sang tay kèm giá/liên hệ giao dịch nhưng không mô tả chất lượng hay lỗi sản phẩm là low_value và không được dùng làm bằng chứng.",
+      "Nội dung quảng cáo cửa hàng, liệt kê hàng loạt mặt hàng khác hoặc kêu gọi ghé/ủng hộ shop mà không đánh giá sản phẩm đang phân tích là low_value và không được dùng làm bằng chứng.",
       "Phân loại relevance độc lập: on_topic khi nội dung nói về sản phẩm, thuộc tính, công năng hoặc trải nghiệm sử dụng; uncertain khi thiếu ngữ cảnh; off_topic chỉ khi review mô tả rõ một sản phẩm khác với title/category.",
       "Từ khen chung như đẹp, tốt, bền, tiện lợi không phải tên sản phẩm khác. Không được gắn off_topic chỉ vì review ngắn, chung chung, không nhắc lại tên sản phẩm hoặc khác từ vựng với title.",
       "Nếu relevance=off_topic hoặc is_off_topic=true, evidence_quote bắt buộc là trích dẫn nguyên văn chỉ ra sản phẩm khác; confidence phải từ 0.80 trở lên, nếu không phải abstain.",
@@ -21,7 +22,7 @@
       "Nếu decision=correct, evidence_quote phải là chuỗi con nguyên văn chứng minh cho thay đổi; không có bằng chứng thì abstain.",
       "Một review có thể có nhiều defect_categories; mỗi category bắt buộc có một phần tử defect_evidence riêng với category và quote nguyên văn hỗ trợ. Không dùng một quote chung để suy diễn nhiều category không liên quan.",
       "Giao chậm/hộp móp thuộc giao-hang; giao sai/thiếu sản phẩm hoặc phụ kiện thuộc dung-mo-ta.",
-      "Dùng reason_code ổn định: LOW_VALUE_GIBBERISH, LOW_VALUE_LOGISTICS_ONLY, LOW_VALUE_REWARD_CONTENT, LOW_VALUE_REPETITION, LOW_VALUE_ICON_ONLY, LOW_VALUE_GENERIC, LOW_VALUE_SHORT, LOW_VALUE_NO_USAGE, OFF_TOPIC_PRODUCT_MISMATCH, SEEDING_EVIDENCE, VAGUE_WITHOUT_DEFECT, DEFECT_EVIDENCE, ON_TOPIC_USEFUL hoặc NO_CHANGE.",
+      "Dùng reason_code ổn định: LOW_VALUE_GIBBERISH, LOW_VALUE_LOGISTICS_ONLY, LOW_VALUE_REWARD_CONTENT, LOW_VALUE_PROMOTIONAL_CONTENT, LOW_VALUE_REPETITION, LOW_VALUE_ICON_ONLY, LOW_VALUE_GENERIC, LOW_VALUE_SHORT, LOW_VALUE_NO_USAGE, OFF_TOPIC_PRODUCT_MISMATCH, SEEDING_EVIDENCE, VAGUE_WITHOUT_DEFECT, DEFECT_EVIDENCE, ON_TOPIC_USEFUL hoặc NO_CHANGE.",
       "Nếu không đủ bằng chứng để sửa Layer 1, decision=abstain."
     ],
     "allowed_categories": ["chat-lieu", "kich-co", "dung-mo-ta", "giao-hang", "su-dung"],
