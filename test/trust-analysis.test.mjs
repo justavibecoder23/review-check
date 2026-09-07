@@ -196,3 +196,31 @@ test('payload diễn giải giữ thống kê đủ 100 review nhưng chỉ gử
     'payload mới phải nhỏ hơn ít nhất 45% so với cách gửi toàn bộ review'
   );
 });
+
+test('tóm tắt review mỹ phẩm hiển thị nhiều chủ đề có số đếm và bằng chứng cụ thể', () => {
+  const useful = [
+    { rating: 5, text: 'Màu đẹp, lên màu chuẩn và son lì lắm.', labels: { has_defect: false, defect_categories: [] } },
+    { rating: 5, text: 'Son lỳ phết, nhẹ môi và mùi thơm.', labels: { has_defect: false, defect_categories: [] } },
+    { rating: 5, text: 'Đúng mô tả, màu xinh và không dính.', labels: { has_defect: false, defect_categories: [] } },
+    { rating: 4, text: 'Độ che phủ ok, chất lượng tốt.', labels: { has_defect: false, defect_categories: [] } },
+    { rating: 4, text: 'Màu đẹp nhưng son không lì, ăn là nhanh trôi.', labels: { has_defect: true, defect_categories: ['su-dung'] } },
+    { rating: 4, text: 'Son quá lỏng, nhanh khô và khó tán.', labels: { has_defect: true, defect_categories: ['su-dung'] } },
+    { rating: 3, text: 'Bôi lên bị khô môi và nóng rát.', labels: { has_defect: true, defect_categories: ['su-dung'] } },
+    { rating: 2, text: 'Màu không chuẩn, không giống trên hình.', labels: { has_defect: true, defect_categories: ['dung-mo-ta'] } },
+    { rating: 2, text: 'Giao chậm và hộp móp.', labels: { has_defect: true, defect_categories: ['giao-hang'] } }
+  ].map((review) => ({ ...review, included: true, verified: true }));
+
+  const trust = buildRuleBasedTrust(useful);
+  assert.equal(trust.pros.length, 5);
+  assert.equal(trust.cons.length, 5);
+  assert.ok(trust.pros.some((item) => item.title === 'Màu sắc và độ lên màu' && item.mentions >= 2));
+  assert.ok(trust.pros.some((item) => item.title === 'Độ bám và độ lì'));
+  assert.ok(trust.cons.some((item) => item.title === 'Độ bám và khả năng giữ màu'));
+  assert.ok(trust.cons.some((item) => item.title === 'Kết cấu và thao tác sử dụng'));
+  assert.ok(trust.cons.some((item) => item.title === 'Cảm giác trên môi'));
+  for (const item of [...trust.pros, ...trust.cons]) {
+    assert.match(item.detail, /review đáng tham khảo cùng đề cập/);
+    assert.match(item.detail, /Dẫn chứng:/);
+  }
+});
+
