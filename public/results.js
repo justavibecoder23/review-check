@@ -125,20 +125,87 @@ function emptyReviewState(included) {
   return `<div class="review-empty"><strong>${included ? 'Chưa có review đủ điều kiện' : 'Không có review nào bị loại'}</strong><span>${included ? 'Mẫu dữ liệu hiện tại chưa có phản hồi đủ chi tiết.' : 'Tất cả review thu thập được đều vượt qua bước giảm nhiễu.'}</span></div>`;
 }
 
-function renderSentimentList(selector, items) {
+function renderSentimentList(selector, items, totalReviews) {
   const root = document.querySelector(selector);
-  root.innerHTML = items.map((item) => `
+  const sampleSize = Math.max(0, Math.round(Number(totalReviews) || 0));
+  root.innerHTML = items.map((item) => {
+    const rawMentions = Math.max(0, Math.round(Number(item.mentions) || 0));
+    const mentions = sampleSize ? Math.min(rawMentions, sampleSize) : 0;
+    return `
     <article class="sentiment-item">
       <span class="sentiment-check" aria-hidden="true">${selector.includes('pros') ? '✓' : '!'}</span>
       <div><h4>${escapeHtml(item.title)}</h4><p>${escapeHtml(item.detail)}</p></div>
-      ${Number(item.mentions) > 0 ? `<b>${Math.round(Number(item.mentions))}×</b>` : ''}
-    </article>`).join('');
+      ${mentions > 0 ? `<span class="sentiment-mentions" aria-label="${mentions} trên ${sampleSize} review đáng tham khảo đề cập chủ đề này"><b>${mentions}</b><small>/${sampleSize} review</small></span>` : ''}
+    </article>`;
+  }).join('');
 }
 
 function driverIcon(impact) {
   if (impact === 'up') return '↗';
   if (impact === 'down') return '↘';
   return '→';
+}
+
+function normalizeDriverImpact(impact) {
+  return ['up', 'down', 'neutral'].includes(impact) ? impact : 'neutral';
+}
+
+function renderDriverGroups(drivers) {
+  const normalizedDrivers = (Array.isArray(drivers) ? drivers : []).map((driver) => ({
+    ...driver,
+    impact: normalizeDriverImpact(driver?.impact)
+  }));
+  const groups = [
+    {
+      impact: 'up',
+      eyebrow: 'Củng cố',
+      title: 'Yếu tố củng cố độ tin cậy',
+      description: 'Những tín hiệu giúp tập review đáng tin hơn.',
+      empty: 'Chưa ghi nhận yếu tố củng cố nổi bật.'
+    },
+    {
+      impact: 'down',
+      eyebrow: 'Hạ điểm',
+      title: 'Yếu tố làm giảm độ tin cậy',
+      description: 'Những tín hiệu trực tiếp kéo TrustScore xuống.',
+      empty: 'Chưa ghi nhận yếu tố làm giảm điểm.'
+    },
+    {
+      impact: 'neutral',
+      eyebrow: 'Trung lập',
+      title: 'Yếu tố trung lập',
+      description: 'Thông tin giúp hiểu bối cảnh nhưng không trực tiếp nâng hoặc hạ điểm.',
+      empty: 'Chưa ghi nhận yếu tố trung lập.'
+    }
+  ];
+  let driverNumber = 0;
+
+  return groups.map((group) => {
+    const groupDrivers = normalizedDrivers.filter((driver) => driver.impact === group.impact);
+    const cards = groupDrivers.map((driver) => {
+      driverNumber += 1;
+      return `
+        <article class="driver-card" data-impact="${group.impact}">
+          <span class="driver-number">${String(driverNumber).padStart(2, '0')}</span>
+          <span class="driver-impact" aria-hidden="true">${driverIcon(group.impact)}</span>
+          <div><small>${group.eyebrow}</small><h4>${escapeHtml(driver.title)}</h4><p>${escapeHtml(driver.detail)}</p></div>
+        </article>`;
+    }).join('');
+
+    return `
+      <section class="driver-group" data-driver-group="${group.impact}" aria-labelledby="driver-group-${group.impact}">
+        <header class="driver-group-header">
+          <span class="driver-group-mark" aria-hidden="true">${driverIcon(group.impact)}</span>
+          <div>
+            <p>${group.eyebrow}</p>
+            <h3 id="driver-group-${group.impact}">${group.title}</h3>
+            <span>${group.description}</span>
+          </div>
+          <strong class="driver-group-count" aria-label="${groupDrivers.length} yếu tố">${groupDrivers.length}</strong>
+        </header>
+        ${cards ? `<div class="driver-grid">${cards}</div>` : `<p class="driver-group-empty">${group.empty}</p>`}
+      </section>`;
+  }).join('');
 }
 
 function setupReviewCarousel(root) {
@@ -253,17 +320,15 @@ function renderResult(data) {
   document.querySelector('#excluded-count-top').textContent = excluded;
   document.querySelector('#kept-count').textContent = kept;
   document.querySelector('#excluded-count').textContent = excluded;
+  document.querySelector('#insight-scanned-count').textContent = scanned;
+  document.querySelector('#insight-kept-count').textContent = kept;
+  document.querySelector('#insight-excluded-count').textContent = excluded;
 
-  renderSentimentList('#pros-list', Array.isArray(trust.pros) && trust.pros.length ? trust.pros : fallbackTrust(data, reviews).pros);
-  renderSentimentList('#cons-list', Array.isArray(trust.cons) && trust.cons.length ? trust.cons : fallbackTrust(data, reviews).cons);
+  renderSentimentList('#pros-list', Array.isArray(trust.pros) && trust.pros.length ? trust.pros : fallbackTrust(data, reviews).pros, kept);
+  renderSentimentList('#cons-list', Array.isArray(trust.cons) && trust.cons.length ? trust.cons : fallbackTrust(data, reviews).cons, kept);
 
   const drivers = Array.isArray(trust.drivers) ? trust.drivers : [];
-  document.querySelector('#trust-drivers').innerHTML = drivers.map((driver, index) => `
-    <article class="driver-card" data-impact="${['up', 'down', 'neutral'].includes(driver.impact) ? driver.impact : 'neutral'}">
-      <span class="driver-number">0${index + 1}</span>
-      <span class="driver-impact" aria-hidden="true">${driverIcon(driver.impact)}</span>
-      <div><small>${driver.impact === 'up' ? 'Tín hiệu củng cố kết quả' : driver.impact === 'down' ? 'Tín hiệu cần thận trọng' : 'Giới hạn độ chắc chắn'}</small><h3>${escapeHtml(driver.title)}</h3><p>${escapeHtml(driver.detail)}</p></div>
-    </article>`).join('');
+  document.querySelector('#trust-drivers').innerHTML = renderDriverGroups(drivers);
 
   document.querySelector('#kept-list').innerHTML = keptReviews.length ? keptReviews.map((review, index) => reviewCard(review, true, index)).join('') : emptyReviewState(true);
   document.querySelector('#excluded-list').innerHTML = excludedReviews.length ? excludedReviews.map((review, index) => reviewCard(review, false, index)).join('') : emptyReviewState(false);
@@ -296,3 +361,4 @@ if (backToTop) {
   window.addEventListener('scroll', updateBackToTop, { passive: true });
   updateBackToTop();
 }
+
