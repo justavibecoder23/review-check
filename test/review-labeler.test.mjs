@@ -768,3 +768,34 @@ test('review mỹ phẩm có lỗi cụ thể vẫn được giữ an toàn khi 
   }
 });
 
+test('bài đăng pass lại sản phẩm kèm giá không được dùng làm bằng chứng chất lượng', () => {
+  const label = labelReviewLayer1({
+    rating: 4,
+    text: 'Tui pass nha mấy bà ơi, vừa lấy hàng hồi sáng. Tui pass 45k/c, lấy hết 2c 85k kèm cọ nha.'
+  });
+  assert.equal(label.is_low_value, true);
+  assert.equal(label.hard_reject, true);
+  assert.equal(label.information_value, 'none');
+  assert.equal(label.reason_codes.includes('LOW_VALUE_RESALE_ONLY'), true);
+  const filtered = shouldKeep({
+    rating: 4,
+    text: 'Tui pass nha mấy bà ơi, vừa lấy hàng hồi sáng. Tui pass 45k/c, lấy hết 2c 85k kèm cọ nha.',
+    labels: { ...label, reason_code: label.reason_codes[0] },
+    labeling: { layer1: label }
+  });
+  assert.equal(filtered.keep, false);
+  assert.match(filtered.reason, /rao bán|sang tay/i);
+});
+
+test('không loại oan review có giá hoặc pass lại nhưng vẫn nêu lỗi sản phẩm cụ thể', () => {
+  for (const text of [
+    'Mua 45k/cây, son lì và màu đẹp, dùng khá ổn.',
+    'Son khô môi và nhanh trôi nên mình pass lại 45k/cây.'
+  ]) {
+    const label = labelReviewLayer1({ rating: 3, text });
+    assert.equal(label.is_low_value, false, text);
+    assert.equal(label.hard_reject, false, text);
+    assert.equal(['medium', 'high'].includes(label.information_value), true, text);
+  }
+});
+
