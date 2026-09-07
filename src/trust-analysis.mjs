@@ -6,7 +6,11 @@ const positiveDefinitions = [
   { id: 'dung-mo-ta', title: 'Đúng mô tả và hình ảnh', description: 'Sản phẩm nhận được nhìn chung đúng mẫu, màu sắc hoặc hình ảnh mà shop đăng.', words: ['đúng mô tả', 'đúng hình', 'giống hình', 'đúng màu', 'đúng mẫu'] },
   { id: 'phu-hop', title: 'Trải nghiệm sử dụng tốt', description: 'Người mua cho biết sản phẩm dễ dùng, thoải mái hoặc đáp ứng đúng nhu cầu thực tế.', words: ['dùng tốt', 'dùng ổn', 'hoạt động tốt', 'mặc đẹp', 'thoải mái', 'vừa vặn', 'êm', 'tiện'] },
   { id: 'giao-hang', title: 'Giao hàng và đóng gói', description: 'Đơn hàng đến nhanh, được đóng gói cẩn thận và sản phẩm còn nguyên vẹn.', words: ['giao nhanh', 'đóng gói kỹ', 'đóng gói tốt', 'gói hàng kỹ', 'hàng nguyên vẹn'] },
-  { id: 'gia-tri', title: 'Giá trị so với chi phí', description: 'Người mua cảm thấy chất lượng nhận được tương xứng với số tiền đã bỏ ra.', words: ['đáng tiền', 'đáng mua', 'giá tốt', 'hợp giá', 'giá hợp lý'] }
+  { id: 'gia-tri', title: 'Giá trị so với chi phí', description: 'Người mua cảm thấy chất lượng nhận được tương xứng với số tiền đã bỏ ra.', words: ['đáng tiền', 'đáng mua', 'giá tốt', 'hợp giá', 'giá hợp lý'] },
+  { id: 'mau-sac', title: 'Màu sắc và độ lên màu', description: 'Người mua hài lòng với màu thực tế hoặc cách sản phẩm lên màu.', words: ['màu đẹp', 'màu xinh', 'lên màu đẹp', 'lên màu chuẩn', 'màu ưng', 'màu cũng ok', 'màu cũng được'] },
+  { id: 'do-bam', title: 'Độ bám và độ lì', description: 'Một số người mua ghi nhận màu bám tương đối tốt hoặc giữ được trên môi.', words: ['son lì', 'son lỳ', 'son li', 'son ly', 'lì lắm', 'lỳ lắm', 'lì phết', 'lỳ phết', 'bám màu', 'lâu trôi', 'độ lì'] },
+  { id: 'cam-giac', title: 'Cảm giác khi sử dụng', description: 'Người mua mô tả sản phẩm nhẹ, mềm hoặc dễ chịu khi dùng.', words: ['nhẹ môi', 'mềm môi', 'không khô môi', 'ko khô môi', 'không dính', 'ko dính', 'mùi thơm', 'thơm'] },
+  { id: 'thao-tac', title: 'Dễ sử dụng và che phủ', description: 'Sản phẩm được nhận xét là dễ dùng hoặc có độ che phủ ổn.', words: ['dễ đánh', 'che phủ tốt', 'độ che phủ ok', 'độ che phủ: ok'] }
 ];
 
 const negativeDefinitions = [
@@ -14,10 +18,15 @@ const negativeDefinitions = [
   { id: 'kich-co', title: 'Kích cỡ / form dáng', description: 'Kích thước thực tế có thể chật, rộng hoặc lệch so với bảng size và kỳ vọng của người mua.', words: ['form nhỏ', 'chật', 'rộng', 'ngắn', 'bé', 'size nhỏ', 'size lớn', 'không đúng size', 'lệch size'] },
   { id: 'dung-mo-ta', title: 'Khác mô tả / hình ảnh', description: 'Sản phẩm thực nhận có điểm khác về màu, mẫu, số lượng hoặc hình thức so với thông tin đăng bán.', words: ['khác hình', 'không giống', 'khác mô tả', 'sai màu', 'màu khác', 'thiếu', 'không đúng mẫu', 'lỗi'] },
   { id: 'giao-hang', title: 'Giao hàng / đóng gói', description: 'Người mua gặp tình trạng giao chậm, thiếu hàng hoặc sản phẩm bị ảnh hưởng do đóng gói chưa tốt.', words: ['giao chậm', 'lâu', 'móp', 'bể', 'vỡ', 'đóng gói sơ sài', 'giao thiếu', 'trễ'] },
-  { id: 'su-dung', title: 'Trải nghiệm sử dụng', description: 'Sản phẩm có thể gây khó chịu, hoạt động yếu hoặc không đáp ứng tốt khi sử dụng thực tế.', words: ['không dùng được', 'không hoạt động', 'không bền', 'nóng', 'bí', 'khó chịu', 'rò', 'hết pin', 'yếu'] }
+  { id: 'su-dung', title: 'Trải nghiệm sử dụng', description: 'Sản phẩm có thể gây khó chịu, hoạt động yếu hoặc không đáp ứng tốt khi sử dụng thực tế.', words: ['không dùng được', 'không hoạt động', 'không bền', 'nóng', 'bí', 'khó chịu', 'rò', 'hết pin', 'yếu'] },
+  { id: 'do-bam-mau', title: 'Độ bám và khả năng giữ màu', description: 'Một số người mua cho biết màu không đủ lì, dễ lem hoặc trôi nhanh khi ăn uống.', matchFromText: true, words: ['không lì', 'ko lì', 'k lì', 'không lỳ', 'ko lỳ', 'không có lì', 'ko có lì', 'không bám', 'ko bám', 'k bám', 'nhanh trôi', 'mau trôi', 'trôi nhanh', 'cũng trôi', 'không còn son', 'chẳng còn son', 'giữ màu không lâu', 'giữ màu ko lâu'] },
+  { id: 'ket-cau-thao-tac', title: 'Kết cấu và thao tác sử dụng', description: 'Sản phẩm bị nhận xét là quá lỏng, dễ chảy hoặc khô nhanh khiến người dùng khó tán đều.', matchFromText: true, words: ['quá lỏng', 'rất lỏng', 'son lỏng', 'son dạng lỏng', 'son nước', 'chảy', 'trào ra', 'tràn ra', 'lem bẩn', 'khó tán', 'khó đánh', 'mau khô', 'nhanh khô'] },
+  { id: 'cam-giac-su-dung', title: 'Cảm giác trên môi', description: 'Một số phản hồi đề cập tình trạng khô, rát, tê hoặc vị và mùi gây khó chịu.', matchFromText: true, words: ['khô môi', 'môi khô', 'nứt môi', 'nóng rát', 'rát môi', 'tê môi', 'tê tê', 'bị đắng', 'đắng miệng', 'vị mặn', 'mùi hôi'] },
+  { id: 'mau-sac-thuc-te', title: 'Màu sắc thực tế', description: 'Màu nhận được hoặc màu lên môi có chỗ chưa giống hình ảnh, quảng cáo hay kỳ vọng của người mua.', matchFromText: true, words: ['màu xỉn', 'màu tối', 'màu thâm', 'không chuẩn màu', 'ko chuẩn màu', 'màu không chuẩn', 'không giống trên hình', 'không như quảng cáo', 'không giống như quảng cáo', 'khác quảng cáo', 'hồng cánh sen'] }
 ];
 
 const MAX_NARRATIVE_EVIDENCE = 18;
+const MAX_SUMMARY_ITEMS = 5;
 
 function normalise(value = '') {
   return String(value).toLocaleLowerCase('vi').replace(/\s+/g, ' ').trim();
@@ -58,18 +67,28 @@ function countThemes(reviews, definitions) {
 }
 
 function countDefectThemes(reviews) {
-  return negativeDefinitions
+  const themes = negativeDefinitions
     .map((definition) => {
       const matching = reviews.filter((review) => {
         const categories = review?.labels?.defect_categories;
-        if (Array.isArray(categories)) return categories.includes(definition.id);
+        if (Array.isArray(categories) && categories.includes(definition.id)) return true;
+        if (!definition.matchFromText) return false;
+        if (!review?.labels?.has_defect && Number(review.rating) > 3) return false;
         const text = normalise(review.text);
-        return definition.words.some((word) => text.includes(word));
+        return definition.words.some((word) => text.includes(normalise(word)));
       });
       return { ...definition, count: matching.length, example: matching[0]?.text || '' };
     })
     .filter((theme) => theme.count > 0)
     .sort((left, right) => right.count - left.count);
+  const hasSpecificExperienceTheme = themes.some((theme) => [
+    'do-bam-mau',
+    'ket-cau-thao-tac',
+    'cam-giac-su-dung'
+  ].includes(theme.id));
+  return hasSpecificExperienceTheme
+    ? themes.filter((theme) => theme.id !== 'su-dung')
+    : themes;
 }
 
 function reviewExcerpt(value, maximum = 105) {
@@ -80,7 +99,7 @@ function reviewExcerpt(value, maximum = 105) {
 
 function fallbackCopy(reviews, included, excluded) {
   const pros = countThemes(included.filter((review) => Number(review.rating) >= 4), positiveDefinitions)
-    .slice(0, 3)
+    .slice(0, MAX_SUMMARY_ITEMS)
     .map((theme) => ({
       title: theme.title,
       detail: `${theme.count} review đáng tham khảo cùng đề cập. ${theme.description}${theme.example ? ` Dẫn chứng: “${reviewExcerpt(theme.example)}”` : ''}`,
@@ -89,7 +108,7 @@ function fallbackCopy(reviews, included, excluded) {
   // Dùng đúng nhãn cuối của pipeline, cùng nguồn dữ liệu với công thức điểm.
   // Tránh UI đếm bằng keyword khác với số khuyết tật ở backend.
   const cons = countDefectThemes(included)
-    .slice(0, 3)
+    .slice(0, MAX_SUMMARY_ITEMS)
     .map((theme) => ({
       title: theme.title,
       detail: `${theme.count} review đáng tham khảo cùng đề cập. ${theme.description}${theme.example ? ` Dẫn chứng: “${reviewExcerpt(theme.example)}”` : ''}`,
@@ -241,11 +260,11 @@ const trustSchema = {
   properties: {
     summary: { type: 'string' },
     pros: {
-      type: 'array', minItems: 1, maxItems: 3,
+      type: 'array', minItems: 1, maxItems: MAX_SUMMARY_ITEMS,
       items: { type: 'object', properties: { title: { type: 'string' }, detail: { type: 'string' }, mentions: { type: 'integer', minimum: 0 } }, required: ['title', 'detail', 'mentions'] }
     },
     cons: {
-      type: 'array', minItems: 1, maxItems: 3,
+      type: 'array', minItems: 1, maxItems: MAX_SUMMARY_ITEMS,
       items: { type: 'object', properties: { title: { type: 'string' }, detail: { type: 'string' }, mentions: { type: 'integer', minimum: 0 } }, required: ['title', 'detail', 'mentions'] }
     },
     drivers: {
@@ -414,8 +433,8 @@ function cleanDriver(item, fallback) {
 
 function validateGeminiTrust(value, fallback) {
   if (!value || typeof value !== 'object') throw new Error('Gemini không trả về kết quả JSON hợp lệ.');
-  const pros = Array.isArray(value.pros) ? value.pros.slice(0, 3).map((item, index) => cleanItem(item, fallback.pros[index] || fallback.pros[0])) : fallback.pros;
-  const cons = Array.isArray(value.cons) ? value.cons.slice(0, 3).map((item, index) => cleanItem(item, fallback.cons[index] || fallback.cons[0])) : fallback.cons;
+  const pros = Array.isArray(value.pros) ? value.pros.slice(0, MAX_SUMMARY_ITEMS).map((item, index) => cleanItem(item, fallback.pros[index] || fallback.pros[0])) : fallback.pros;
+  const cons = Array.isArray(value.cons) ? value.cons.slice(0, MAX_SUMMARY_ITEMS).map((item, index) => cleanItem(item, fallback.cons[index] || fallback.cons[0])) : fallback.cons;
   const drivers = Array.isArray(value.drivers) && value.drivers.length >= 6
     ? value.drivers.slice(0, 8).map((item, index) => cleanDriver(item, fallback.drivers[index] || fallback.drivers[0]))
     : fallback.drivers;
@@ -534,3 +553,4 @@ export async function buildTrustAnalysis(reviews = [], options = {}) {
     };
   }
 }
+

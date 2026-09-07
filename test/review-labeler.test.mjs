@@ -674,3 +674,47 @@ test('template Shopee với nội dung thuần giao hàng bị gán LOW_VALUE_LO
   assert.equal(label.reason_codes.includes('LOW_VALUE_LOGISTICS_ONLY'), true);
 });
 
+test('Layer 1 giữ các review mỹ phẩm có trải nghiệm cụ thể thay vì đẩy sang trạng thái chưa kiểm định', () => {
+  const product = { title: 'Son tint lì Watery Lip Tint GY Cosmetic Vietnam' };
+  const samples = [
+    { rating: 5, text: 'OK đúng như mô tả. Son màu đẹp, lỳ rất lỳ.', defect: false },
+    { rating: 4, text: 'Màu đỏ đẹp nhưng hơi khô môi, độ che phủ ok.', defect: true },
+    { rating: 4, text: 'Màu cũng ok nhưng bị chảy nước, lem bẩn ra ngoài.', defect: true },
+    { rating: 4, text: 'Son không lì lắm, ăn một chút là nhanh trôi.', defect: true },
+    { rating: 4, text: 'Son lên đúng màu nhưng chất son nhanh khô, khó tán và bị đắng miệng.', defect: true },
+    { rating: 2, text: 'Ko giống như quảng cáo, màu không chuẩn và không bám chút nào.', defect: true }
+  ];
+
+  for (const [index, sample] of samples.entries()) {
+    const label = labelReviewLayer1(sample, index, product);
+    assert.equal(label.is_low_value, false, sample.text);
+    assert.equal(label.information_value, 'high', sample.text);
+    assert.equal(label.requires_llm, false, sample.text);
+    assert.equal(label.has_defect, sample.defect, sample.text);
+    if (sample.defect) assert.equal(label.defect_categories.length > 0, true, sample.text);
+  }
+});
+
+test('review mỹ phẩm có lỗi cụ thể vẫn được giữ an toàn khi câu minh họa làm Layer 2 thất bại', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  try {
+    const result = await labelReviewsTwoLayer([{
+      rating: 3,
+      text: 'Độ che phủ kém, thoa lên bám màu liền nên khó tán. Hình ảnh chỉ mang tính chất minh họa.'
+    }], {
+      mode: 'all',
+      product: { title: 'Son tint lì' },
+      fetchImpl: async () => ({ ok: false, status: 503 })
+    });
+    assert.equal(result.reviews[0].labels.has_defect, true);
+    assert.equal(result.reviews[0].labels.layer2_unavailable, false);
+    assert.equal(result.reviews[0].labels.layer2_fallback_accepted, true);
+    assert.equal(result.reviews[0].labels.reviewed_by, 'layer1-safe-fallback');
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
+

@@ -120,13 +120,13 @@ export function stripShopeeTemplateHeaders(text = '') {
 
 const explicitNoUsagePattern = /\b(?:chua\s+(?:su\s+dung|dung|xai|trai\s+nghiem|mo|boc|thu|test)|(?:phai\s+)?(?:dung|thu|xai)\s+moi\s+biet|chua\s+biet(?:\s+chat\s+luong|\s+the\s+nao)?)\b/iu;
 const logisticsCuePattern = /\b(?:giao|ship|van chuyen|dong goi|goi ky|goi ki|nhan hang|shop)\b/u;
-const productExperiencePattern = /\b(?:san pham|chat luong|chat lieu|su dung|dung (?:thu|on|tot|ben|duoc|lau|hang|ngay|san pham|thoi gian|vai|rat)|da dung|xai|mac|uong|giu nhiet|ben|sac|pin|size|form|mui|vi|cong nang|hoat dong)\b/u;
-const meaningfulFeedbackPattern = /\b(?:chat luong|chat lieu|do ben|chac chan|mem mai|mem|em chan|om chan|vua chan|bam chan|lot giay|lot vao|de dieu chinh|khong dau chan|im ban chan|dai|day dan|tien loi|gon|dung tich|dung do|sac nhanh|sac on dinh|khong nong|nhan dien|dung on|dung tot|rat tot|chat luong tot|san pham tot|hang tot|hoat dong tot|dung duoc|y hinh|dung mo ta|de cuon|bao hanh)\b/u;
-const concreteFeedbackPattern = /\b(?:khong|ko|k|bi|loi|hong|rach|bung|dut|roi|rot|bong|nong|yeu|cham|nhanh|ben|chac|mem|em chan|om chan|vua chan|bam chan|lot giay|lot vao|de dieu chinh|khong dau chan|im ban chan|dai|mong|day|vai|nhua|kim loai|boc du|dau cam|bao hanh|\d+\s*(?:ngay|thang|nam|gio|phut|lan|\/10))\b/u;
+const productExperiencePattern = /\b(?:san pham|chat luong|chat lieu|su dung|dung (?:thu|on|tot|ben|duoc|lau|hang|ngay|san pham|thoi gian|vai|rat)|da dung|xai|mac|uong|giu nhiet|ben|sac|pin|size|form|mui|vi|cong nang|hoat dong|son|moi|len mau|do bam|che phu)\b/u;
+const meaningfulFeedbackPattern = /\b(?:chat luong|chat lieu|do ben|chac chan|mem mai|mem|em chan|om chan|vua chan|bam chan|lot giay|lot vao|de dieu chinh|khong dau chan|im ban chan|dai|day dan|tien loi|gon|dung tich|dung do|sac nhanh|sac on dinh|khong nong|nhan dien|dung on|dung tot|rat tot|chat luong tot|san pham tot|hang tot|hoat dong tot|dung duoc|y hinh|dung mo ta|de cuon|bao hanh|mau dep|mau xinh|len mau|do che phu|che phu|son li|son ly|li lau|ly lau|li tren moi|ly tren moi|bam mau|nhe moi|mem moi|kho moi|nut moi|tham moi|kho tan|de tan|son tan|kho xai|kho danh|nhanh kho|mau kho|son long|qua long|rat long|tran ra|trao ra|chay son|chay nuoc|lem mau|lem ban|nhanh troi|mau troi|giu mau|nong rat|rat moi|te moi|vi man|dang mieng)\b/u;
+const concreteFeedbackPattern = /\b(?:khong|ko|k|bi|loi|hong|rach|bung|dut|roi|rot|bong|nong|yeu|cham|nhanh|ben|chac|mem|em chan|om chan|vua chan|bam chan|lot giay|lot vao|de dieu chinh|khong dau chan|im ban chan|dai|mong|day|vai|nhua|kim loai|boc du|dau cam|bao hanh|son|mau|li|ly|bam mau|nhe moi|mem moi|kho moi|nut moi|tan|kho tan|nhanh kho|mau kho|long|chay|lem|troi|nong rat|rat moi|dang|\d+\s*(?:ngay|thang|nam|gio|phut|lan|lop|\/10))\b/u;
 // Tránh từ đơn bị nhập nhằng sau khi bỏ dấu (ổn/ồn, chất/chật, đầu/đau,
 // đẹp/dép...). Các trường hợp đó chỉ được chấp nhận bằng cụm có ngữ cảnh.
 // "không" đứng riêng cũng không đủ: "không nóng/không lỏng" là lời khen.
-const negativeDefectCuePattern = /\b(?:(?:khong|ko|k)\s+(?:dung duoc|dung dc|hoat dong|len nguon|nhan sac|vao dien|dinh|ben|chac|vua|giong(?:\s+hinh)?|dung(?:\s+mo ta|\s+mau|\s+size)?|nhu mong doi|hai long|ung y|uy tin)|chang\s+(?:dung duoc|dung dc|hoat dong)|giao\s+(?:sai|nham|khac|lon)|hong|rach|bung|dut|long leo|kho dung|kho ngoi|kho chiu|dau (?:chan|lung|mong|tay)|qua chat|qua rong|sai mau|nham mau|thieu(?:\s+hang|\s+phu kien|\s+chot|\s+oc|\s+vit|\s+nut)?|mop(?:\s+meo)?|be vo|vo nat|rat te|bi loi|bao loi|loi san pham|hang loi|kem chat luong|mui hoi|tieng on|ro ri|het pin|xu long|that vong|phi tien|xuoc|tray|bi gay|gay|venh|kenh venh|cap kenh|tua vai|vai tua|bi xon|tut(?:\s+ra)?|tuot(?:\s+ra)?|bavia|chua (?:tot|ve sinh|hoan thien)|rat ban)\b/u;
+const negativeDefectCuePattern = /\b(?:(?:khong|ko|k)\s+(?:dung duoc|dung dc|hoat dong|len nguon|nhan sac|vao dien|dinh|ben|chac|vua|giong(?:\s+(?:hinh|tren hinh|nhu quang cao))?|dung(?:\s+mo ta|\s+mau|\s+size)?|nhu mong doi|nhu quang cao|chuan mau|hai long|ung y|uy tin|li|ly|ni|co\s+li|co\s+ly|bam(?:\s+mau)?|giu\s+mau\s+lau)|chang\s+(?:dung duoc|dung dc|hoat dong|con son)|giao\s+(?:sai|nham|khac|lon)|hong|rach|bung|dut|long leo|kho dung|kho xai|kho danh|kho ngoi|kho chiu|kho moi|moi kho|nut moi|tham moi|hu moi|kho tan|mau kho|nhanh kho|son qua long|son long|qua long|rat long|tran ra|trao ra|chay son|chay nuoc|chay vao (?:rang|mieng)|lem mau|lem ban|nhanh troi|mau troi|troi nhanh|cung troi|khong con (?:son|ti nao)|ko con son|giu mau (?:khong|ko) lau|nong rat|rat moi|te moi|te te|vi man|dang mieng|bi dang|bet bet|dau (?:chan|lung|mong|tay)|qua chat|qua rong|sai mau|nham mau|thieu(?:\s+hang|\s+phu kien|\s+chot|\s+oc|\s+vit|\s+nut)?|mop(?:\s+meo)?|be vo|vo nat|rat te|bi loi|bao loi|loi san pham|hang loi|hang da su dung|da qua su dung|kem chat luong|mui hoi|tieng on|ro ri|het pin|xu long|that vong|phi tien|xuoc|tray|bi gay|gay|venh|kenh venh|cap kenh|tua vai|vai tua|bi xon|tut(?:\s+ra)?|tuot(?:\s+ra)?|bavia|chua (?:tot|ve sinh|hoan thien)|rat ban)\b/u;
 
 function logisticsOnlyReview(text) {
   if (!logisticsCuePattern.test(text) || productExperiencePattern.test(text)) return false;
@@ -198,7 +198,7 @@ function assessInformationValue(text, defects, flags = {}) {
 }
 
 const concreteMeasurementPattern = /\b\d+(?:[.,]\d+)?\s*(?:hz|khz|mhz|w|kw|wh|mah|v|a|cm|mm|m|kg|g|ml|l|inch|in|gb|tb|mb|mp|che do|mau|ngay|thang|nam|gio|phut|lan)\b/gu;
-const groundedExperiencePattern = /\b(?:phu hop|de dang|dieu chinh|canh chinh|su dung|da dung|dung thu|xai thu|cam thay|thuc te|diem cong|diem tru|uu diem|nhuoc diem|duy nhat|khong bi|co mui|am thanh|hinh anh|mau sac|kich thuoc|do sang)\b/gu;
+const groundedExperiencePattern = /\b(?:phu hop|de dang|dieu chinh|canh chinh|su dung|da dung|dung thu|xai thu|cam thay|thuc te|diem cong|diem tru|uu diem|nhuoc diem|duy nhat|khong bi|co mui|am thanh|hinh anh|mau sac|kich thuoc|do sang|len mau|che phu|bam mau|kho moi|kho tan|nhanh troi|mau troi|nong rat|dang mieng)\b/gu;
 const balancedObservationPattern = /\b(?:diem tru|diem cong|uu diem|nhuoc diem|nhung|tuy nhien|con lai|duy nhat)\b/u;
 
 function assessStructuralSpecificity(text = '') {
@@ -235,13 +235,17 @@ function baseLabels(layer1) {
 }
 
 function canUseSafeLayer1Fallback(layer1) {
+  const blockingConflicts = layer1.conflicts.filter((conflict) => conflict !== 'SEEDING_WITH_NEGATIVE_DEFECT');
+  const negativeDisclaimerWithDefect = layer1.has_defect
+    && layer1.conflicts.length > 0
+    && layer1.conflicts.every((conflict) => conflict === 'SEEDING_WITH_NEGATIVE_DEFECT');
   return !layer1.is_seeding
     && !layer1.is_low_value
     && !layer1.is_vague
     && layer1.relevance !== 'needs_review'
-    && !layer1.conflicts.length
+    && !blockingConflicts.length
     && ['medium', 'high'].includes(layer1.information_value)
-    && layer1.confidence >= 0.75;
+    && (layer1.confidence >= 0.75 || negativeDisclaimerWithDefect);
 }
 
 export function labelReviewLayer1(review = {}, index = 0, product = {}) {
