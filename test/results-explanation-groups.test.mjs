@@ -109,4 +109,3 @@ test('trang kết quả có popup giới thiệu và phần mở rộng công th
   assert.match(script, /showModal\(\)/);
   assert.match(css, /\.trust-intro-dialog::backdrop/);
 });
-
