@@ -191,8 +191,29 @@ function assessProductRelevance(reviewText, product = {}) {
 function assessInformationValue(text, defects, flags = {}) {
   if (flags.gibberish || flags.iconOnly || flags.repeated) return 'none';
   if (flags.logisticsOnly || flags.generic || flags.noUsageExperience || !text) return 'low';
-  if (defects.length || (meaningfulFeedbackPattern.test(text) && concreteFeedbackPattern.test(text))) return 'high';
-  if (meaningfulFeedbackPattern.test(text)) return 'medium';
+  const structuralSpecificity = assessStructuralSpecificity(text);
+  if (defects.length || (meaningfulFeedbackPattern.test(text) && concreteFeedbackPattern.test(text)) || structuralSpecificity === 'high') return 'high';
+  if (meaningfulFeedbackPattern.test(text) || structuralSpecificity === 'medium') return 'medium';
+  return 'low';
+}
+
+const concreteMeasurementPattern = /\b\d+(?:[.,]\d+)?\s*(?:hz|khz|mhz|w|kw|wh|mah|v|a|cm|mm|m|kg|g|ml|l|inch|in|gb|tb|mb|mp|che do|mau|ngay|thang|nam|gio|phut|lan)\b/gu;
+const groundedExperiencePattern = /\b(?:phu hop|de dang|dieu chinh|canh chinh|su dung|da dung|dung thu|xai thu|cam thay|thuc te|diem cong|diem tru|uu diem|nhuoc diem|duy nhat|khong bi|co mui|am thanh|hinh anh|mau sac|kich thuoc|do sang)\b/gu;
+const balancedObservationPattern = /\b(?:diem tru|diem cong|uu diem|nhuoc diem|nhung|tuy nhien|con lai|duy nhat)\b/u;
+
+function assessStructuralSpecificity(text = '') {
+  const tokens = String(text).split(/\s+/u).filter(Boolean);
+  const clauses = String(text)
+    .split(/[.!?;,\n]+|\s+(?:nhung|tuy nhien|diem tru|diem cong)\s+/u)
+    .map((clause) => clause.trim())
+    .filter((clause) => clause.split(/\s+/u).length >= 3);
+  const measurements = String(text).match(concreteMeasurementPattern) || [];
+  const experienceSignals = String(text).match(groundedExperiencePattern) || [];
+  const balanced = balancedObservationPattern.test(String(text));
+  const concreteAnchors = measurements.length + Math.min(experienceSignals.length, 3) + Number(balanced);
+
+  if (experienceSignals.length >= 1 && tokens.length >= 24 && clauses.length >= 3 && concreteAnchors >= 3) return 'high';
+  if (experienceSignals.length >= 1 && tokens.length >= 12 && clauses.length >= 2 && concreteAnchors >= 2) return 'medium';
   return 'low';
 }
 
@@ -321,10 +342,12 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
     : strongSeeding ? 0.94
       : defects.length ? 0.92
         : meaningfulFeedback ? 0.91
-        : rantKeyword ? 0.88
-          : isLowValue ? 0.9
-            : weakSeeding ? 0.62
-              : 0.76;
+          : informationValue === 'high' ? 0.91
+            : informationValue === 'medium' ? 0.86
+              : rantKeyword ? 0.88
+                : isLowValue ? 0.9
+                  : weakSeeding ? 0.62
+                    : 0.76;
   const confidence = conflicts.length ? Math.min(signalConfidence, 0.68) : signalConfidence;
   const result = {
     id: `r${String(index + 1).padStart(4, '0')}`,
@@ -826,3 +849,4 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
 }
 
 export { rulesDocument as LAYER1_RULES, layer2Document as LAYER2_PROMPT };
+
