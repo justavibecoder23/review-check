@@ -724,4 +724,3 @@ body.chatbot-open .result-action-bar { opacity: 0; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
   .action-button, .accordion-chevron { transition: none; }
 }
-
