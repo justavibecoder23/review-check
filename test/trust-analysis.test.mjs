@@ -23,6 +23,53 @@ test('mẫu quá nhỏ không công bố điểm nhưng vẫn trả ưu nhược
   assert.doesNotMatch(trust.drivers.map((driver) => `${driver.title} ${driver.detail}`).join(' '), /Fisher|p\s*=|OR\*|logistic|hard cap|Bonferroni/i);
 });
 
+test('backend luôn chỉ ra yếu tố thực sự hạ điểm và Gemini không thể đổi thành trung lập', async () => {
+  const sample = Array.from({ length: 20 }, (_value, index) => index < 10 ? {
+    rating: index % 5 + 1,
+    text: `Review ${index + 1} mô tả trải nghiệm sử dụng sản phẩm rõ ràng, chi tiết và có thể đối chiếu sau nhiều ngày sử dụng.`,
+    verified: true,
+    included: true,
+    labels: { information_value: 'high', is_seeding: false, is_vague: false, is_low_value: false, layer2_unavailable: false, defect_categories: [] }
+  } : {
+    rating: index % 5 + 1,
+    text: `Nội dung quảng cáo cửa hàng số ${index + 1}`,
+    verified: true,
+    included: false,
+    exclusionReason: 'Nội dung quảng cáo cửa hàng',
+    labels: { information_value: 'none', is_seeding: false, is_vague: false, is_low_value: true, layer2_unavailable: false, defect_categories: [] }
+  });
+  const fallback = buildRuleBasedTrust(sample);
+  const fallbackImpacts = fallback.drivers.map(({ impact }) => impact);
+  const loweringTitles = fallback.drivers.filter(({ impact }) => impact === 'down').map(({ title }) => title).join(' ');
+
+  assert.match(loweringTitles, /không đủ tin cậy|độ phủ mẫu/i);
+  assert.equal(fallbackImpacts.includes('down'), true);
+
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  try {
+    const trust = await buildTrustAnalysis(sample, {
+      fetchImpl: async () => ({
+        ok: true,
+        async json() {
+          return { candidates: [{ content: { parts: [{ text: JSON.stringify({
+            summary: 'TrustScore phản ánh độ tin cậy của tập review, không phải chất lượng sản phẩm.',
+            pros: [{ title: 'Điểm tích cực', detail: 'Một số review nêu trải nghiệm rõ ràng.', mentions: 999 }],
+            cons: [{ title: 'Điểm cần cân nhắc', detail: 'Một số review không đủ điều kiện.', mentions: 999 }],
+            drivers: Array.from({ length: 8 }, (_item, index) => ({ impact: 'neutral', title: `AI driver ${index + 1}`, detail: 'AI cố đổi tác động.' }))
+          }) }] } }] };
+        }
+      })
+    });
+    assert.deepEqual(trust.drivers.map(({ impact }) => impact), fallbackImpacts);
+    assert.equal(trust.drivers.some(({ impact }) => impact === 'down'), true);
+    assert.equal(trust.drivers.some(({ title }) => /AI driver/.test(title)), false);
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
 test('nhược điểm hiển thị dùng cùng nhãn cuối với bộ đếm TrustScore', () => {
   const labeled = [
     {
