@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "Labeling functions cho review tiếng Việt. Relevance và giá trị thông tin là hai trục riêng; Layer 1 chỉ tạo ứng viên off-topic và Layer 2 phải xác nhận bằng bằng chứng nguyên văn.",
   "policy": {
     "allowed_defect_categories": ["chat-lieu", "kich-co", "dung-mo-ta", "giao-hang", "su-dung"],
@@ -102,7 +102,11 @@
           "mau nhat hon", "lech mau", "nham mau", "giao khac mau", "giao sai mau", "giao sai", "giao khac", "giao lon", "sai mau ma", "giao thieu", "thieu phu kien", "thieu hang", "thieu qua",
           "thieu chot", "thieu nut", "thieu oc", "thieu vit",
           "khong dung mau", "khong dung mau ma", "khong dung mo ta", "khong dung phan loai",
-          "giao nham", "hang gia", "hang nhai", "fake"
+          "giao nham", "hang gia", "hang nhai", "fake",
+          "khong li nhu quang cao", "ko li nhu quang cao", "k li nhu quang cao", "khong ly nhu quang cao", "ko ly nhu quang cao",
+          "khong dung nhu quang cao", "khong nhu quang cao", "ko nhu quang cao", "khong giong nhu quang cao", "ko giong nhu quang cao", "mau k he nhu quang cao", "khac quang cao",
+          "khong chuan mau", "ko chuan mau", "mau khong chuan", "mau ko chuan", "khong giong tren hinh", "ko giong tren hinh",
+          "hang da su dung", "da qua su dung", "hang dung roi", "su dung gui lai", "su dung goi lai", "su dung gui di lai", "su dung goi di lai"
         ]
       },
       "giao-hang": {
@@ -122,9 +126,15 @@
           "khong dung duoc", "khong dung dc", "ko dung dc", "k dung dc", "khong hoat dong", "khong len nguon", "bat khong len", "chap chon", "liet phim",
           "ket nut", "hong nguon", "chay nguon", "pin yeu", "pin tut nhanh", "chai pin", "sac khong vao",
           "khong nhan sac", "nong ran", "tieng re", "mat am", "keu to", "ro ri nuoc", "chay nuoc", "kho dung",
-          "chua dung da hong", "moi dung da hong", "dung vai hom thi hong", "bi loi", "hang loi", "loi san pham"
+          "chua dung da hong", "moi dung da hong", "dung vai hom thi hong", "bi loi", "hang loi", "loi san pham",
+          "kho moi", "moi kho", "nut moi", "tham moi", "hu moi", "kho xai", "kho danh", "nong rat", "rat moi", "te moi", "te te", "vi man", "bi dang", "dang mieng", "kho tan", "mau kho", "nhanh kho", "bet bet",
+          "son qua long", "son long", "qua long", "rat long", "tran ra", "trao ra", "chay son", "chay vao rang", "chay vao mieng", "lem ban", "lem mau",
+          "khong li", "ko li", "k li", "khong ly", "ko ly", "k ly", "khong ni", "khong co li", "ko co li", "khong co ly", "ko co ly",
+          "nhanh troi", "mau troi", "troi nhanh", "cung troi", "khong con son", "ko con son", "chang con son", "khong con mieng son", "ko con mieng son", "chang con mieng son", "khong con ti nao", "giu mau khong lau", "giu mau ko lau", "khong giu mau lau", "ko giu mau lau",
+          "khong bam mau", "ko bam mau", "k bam mau", "khong bam", "ko bam", "k bam", "bam mau kem", "mau khong dep", "mau ko dep", "mau kg dep"
         ]
       }
     }
   }
 }
+
