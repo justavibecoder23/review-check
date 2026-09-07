@@ -128,3 +128,40 @@
   .chatbot-message.is-loading p i { animation: none; opacity: .7; }
 }
 
+/* Improve chatbot legibility while keeping its visual language unchanged. */
+.chatbot-panel { width: min(440px, calc(100vw - 32px)); height: min(680px, calc(100dvh - 108px)); }
+.chatbot-header { min-height: 96px; padding: 17px 18px; grid-template-columns: 56px minmax(0, 1fr) 44px; gap: 14px; }
+.chatbot-avatar { width: 56px; height: 56px; }
+.chatbot-header h2 { font-size: 19px; }
+.chatbot-header p { font-size: 11px; }
+.chatbot-close { width: 44px; height: 44px; }
+.chatbot-close svg { width: 21px; height: 21px; }
+.chatbot-messages { padding: 24px 21px 28px; }
+.chatbot-message { gap: 11px; }
+.chatbot-message-avatar { width: 34px; height: 34px; flex-basis: 34px; font-size: 12px; }
+.chatbot-message p { padding: 13px 15px; font-size: 14px; }
+.chatbot-message time { font-size: 9px; }
+.chatbot-suggestions { margin: 21px 0 0 45px; gap: 9px; }
+.chatbot-suggestions button { padding: 10px 14px; font-size: 12px; }
+.chatbot-form { padding: 16px 16px 14px; }
+.chatbot-input-shell { padding: 8px 8px 8px 15px; gap: 10px; border-radius: 21px; }
+.chatbot-input-shell textarea { min-height: 42px; padding: 9px 0 7px; font-size: 14px; }
+.chatbot-input-shell button { width: 46px; height: 46px; flex-basis: 46px; border-radius: 15px; }
+.chatbot-input-shell button svg { width: 22px; height: 22px; }
+.chatbot-form > p { font-size: 9px; }
+
+@media (max-width: 520px) {
+  .chatbot-header { min-height: 86px; padding: 14px; grid-template-columns: 50px minmax(0, 1fr) 42px; gap: 12px; }
+  .chatbot-avatar { width: 50px; height: 50px; }
+  .chatbot-close { width: 42px; height: 42px; }
+  .chatbot-messages { padding: 20px 16px 24px; }
+  .chatbot-message p { font-size: 14px; }
+  .chatbot-suggestions { margin-left: 45px; }
+  .chatbot-input-shell textarea { font-size: 16px; }
+}
+
+@media (max-width: 380px) {
+  .chatbot-header { min-height: 78px; padding: 11px; grid-template-columns: 46px minmax(0, 1fr) 38px; gap: 9px; }
+  .chatbot-avatar { width: 46px; height: 46px; }
+  .chatbot-close { width: 38px; height: 38px; }
+}
