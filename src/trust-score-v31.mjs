@@ -11,7 +11,7 @@ const MIN_STRATUM_FILL_FOR_VALID_STATUS = 0.5;
 
 export const ISSUE_DEFINITIONS = [
   { id: 'chat-lieu', label: 'Chất liệu / độ bền', severity: 1.5, words: ['vai mong', 'mong', 'xu', 'bong', 'rach', 'son', 'mui', 'cung', 'tho', 'nhao', 'kem chat luong', 'de hong'] },
-  { id: 'kich-co', label: 'Kích cỡ / form dáng', severity: 1, words: ['form nho', 'chat', 'rong', 'ngan', 'be', 'size nho', 'size lon', 'khong dung size', 'lech size'] },
+  { id: 'kich-co', label: 'Kích thước / độ phù hợp', severity: 1, words: ['form nho', 'chat', 'rong', 'ngan', 'be', 'size nho', 'size lon', 'khong dung size', 'lech size'] },
   { id: 'dung-mo-ta', label: 'Khác mô tả / hình ảnh', severity: 1.2, words: ['khac hinh', 'khong giong', 'khac mo ta', 'sai mau', 'mau khac', 'giao thieu', 'khong dung mau', 'khong dung mo ta', 'loi'] },
   { id: 'giao-hang', label: 'Giao hàng / đóng gói', severity: 0.5, words: ['giao cham', 'giao lau', 'mop', 'be', 'vo', 'dong goi so sai', 'giao thieu', 'tre'] },
   { id: 'su-dung', label: 'Trải nghiệm sử dụng', severity: 1.5, words: ['khong dung duoc', 'khong hoat dong', 'khong ben', 'nong', 'bi', 'kho chiu', 'ro', 'het pin', 'yeu'] }

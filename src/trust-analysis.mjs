@@ -15,7 +15,7 @@ const positiveDefinitions = [
 
 const negativeDefinitions = [
   { id: 'chat-lieu', title: 'Chất liệu / độ bền', description: 'Một số người mua phản ánh chất liệu mỏng, thô, có mùi hoặc dễ xuống cấp sau khi sử dụng.', words: ['vải mỏng', 'mỏng', 'xù', 'bong', 'rách', 'sờn', 'mùi', 'cứng', 'thô', 'nhão', 'kém chất lượng', 'dễ hỏng'] },
-  { id: 'kich-co', title: 'Kích cỡ / form dáng', description: 'Kích thước thực tế có thể chật, rộng hoặc lệch so với bảng size và kỳ vọng của người mua.', words: ['form nhỏ', 'chật', 'rộng', 'ngắn', 'bé', 'size nhỏ', 'size lớn', 'không đúng size', 'lệch size'] },
+  { id: 'kich-co', title: 'Kích thước / độ phù hợp', description: 'Một số người mua cho biết kích thước thực tế chưa phù hợp với nhu cầu, không gian sử dụng hoặc kích cỡ dự kiến.', words: ['form nhỏ', 'chật', 'rộng', 'ngắn', 'bé', 'size nhỏ', 'size lớn', 'không đúng size', 'lệch size'] },
   { id: 'dung-mo-ta', title: 'Khác mô tả / hình ảnh', description: 'Sản phẩm thực nhận có điểm khác về màu, mẫu, số lượng hoặc hình thức so với thông tin đăng bán.', words: ['khác hình', 'không giống', 'khác mô tả', 'sai màu', 'màu khác', 'thiếu', 'không đúng mẫu', 'lỗi'] },
   { id: 'giao-hang', title: 'Giao hàng / đóng gói', description: 'Người mua gặp tình trạng giao chậm, thiếu hàng hoặc sản phẩm bị ảnh hưởng do đóng gói chưa tốt.', words: ['giao chậm', 'lâu', 'móp', 'bể', 'vỡ', 'đóng gói sơ sài', 'giao thiếu', 'trễ'] },
   { id: 'su-dung', title: 'Trải nghiệm sử dụng', description: 'Sản phẩm có thể gây khó chịu, hoạt động yếu hoặc không đáp ứng tốt khi sử dụng thực tế.', words: ['không dùng được', 'không hoạt động', 'không bền', 'nóng', 'bí', 'khó chịu', 'rò', 'hết pin', 'yếu'] },

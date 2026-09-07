@@ -317,6 +317,34 @@ test('payload diễn giải giữ thống kê đủ 100 review nhưng chỉ gử
   );
 });
 
+test('nhãn kích thước dùng mô tả trung tính cho sản phẩm điện tử', () => {
+  const reviews = [
+    {
+      rating: 2,
+      verified: true,
+      included: true,
+      text: 'Chân đế chiếm nhiều diện tích hơn mình dự tính.',
+      labels: {
+        is_seeding: false,
+        is_vague: false,
+        is_low_value: false,
+        has_defect: true,
+        defect_categories: ['kich-co'],
+        reviewed_by: 'layer1'
+      }
+    }
+  ];
+
+  const result = buildRuleBasedTrust(reviews, {
+    product: { title: 'Màn hình Gaming LG UltraGear G6 27 inch' }
+  });
+  const sizeIssue = result.cons.find((item) => item.title === 'Kích thước / độ phù hợp');
+
+  assert.ok(sizeIssue);
+  assert.doesNotMatch(sizeIssue.detail, /form dáng|bảng size|có thể chật/i);
+  assert.match(sizeIssue.detail, /không gian sử dụng/i);
+});
+
 test('tóm tắt review mỹ phẩm hiển thị nhiều chủ đề có số đếm và bằng chứng cụ thể', () => {
   const useful = [
     { rating: 5, text: 'Màu đẹp, lên màu chuẩn và son lì lắm.', labels: { has_defect: false, defect_categories: [] } },
