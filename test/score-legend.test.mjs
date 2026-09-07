@@ -47,6 +47,14 @@ test('thang điểm nằm cùng vòng tròn TrustScore, không còn ở phần g
   assert.ok(!html.slice(html.indexOf('<section class="explanation-section"')).includes('class="score-legend"'));
 });
 
+test('thang điểm được trình bày theo thứ tự từ thấp đến cao', () => {
+  const order = [...html.matchAll(/<li class="legend-(red|orange|yellow|green)"/g)].map((match) => match[1]);
+  assert.deepEqual(order, ['red', 'orange', 'yellow', 'green']);
+  assert.ok(html.indexOf('&lt;50') < html.indexOf('50–59'));
+  assert.ok(html.indexOf('50–59') < html.indexOf('60–79'));
+  assert.ok(html.indexOf('60–79') < html.indexOf('≥80'));
+});
+
 test('đánh dấu đúng khung ở mọi ranh giới, bao gồm 80 thuộc mức xanh', () => {
   const { items, render } = legendHarness();
   for (const [score, tone, range] of [
@@ -88,3 +96,4 @@ test('thang điểm co giãn theo chiều rộng và cỡ chữ, không yêu c�
   assert.doesNotMatch(css, /\.score-legend\s*\{[^}]*overflow-x:\s*auto/);
   assert.match(script, /renderScoreLegend\(scoreAvailable \? score : null\)/);
 });
+
