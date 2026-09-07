@@ -682,7 +682,10 @@ test('Layer 1 giữ các review mỹ phẩm có trải nghiệm cụ thể thay 
     { rating: 4, text: 'Màu cũng ok nhưng bị chảy nước, lem bẩn ra ngoài.', defect: true },
     { rating: 4, text: 'Son không lì lắm, ăn một chút là nhanh trôi.', defect: true },
     { rating: 4, text: 'Son lên đúng màu nhưng chất son nhanh khô, khó tán và bị đắng miệng.', defect: true },
-    { rating: 2, text: 'Ko giống như quảng cáo, màu không chuẩn và không bám chút nào.', defect: true }
+    { rating: 2, text: 'Ko giống như quảng cáo, màu không chuẩn và không bám chút nào.', defect: true },
+    { rating: 5, text: 'Dỡn mặt hả, tại sao lại bán son đẹp và thơm như vậy.', defect: false },
+    { rating: 2, text: 'Son ni bôi lên ăn phát hết cha son cả, thất vọng.', defect: true },
+    { rating: 1, text: 'Không đúng quảng cáo, bôi giống nước lọc, son k bán vào môi.', defect: true }
   ];
 
   for (const [index, sample] of samples.entries()) {
@@ -716,5 +719,4 @@ test('review mỹ phẩm có lỗi cụ thể vẫn được giữ an toàn khi 
     else delete process.env.GEMINI_API_KEY;
   }
 });
-
 
