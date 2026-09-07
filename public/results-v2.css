@@ -651,7 +651,59 @@
 
 body.chatbot-open .result-action-bar { opacity: 0; pointer-events: none; }
 
+/* Keep the result page content readable without changing primary headings or product title. */
+.results-page .results-main .result-breadcrumb { font-size: 12px; }
+.results-page .results-main .results-eyebrow { font-size: 12px; }
+.results-page .results-main .product-meta,
+.results-page .results-main .product-inline-link { font-size: 12px; }
+.results-page .results-main .product-platform { font-size: 9px; }
+.results-page .results-main .trust-scale-caption { font-size: .875rem; }
+.results-page .results-main .trust-status { font-size: 13px; }
+.results-page .results-main .trust-copy > p { font-size: 13px; }
+.results-page .results-main .trustscore-note p { font-size: 12px; }
+.results-page .results-main .trustscore-note strong { font-size: 13px; }
+.results-page .results-main .overview-stats span { font-size: 10px; }
+.results-page .results-main .overview-stats strong { font-size: 14px; }
+.results-page .results-main .result-disclaimer { font-size: 11px; }
+.results-page .results-main .section-kicker { font-size: 12px; }
+.results-page .results-main .section-heading > div:first-child > p:last-child { font-size: 14px; }
+.results-page .results-main .source-chip { font-size: 10px; }
+.results-page .results-main .insight-sample-primary > span { font-size: 12px; }
+.results-page .results-main .insight-sample-primary strong { font-size: 16px; }
+.results-page .results-main .insight-sample-flow span { font-size: 13px; }
+.results-page .results-main .insight-sample-flow b { font-size: 15px; }
+.results-page .results-main .insight-sample > p { font-size: 13px; }
+.results-page .results-main .sentiment-card header small { font-size: 10px; }
+.results-page .results-main .sentiment-card header h3 { font-size: 19px; }
+.results-page .results-main .sentiment-item h4 { font-size: 14px; }
+.results-page .results-main .sentiment-item p { font-size: 12px; }
+.results-page .results-main .sentiment-mentions b { font-size: 13px; }
+.results-page .results-main .sentiment-mentions small { font-size: 10px; }
+.results-page .results-main .insight-illustration strong { font-size: 16px; }
+.results-page .results-main .insight-illustration span { font-size: 11px; }
+.results-page .results-main .driver-group-header p { font-size: 11px; }
+.results-page .results-main .driver-group-header h3 { font-size: 21px; }
+.results-page .results-main .driver-group-header div > span { font-size: 13px; }
+.results-page .results-main .driver-group-count { font-size: 15px; }
+.results-page .results-main .driver-group-empty { font-size: 13px; }
+.results-page .results-main .driver-card small { font-size: 10px; }
+.results-page .results-main .driver-card h4 { font-size: 19px; }
+.results-page .results-main .driver-card p { font-size: 13px; }
+.results-page .results-main .accordion-copy small { font-size: 10px; }
+.results-page .results-main .accordion-copy strong { font-size: 20px; }
+.results-page .results-main .accordion-count { font-size: 11px; }
+.results-page .results-main .accordion-count b { font-size: 15px; }
+.results-page .results-main .review-carousel-status { font-size: 11px; }
+.results-page .results-main .evidence-person strong { font-size: 13px; }
+.results-page .results-main .evidence-person small { font-size: 9px; }
+.results-page .results-main .evidence-card > p { font-size: 13px; }
+.results-page .results-main .evidence-label,
+.results-page .results-main .exclusion-reason strong { font-size: 9px; }
+.results-page .results-main .exclusion-reason small { font-size: 9px; }
+.results-page .results-main .excluded-intro p { font-size: 11px; }
+.results-page .results-main .review-empty strong { font-size: 15px; }
+.results-page .results-main .review-empty span { font-size: 11px; }
+
 @media (prefers-reduced-motion: reduce) {
   .action-button, .accordion-chevron { transition: none; }
 }
-
