@@ -193,16 +193,18 @@ function withCoverageNotice(summary, method) {
   return notice && !summary.includes(notice) ? `${summary} ${notice}` : summary;
 }
 
-function plainTrustSummary(score, scoreStatus = 'valid') {
+export function plainTrustSummary(score, scoreStatus = 'valid') {
   if (!Number.isFinite(score) || scoreStatus === 'insufficient') {
     return 'Chưa có đủ review có nội dung chữ để đạt ngưỡng tối thiểu 20 review và công bố TrustScore.';
   }
   const meaning = score >= 80
-    ? 'Các review đủ điều kiện hiện khá nhất quán, có nội dung dễ đối chiếu và ít dấu hiệu bất thường.'
+    ? 'Tập review có độ tin cậy cao; bạn có thể dùng kết quả này làm cơ sở cân nhắc sản phẩm.'
     : score >= 60
-      ? 'Phần lớn review đủ điều kiện có thể tham khảo, nhưng vẫn còn một vài tín hiệu cần đọc kỹ.'
-      : 'Tập review hiện còn những điểm thiếu nhất quán hoặc khó kiểm chứng nên cần được xem thận trọng.';
-  return `${meaning} Vì vậy, tập review đạt TrustScore ${score}/100. Đây là điểm về độ đáng tin của thông tin review, không phải điểm chất lượng tuyệt đối của sản phẩm.`;
+      ? 'Tập review khá đáng tin; bạn có thể tham khảo để cân nhắc sản phẩm, nhưng nên đọc kỹ các điểm chưa đồng nhất.'
+      : score >= 50
+        ? 'Tập review có độ tin cậy trung bình; hãy xem đây là nguồn tham khảo và kiểm tra kỹ các review liên quan trước khi quyết định.'
+        : 'Tập review có độ tin cậy thấp; chưa nên dựa chủ yếu vào kết quả này để quyết định mua.';
+  return `${meaning} TrustScore ${score}/100 đo độ đáng tin của tập review, không phải điểm chất lượng tuyệt đối của sản phẩm.`;
 }
 
 function componentImpact(score) {
@@ -518,13 +520,11 @@ function validateGeminiTrust(value, fallback) {
   // mô hình thay câu chữ vì có thể đưa ví dụ thuộc ngành hàng khác vào UI.
   const cons = fallback.cons;
   // Nhóm up/down/neutral phải phản ánh đúng các thành phần đã tính ở backend.
-  // Gemini chỉ diễn giải summary và ưu điểm, không được đổi tác động điểm.
+  // Gemini chỉ diễn giải ưu điểm, không được đổi kết luận hành động hoặc tác động điểm.
   const drivers = fallback.drivers;
-  const summary = String(value.summary || fallback.summary).slice(0, 420);
-  const preserveStatisticalSummary = fallback.method.scoreStatus !== 'valid';
   return {
     ...fallback,
-    summary: withCoverageNotice(preserveStatisticalSummary || TECHNICAL_USER_COPY.test(summary) ? fallback.summary : summary, fallback.method),
+    summary: fallback.summary,
     pros: pros.length ? pros : fallback.pros,
     cons: cons.length ? cons : fallback.cons,
     drivers: drivers.length ? drivers : fallback.drivers,
@@ -548,7 +548,7 @@ async function analyzeWithGemini(reviews, fallback, options = {}) {
     'Review included=false đã bị giảm ưu tiên: dùng chúng để đánh giá chất lượng dữ liệu, không dùng làm bằng chứng ưu/nhược điểm sản phẩm.',
     'Điểm đã được backend tính bằng thuật toán RealView v4.2: ba thành phần chất lượng bằng chứng, mức ít nhiễu và độ phủ kiểm định tạo điểm chất lượng cơ sở; độ phủ mẫu chỉ điều chỉnh bảo thủ phần điểm trên 50 đúng một lần. Nhược điểm sản phẩm không trực tiếp làm giảm TrustScore.',
     'Nội dung hiển thị cho người dùng tuyệt đối không được nhắc Fisher, p-value, odds ratio, binomial, logistic, Bonferroni, guardrail, điểm thành phần hoặc công thức.',
-    'Summary cần giải thích ý nghĩa kết quả bằng lời trong 2 câu và nhắc rõ TrustScore đo độ đáng tin của tập review, không phải điểm chất lượng tuyệt đối của sản phẩm.',
+    'Summary đã được backend khóa trong fixedBackendDraft; phải chép nguyên văn, không viết lại.',
     'Mỗi ưu/nhược điểm chỉ viết một câu ngắn, cụ thể: người mua thích hoặc chưa hài lòng điều gì và ảnh hưởng thực tế ra sao. Không lặp số lượt review, không thêm câu “cùng đề cập” và không chèn dẫn chứng vì giao diện đã liên kết trực tiếp tới review nguồn.',
     'Danh sách drivers trong fixedBackendDraft đã được backend xác định và sẽ được giữ nguyên; không đổi impact, thứ tự, tiêu đề hoặc nội dung của các driver.',
     Number.isFinite(fallback.score)

@@ -26,12 +26,10 @@ test('nút và avatar trợ lý dùng cùng logo RV', async () => {
   assert.doesNotMatch(chatbot, /M12 3a8 8 0 0 0-8 8v5/);
 });
 
-test('trang chủ khai báo favicon RealView hình vuông cho tab và máy tìm kiếm', async () => {
-  const home = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
-  const favicon = await readFile(new URL('../public/favicon.svg', import.meta.url), 'utf8');
-
-  assert.match(home, /rel="icon" type="image\/svg\+xml" sizes="any" href="\/favicon\.svg"/);
-  assert.match(home, /rel="shortcut icon" href="\/favicon\.svg"/);
-  assert.match(favicon, /viewBox="0 0 64 64"/);
-  assert.match(favicon, /aria-label="RealView"/);
+test('các trang dùng logo RV trong suốt làm favicon và không tham chiếu icon nền vuông', async () => {
+  for (const page of pages) {
+    const html = await readFile(new URL(`../public/${page}`, import.meta.url), 'utf8');
+    assert.match(html, /rel="icon" type="image\/png" href="\/assets\/realview-rv\.png"/);
+    assert.doesNotMatch(html, /favicon\.svg/);
+  }
 });

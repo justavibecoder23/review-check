@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { buildGeminiNarrativePayload, buildRuleBasedTrust, buildTrustAnalysis, trustTone } from '../src/trust-analysis.mjs';
+import { buildGeminiNarrativePayload, buildRuleBasedTrust, buildTrustAnalysis, plainTrustSummary, trustTone } from '../src/trust-analysis.mjs';
 
 const reviews = [
   { rating: 5, text: 'Sản phẩm đúng mô tả, chất lượng tốt và đóng gói kỹ, mình đã dùng một tuần.', verified: true, included: true },
@@ -9,6 +9,14 @@ const reviews = [
   { rating: 2, text: 'Vải mỏng và form nhỏ hơn bảng size, đường may cũng hơi thô.', verified: true, included: true },
   { rating: 5, text: 'Tốt', verified: false, included: false, exclusionReason: 'Quá ngắn hoặc không có trải nghiệm cụ thể' }
 ];
+
+test('kết luận nhanh đưa ra khuyến nghị hành động theo đúng dải TrustScore', () => {
+  assert.match(plainTrustSummary(88), /tin cậy cao.*cơ sở cân nhắc sản phẩm/i);
+  assert.match(plainTrustSummary(67), /khá đáng tin.*tham khảo để cân nhắc sản phẩm/i);
+  assert.match(plainTrustSummary(55), /tin cậy trung bình.*kiểm tra kỹ/i);
+  assert.match(plainTrustSummary(39), /tin cậy thấp.*chưa nên dựa/i);
+  assert.match(plainTrustSummary(88), /không phải điểm chất lượng tuyệt đối/i);
+});
 
 test('mẫu quá nhỏ không công bố điểm nhưng vẫn trả ưu nhược điểm và giải thích', () => {
   const trust = buildRuleBasedTrust(reviews);
