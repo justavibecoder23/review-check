@@ -200,7 +200,10 @@ function plainTrustSummary(score, scoreStatus = 'valid') {
 }
 
 function componentImpact(score) {
-  return Number(score) >= 99.5 ? 'up' : 'down';
+  const value = Number(score);
+  if (value > 50.5) return 'up';
+  if (value < 49.5) return 'down';
+  return 'neutral';
 }
 
 export function buildRuleBasedTrust(reviews = [], options = {}) {
@@ -222,13 +225,22 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
   const labelingUnavailableCount = reviews.filter((review) => review.labels?.layer2_unavailable).length;
   const excludedRate = reviews.length ? Math.round(excluded.length / reviews.length * 100) : 0;
   const coverageLowersScore = method.guardrails.applied.includes('sample-coverage');
+  const authenticityImpact = componentImpact(method.components.authenticity.score);
+  const textImpact = componentImpact(method.components.text.score);
+  const labelingImpact = componentImpact(method.components.labeling.score);
   const drivers = [
     {
-      impact: componentImpact(method.components.authenticity.score),
-      title: componentImpact(method.components.authenticity.score) === 'up' ? 'Mẫu không còn tín hiệu nhiễu đáng kể' : 'Một phần review không đủ tin cậy để dùng',
-      detail: componentImpact(method.components.authenticity.score) === 'up'
-        ? 'Các review trong mẫu kiểm định đều đủ điều kiện làm bằng chứng chính sau bước giảm nhiễu.'
-        : `${excluded.length}/${reviews.length} review không được dùng làm bằng chứng chính vì có dấu hiệu seeding, quảng cáo, trùng lặp, quá mơ hồ hoặc ít thông tin. Phần thiếu hụt này trực tiếp làm giảm mức ít nhiễu của tập review.`
+      impact: authenticityImpact,
+      title: authenticityImpact === 'up'
+        ? 'Phần lớn review vượt qua bước giảm nhiễu'
+        : authenticityImpact === 'down'
+          ? 'Nhiều review không đủ tin cậy để dùng'
+          : 'Mức ít nhiễu đang ở ngưỡng trung lập',
+      detail: authenticityImpact === 'up'
+        ? `${included.length}/${reviews.length} review đủ điều kiện làm bằng chứng chính sau khi loại seeding, quảng cáo, trùng lặp và nội dung ít thông tin.`
+        : authenticityImpact === 'down'
+          ? `${excluded.length}/${reviews.length} review không được dùng làm bằng chứng chính vì có dấu hiệu seeding, quảng cáo, trùng lặp, quá mơ hồ hoặc ít thông tin. Phần thiếu hụt này trực tiếp kéo điểm xuống.`
+          : `${included.length}/${reviews.length} review vượt qua bước giảm nhiễu. Thành phần này hiện không đẩy TrustScore lên hoặc xuống.`
     },
     {
       impact: 'neutral',
@@ -246,16 +258,18 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
           : `Trong ${method.sample.afterSeedingRemoval} review còn lại sau bước lọc nhiễu, chưa có một nhóm lỗi nào được người mua nhắc lại đủ rõ. Thống kê này không trực tiếp tăng hoặc giảm TrustScore.`
     },
     {
-      impact: componentImpact(method.components.text.score),
-      title: componentImpact(method.components.text.score) === 'up' ? 'Bằng chứng review rõ và đủ chi tiết' : 'Độ chi tiết của review chưa đồng đều',
-      detail: `Trong ${included.length} review được giữ lại, ${detailedCount} review mô tả trải nghiệm đủ chi tiết và ${verifiedCount} review có tín hiệu đã mua hàng. ${componentImpact(method.components.text.score) === 'up' ? 'Các bằng chứng đều đạt mức chi tiết tối đa theo tiêu chí nội dung.' : 'Một số review còn ngắn hoặc thiếu mô tả trải nghiệm cụ thể nên chất lượng bằng chứng chưa đạt mức tối đa.'}`
+      impact: textImpact,
+      title: textImpact === 'up' ? 'Nội dung review đủ rõ để đối chiếu' : textImpact === 'down' ? 'Nhiều review còn thiếu chi tiết' : 'Độ chi tiết đang ở ngưỡng trung lập',
+      detail: `Trong ${included.length} review được giữ lại, ${detailedCount} review mô tả trải nghiệm đủ chi tiết và ${verifiedCount} review có tín hiệu đã mua hàng. ${textImpact === 'up' ? 'Chất lượng nội dung đang đóng góp tích cực cho TrustScore.' : textImpact === 'down' ? 'Nội dung thiếu chi tiết đang trực tiếp kéo điểm xuống.' : 'Thành phần này hiện không đẩy điểm lên hoặc xuống.'}`
     },
     {
-      impact: componentImpact(method.components.labeling.score),
-      title: componentImpact(method.components.labeling.score) === 'up' ? 'Toàn bộ review đã có kết quả kiểm định' : 'Một phần review chưa kiểm định được',
-      detail: componentImpact(method.components.labeling.score) === 'up'
-        ? 'Mọi review trong mẫu đều đã có quyết định từ bộ quy tắc hoặc lớp AI kiểm định, không còn mục ở trạng thái chưa xác định.'
-        : `${labelingUnavailableCount} review chưa nhận được kết quả kiểm định đầy đủ nên không được dùng làm bằng chứng; khoảng trống này trực tiếp làm giảm độ phủ kiểm định.`
+      impact: labelingImpact,
+      title: labelingImpact === 'up' ? 'Phần lớn review đã có kết quả kiểm định' : labelingImpact === 'down' ? 'Nhiều review chưa kiểm định được' : 'Độ phủ kiểm định ở ngưỡng trung lập',
+      detail: labelingImpact === 'up'
+        ? `${reviews.length - labelingUnavailableCount}/${reviews.length} review đã có quyết định từ bộ quy tắc hoặc lớp AI kiểm định. Độ phủ này đang củng cố TrustScore.`
+        : labelingImpact === 'down'
+          ? `${labelingUnavailableCount} review chưa nhận được kết quả kiểm định đầy đủ nên không được dùng làm bằng chứng; khoảng trống này trực tiếp kéo điểm xuống.`
+          : `${reviews.length - labelingUnavailableCount}/${reviews.length} review đã có kết quả kiểm định; thành phần này hiện không đẩy điểm lên hoặc xuống.`
     },
     {
       impact: 'neutral',
