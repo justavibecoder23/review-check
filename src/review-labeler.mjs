@@ -217,7 +217,7 @@ function assessProductRelevance(reviewText, product = {}) {
 }
 
 function assessInformationValue(text, defects, flags = {}) {
-  if (flags.gibberish || flags.iconOnly || flags.repeated || flags.resaleOnly) return 'none';
+  if (flags.gibberish || flags.iconOnly || flags.repeated || flags.resaleOnly || flags.rewardMotivated) return 'none';
   if (flags.logisticsOnly || flags.generic || flags.noUsageExperience || !text) return 'low';
   const structuralSpecificity = assessStructuralSpecificity(text);
   if (defects.length || (meaningfulFeedbackPattern.test(text) && concreteFeedbackPattern.test(text)) || structuralSpecificity === 'high') return 'high';
@@ -263,17 +263,13 @@ function baseLabels(layer1) {
 }
 
 function canUseSafeLayer1Fallback(layer1) {
-  const blockingConflicts = layer1.conflicts.filter((conflict) => conflict !== 'SEEDING_WITH_NEGATIVE_DEFECT');
-  const negativeDisclaimerWithDefect = layer1.has_defect
-    && layer1.conflicts.length > 0
-    && layer1.conflicts.every((conflict) => conflict === 'SEEDING_WITH_NEGATIVE_DEFECT');
   return !layer1.is_seeding
     && !layer1.is_low_value
     && !layer1.is_vague
     && layer1.relevance !== 'needs_review'
-    && !blockingConflicts.length
+    && !layer1.conflicts.length
     && ['medium', 'high'].includes(layer1.information_value)
-    && (layer1.confidence >= 0.75 || negativeDisclaimerWithDefect);
+    && layer1.confidence >= 0.75;
 }
 
 export function labelReviewLayer1(review = {}, index = 0, product = {}) {
@@ -286,12 +282,11 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
   const strongSeeding = exactSeeding ? null : matchAny(strongSeedingPatterns, text);
   const weakSeeding = matchAny(weakSeedingPatterns, text);
 
-  // Review chê/đánh giá thấp (<= 3 sao) hoặc phản ánh lỗi hỏng cụ thể dù có kèm disclaimer
-  // "hình ảnh nhận xu" hay "bình luận lấy xu" KHÔNG PHẢI là seeding mà là review lỗi thật.
-  const hasNegativeDefectSignals = defects.length > 0
-    || (rating <= 3 && (negativeDefectCuePattern.test(cleanText) || negativeDefectCuePattern.test(text)));
-  const seedingDisclaimedOnNegative = Boolean((exactSeeding || strongSeeding) && hasNegativeDefectSignals);
-  const isSeeding = Boolean((exactSeeding || strongSeeding) && !seedingDisclaimedOnNegative);
+  // Nội dung tự khai được đăng để nhận xu/điểm/thưởng bị loại cứng, kể cả khi
+  // phần còn lại có nhắc tới thuộc tính hoặc lỗi sản phẩm. Layer 2 không được
+  // phép mở khóa tín hiệu này.
+  const rewardMotivated = Boolean(exactSeeding || strongSeeding);
+  const isSeeding = rewardMotivated;
 
   const effectiveText = cleanText || text;
   const tokens = effectiveText ? effectiveText.split(/\s+/u) : [];
@@ -305,7 +300,7 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
   const tooShort = effectiveText.length < Number(rules.spam_and_low_value.min_character_length)
     || tokens.length < Number(rules.spam_and_low_value.min_token_count);
   const repeated = repeatedCharacterSpam(effectiveText);
-  const deterministicHardReject = gibberish || iconOnly || repeated || resaleOnly;
+  const deterministicHardReject = gibberish || iconOnly || repeated || resaleOnly || rewardMotivated;
   const relevanceAssessment = assessProductRelevance(originalText, product);
   const offTopicCandidate = relevanceAssessment.state === 'needs_review';
 
@@ -315,13 +310,13 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
     || (meaningfulFeedback && concreteFeedbackPattern.test(effectiveText));
   const noUsageExperience = !hasConcreteEvidence && explicitNoUsagePattern.test(effectiveText);
 
-  const lowValueCandidate = !effectiveText || generic || iconOnly || repeated || gibberish || logisticsOnly || resaleOnly || tooShort || noUsageExperience;
+  const lowValueCandidate = !effectiveText || generic || iconOnly || repeated || gibberish || logisticsOnly || resaleOnly || rewardMotivated || tooShort || noUsageExperience;
   // Tín hiệu rác chắc chắn không được phép bị một tiền tố chung như
   // "Chất lượng sản phẩm:" mở khóa.
-  const isLowValue = defects.length === 0
-    && (deterministicHardReject || (lowValueCandidate && !meaningfulFeedback));
+  const isLowValue = rewardMotivated || (defects.length === 0
+    && (deterministicHardReject || (lowValueCandidate && !meaningfulFeedback)));
   const informationValue = assessInformationValue(effectiveText, defects, {
-    generic, iconOnly, repeated, gibberish, logisticsOnly, resaleOnly, tooShort, noUsageExperience
+    generic, iconOnly, repeated, gibberish, logisticsOnly, resaleOnly, rewardMotivated, tooShort, noUsageExperience
   });
   const rantKeyword = rules.vague_rant_detection.rant_keywords.find((keyword) => text.includes(normalizeVietnamese(keyword)));
   const vagueRating = rules.vague_rant_detection.trigger_ratings.includes(rating);
@@ -330,20 +325,15 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
     && Boolean(rantKeyword || isLowValue || text.length <= Number(rules.vague_rant_detection.max_length_without_defect));
   const reasonCodes = [];
   const evidence = [];
-  if (exactSeeding || strongSeeding) {
-    if (isSeeding) {
-      reasonCodes.push(exactSeeding ? 'SEEDING_EXACT_PHRASE' : 'SEEDING_STRONG_PATTERN');
-      evidence.push({ label: 'seeding', rule: exactSeeding || strongSeeding, quote: originalText.slice(0, 180) });
-    } else if (seedingDisclaimedOnNegative) {
-      reasonCodes.push('NEGATIVE_REVIEW_WITH_COIN_DISCLAIMER');
-      evidence.push({ label: 'negative_with_coin_disclaimer', rule: exactSeeding || strongSeeding, quote: originalText.slice(0, 180) });
-    }
+  if (rewardMotivated) {
+    reasonCodes.push('LOW_VALUE_REWARD_CONTENT');
+    evidence.push({ label: 'reward_motivated_content', rule: exactSeeding || strongSeeding, quote: originalText.slice(0, 180) });
   }
-  if (weakSeeding && !seedingDisclaimedOnNegative) {
+  if (weakSeeding && !rewardMotivated) {
     reasonCodes.push('SEEDING_WEAK_CUE');
     evidence.push({ label: 'seeding_candidate', rule: weakSeeding, quote: originalText.slice(0, 180) });
   }
-  if (isLowValue) {
+  if (isLowValue && !rewardMotivated) {
     reasonCodes.push(
       gibberish ? 'LOW_VALUE_GIBBERISH'
         : logisticsOnly ? 'LOW_VALUE_LOGISTICS_ONLY'
@@ -374,8 +364,7 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
 
   const conflicts = [];
   if (isSeeding && defects.length) conflicts.push('SEEDING_WITH_CONCRETE_DEFECT');
-  if (seedingDisclaimedOnNegative) conflicts.push('SEEDING_WITH_NEGATIVE_DEFECT');
-  if (weakSeeding && !isSeeding && !seedingDisclaimedOnNegative) conflicts.push('WEAK_SEEDING_CUE_ONLY');
+  if (weakSeeding && !isSeeding) conflicts.push('WEAK_SEEDING_CUE_ONLY');
   const signalConfidence = gibberish ? 0.97
     : exactSeeding ? 0.99
     : strongSeeding ? 0.94
@@ -407,7 +396,7 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
     evidence,
     conflicts,
     hard_reject: deterministicHardReject,
-    // Chỉ chuỗi rác/emoji/lặp ký tự chắc chắn mới bị khóa ở Layer 1. Review ngắn,
+    // Tín hiệu nhận xu/thưởng và rác chắc chắn bị khóa ở Layer 1. Review ngắn,
     // generic hoặc chỉ nhắc logistics vẫn qua Gemini để tránh loại oan nội dung
     // hữu ích nằm ngoài từ điển heuristic.
     requires_llm: !deterministicHardReject && (
@@ -534,7 +523,7 @@ function normalizeLayer2Label(candidate, review, layer1, product = {}) {
       return { decision: 'abstain', confidence, reason_code: 'DEFECT_EVIDENCE_REUSED_ACROSS_CATEGORIES' };
     }
   }
-  const lockedLowValue = layer1.reason_codes.some((code) => ['LOW_VALUE_GIBBERISH', 'LOW_VALUE_ICON_ONLY', 'LOW_VALUE_REPETITION', 'LOW_VALUE_RESALE_ONLY'].includes(code));
+  const lockedLowValue = layer1.reason_codes.some((code) => ['LOW_VALUE_GIBBERISH', 'LOW_VALUE_ICON_ONLY', 'LOW_VALUE_REPETITION', 'LOW_VALUE_RESALE_ONLY', 'LOW_VALUE_REWARD_CONTENT'].includes(code));
   // Các tín hiệu deterministic này không được để LLM mở khóa bằng một category
   // defect được suy diễn. Review lỗi thật đã được Layer 1 ưu tiên defect và sẽ
   // không mang lockedLowValue ngay từ đầu.
@@ -731,7 +720,10 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
     }]));
   const uniquePrepared = prepared.filter(({ layer1 }) => !duplicateById.has(String(layer1.id)));
   const mode = options.mode || process.env.LABELER_LLM_MODE || 'uncertain';
-  const selected = mode === 'off' ? [] : mode === 'uncertain' ? uniquePrepared.filter((item) => item.layer1.requires_llm) : uniquePrepared;
+  const selectedByMode = mode === 'off' ? [] : mode === 'uncertain' ? uniquePrepared.filter((item) => item.layer1.requires_llm) : uniquePrepared;
+  // Hard reject là quyết định cuối của Layer 1: không gửi sang Gemini ở bất kỳ
+  // chế độ nào để AI không thể mở khóa nội dung nhận xu hoặc rác chắc chắn.
+  const selected = selectedByMode.filter((item) => !item.layer1.hard_reject);
   const selectedIds = new Set(selected.map((item) => String(item.layer1.id)));
   const batchSize = Math.min(12, Math.max(8, Number.parseInt(
     process.env.LABELER_LLM_BATCH_SIZE || String(LAYER2_DEFAULT_BATCH_SIZE), 10
@@ -898,5 +890,4 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
 }
 
 export { rulesDocument as LAYER1_RULES, layer2Document as LAYER2_PROMPT };
-
 
