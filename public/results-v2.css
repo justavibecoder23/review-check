@@ -130,7 +130,7 @@
   display: -webkit-box;
   overflow: hidden;
   font-size: clamp(25px, 2.7vw, 39px);
-  line-height: 1.12;
+  line-height: 1.2;
   letter-spacing: -1.7px;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
