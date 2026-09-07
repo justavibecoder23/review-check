@@ -64,8 +64,8 @@ test('màu TrustScore tuân theo đúng các ngưỡng giao diện', () => {
   assert.equal(trustTone(80).id, 'green');
   assert.equal(trustTone(60).id, 'yellow');
   assert.equal(trustTone(59).id, 'orange');
-  assert.equal(trustTone(40).id, 'orange');
-  assert.equal(trustTone(39).id, 'red');
+  assert.equal(trustTone(50).id, 'orange');
+  assert.equal(trustTone(49).id, 'red');
 });
 
 test('frontend không tự tính TrustScore từ trung bình sao khi backend thiếu điểm', () => {
@@ -81,10 +81,130 @@ test('tự dùng kết quả quy tắc khi Gemini không được cấu hình', 
   delete process.env.GEMINI_API_KEY;
   try {
     const trust = await buildTrustAnalysis(reviews);
-    assert.equal(trust.engine, 'statistical-v4.1');
-    assert.equal(trust.method.version, '4.1');
+    assert.equal(trust.engine, 'statistical-v4.2');
+    assert.equal(trust.method.version, '4.2');
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+  }
+});
+
+test('Gemini diễn giải lỗi vẫn trả TrustScore thống kê khi đã có 20 review', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-only-key';
+  const sufficientReviews = Array.from({ length: 20 }, (_, index) => ({
+    rating: 5,
+    text: `Review ${index + 1} mô tả trải nghiệm sử dụng thực tế và chất lượng sản phẩm rõ ràng.`,
+    included: true,
+    labels: {
+      is_seeding: false,
+      is_vague: false,
+      is_low_value: false,
+      is_off_topic: false,
+      information_value: 'high',
+      defect_categories: []
+    }
+  }));
+  try {
+    const trust = await buildTrustAnalysis(sufficientReviews, {
+      fetchImpl: async () => { throw new Error('Gemini unavailable in test'); }
+    });
+    assert.ok(Number.isFinite(trust.score));
+    assert.equal(trust.method.version, '4.2');
+    assert.match(trust.fallbackReason, /Gemini unavailable/i);
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
+test('Gemini không được che cảnh báo độ phủ hoặc thay điểm khi mẫu đủ 20 review nhưng thiếu tầng sao', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-only-key';
+  const oneStratumReviews = Array.from({ length: 20 }, (_, index) => ({
+    rating: 5,
+    text: `Review ${index + 1} mô tả trải nghiệm sử dụng thực tế và chất lượng sản phẩm rõ ràng.`,
+    verified: true,
+    included: true,
+    labels: {
+      is_seeding: false,
+      is_vague: false,
+      is_low_value: false,
+      is_off_topic: false,
+      information_value: 'high',
+      defect_categories: []
+    }
+  }));
+  const sampling = { strategy: 'parallel-star-filters', ratingStrata: [1, 2, 3, 4, 5], perStarLimit: 20 };
+  const fallback = buildRuleBasedTrust(oneStratumReviews, { sampling });
+  try {
+    const trust = await buildTrustAnalysis(oneStratumReviews, {
+      sampling,
+      fetchImpl: async () => ({
+        ok: true,
+        async json() {
+          return {
+            candidates: [{ content: { parts: [{ text: JSON.stringify({
+              score: 100,
+              summary: 'Tập review hoàn toàn đáng tin cậy và có thể dùng để kết luận chắc chắn.',
+              pros: [],
+              cons: [],
+              drivers: []
+            }) }] } }]
+          };
+        }
+      })
+    });
+
+    assert.equal(fallback.scoreStatus, 'limited');
+    assert.deepEqual(fallback.method.adequacy.missingRatings, [1, 2, 3, 4]);
+    assert.equal(trust.score, fallback.score, 'Gemini không được thay TrustScore do backend tính');
+    assert.equal(trust.scoreStatus, 'limited');
+    assert.match(trust.summary, /Độ phủ bằng chứng còn hạn chế/i);
+    assert.match(trust.summary, /nhận định tạm thời/i);
+    assert.equal(trust.summary, fallback.summary);
+    assert.doesNotMatch(trust.summary, /hoàn toàn đáng tin cậy/i);
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
+test('mẫu bị loại toàn bộ luôn nói rõ không có review đủ điều kiện làm bằng chứng', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-only-key';
+  let requests = 0;
+  const rejectedReviews = Array.from({ length: 20 }, (_, index) => ({
+    rating: index % 5 + 1,
+    text: `Review ${index + 1} có nội dung chữ nhưng đã bị loại khỏi tập bằng chứng.`,
+    verified: true,
+    included: false,
+    exclusionReason: 'Nội dung không đủ giá trị kiểm định',
+    labels: {
+      is_seeding: false,
+      is_vague: false,
+      is_low_value: true,
+      is_off_topic: false,
+      information_value: 'none',
+      defect_categories: []
+    }
+  }));
+  try {
+    const trust = await buildTrustAnalysis(rejectedReviews, {
+      sampling: { strategy: 'parallel-star-filters', ratingStrata: [1, 2, 3, 4, 5], perStarLimit: 4 },
+      fetchImpl: async () => {
+        requests += 1;
+        throw new Error('Không nên gọi Gemini khi không có bằng chứng.');
+      }
+    });
+
+    assert.equal(trust.method.sample.afterSeedingRemoval, 0);
+    assert.match(trust.summary, /chưa có review đủ điều kiện làm bằng chứng/i);
+    assert.doesNotMatch(trust.summary, /có nhiều bằng chứng đáng tin/i);
+    assert.equal(trust.narrativeSkippedReason, 'no-eligible-evidence');
+    assert.equal(requests, 0);
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
   }
 });
 

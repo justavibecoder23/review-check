@@ -427,7 +427,8 @@ const layer2ResponseSchema = {
 
 function normalizeLayer2Label(candidate, review, layer1, product = {}) {
   if (!candidate || !['confirm', 'correct', 'abstain'].includes(candidate.decision)) return null;
-  const categories = [...new Set((candidate.defect_categories || []).filter((category) => allowedCategories.has(category)))];
+  const categories = [...new Set((Array.isArray(candidate.defect_categories) ? candidate.defect_categories : [])
+    .filter((category) => allowedCategories.has(category)))];
   const confidence = clamp(candidate.confidence);
   if (candidate.decision === 'abstain' || confidence < 0.65) {
     return { decision: 'abstain', confidence, reason_code: String(candidate.reason_code || 'LLM_ABSTAIN') };
@@ -670,7 +671,7 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
   const layer2StartedAt = Date.now();
   const prepared = reviews.map((review, index) => ({ review, layer1: labelReviewLayer1(review, index, options.product) }));
   // Phát hiện bản sao trước khi gọi Gemini để một nội dung lặp không tiêu hao
-  // nhiều request/token. Bản đại diện đầu tiên vẫn đi qua đủ hai lớp.
+  // nhiều request/token. Bản đại diện được chọn ổn định, không phụ thuộc thứ tự.
   const duplicateAudit = annotateReviewDuplicates(prepared.map(({ review, layer1 }) => ({
     ...review,
     labelId: layer1.id,
@@ -682,7 +683,9 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
       is_duplicate: true,
       duplicate_of: review.labels.duplicate_of,
       duplicate_similarity: review.labels.duplicate_similarity,
-      reason_code: 'DUPLICATE_CONTENT'
+      duplicate_rating_conflict: Boolean(review.labels.duplicate_rating_conflict),
+      duplicate_semantic_conflict: Boolean(review.labels.duplicate_semantic_conflict),
+      reason_code: review.labels.reason_code || 'DUPLICATE_CONTENT'
     }]));
   const uniquePrepared = prepared.filter(({ layer1 }) => !duplicateById.has(String(layer1.id)));
   const mode = options.mode || process.env.LABELER_LLM_MODE || 'uncertain';
@@ -777,8 +780,9 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
     if (layer2?.decision === 'abstain') abstained += 1;
     if (layer2?.changed) corrected += 1;
     const accepted = layer2 && layer2.decision !== 'abstain';
+    const duplicate = duplicateById.get(String(layer1.id));
     const safeLayer1Fallback = Boolean(selectedIds.has(String(layer1.id)) && !accepted && canUseSafeLayer1Fallback(layer1));
-    const layer2Unavailable = Boolean(layer1.requires_llm && !accepted && !safeLayer1Fallback);
+    const layer2Unavailable = Boolean(!duplicate && layer1.requires_llm && !accepted && !safeLayer1Fallback);
     const semanticFinal = accepted ? {
       is_seeding: layer2.is_seeding,
       is_low_value: layer2.is_low_value,
@@ -799,7 +803,6 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
       layer2_fallback_accepted: safeLayer1Fallback,
       reviewed_by: safeLayer1Fallback ? 'layer1-safe-fallback' : 'layer1'
     };
-    const duplicate = duplicateById.get(String(layer1.id));
     const final = duplicate ? { ...semanticFinal, ...duplicate } : semanticFinal;
     return {
       ...review,

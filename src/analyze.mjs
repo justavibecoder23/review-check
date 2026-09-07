@@ -6,7 +6,6 @@ import { saveReviewDatasets } from './review-dataset-storage.mjs';
 import { createProgressReporter } from './sse.mjs';
 import { assertEnoughReviews, checkSamplingCoverage } from './analysis-eligibility.mjs';
 import { throwIfAborted } from './abort.mjs';
-import { annotateReviewDuplicates } from './review-deduplication.mjs';
 
 const issueDefinitions = ISSUE_DEFINITIONS.map(({ id, label, words }) => ({ id, label, words }));
 const lowValuePatterns = [/^ok+([.! ]*)$/i, /tốt([.! ]*)$/i, /^đẹp([.! ]*)$/i, /^5\s*sao/i, /chưa.{0,12}(dùng|thử)/i];
@@ -102,12 +101,14 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   };
   const labeling = await labelReviewsTwoLayer(reviews, { product, geminiContext, signal: options.signal });
   progress('filtering', 76, 'Đang phân tích reviews...');
-  const deduplication = annotateReviewDuplicates(labeling.reviews);
-  const labelingStats = { ...labeling.stats, duplicateContentCount: deduplication.duplicateCount };
-  if (deduplication.duplicateCount) {
-    warnings.push(`Đã loại ${deduplication.duplicateCount} review có nội dung trùng hoặc gần trùng trong cùng mẫu.`);
+  // Labeler đã khử trùng trước Gemini. Chỉ bản đại diện được kiểm định; chạy
+  // lại sau đó sẽ nhầm nhãn mới của đại diện với nhãn cũ của bản sao.
+  const labelingStats = labeling.stats;
+  const duplicateCount = labelingStats.duplicateContentCount || 0;
+  if (duplicateCount) {
+    warnings.push(`Đã loại ${duplicateCount} review có nội dung trùng hoặc gần trùng trong cùng mẫu.`);
   }
-  const checked = deduplication.reviews.map((review) => ({ ...review, filter: shouldKeep(review) }));
+  const checked = labeling.reviews.map((review) => ({ ...review, filter: shouldKeep(review) }));
   const genuine = checked.filter((review) => review.filter.keep);
   const excluded = checked.filter((review) => !review.filter.keep);
   const grouped = new Map(issueDefinitions.map((issue) => [issue.id, { ...issue, count: 0, reviews: [] }]));
@@ -138,7 +139,7 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   }));
   const unverifiedCount = processedReviews.filter((review) => review.verificationStatus === 'unverified').length;
   if (reviews.length && unverifiedCount / reviews.length > 0.2) {
-    warnings.push(`Có ${unverifiedCount}/${reviews.length} review chưa được Layer 2 kiểm định; các review này không tham gia TrustScore.`);
+    warnings.push(`Có ${unverifiedCount}/${reviews.length} review chưa được Layer 2 kiểm định; nội dung của chúng không được dùng làm bằng chứng và phần thiếu này được phản ánh trong độ phủ kiểm định.`);
   }
   const fallbackTrustSample = processedReviews.filter((review) => (
     review.included !== false && !classifyReviewSignals(review).seeding
@@ -191,7 +192,7 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
       algorithmSample: trust.method?.sample?.afterSeedingRemoval ?? fallbackTrustSample,
       evidenceRejected: trust.method?.sample?.rejectedFromEvidence ?? (reviews.length - fallbackTrustSample),
       samplingDesignExcluded: trust.method?.sample?.excludedBySamplingDesign ?? 0,
-      duplicateContentExcluded: deduplication.duplicateCount,
+      duplicateContentExcluded: duplicateCount,
       seedingExcluded: trust.method?.sample?.totalSeedingCount
         ?? processedReviews.filter((review) => classifyReviewSignals(review).seeding).length
     },

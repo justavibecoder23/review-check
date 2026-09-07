@@ -1,6 +1,10 @@
 export const MINIMUM_REVIEWS_FOR_ANALYSIS = 20;
 export const TRUST_SCORE_ANCHOR_RATINGS = Object.freeze([1, 2, 3, 4, 5]);
 
+export function isWrittenReview(review) {
+  return Boolean(review && typeof review === 'object' && typeof review.text === 'string' && review.text.trim());
+}
+
 function requiredRatingStrata(collection = {}) {
   const configured = Array.isArray(collection?.ratingStrata)
     ? [...new Set(collection.ratingStrata.map(Number)
@@ -10,7 +14,9 @@ function requiredRatingStrata(collection = {}) {
 }
 
 export function assertEnoughReviews(reviews, minimum = MINIMUM_REVIEWS_FOR_ANALYSIS) {
-  const count = Array.isArray(reviews) ? reviews.length : 0;
+  const count = Array.isArray(reviews)
+    ? reviews.filter(isWrittenReview).length
+    : 0;
   const required = Number.isFinite(Number(minimum))
     ? Math.max(1, Math.floor(Number(minimum)))
     : MINIMUM_REVIEWS_FOR_ANALYSIS;
@@ -31,6 +37,7 @@ export function checkSamplingCoverage(reviews, collection = {}) {
     return { complete: true, missingRatings: [], requiredRatings: [] };
   }
   const ratings = new Set((Array.isArray(reviews) ? reviews : [])
+    .filter(isWrittenReview)
     .map((review) => Number(review?.rating))
     .filter((rating) => Number.isInteger(rating)));
   const requiredRatings = requiredRatingStrata(collection);

@@ -65,14 +65,24 @@ test('Holm điều chỉnh p-value đơn điệu theo thứ tự', () => {
   assert.equal(results.find((item) => item.id === 'c').adjustedPValue, 0.2);
 });
 
-test('TrustScore v4 là trung bình minh bạch của bốn thành phần và không còn cap', () => {
+test('TrustScore v4.2 tính chất lượng ba thành phần rồi điều chỉnh độ phủ đúng một lần', () => {
   const combined = combineTrustComponents({ text: 80, authenticity: 60, labeling: 100, adequacy: 40 });
-  assert.equal(combined.rawScore, 70);
-  assert.equal(combined.score, 70);
-  assert.deepEqual(Object.values(combined.components).map((item) => item.weight), [0.25, 0.25, 0.25, 0.25]);
-  assert.equal(combined.guardrails.totalPenalty, 0);
+  assert.equal(combined.qualityScore, 80);
+  assert.equal(combined.rawScore, 62);
+  assert.equal(combined.score, 62);
+  assert.deepEqual(Object.values(combined.components).map((item) => item.weight), [1 / 3, 1 / 3, 1 / 3, 0]);
+  assert.equal(combined.components.adequacy.active, false);
+  assert.equal(combined.guardrails.totalPenalty, 18);
+  assert.equal(combined.guardrails.method, 'one-sided-coverage-shrinkage');
   assert.equal(combined.caps.deprecated, true);
   assert.equal(combined.caps.applied.length, 0);
+});
+
+test('độ phủ không được nâng điểm chất lượng thấp về mức trung lập', () => {
+  const combined = combineTrustComponents({ text: 40, authenticity: 40, labeling: 40, adequacy: 10 });
+  assert.equal(combined.qualityScore, 40);
+  assert.equal(combined.rawScore, 40);
+  assert.equal(combined.score, 40);
 });
 
 test('điểm review tiêu cực riêng thưởng chi tiết và phạt nội dung mơ hồ', () => {
@@ -86,8 +96,41 @@ test('một tài khoản lặp nhiều review không làm cỡ mẫu bằng ch�
   const reviews = Array.from({ length: 20 }, (_, index) => usefulReview(index, { authorId: 'same-buyer' }));
   const result = calculateTrustScoreV31(reviews);
   assert.equal(result.sample.independentEvidenceSize, 1);
-  assert.equal(result.scoreStatus, 'insufficient');
-  assert.equal(result.score, null);
+  assert.equal(result.scoreStatus, 'limited');
+  assert.ok(Number.isFinite(result.score));
+  assert.ok(result.score <= 51);
+});
+
+test('một tài khoản lặp nhiều dòng không lấn át điểm chất lượng của contributor khác', () => {
+  const repeatedHigh = Array.from({ length: 20 }, (_, index) => usefulReview(index, {
+    authorId: 'repeated-buyer',
+    text: `Review rất chi tiết số ${index + 1} về trải nghiệm, độ bền, chất liệu và cách dùng thực tế.`
+  }));
+  const oneLow = usefulReview(21, {
+    authorId: 'second-buyer',
+    text: 'x',
+    labels: { information_value: 'none' }
+  });
+  const result = calculateTrustScoreV31([...repeatedHigh, oneLow]);
+
+  assert.ok(result.components.text.score > 49 && result.components.text.score < 51);
+  assert.equal(result.sample.distinctContributorEvidenceSize, 2);
+});
+
+test('một tài khoản xuất hiện ở nhiều tầng chỉ đóng góp một đơn vị độ phủ', () => {
+  const reviews = [1, 2, 3, 4, 5].flatMap((rating) => Array.from(
+    { length: 4 },
+    (_, index) => usefulReview(index, { rating, authorId: 'same-buyer' })
+  ));
+  const result = calculateTrustScoreV31(reviews, {
+    sampling: { strategy: 'parallel-star-filters', perStarLimit: 20 }
+  });
+
+  assert.ok(Math.abs(result.sample.distinctContributorCoverageSize - 1) < 1e-12);
+  assert.ok(Math.abs(result.adequacy.coveredSampleSlots - 1) < 1e-12);
+  assert.ok(Math.abs(result.adequacy.coverage - 0.01) < 1e-12);
+  assert.equal(result.scoreStatus, 'limited');
+  assert.ok(Number.isFinite(result.score));
 });
 
 test('mẫu chia tầng không được giả là phân bố rating tự nhiên', () => {
@@ -146,12 +189,12 @@ test('TikTok dùng đủ năm tầng 1–5 theo đúng thiết kế lấy mẫu 
   assert.deepEqual(result.defects.estimator.strata.map((item) => item.rating), [1, 2, 3, 4, 5]);
 });
 
-test('thiếu một số tầng chuẩn vẫn tính TrustScore nếu cỡ mẫu hiệu dụng đạt yêu cầu', () => {
+test('thiếu một số tầng chuẩn vẫn tính TrustScore khi đã có ít nhất 20 review chữ', () => {
   const reviews = [2, 3, 4, 5].flatMap((rating) => Array.from({ length: 20 }, (_, index) => usefulReview(index, { rating })));
   const result = calculateTrustScoreV31(reviews, { sampling: { strategy: 'parallel-star-filters', perStarLimit: 20 } });
   assert.ok(typeof result.score === 'number' && result.score > 0);
   assert.ok(typeof result.rawScore === 'number');
-  assert.equal(result.scoreStatus, 'valid');
+  assert.equal(result.scoreStatus, 'provisional');
   assert.deepEqual(result.adequacy.missingRatings, [1]);
 });
 
@@ -160,10 +203,186 @@ test('không có bằng chứng không được mặc định thành điểm cao
     included: false, labels: { is_low_value: true, information_value: 'none' }
   }));
   const result = calculateTrustScoreV31(reviews);
-  assert.equal(result.score, null);
-  assert.equal(result.scoreStatus, 'insufficient');
+  assert.equal(result.score, 33);
+  assert.equal(result.scoreStatus, 'limited');
   assert.equal(result.components.text.score, 0);
   assert.equal(result.components.authenticity.score, 0);
+});
+
+test('coverage dùng đủ mẫu số thiết kế và không cho tầng dư bù tầng thiếu', () => {
+  const build = (counts) => counts.flatMap((count, ratingIndex) => Array.from(
+    { length: count },
+    (_, index) => usefulReview(index, { rating: ratingIndex + 1, authorId: `${ratingIndex + 1}-${index}` })
+  ));
+  const one = calculateTrustScoreV31(build([20, 0, 0, 0, 0]), {
+    sampling: { strategy: 'parallel-star-filters', perStarLimit: 20 }
+  });
+  const four = calculateTrustScoreV31(build([20, 20, 20, 20, 0]), {
+    sampling: { strategy: 'parallel-star-filters', perStarLimit: 20 }
+  });
+  const five = calculateTrustScoreV31(build([20, 20, 20, 20, 20]), {
+    sampling: { strategy: 'parallel-star-filters', perStarLimit: 20 }
+  });
+
+  assert.ok(Math.abs(one.adequacy.coverage - 0.2) < 1e-12);
+  assert.equal(one.score, 60);
+  assert.equal(one.scoreStatus, 'limited');
+  assert.ok(Math.abs(four.adequacy.coverage - 0.8) < 1e-12);
+  assert.equal(four.score, 90);
+  assert.equal(four.scoreStatus, 'provisional');
+  assert.equal(five.adequacy.coverage, 1);
+  assert.equal(five.score, 100);
+  assert.equal(five.scoreStatus, 'valid');
+});
+
+test('xóa tầng mỏng không còn làm độ phủ hoặc TrustScore tăng', () => {
+  const build = (counts) => counts.flatMap((count, ratingIndex) => Array.from(
+    { length: count },
+    (_, index) => usefulReview(index, { rating: ratingIndex + 1, authorId: `${ratingIndex + 1}-${index}` })
+  ));
+  const withThinStratum = calculateTrustScoreV31(build([20, 20, 20, 20, 1]), {
+    sampling: { strategy: 'parallel-star-filters', perStarLimit: 20 }
+  });
+  const withoutThinStratum = calculateTrustScoreV31(build([20, 20, 20, 20, 0]), {
+    sampling: { strategy: 'parallel-star-filters', perStarLimit: 20 }
+  });
+
+  assert.ok(withThinStratum.adequacy.coverage > withoutThinStratum.adequacy.coverage);
+  assert.ok(withThinStratum.rawScore > withoutThinStratum.rawScore);
+  assert.equal(withThinStratum.scoreStatus, 'provisional');
+  assert.deepEqual(withThinStratum.adequacy.thinRatings, [5]);
+});
+
+test('từ 20 review trở lên luôn trả điểm dù bằng chứng hoặc tầng sao bị thiếu', () => {
+  const cases = [
+    Array.from({ length: 20 }, (_, index) => usefulReview(index, { rating: 5 })),
+    Array.from({ length: 20 }, (_, index) => usefulReview(index, {
+      included: false, labels: { is_low_value: true, information_value: 'none' }
+    })),
+    Array.from({ length: 20 }, (_, index) => usefulReview(index, {
+      labels: { layer2_unavailable: true }
+    })),
+    Array.from({ length: 20 }, (_, index) => usefulReview(index, {
+      rating: 0, labels: { is_duplicate: true }
+    }))
+  ];
+
+  for (const reviews of cases) {
+    const result = calculateTrustScoreV31(reviews, {
+      sampling: { strategy: 'parallel-star-filters', perStarLimit: 20 }
+    });
+    assert.ok(Number.isFinite(result.score));
+    assert.ok(result.score >= 0 && result.score <= 100);
+    assert.notEqual(result.scoreStatus, 'insufficient');
+  }
+
+  const tooSmall = calculateTrustScoreV31(cases[0].slice(0, 19), {
+    sampling: { strategy: 'parallel-star-filters', perStarLimit: 20 }
+  });
+  assert.equal(tooSmall.score, null);
+  assert.equal(tooSmall.scoreStatus, 'insufficient');
+});
+
+test('phần tử rỗng không được giả làm review để vượt ngưỡng 20', () => {
+  const result = calculateTrustScoreV31([
+    ...Array.from({ length: 19 }, (_, index) => usefulReview(index)),
+    null,
+    {},
+    { text: '   ' }
+  ]);
+  assert.equal(result.sample.total, 19);
+  assert.equal(result.score, null);
+  assert.equal(result.scoreStatus, 'insufficient');
+});
+
+test('thêm một tầng toàn review bị loại không được làm TrustScore tăng', () => {
+  const options = { sampling: { strategy: 'parallel-star-filters', ratingStrata: [1, 5], perStarLimit: 20 } };
+  const clean = Array.from({ length: 20 }, (_, index) => usefulReview(index, {
+    rating: 5, authorId: `clean-${index}`
+  }));
+  const rejected = Array.from({ length: 20 }, (_, index) => usefulReview(index, {
+    rating: 1,
+    authorId: `rejected-${index}`,
+    included: false,
+    labels: { is_low_value: true, information_value: 'none' }
+  }));
+  const before = calculateTrustScoreV31(clean, options);
+  const after = calculateTrustScoreV31([...clean, ...rejected], options);
+
+  assert.equal(before.adequacy.coverage, after.adequacy.coverage);
+  assert.ok(after.components.text.score < before.components.text.score);
+  assert.ok(after.rawScore <= before.rawScore);
+  assert.deepEqual(after.adequacy.missingRatings, [1]);
+});
+
+test('thành phần chất lượng cân bằng theo tầng thay vì theo số review gộp', () => {
+  const detailed = (count, rating) => Array.from({ length: count }, (_, index) => usefulReview(index, {
+    rating,
+    authorId: `d-${rating}-${index}`,
+    text: 'Review mô tả rất chi tiết trải nghiệm sử dụng, độ bền, độ hoàn thiện và tình huống kiểm tra thực tế.',
+    labels: { information_value: 'high' }
+  }));
+  const brief = (count, rating) => Array.from({ length: count }, (_, index) => usefulReview(index, {
+    rating,
+    authorId: `b-${rating}-${index}`,
+    text: 'Ổn.',
+    labels: { information_value: 'low' }
+  }));
+  const options = { sampling: { strategy: 'parallel-star-filters', perStarLimit: 20 } };
+  const highStratumLarge = calculateTrustScoreV31([...detailed(20, 5), ...brief(1, 1)], options);
+  const lowStratumLarge = calculateTrustScoreV31([...detailed(1, 5), ...brief(20, 1)], options);
+
+  assert.ok(Math.abs(highStratumLarge.components.text.score - lowStratumLarge.components.text.score) < 1e-10);
+  assert.ok(Math.abs(highStratumLarge.rawScore - lowStratumLarge.rawScore) < 1e-10);
+});
+
+test('coverage đơn điệu, hữu hạn và bất biến với hoán vị tầng trên nhiều cấu hình', () => {
+  const build = (counts) => counts.flatMap((count, ratingIndex) => Array.from(
+    { length: count },
+    (_, index) => usefulReview(index, { rating: ratingIndex + 1, authorId: `${ratingIndex + 1}-${index}` })
+  ));
+  const options = { sampling: { strategy: 'parallel-star-filters', perStarLimit: 20 } };
+  let seed = 20260906;
+  for (let iteration = 0; iteration < 250; iteration += 1) {
+    seed = (1664525 * seed + 1013904223) >>> 0;
+    const counts = Array.from({ length: 5 }, (_value, index) => (seed >>> (index * 5)) % 21);
+    const before = calculateTrustScoreV31(build(counts), options);
+    const target = iteration % 5;
+    const incremented = [...counts];
+    incremented[target] += 1;
+    const after = calculateTrustScoreV31(build(incremented), options);
+    const permuted = calculateTrustScoreV31(build([...counts].reverse()), options);
+
+    assert.ok(Number.isFinite(before.adequacy.coverage));
+    assert.ok(before.adequacy.coverage >= 0 && before.adequacy.coverage <= 1);
+    assert.ok(after.adequacy.coverage + 1e-12 >= before.adequacy.coverage);
+    assert.ok(Math.abs(permuted.adequacy.coverage - before.adequacy.coverage) < 1e-12);
+  }
+});
+
+test('không có cap 39 và điểm tăng liên tục theo độ phủ', () => {
+  const scores = [20, 40, 60, 80, 100].map((adequacy) => combineTrustComponents({
+    text: 100, authenticity: 100, labeling: 100, adequacy
+  }));
+  assert.deepEqual(scores.map(({ score }) => score), [60, 70, 80, 90, 100]);
+  assert.ok(scores.every(({ caps }) => caps.applied.length === 0));
+});
+
+test('perStarLimit không hợp lệ quay về mốc 20 và không sinh NaN', () => {
+  const reviews = Array.from({ length: 20 }, (_, index) => usefulReview(index, { rating: 5 }));
+  for (const perStarLimit of [0, -1, Number.POSITIVE_INFINITY, Number.NaN]) {
+    const result = calculateTrustScoreV31(reviews, {
+      sampling: { strategy: 'parallel-star-filters', perStarLimit }
+    });
+    assert.equal(result.adequacy.targetSample, 100);
+    assert.ok(Number.isFinite(result.score));
+    assert.ok(Number.isFinite(result.adequacy.coverage));
+  }
+  const bounded = calculateTrustScoreV31(reviews, {
+    sampling: { strategy: 'parallel-star-filters', perStarLimit: Number.MAX_VALUE }
+  });
+  assert.equal(bounded.adequacy.targetSample, 500);
+  assert.ok(Number.isFinite(bounded.adequacy.coveredSampleSlots));
 });
 
 test('review bị loại là nhiễu audit nhưng không làm sai thống kê khuyết điểm', () => {
@@ -192,7 +411,7 @@ test('từ khen “đẹp” không làm suy luận sai sản phẩm thành th�
 });
 
 test('suy luận chỉ bật khi mẫu ngẫu nhiên và baseline đã hiệu chuẩn', () => {
-  const reviews = Array.from({ length: 20 }, (_, index) => usefulReview(index));
+  const reviews = Array.from({ length: 20 }, (_, index) => usefulReview(index, { authorId: `buyer-${index}` }));
   const ids = ['chat-lieu', 'kich-co', 'dung-mo-ta', 'giao-hang', 'su-dung'];
   const baselines = { calibrated: true, source: 'test', values: { general: Object.fromEntries(ids.map((id) => [id, 0.04])) } };
   const descriptive = calculateTrustScoreV31(reviews, { category: 'general', baselines });
@@ -205,6 +424,34 @@ test('suy luận chỉ bật khi mẫu ngẫu nhiên và baseline đã hiệu ch
   assert.equal(inferential.sampling.populationInferenceEnabled, true);
   assert.equal(inferential.defects.familyComplete, true);
   assert.ok(inferential.defects.tests.every((item) => Number.isFinite(item.adjustedPValue)));
+});
+
+test('review ẩn danh chỉ dùng mô tả, không giả định độc lập để chạy kiểm định', () => {
+  const reviews = Array.from({ length: 20 }, (_, index) => usefulReview(index));
+  const result = calculateTrustScoreV31(reviews, {
+    sampling: { strategy: 'random', randomized: true }
+  });
+  assert.equal(result.sampling.populationInferenceEnabled, false);
+  assert.equal(result.sampling.populationInferenceDisabledReason, 'unknown-contributor-identity');
+  assert.equal(result.fisher.positive.pValue, null);
+  assert.ok(Number.isFinite(result.score));
+});
+
+test('suy luận tổng thể tự tắt khi cùng contributor xuất hiện nhiều lần', () => {
+  const ids = ['chat-lieu', 'kich-co', 'dung-mo-ta', 'giao-hang', 'su-dung'];
+  const baselines = { calibrated: true, source: 'test', values: { general: Object.fromEntries(ids.map((id) => [id, 0.04])) } };
+  const reviews = Array.from({ length: 20 }, (_, index) => usefulReview(index, {
+    authorId: index < 2 ? 'repeated-buyer' : `buyer-${index}`
+  }));
+  const result = calculateTrustScoreV31(reviews, {
+    category: 'general', baselines, sampling: { strategy: 'random', randomized: true }
+  });
+
+  assert.equal(result.sampling.populationInferenceRequested, true);
+  assert.equal(result.sampling.populationInferenceEnabled, false);
+  assert.equal(result.sampling.populationInferenceDisabledReason, 'repeated-contributor');
+  assert.equal(result.fisher.positive.pValue, null);
+  assert.ok(result.defects.tests.every((item) => item.pValue === null));
 });
 
 test('cờ randomized không bật suy luận tổng thể khi mẫu vẫn chia tầng sao', () => {

@@ -148,18 +148,21 @@ Các baseline `p0` mặc định là ví dụ trong tài liệu v3.1 nên giao d
 Mỗi lượt thu thập review chạy theo thứ tự:
 
 1. `src/review-labeler.mjs` áp dụng labeling functions trong `src/layer1_rules.json`. Rule tách riêng `relevance` (mức liên quan) và `information_value` (giá trị thông tin), đồng thời có các nhãn độc lập cho `seeding`, `low_value`, `vague` và nhóm lỗi. Layer 1 chỉ tạo ứng viên off-topic, không tự loại review dựa trên từ khóa mơ hồ.
-2. Nếu có `GEMINI_API_KEY`, Layer 2 kiểm tra các trường hợp chưa chắc chắn theo batch bằng schema trong `src/sample_ai_payload.json`. LLM chỉ được `confirm`, `correct` hoặc `abstain`; mọi lần sửa nhãn phải kèm trích dẫn nguyên văn. Nhãn off-topic còn phải trích đúng đoạn nêu một sản phẩm khác; kết quả sai ID, category lạ, quote không nguyên văn hoặc vi phạm bất biến sẽ bị backend từ chối.
-3. Sau Layer 2, backend loại bản sao nội dung theo exact/near-duplicate dù review có ID khác. TrustScore v4.1 đọc nhãn cuối cùng và chỉ đo độ tin cậy của tập review bằng bốn thành phần có trọng số bằng nhau: chất lượng bằng chứng, mức ít nhiễu, độ phủ kiểm định và độ đầy đủ của mẫu. `defectScore` là thống kê riêng để tạo ưu/nhược điểm cho người dùng tự đánh giá sản phẩm; phản hồi tiêu cực chân thực không làm TrustScore giảm. Với lượt lấy chia tầng, cả Shopee và TikTok Shop đều dùng thiết kế đồng bộ 5 tầng sao 1★–5★ tối đa 100 review để đảm bảo độ bao phủ mẫu đầy đủ. Đây là chỉ số tổng hợp, không phải xác suất và không đại diện cho phân bố toàn bộ sản phẩm. Nếu cỡ mẫu không đủ, API trả `score: null` thay vì mặc định một điểm cao. Nếu Layer 2 lỗi hoặc không có khóa, hệ thống vẫn chạy bằng Layer 1 và ghi rõ provenance.
+2. Backend khử trùng exact/near-duplicate trước Gemini để chỉ kiểm định bản đại diện. Khi có khóa môi trường hoặc Gemini pool khả dụng, Layer 2 kiểm tra các trường hợp chưa chắc chắn theo batch bằng schema trong `src/sample_ai_payload.json`. LLM chỉ được `confirm`, `correct` hoặc `abstain`; mọi lần sửa nhãn phải kèm trích dẫn nguyên văn. Nhãn off-topic còn phải trích đúng đoạn nêu một sản phẩm khác; kết quả sai ID, category lạ, quote không nguyên văn hoặc vi phạm bất biến sẽ bị backend từ chối.
+3. Bộ lọc cuối dùng kết quả khử trùng và nhãn của labeler, không khử trùng lại sau Gemini. TrustScore v4.2 tổng hợp chất lượng bằng chứng, mức ít nhiễu và độ phủ kiểm định. Độ phủ bằng chứng điều chỉnh phần điểm trên 50; tầng thiếu đóng góp 0 vào độ phủ và không thể được bù bằng cách lấy dư tầng khác. `defectScore` được giữ riêng để mô tả nhược điểm, không trực tiếp làm giảm TrustScore.
+
+Thiết kế hiện tại của cả Shopee và TikTok là 5 tầng 1★–5★, tối đa 20 review mỗi tầng. Endpoint chỉ chặn vì thiếu mẫu khi thu được dưới 20 review có nội dung chữ; từ 20 trở lên vẫn công bố điểm và trạng thái `limited`, `provisional` hoặc `valid`. Lỗi Layer 2 có fallback ghi rõ provenance. URL không hợp lệ hoặc nguồn thu thập thất bại vẫn trả lỗi kỹ thuật.
+
+TrustScore là chỉ số tổng hợp theo thiết kế mẫu; không phải xác suất review thật hay tỷ lệ đại diện cho toàn bộ sản phẩm. Công thức, mẫu số, trạng thái và ví dụ được ghi tại [Thuật toán TrustScore v4.2](docs/trust-score-v4.2.md).
 
 `LABELER_LLM_MODE=uncertain` là mặc định tiết kiệm: gửi ứng viên off-topic, review ngắn/low-value chưa chắc chắn, trường hợp xung đột hoặc độ tin cậy thấp; chuỗi rác, chỉ emoji và lặp ký tự chắc chắn vẫn bị Layer 1 chặn mà không tốn Gemini. `all` dùng để audit toàn bộ review; `off` tắt Layer 2.
 
-Layer 2 chia tối đa 20 review mỗi batch và chạy các batch song song. Nếu Gemini
-timeout, lỗi mạng hoặc HTTP 5xx, mỗi batch thử model kế tiếp; sau hai model vẫn
-lỗi, hệ thống chuyển sang một API key dự phòng khác trong Redis. Việc retry do
-timeout không đánh dấu key là hết quota. `GEMINI_TRANSIENT_KEY_RETRIES` giới hạn
-số key dự phòng (mặc định 1, tối đa 2) để toàn bộ request không vượt giới hạn
-thời gian của Vercel. Kết quả trả `layer2Retry` gồm số retry, số lần đổi key và
-model hoàn tất để đối chiếu với runtime log.
+Layer 2 mặc định chia 10 review mỗi batch (cấu hình được trong khoảng 8–12) và
+chạy tối đa hai batch đồng thời. Mỗi batch dùng duy nhất model
+`gemini-3.5-flash-lite`, thử tối đa hai route tuần tự; khi route đầu lỗi hoặc
+timeout, route thứ hai ưu tiên API key khỏe và ít sử dụng hơn trong Redis. Timeout
+không đánh dấu key là hết quota ngày. Kết quả trả `layer2Retry` gồm số retry, số
+lần đổi key và model đã dùng để đối chiếu với runtime log.
 
 ## Lưu dataset
 

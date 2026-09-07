@@ -45,3 +45,25 @@ test('cho phép phân tích từ đúng ngưỡng 20 review', () => {
   assert.equal(assertEnoughReviews(reviews), 20);
 });
 
+test('review trống không được che mất cảnh báo thiếu tầng sao', () => {
+  const coverage = checkSamplingCoverage([
+    { rating: 1, text: 'Có nội dung' },
+    { rating: 5, text: '   ' }
+  ], { strategy: 'parallel-star-filters', ratingStrata: [1, 5] });
+  assert.equal(coverage.complete, false);
+  assert.deepEqual(coverage.missingRatings, [5]);
+});
+
+test('chỉ đếm bản ghi có nội dung chữ vào ngưỡng tối thiểu', () => {
+  const reviews = [
+    ...Array.from({ length: 19 }, (_, index) => ({ text: `Review ${index + 1}` })),
+    null,
+    {},
+    { text: '   ' }
+  ];
+  assert.throws(
+    () => assertEnoughReviews(reviews),
+    (error) => error.code === 'INSUFFICIENT_REVIEWS' && error.details.reviewCount === 19
+  );
+});
+

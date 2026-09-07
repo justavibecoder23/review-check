@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { shouldKeep } from '../src/analyze.mjs';
 import { classifyBatchWithGemini, labelReviewLayer1, labelReviewsTwoLayer } from '../src/review-labeler.mjs';
 
 test('review generic ngắn là low_value nhưng không bị suy diễn thành seeding', () => {
@@ -621,6 +623,51 @@ test('review trùng nội dung không tiêu hao thêm lượt kiểm định Lay
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
     else delete process.env.GEMINI_API_KEY;
   }
+});
+
+test('Layer 2 sửa nhãn bản đại diện không được làm mất cả cụm duplicate ở bước lọc cuối', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  const text = 'Mua đúng quần áo mà thấy nó hơi vả à, không biết giặt được không nữa, nhưng mà nó rẻ nên vẫn cho shop 5 sao';
+  try {
+    const result = await labelReviewsTwoLayer([
+      { reviewId: 'actor-a', authorId: 'buyer-a', rating: 5, text, verified: true },
+      { reviewId: 'actor-b', authorId: 'buyer-b', rating: 5, text, verified: true }
+    ], {
+      mode: 'all',
+      product: { title: 'Quần áo mặc hằng ngày' },
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        async json() {
+          return { candidates: [{ content: { parts: [{ text: JSON.stringify({ labels: [{
+            id: 'r0001', decision: 'correct', is_seeding: false, is_low_value: false,
+            is_vague: false, is_off_topic: false, relevance: 'on_topic', information_value: 'high',
+            has_defect: false, defect_categories: [], defect_quote: null,
+            evidence_quote: text, confidence: 0.99, reason_code: 'USEFUL_PRODUCT_EXPERIENCE'
+          }] }) }] } }] };
+        }
+      })
+    });
+
+    const representatives = result.reviews.filter((review) => !review.labels?.is_duplicate);
+    const duplicates = result.reviews.filter((review) => review.labels?.is_duplicate);
+    assert.equal(result.stats.layer2Requested, 1, 'duplicate sibling không được gửi thêm sang Gemini');
+    assert.equal(representatives.length, 1, 'phải giữ đúng một bản đại diện');
+    assert.equal(duplicates.length, 1, 'chỉ sibling được đánh dấu duplicate');
+    assert.equal(representatives[0].labels.reviewed_by, 'gemini-layer2');
+    assert.equal(representatives[0].labels.information_value, 'high');
+    assert.equal(duplicates[0].labels.layer2_unavailable, false, 'duplicate đã biết không cần Gemini kiểm định riêng');
+    assert.equal(result.reviews.filter((review) => shouldKeep(review).keep).length, 1);
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
+test('analyze dùng kết quả dedupe của labeler và không chạy lại dedupe sau Layer 2', () => {
+  const source = readFileSync(new URL('../src/analyze.mjs', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /annotateReviewDuplicates\s*\(/);
 });
 
 test('hàng nhận bị xước không bị nhầm thành seeding và nhận đúng lỗi chất liệu', () => {

@@ -143,7 +143,7 @@ export function trustTone(score) {
   if (!Number.isFinite(score)) return { id: 'neutral', label: 'Chưa đủ bằng chứng' };
   if (score >= 80) return { id: 'green', label: 'Mức tin cậy rất cao' };
   if (score >= 60) return { id: 'yellow', label: 'Mức tin cậy khá tốt' };
-  if (score >= 40) return { id: 'orange', label: 'Mức tin cậy trung bình' };
+  if (score >= 50) return { id: 'orange', label: 'Mức tin cậy trung bình' };
   return { id: 'red', label: 'Mức tin cậy thấp' };
 }
 
@@ -156,9 +156,25 @@ function configuredBaselines() {
   }
 }
 
-function plainTrustSummary(score, includedCount, scoreStatus = 'valid') {
+function coverageNotice(method) {
+  if (!method || method.scoreStatus === 'insufficient') return '';
+  if (method.sample.afterSeedingRemoval === 0) {
+    return 'Mẫu hiện chưa có review đủ điều kiện làm bằng chứng để nhận định ưu, nhược điểm sản phẩm.';
+  }
+  if (method.scoreStatus === 'limited' || method.scoreStatus === 'provisional') {
+    return 'Độ phủ bằng chứng còn hạn chế; hãy đọc kết quả như nhận định tạm thời trên phần review đã thu thập.';
+  }
+  return '';
+}
+
+function withCoverageNotice(summary, method) {
+  const notice = coverageNotice(method);
+  return notice && !summary.includes(notice) ? `${summary} ${notice}` : summary;
+}
+
+function plainTrustSummary(score, scoreStatus = 'valid') {
   if (!Number.isFinite(score) || scoreStatus === 'insufficient') {
-    return 'Chưa có đủ review hữu ích và đủ độ phủ mẫu để tính TrustScore đáng tin cậy. Bạn vẫn có thể đọc các review đã được phân loại, nhưng chưa nên suy rộng kết quả.';
+    return 'Chưa có đủ review có nội dung chữ để đạt ngưỡng tối thiểu 20 review và công bố TrustScore.';
   }
   const meaning = score >= 80
     ? 'Các review đủ điều kiện hiện khá nhất quán, có nội dung dễ đối chiếu và ít dấu hiệu bất thường.'
@@ -236,8 +252,10 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
       impact: method.scoreStatus === 'valid' ? 'up' : 'neutral',
       title: method.scoreStatus === 'valid' ? 'Mẫu bằng chứng đạt mức sử dụng' : 'Mẫu bằng chứng còn hạn chế',
       detail: method.scoreStatus === 'valid'
-        ? `Cỡ mẫu bằng chứng cân bằng đạt ${method.adequacy.balancedEvidenceSize.toFixed(1)} review trên mốc ${method.adequacy.targetSample}.`
-        : `Cỡ mẫu bằng chứng cân bằng hiện là ${method.adequacy.balancedEvidenceSize.toFixed(1)}/${method.adequacy.targetSample}; hệ thống ${method.scoreStatus === 'insufficient' ? 'không công bố TrustScore' : 'đánh dấu kết quả là tạm thời'}.`
+        ? `Độ phủ mẫu đạt ${Math.round(method.adequacy.coverage * 100)}% theo thiết kế lấy review hiện tại.`
+        : method.scoreStatus === 'insufficient'
+          ? `Mẫu hiện có ${method.sample.total}/20 review; hệ thống chỉ không công bố TrustScore khi chưa đạt 20 review.`
+          : `Độ phủ mẫu hiện là ${Math.round(method.adequacy.coverage * 100)}%; TrustScore vẫn được công bố nhưng đi kèm trạng thái ${method.scoreStatus === 'limited' ? 'hạn chế' : 'tạm thời'}.`
     },
   ];
 
@@ -246,7 +264,7 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
     label: tone.label,
     tone: tone.id,
     scoreStatus: method.scoreStatus,
-    summary: plainTrustSummary(score, included.length, method.scoreStatus),
+    summary: withCoverageNotice(plainTrustSummary(score, method.scoreStatus), method),
     pros,
     cons,
     drivers,
@@ -439,9 +457,10 @@ function validateGeminiTrust(value, fallback) {
     ? value.drivers.slice(0, 8).map((item, index) => cleanDriver(item, fallback.drivers[index] || fallback.drivers[0]))
     : fallback.drivers;
   const summary = String(value.summary || fallback.summary).slice(0, 420);
+  const preserveStatisticalSummary = fallback.method.scoreStatus !== 'valid';
   return {
     ...fallback,
-    summary: TECHNICAL_USER_COPY.test(summary) ? fallback.summary : summary,
+    summary: withCoverageNotice(preserveStatisticalSummary || TECHNICAL_USER_COPY.test(summary) ? fallback.summary : summary, fallback.method),
     pros: pros.length ? pros : fallback.pros,
     cons: cons.length ? cons : fallback.cons,
     drivers: drivers.length ? drivers : fallback.drivers,
@@ -455,14 +474,14 @@ async function analyzeWithGemini(reviews, fallback, options = {}) {
   const narrativePayload = buildGeminiNarrativePayload(reviews, fallback);
   const prompt = [
     'Bạn là hệ thống kiểm định review thương mại điện tử của RealView.',
-    'Backend đã xử lý toàn bộ review, chạy đủ hai lớp nhãn và tính xong TrustScore. Bạn chỉ viết lại phần diễn giải cho dễ hiểu.',
+    'Backend đã xử lý review qua quy trình gắn nhãn và tính xong TrustScore. Một số review có thể chưa kiểm định được; dùng trạng thái trong dữ liệu, không mặc định mọi review đều đã qua đủ hai lớp. Bạn chỉ viết lại phần diễn giải cho dễ hiểu.',
     'Viết phần diễn giải TrustScore bằng tiếng Việt cho người mua phổ thông. Tuyệt đối không chấm lại hoặc sửa điểm thống kê.',
     'Giữ nguyên thứ tự, chủ đề và số lượt mentions của từng pros/cons trong fixedBackendDraft; không thêm, bớt hoặc tự đếm lại.',
     'fullSampleStatistics là số liệu chính xác của toàn bộ mẫu. Luôn dùng các tổng số này khi nói về số lượng hoặc tỷ lệ.',
     'representativeEvidence chỉ là các ví dụ minh họa được chọn từ toàn bộ mẫu. Không suy ra số lượt đề cập hoặc tỷ lệ từ tập ví dụ này.',
     'Chỉ dùng dữ liệu được cung cấp; không suy đoán đặc tính sản phẩm hoặc bịa số lượt đề cập.',
     'Review included=false đã bị giảm ưu tiên: dùng chúng để đánh giá chất lượng dữ liệu, không dùng làm bằng chứng ưu/nhược điểm sản phẩm.',
-    'Điểm đã được backend tính bằng thuật toán RealView v4.1 để đo độ tin cậy của tập review từ chất lượng bằng chứng, mức ít nhiễu, độ phủ kiểm định và độ đầy đủ mẫu. Nhược điểm sản phẩm không trực tiếp làm giảm TrustScore.',
+    'Điểm đã được backend tính bằng thuật toán RealView v4.2: ba thành phần chất lượng bằng chứng, mức ít nhiễu và độ phủ kiểm định tạo điểm chất lượng cơ sở; độ phủ mẫu chỉ điều chỉnh bảo thủ phần điểm trên 50 đúng một lần. Nhược điểm sản phẩm không trực tiếp làm giảm TrustScore.',
     'Nội dung hiển thị cho người dùng tuyệt đối không được nhắc Fisher, p-value, odds ratio, binomial, logistic, Bonferroni, guardrail, điểm thành phần hoặc công thức.',
     'Summary cần giải thích ý nghĩa kết quả bằng lời trong 2 câu và nhắc rõ TrustScore đo độ đáng tin của tập review, không phải điểm chất lượng tuyệt đối của sản phẩm.',
     'Mỗi ưu/nhược điểm phải nêu rõ người mua thích hoặc chưa hài lòng điều gì, ảnh hưởng thực tế ra sao và có bao nhiêu review cùng đề cập; tránh câu chung chung như “ghi nhận tín hiệu tích cực”.',
@@ -515,6 +534,11 @@ async function analyzeWithGemini(reviews, fallback, options = {}) {
 export async function buildTrustAnalysis(reviews = [], options = {}) {
   const narrativeStartedAt = Date.now();
   const fallback = buildRuleBasedTrust(reviews, options);
+  // Không có bằng chứng thì không có ưu/nhược điểm để AI diễn giải. Vẫn trả
+  // điểm và kết luận minh bạch của backend, tránh suy diễn lẫn tốn quota.
+  if (fallback.method.sample.afterSeedingRemoval === 0) {
+    return { ...fallback, narrativeSkippedReason: 'no-eligible-evidence' };
+  }
   try {
     const analyzed = await analyzeWithGemini(reviews, fallback, {
       fetchImpl: options.fetchImpl || fetch,
