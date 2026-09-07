@@ -53,7 +53,7 @@ function hasLocalNegation(normalizedText, keywordIndex, keyword) {
   return new RegExp(`(?:^|\\s)(?:${negations})(?:\\s+(?:${bridges})){0,2}\\s*$`, 'u').test(prefix);
 }
 
-function defectMatches(reviewText) {
+function defectMatches(reviewText, product = {}) {
   const normalized = normalizeVietnamese(reviewText);
   const matches = [];
   for (const [category, definition] of Object.entries(rules.defect_categories)) {
@@ -71,12 +71,13 @@ function defectMatches(reviewText) {
         }
       }
     }
-    if (categoryMatches.length) {
+    const applicableMatches = categoryMatches.filter(({ quote }) => defectCategoryFitsProductContext(category, quote, product));
+    if (applicableMatches.length) {
       matches.push({
         id: category,
         label: definition.label,
         severity: Number(definition.severity_weight),
-        evidence: categoryMatches.slice(0, 3)
+        evidence: applicableMatches.slice(0, 3)
       });
     }
   }
@@ -150,11 +151,31 @@ const productFamilies = Object.freeze({
   drinkware: ['binh nuoc', 'binh giu nhiet', 'ly giu nhiet', 'ly nuoc', 'coc nuoc', 'chai nuoc'],
   grooming: ['dao cao rau', 'may cao rau', 'luoi dao cao'],
   audio: ['tai nghe', 'loa bluetooth', 'headphone', 'earphone'],
-  clothing: ['ao thun', 'ao khoac', 'quan jean', 'quan ao', 'vay dam'],
-  footwear: ['giay the thao', 'giay cao got', 'doi giay', 'doi dep', 'dep quai', 'dep sandal'],
+  clothing: ['ao', 'ao thun', 'ao khoac', 'quan', 'quan jean', 'quan ao', 'vay', 'vay dam'],
+  footwear: ['giay', 'giay the thao', 'giay cao got', 'doi giay', 'doi dep', 'dep quai', 'dep sandal'],
+  display: ['man hinh', 'gaming monitor', 'monitor', 'ultragear'],
   phoneAccessory: ['op lung', 'kinh cuong luc', 'cap sac', 'day sac', 'dau sac', 'sac du phong', 'cap type c', 'cap lightning'],
   storage: ['hop dung do', 'hop vai', 'tu vai', 'dung quan ao', 'dung do da nang']
 });
+
+const apparelFamilies = new Set(['clothing', 'footwear']);
+const physicalSizeSubjectPattern = /\b(?:kich thuoc|man hinh|chan de|than may|thiet bi|san pham)\b/u;
+const physicalSizeProblemPattern = /\b(?:qua (?:to|lon|rong|be|nho)|khong vua|ko vua|k vua|khong phu hop|chiem (?:nhieu|qua nhieu) (?:cho|dien tich|khong gian)|vuong viu|can tro)\b/u;
+
+function defectCategoryFitsProductContext(category, evidence, product = {}) {
+  if (category !== 'kich-co') return true;
+  const targetFamilies = matchingProductFamilies(`${product?.category || ''} ${product?.title || ''}`)
+    .map(({ family }) => family);
+  if (targetFamilies.some((family) => apparelFamilies.has(family))) return true;
+
+  // Ngoài thời trang, chỉ coi kích thước là nhược điểm khi cùng một mệnh đề
+  // vừa chỉ rõ sản phẩm/bộ phận, vừa nêu hệ quả không phù hợp. Ví dụ
+  // "góc làm việc hơi chật" mô tả không gian của người mua, không phải lỗi màn hình.
+  return String(evidence || '')
+    .split(/(?<=[.!?;])\s+|[,\n]+/u)
+    .map(normalizeVietnamese)
+    .some((clause) => physicalSizeSubjectPattern.test(clause) && physicalSizeProblemPattern.test(clause));
+}
 
 function containsFoldedPhrase(text, phrase) {
   const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -259,7 +280,7 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
   const originalText = String(review.text || '').trim();
   const text = normalizeVietnamese(originalText);
   const cleanText = stripShopeeTemplateHeaders(text);
-  const defects = defectMatches(originalText);
+  const defects = defectMatches(originalText, product);
   const rating = Number(review.rating) || 0;
   const exactSeeding = rules.seeding_detection.exact_phrases.find((phrase) => text.includes(normalizeVietnamese(phrase)));
   const strongSeeding = exactSeeding ? null : matchAny(strongSeedingPatterns, text);
@@ -477,15 +498,22 @@ function normalizeLayer2Label(candidate, review, layer1, product = {}) {
           : 'DEFECT_CATEGORY_EVIDENCE_MISSING'
     };
   }
+  if (candidate.has_defect && categories.some((category) => !defectCategoryFitsProductContext(
+    category,
+    evidenceByCategory.get(category),
+    product
+  ))) {
+    return { decision: 'abstain', confidence, reason_code: 'DEFECT_CATEGORY_PRODUCT_CONTEXT_MISMATCH' };
+  }
   if (candidate.has_defect && quote) {
-    const quoteHasDefectEvidence = defectMatches(quote).length > 0
+    const quoteHasDefectEvidence = defectMatches(quote, product).length > 0
       || negativeDefectCuePattern.test(normalizeVietnamese(quote));
     if (!quoteHasDefectEvidence) {
       return { decision: 'abstain', confidence, reason_code: 'DEFECT_EVIDENCE_NOT_NEGATIVE' };
     }
     const unsupportedCategory = categories.find((category) => {
       const categoryQuote = evidenceByCategory.get(category);
-      return defectMatches(categoryQuote).length === 0
+      return defectMatches(categoryQuote, product).length === 0
         && !negativeDefectCuePattern.test(normalizeVietnamese(categoryQuote));
     });
     if (unsupportedCategory) {
@@ -499,7 +527,7 @@ function normalizeLayer2Label(candidate, review, layer1, product = {}) {
     }
     const reusedUnsupportedQuote = [...categoriesByQuote.entries()].some(([categoryQuote, quoteCategories]) => {
       if (quoteCategories.length < 2) return false;
-      const deterministicCategories = new Set(defectMatches(categoryQuote).map((item) => item.id));
+      const deterministicCategories = new Set(defectMatches(categoryQuote, product).map((item) => item.id));
       return quoteCategories.some((category) => !deterministicCategories.has(category));
     });
     if (reusedUnsupportedQuote) {

@@ -277,6 +277,30 @@ test('Layer 1 giữ review dài có thông số và trải nghiệm cụ thể d
   assert.equal(result.reviews[0].labels.reviewed_by, 'layer1');
 });
 
+test('Layer 1 không gán lỗi kích thước màn hình từ không gian làm việc chật', () => {
+  const label = labelReviewLayer1({
+    rating: 5,
+    text: 'Màn hình hiển thị rất tốt. Tiếc cái là góc làm việc hơi chật nên chưa thể phát huy hết công năng.'
+  }, 0, {
+    title: 'Màn hình Gaming LG UltraGear G6 27 inch'
+  });
+
+  assert.equal(label.defect_categories.includes('kich-co'), false);
+  assert.equal(label.has_defect, false);
+});
+
+test('Layer 1 vẫn nhận lỗi kích thước điện tử khi sản phẩm không vừa không gian sử dụng', () => {
+  const label = labelReviewLayer1({
+    rating: 3,
+    text: 'Chân đế màn hình quá rộng, không vừa bàn làm việc của mình.'
+  }, 0, {
+    title: 'Màn hình Gaming LG UltraGear G6 27 inch'
+  });
+
+  assert.equal(label.defect_categories.includes('kich-co'), true);
+  assert.equal(label.has_defect, true);
+});
+
 test('đánh giá độ cụ thể theo cấu trúc không mở khóa nội dung dài nhưng chỉ nói logistics', () => {
   const label = labelReviewLayer1({
     rating: 5,
@@ -408,6 +432,77 @@ test('Layer 2 không hiểu nhầm phủ định lỗi như “không nóng” t
     });
     assert.equal(result.reviews[0].labels.has_defect, false);
     assert.equal(result.reviews[0].labeling.layer2.reason_code, 'DEFECT_EVIDENCE_NOT_NEGATIVE');
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
+test('Layer 2 từ chối lỗi kích thước màn hình khi câu trích dẫn chỉ nói không gian làm việc chật', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  try {
+    const text = 'Màn hình hiển thị rất tốt. Tiếc cái là góc làm việc hơi chật nên chưa thể phát huy hết công năng.';
+    const result = await labelReviewsTwoLayer([{ rating: 5, text }], {
+      mode: 'all',
+      product: { title: 'Màn hình Gaming LG UltraGear G6 27 inch' },
+      fetchImpl: async () => ({
+        ok: true,
+        async json() {
+          return {
+            candidates: [{ content: { parts: [{ text: JSON.stringify({ labels: [{
+              id: 'r0001', decision: 'correct', is_seeding: false, is_low_value: false,
+              is_vague: false, is_off_topic: false, relevance: 'on_topic',
+              information_value: 'high', has_defect: true, defect_categories: ['kich-co'],
+              defect_quote: 'góc làm việc hơi chật',
+              defect_evidence: [{ category: 'kich-co', quote: 'góc làm việc hơi chật' }],
+              evidence_quote: 'Màn hình hiển thị rất tốt', confidence: 0.99,
+              reason_code: 'SIZE_PROBLEM'
+            }] }) }] } }]
+          };
+        }
+      })
+    });
+
+    assert.equal(result.reviews[0].labels.has_defect, false);
+    assert.equal(result.reviews[0].labels.defect_categories.includes('kich-co'), false);
+    assert.equal(result.reviews[0].labeling.layer2.decision, 'abstain');
+    assert.equal(result.reviews[0].labeling.layer2.reason_code, 'DEFECT_CATEGORY_PRODUCT_CONTEXT_MISMATCH');
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
+test('Layer 2 vẫn nhận lỗi kích thước màn hình khi câu trích dẫn chỉ rõ bộ phận không vừa bàn', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  try {
+    const text = 'Chân đế màn hình quá rộng, không vừa bàn làm việc của mình.';
+    const result = await labelReviewsTwoLayer([{ rating: 3, text }], {
+      mode: 'all',
+      product: { title: 'Màn hình Gaming LG UltraGear G6 27 inch' },
+      fetchImpl: async () => ({
+        ok: true,
+        async json() {
+          return {
+            candidates: [{ content: { parts: [{ text: JSON.stringify({ labels: [{
+              id: 'r0001', decision: 'correct', is_seeding: false, is_low_value: false,
+              is_vague: false, is_off_topic: false, relevance: 'on_topic',
+              information_value: 'high', has_defect: true, defect_categories: ['kich-co'],
+              defect_quote: 'Chân đế màn hình quá rộng, không vừa bàn',
+              defect_evidence: [{ category: 'kich-co', quote: 'Chân đế màn hình quá rộng, không vừa bàn' }],
+              evidence_quote: 'Chân đế màn hình quá rộng, không vừa bàn', confidence: 0.99,
+              reason_code: 'SIZE_PROBLEM'
+            }] }) }] } }]
+          };
+        }
+      })
+    });
+
+    assert.equal(result.reviews[0].labels.has_defect, true);
+    assert.equal(result.reviews[0].labels.defect_categories.includes('kich-co'), true);
+    assert.equal(result.reviews[0].labels.reviewed_by, 'gemini-layer2');
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
     else delete process.env.GEMINI_API_KEY;
