@@ -85,6 +85,35 @@ test('nhược điểm hiển thị dùng cùng nhãn cuối với bộ đếm T
   assert.equal(trust.cons.find((item) => item.title === 'Chất liệu / độ bền').mentions, 1);
 });
 
+test('nhược điểm màn hình không dùng câu mẫu chất liệu của quần áo', () => {
+  const monitorReviews = [
+    'Bên trong màn hình có dị vật, shop đã đổi cho cái mới.',
+    'Màn hình có dính keo rất khó lau.',
+    'Mua hai lần đều gặp lỗi chết điểm ảnh và sọc màn hình.'
+  ].map((text, index) => ({
+    rating: index === 2 ? 1 : 3,
+    text,
+    verified: true,
+    included: true,
+    labels: {
+      information_value: 'high',
+      is_seeding: false,
+      is_vague: false,
+      is_low_value: false,
+      defect_categories: ['chat-lieu']
+    }
+  }));
+
+  const trust = buildRuleBasedTrust(monitorReviews, {
+    product: { title: 'Màn hình Gaming LG UltraGear G6 27 inch' }
+  });
+  const item = trust.cons.find((candidate) => candidate.mentions === 3);
+
+  assert.equal(item.title, 'Độ hoàn thiện / độ bền phần cứng');
+  assert.match(item.detail, /Dẫn chứng:/);
+  assert.doesNotMatch(item.detail, /chất liệu mỏng|\bthô\b|có mùi/i);
+});
+
 test('cụm phủ định không bị đếm ngược thành ưu điểm', () => {
   const trust = buildRuleBasedTrust(Array.from({ length: 20 }, (_, index) => ({
     rating: 5,
@@ -297,6 +326,51 @@ test('Gemini dùng khóa ở header backend và trả cấu trúc giao diện an
     assert.equal(trust.cons[0].mentions, statisticalFallback.cons[0].mentions, 'Gemini không được thay đổi bộ đếm backend');
     assert.equal(trust.drivers.length >= 6, true);
     assert.doesNotMatch(`${trust.drivers[0].title} ${trust.drivers[0].detail}`, /Fisher|p\s*=|OR\*/i);
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
+test('Gemini không được thay nhược điểm đã có dẫn chứng bằng câu mẫu sai ngành hàng', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-only-key';
+  const monitorReviews = [{
+    rating: 1,
+    text: 'Màn hình bị chết điểm ảnh sau hai ngày sử dụng.',
+    verified: true,
+    included: true,
+    labels: {
+      information_value: 'high',
+      is_seeding: false,
+      is_vague: false,
+      is_low_value: false,
+      defect_categories: ['chat-lieu']
+    }
+  }];
+  try {
+    const fallback = buildRuleBasedTrust(monitorReviews, {
+      product: { title: 'Màn hình Gaming LG UltraGear G6' }
+    });
+    const trust = await buildTrustAnalysis(monitorReviews, {
+      product: { title: 'Màn hình Gaming LG UltraGear G6' },
+      fetchImpl: async () => ({
+        ok: true,
+        async json() {
+          return {
+            candidates: [{ content: { parts: [{ text: JSON.stringify({
+              summary: fallback.summary,
+              pros: fallback.pros,
+              cons: [{ title: 'Chất liệu mỏng', detail: 'Vải thô và có mùi.', mentions: 999 }],
+              drivers: fallback.drivers
+            }) }] } }]
+          };
+        }
+      })
+    });
+
+    assert.deepEqual(trust.cons, fallback.cons);
+    assert.doesNotMatch(`${trust.cons[0].title} ${trust.cons[0].detail}`, /vải thô|có mùi/i);
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
     else delete process.env.GEMINI_API_KEY;

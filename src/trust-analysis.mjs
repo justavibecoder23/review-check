@@ -91,13 +91,27 @@ function countDefectThemes(reviews) {
     : themes;
 }
 
+const displayProductPattern = /(?:màn\s*hình|monitor|display|ultragear)/iu;
+
+function contextualizeNegativeTheme(theme, product = {}) {
+  const productContext = `${product?.title || ''} ${product?.category || ''}`;
+  if (theme.id === 'chat-lieu' && displayProductPattern.test(productContext)) {
+    return {
+      ...theme,
+      title: 'Độ hoàn thiện / độ bền phần cứng',
+      description: 'Những review này nêu vấn đề cụ thể về độ hoàn thiện hoặc độ bền của màn hình; xem dẫn chứng để biết lỗi thực tế.'
+    };
+  }
+  return theme;
+}
+
 function reviewExcerpt(value, maximum = 105) {
   const text = String(value || '').replace(/\s+/g, ' ').trim();
   if (!text) return '';
   return text.length <= maximum ? text : `${text.slice(0, maximum).trim()}…`;
 }
 
-function fallbackCopy(reviews, included, excluded) {
+function fallbackCopy(reviews, included, excluded, product = {}) {
   const pros = countThemes(included.filter((review) => Number(review.rating) >= 4), positiveDefinitions)
     .slice(0, MAX_SUMMARY_ITEMS)
     .map((theme) => ({
@@ -109,6 +123,7 @@ function fallbackCopy(reviews, included, excluded) {
   // Tránh UI đếm bằng keyword khác với số khuyết tật ở backend.
   const cons = countDefectThemes(included)
     .slice(0, MAX_SUMMARY_ITEMS)
+    .map((theme) => contextualizeNegativeTheme(theme, product))
     .map((theme) => ({
       title: theme.title,
       detail: `${theme.count} review đáng tham khảo cùng đề cập. ${theme.description}${theme.example ? ` Dẫn chứng: “${reviewExcerpt(theme.example)}”` : ''}`,
@@ -198,7 +213,7 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
     sampling: options.sampling
   });
   const score = method.score;
-  const { pros, cons } = fallbackCopy(reviews, included, excluded);
+  const { pros, cons } = fallbackCopy(reviews, included, excluded, options.product);
   const tone = trustTone(score);
   const mostFrequentDefect = [...method.defects.tests].sort((left, right) => right.count - left.count)[0];
   const controlledDefectSample = method.defects.status === 'standardized-controlled-sample';
@@ -409,11 +424,16 @@ function countExclusionReasons(reviews) {
   return counts;
 }
 
-export function buildGeminiNarrativePayload(reviews = [], fallback) {
+export function buildGeminiNarrativePayload(reviews = [], fallback, options = {}) {
   const included = reviews.filter((review) => review.included !== false);
   const excluded = reviews.filter((review) => review.included === false);
   const method = fallback?.method || {};
   return {
+    productContext: {
+      title: String(options.product?.title || '').slice(0, 240),
+      category: String(options.product?.category || '').slice(0, 120),
+      marketplace: String(options.product?.marketplace || '').slice(0, 40)
+    },
     fixedBackendDraft: {
       score: fallback.score,
       label: fallback.label,
@@ -467,9 +487,11 @@ function cleanDriver(item, fallback) {
 function validateGeminiTrust(value, fallback) {
   if (!value || typeof value !== 'object') throw new Error('Gemini không trả về kết quả JSON hợp lệ.');
   const pros = Array.isArray(value.pros) ? value.pros.slice(0, MAX_SUMMARY_ITEMS).map((item, index) => cleanItem(item, fallback.pros[index] || fallback.pros[0])) : fallback.pros;
-  const cons = Array.isArray(value.cons) ? value.cons.slice(0, MAX_SUMMARY_ITEMS).map((item, index) => cleanItem(item, fallback.cons[index] || fallback.cons[0])) : fallback.cons;
+  // Nhược điểm và dẫn chứng đã được backend tổng hợp từ nhãn cuối. Không cho
+  // mô hình thay câu chữ vì có thể đưa ví dụ thuộc ngành hàng khác vào UI.
+  const cons = fallback.cons;
   // Nhóm up/down/neutral phải phản ánh đúng các thành phần đã tính ở backend.
-  // Gemini chỉ diễn giải summary và ưu/nhược điểm, không được đổi tác động điểm.
+  // Gemini chỉ diễn giải summary và ưu điểm, không được đổi tác động điểm.
   const drivers = fallback.drivers;
   const summary = String(value.summary || fallback.summary).slice(0, 420);
   const preserveStatisticalSummary = fallback.method.scoreStatus !== 'valid';
@@ -486,12 +508,13 @@ function validateGeminiTrust(value, fallback) {
 async function analyzeWithGemini(reviews, fallback, options = {}) {
   const apiKey = process.env.GEMINI_API_KEY;
   const model = 'gemini-3.5-flash-lite';
-  const narrativePayload = buildGeminiNarrativePayload(reviews, fallback);
+  const narrativePayload = buildGeminiNarrativePayload(reviews, fallback, options);
   const prompt = [
     'Bạn là hệ thống kiểm định review thương mại điện tử của RealView.',
     'Backend đã xử lý review qua quy trình gắn nhãn và tính xong TrustScore. Một số review có thể chưa kiểm định được; dùng trạng thái trong dữ liệu, không mặc định mọi review đều đã qua đủ hai lớp. Bạn chỉ viết lại phần diễn giải cho dễ hiểu.',
     'Viết phần diễn giải TrustScore bằng tiếng Việt cho người mua phổ thông. Tuyệt đối không chấm lại hoặc sửa điểm thống kê.',
     'Giữ nguyên thứ tự, chủ đề và số lượt mentions của từng pros/cons trong fixedBackendDraft; không thêm, bớt hoặc tự đếm lại.',
+    'productContext cho biết sản phẩm đang phân tích. Không dùng ví dụ hoặc đặc tính của ngành hàng khác.',
     'fullSampleStatistics là số liệu chính xác của toàn bộ mẫu. Luôn dùng các tổng số này khi nói về số lượng hoặc tỷ lệ.',
     'representativeEvidence chỉ là các ví dụ minh họa được chọn từ toàn bộ mẫu. Không suy ra số lượt đề cập hoặc tỷ lệ từ tập ví dụ này.',
     'Chỉ dùng dữ liệu được cung cấp; không suy đoán đặc tính sản phẩm hoặc bịa số lượt đề cập.',
@@ -558,7 +581,8 @@ export async function buildTrustAnalysis(reviews = [], options = {}) {
     const analyzed = await analyzeWithGemini(reviews, fallback, {
       fetchImpl: options.fetchImpl || fetch,
       geminiContext: options.geminiContext,
-      signal: options.signal
+      signal: options.signal,
+      product: options.product
     });
     const result = analyzed.result;
     if (process.env.VERCEL || options.logGeminiErrors) {
