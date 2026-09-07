@@ -1010,6 +1010,32 @@ test('review thật có nhắc shop nhưng đánh giá đúng sản phẩm khôn
   assert.equal(label.reason_codes.includes('LOW_VALUE_PROMOTIONAL_CONTENT'), false);
 });
 
+test('review dùng dày đặc lời khen tuyệt đối nhưng thiếu trải nghiệm kiểm chứng bị loại cứng', () => {
+  const text = 'Sản phẩm tuyệt vời! Giống hình 100%, giao hàng thần tốc, đóng gói kỹ càng. Shop phục vụ rất chu đáo. Hàng đẹp, giá tốt, chất vải mềm mịn. Rất hài lòng, sẽ ủng hộ shop tiếp. Sản phẩm chất lượng cao, giao nhanh, 5 sao!';
+  const label = labelReviewLayer1({ rating: 5, text }, 0, { title: 'Áo chống nắng' });
+
+  assert.equal(label.is_low_value, true);
+  assert.equal(label.hard_reject, true);
+  assert.equal(label.information_value, 'none');
+  assert.equal(label.reason_codes.includes('LOW_VALUE_EXAGGERATED_LANGUAGE'), true);
+  const filtered = shouldKeep({ rating: 5, text, labels: { ...label, reason_code: label.reason_codes[0] }, labeling: { layer1: label } });
+  assert.equal(filtered.keep, false);
+  assert.match(filtered.reason, /tuyệt đối|cường điệu|kiểm chứng/i);
+});
+
+test('lời khen mạnh có mốc sử dụng và nhận xét cân bằng không bị loại oan', () => {
+  const text = 'Mình thấy sản phẩm tuyệt vời sau 30 ngày sử dụng: vải mềm và đường may chắc, tuy nhiên khóa kéo hơi cứng.';
+  const label = labelReviewLayer1({ rating: 4, text }, 0, { title: 'Áo chống nắng' });
+  assert.equal(label.hard_reject, false);
+  assert.equal(label.reason_codes.includes('LOW_VALUE_EXAGGERATED_LANGUAGE'), false);
+});
+
+test('nhiều lời chê cực đoan không có bằng chứng cụ thể bị loại cứng', () => {
+  const label = labelReviewLayer1({ rating: 1, text: 'Sản phẩm tệ nhất, thật kinh khủng và đúng là thảm họa. Không thể chấp nhận được.' });
+  assert.equal(label.hard_reject, true);
+  assert.equal(label.reason_codes.includes('LOW_VALUE_EXAGGERATED_LANGUAGE'), true);
+});
+
 test('review quá ngắn chưa bị khóa ở Layer 1 và được gửi sang Layer 2', async () => {
   const review = { text: 'Hàng ổn', rating: 5 };
   const product = { title: 'Combo 100 bỉm Yorobbe' };

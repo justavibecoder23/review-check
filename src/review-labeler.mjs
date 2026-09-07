@@ -234,7 +234,7 @@ function assessProductRelevance(reviewText, product = {}) {
 }
 
 function assessInformationValue(text, defects, flags = {}) {
-  if (flags.gibberish || flags.iconOnly || flags.repeated || flags.resaleOnly || flags.rewardMotivated || flags.promotional) return 'none';
+  if (flags.gibberish || flags.iconOnly || flags.repeated || flags.resaleOnly || flags.rewardMotivated || flags.promotional || flags.exaggerated) return 'none';
   if (flags.logisticsOnly || flags.generic || flags.noUsageExperience || !text) return 'low';
   const structuralSpecificity = assessStructuralSpecificity(text);
   if (defects.length || (meaningfulFeedbackPattern.test(text) && concreteFeedbackPattern.test(text)) || structuralSpecificity === 'high') return 'high';
@@ -245,6 +245,15 @@ function assessInformationValue(text, defects, flags = {}) {
 const concreteMeasurementPattern = /\b\d+(?:[.,]\d+)?\s*(?:hz|khz|mhz|w|kw|wh|mah|v|a|cm|mm|m|kg|g|ml|l|inch|in|gb|tb|mb|mp|che do|mau|ngay|thang|nam|gio|phut|lan)\b/gu;
 const groundedExperiencePattern = /\b(?:phu hop|de dang|dieu chinh|canh chinh|su dung|da dung|dung thu|xai thu|cam thay|thuc te|diem cong|diem tru|uu diem|nhuoc diem|duy nhat|khong bi|co mui|am thanh|hinh anh|mau sac|kich thuoc|do sang|len mau|che phu|bam mau|kho moi|kho tan|nhanh troi|mau troi|nong rat|dang mieng)\b/gu;
 const balancedObservationPattern = /\b(?:diem tru|diem cong|uu diem|nhuoc diem|nhung|tuy nhien|con lai|duy nhat)\b/u;
+const exaggeratedClaimPattern = /\b(?:tuyet voi|hoan hao|xuat sac|dinh cua chop|sieu pham|tot nhat|so mot|than toc|cuc ky|vo cung|khong the tot hon|te nhat|kinh khung|khung khiep|tham hoa|rac ruoi|vo dung|lua dao|khong the chap nhan)\b|100\s*%/gu;
+
+function exaggeratedOpinionReview(text) {
+  const claims = String(text).match(exaggeratedClaimPattern) || [];
+  if (claims.length < 3) return false;
+  const grounded = (String(text).match(concreteMeasurementPattern) || []).length > 0
+    || balancedObservationPattern.test(String(text));
+  return !grounded;
+}
 
 function assessStructuralSpecificity(text = '') {
   const tokens = String(text).split(/\s+/u).filter(Boolean);
@@ -314,6 +323,9 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
   // đồng thời có lời rao bán, giá/liên hệ giao dịch và không có lỗi sản phẩm.
   const resaleOnly = resaleOnlyReview(effectiveText) && defects.length === 0;
   const promotional = promotionalCatalogReview(effectiveText);
+  // Nhiều tuyên bố tuyệt đối/cường điệu mà không có mốc sử dụng, số đo hoặc
+  // nhận xét cân bằng không đủ giá trị để làm bằng chứng chất lượng.
+  const exaggerated = exaggeratedOpinionReview(effectiveText);
   const tooShort = effectiveText.length < Number(rules.spam_and_low_value.min_character_length)
     || tokens.length < Number(rules.spam_and_low_value.min_token_count);
   const repeated = repeatedCharacterSpam(effectiveText);
@@ -328,16 +340,16 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
   // không đủ làm bằng chứng. Câu ngắn nhưng có bằng chứng cụ thể vẫn được giữ.
   const shortWithoutEvidence = tooShort && !hasConcreteEvidence;
   const deterministicHardReject = gibberish || iconOnly || repeated || resaleOnly
-    || rewardMotivated || promotional;
+    || rewardMotivated || promotional || exaggerated;
   const noUsageExperience = !hasConcreteEvidence && explicitNoUsagePattern.test(effectiveText);
 
-  const lowValueCandidate = !effectiveText || generic || iconOnly || repeated || gibberish || logisticsOnly || resaleOnly || rewardMotivated || promotional || tooShort || noUsageExperience;
+  const lowValueCandidate = !effectiveText || generic || iconOnly || repeated || gibberish || logisticsOnly || resaleOnly || rewardMotivated || promotional || exaggerated || tooShort || noUsageExperience;
   // Tín hiệu rác chắc chắn không được phép bị một tiền tố chung như
   // "Chất lượng sản phẩm:" mở khóa.
-  const isLowValue = rewardMotivated || promotional || shortWithoutEvidence || (defects.length === 0
+  const isLowValue = rewardMotivated || promotional || exaggerated || shortWithoutEvidence || (defects.length === 0
     && (deterministicHardReject || (lowValueCandidate && !meaningfulFeedback)));
   const informationValue = assessInformationValue(effectiveText, defects, {
-    generic, iconOnly, repeated, gibberish, logisticsOnly, resaleOnly, rewardMotivated, promotional, tooShort, noUsageExperience
+    generic, iconOnly, repeated, gibberish, logisticsOnly, resaleOnly, rewardMotivated, promotional, exaggerated, tooShort, noUsageExperience
   });
   const rantKeyword = rules.vague_rant_detection.rant_keywords.find((keyword) => text.includes(normalizeVietnamese(keyword)));
   const vagueRating = rules.vague_rant_detection.trigger_ratings.includes(rating);
@@ -353,6 +365,10 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
   if (promotional) {
     reasonCodes.push('LOW_VALUE_PROMOTIONAL_CONTENT');
     evidence.push({ label: 'promotional_catalog', rule: 'catalog_listing_with_shop_promotion', quote: originalText.slice(0, 180) });
+  }
+  if (exaggerated) {
+    reasonCodes.push('LOW_VALUE_EXAGGERATED_LANGUAGE');
+    evidence.push({ label: 'exaggerated_language', rule: 'multiple_absolute_claims_without_grounding', quote: originalText.slice(0, 180) });
   }
   if (weakSeeding && !rewardMotivated) {
     reasonCodes.push('SEEDING_WEAK_CUE');
@@ -391,6 +407,7 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
   if (isSeeding && defects.length) conflicts.push('SEEDING_WITH_CONCRETE_DEFECT');
   if (weakSeeding && !isSeeding) conflicts.push('WEAK_SEEDING_CUE_ONLY');
   const signalConfidence = promotional ? 0.98
+    : exaggerated ? 0.96
     : shortWithoutEvidence ? 0.97
     : gibberish ? 0.97
     : exactSeeding ? 0.99

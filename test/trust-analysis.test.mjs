@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { buildGeminiNarrativePayload, buildRuleBasedTrust, buildTrustAnalysis, trustTone } from '../src/trust-analysis.mjs';
+import { buildGeminiNarrativePayload, buildRuleBasedTrust, buildTrustAnalysis, plainTrustSummary, trustTone } from '../src/trust-analysis.mjs';
 
 const reviews = [
   { rating: 5, text: 'Sản phẩm đúng mô tả, chất lượng tốt và đóng gói kỹ, mình đã dùng một tuần.', verified: true, included: true },
@@ -9,6 +9,14 @@ const reviews = [
   { rating: 2, text: 'Vải mỏng và form nhỏ hơn bảng size, đường may cũng hơi thô.', verified: true, included: true },
   { rating: 5, text: 'Tốt', verified: false, included: false, exclusionReason: 'Quá ngắn hoặc không có trải nghiệm cụ thể' }
 ];
+
+test('kết luận nhanh đưa ra khuyến nghị hành động theo đúng dải TrustScore', () => {
+  assert.match(plainTrustSummary(88), /tin cậy cao.*cơ sở cân nhắc sản phẩm/i);
+  assert.match(plainTrustSummary(67), /khá đáng tin.*tham khảo để cân nhắc sản phẩm/i);
+  assert.match(plainTrustSummary(55), /tin cậy trung bình.*kiểm tra kỹ/i);
+  assert.match(plainTrustSummary(39), /tin cậy thấp.*chưa nên dựa/i);
+  assert.match(plainTrustSummary(88), /không phải điểm chất lượng tuyệt đối/i);
+});
 
 test('mẫu quá nhỏ không công bố điểm nhưng vẫn trả ưu nhược điểm và giải thích', () => {
   const trust = buildRuleBasedTrust(reviews);
@@ -19,7 +27,7 @@ test('mẫu quá nhỏ không công bố điểm nhưng vẫn trả ưu nhược
   assert.equal(trust.cons.length > 0, true);
   assert.equal(trust.drivers.length >= 6, true);
   assert.match(trust.summary, /chưa có đủ review/i);
-  assert.match(trust.pros[0].detail, /Dẫn chứng:/);
+  assert.doesNotMatch(trust.pros[0].detail, /Dẫn chứng:|review đáng tham khảo cùng đề cập/i);
   assert.doesNotMatch(trust.drivers.map((driver) => `${driver.title} ${driver.detail}`).join(' '), /Fisher|p\s*=|OR\*|logistic|hard cap|Bonferroni/i);
 });
 
@@ -70,6 +78,20 @@ test('backend luôn chỉ ra yếu tố thực sự hạ điểm và Gemini khô
   }
 });
 
+test('thành phần cao hơn mốc trung lập được hiển thị là yếu tố củng cố', () => {
+  const sample = Array.from({ length: 20 }, (_value, index) => ({
+    rating: index % 5 + 1,
+    text: `Review ${index + 1} mô tả trải nghiệm sử dụng rõ ràng, chất liệu chắc chắn và hiệu quả có thể đối chiếu sau nhiều ngày.`,
+    verified: true,
+    included: true,
+    labels: { information_value: 'high', is_seeding: false, is_vague: false, is_low_value: false, layer2_unavailable: false, defect_categories: [] }
+  }));
+  const trust = buildRuleBasedTrust(sample);
+
+  assert.equal(trust.drivers.some((driver) => driver.impact === 'up'), true);
+  assert.match(trust.drivers.filter((driver) => driver.impact === 'up').map((driver) => driver.title).join(' '), /review|nội dung|kiểm định|mẫu/i);
+});
+
 test('nhược điểm hiển thị dùng cùng nhãn cuối với bộ đếm TrustScore', () => {
   const labeled = [
     {
@@ -110,7 +132,7 @@ test('nhược điểm màn hình không dùng câu mẫu chất liệu của qu
   const item = trust.cons.find((candidate) => candidate.mentions === 3);
 
   assert.equal(item.title, 'Độ hoàn thiện / độ bền phần cứng');
-  assert.match(item.detail, /Dẫn chứng:/);
+  assert.doesNotMatch(item.detail, /Dẫn chứng:|review đáng tham khảo cùng đề cập/i);
   assert.doesNotMatch(item.detail, /chất liệu mỏng|\bthô\b|có mùi/i);
 });
 
@@ -130,7 +152,7 @@ test('giao diện bỏ Confidence và làm nổi bật ý nghĩa đúng của Tr
   const html = readFileSync(new URL('../public/results.html', import.meta.url), 'utf8');
   const clientScript = readFileSync(new URL('../public/results.js', import.meta.url), 'utf8');
   assert.doesNotMatch(`${html} ${clientScript}`, /Confidence/i);
-  assert.match(html, /TrustScore đánh giá độ tin cậy của review/i);
+  assert.match(html, /điểm độ tin cậy của <strong>tập review<\/strong>/i);
   assert.match(html, /không phải điểm chất lượng sản phẩm/i);
 });
 
@@ -466,7 +488,7 @@ test('nhãn kích thước dùng mô tả trung tính cho sản phẩm điện t
   assert.match(sizeIssue.detail, /không gian sử dụng/i);
 });
 
-test('tóm tắt review mỹ phẩm hiển thị nhiều chủ đề có số đếm và bằng chứng cụ thể', () => {
+test('tóm tắt review mỹ phẩm ngắn gọn và giữ ID review nguồn cho từng chủ đề', () => {
   const useful = [
     { rating: 5, text: 'Màu đẹp, lên màu chuẩn và son lì lắm.', labels: { has_defect: false, defect_categories: [] } },
     { rating: 5, text: 'Son lỳ phết, nhẹ môi và mùi thơm.', labels: { has_defect: false, defect_categories: [] } },
@@ -477,7 +499,7 @@ test('tóm tắt review mỹ phẩm hiển thị nhiều chủ đề có số đ
     { rating: 3, text: 'Bôi lên bị khô môi và nóng rát.', labels: { has_defect: true, defect_categories: ['su-dung'] } },
     { rating: 2, text: 'Màu không chuẩn, không giống trên hình.', labels: { has_defect: true, defect_categories: ['dung-mo-ta'] } },
     { rating: 2, text: 'Giao chậm và hộp móp.', labels: { has_defect: true, defect_categories: ['giao-hang'] } }
-  ].map((review) => ({ ...review, included: true, verified: true }));
+  ].map((review, index) => ({ ...review, labelId: `r${index + 1}`, included: true, verified: true }));
 
   const trust = buildRuleBasedTrust(useful);
   assert.equal(trust.pros.length, 5);
@@ -488,8 +510,8 @@ test('tóm tắt review mỹ phẩm hiển thị nhiều chủ đề có số đ
   assert.ok(trust.cons.some((item) => item.title === 'Kết cấu và thao tác sử dụng'));
   assert.ok(trust.cons.some((item) => item.title === 'Cảm giác trên môi'));
   for (const item of [...trust.pros, ...trust.cons]) {
-    assert.match(item.detail, /review đáng tham khảo cùng đề cập/);
-    assert.match(item.detail, /Dẫn chứng:/);
+    assert.doesNotMatch(item.detail, /review đáng tham khảo cùng đề cập|Dẫn chứng:/i);
+    assert.equal(item.detail.length <= 190, true);
+    assert.equal(item.evidenceIds.length, item.mentions);
   }
 });
-

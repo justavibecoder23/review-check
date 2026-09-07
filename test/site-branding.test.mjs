@@ -25,3 +25,11 @@ test('nút và avatar trợ lý dùng cùng logo RV', async () => {
   assert.match(chatbot, /class="chatbot-avatar"[\s\S]*?<img src="\/assets\/realview-rv\.png"/);
   assert.doesNotMatch(chatbot, /M12 3a8 8 0 0 0-8 8v5/);
 });
+
+test('các trang dùng logo RV trong suốt làm favicon và không tham chiếu icon nền vuông', async () => {
+  for (const page of pages) {
+    const html = await readFile(new URL(`../public/${page}`, import.meta.url), 'utf8');
+    assert.match(html, /rel="icon" type="image\/png" href="\/assets\/realview-rv\.png"/);
+    assert.doesNotMatch(html, /favicon\.svg/);
+  }
+});

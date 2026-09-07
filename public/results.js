@@ -42,6 +42,21 @@ function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, Number(value) || 0));
 }
 
+function conciseSummary(value, limit = 175) {
+  const text = String(value || '').trim();
+  if (!text || text.length <= limit) return text;
+  const firstSentence = text.match(/^.*?[.!?](?:\s|$)/u)?.[0]?.trim();
+  if (firstSentence && firstSentence.length <= limit) return firstSentence;
+  const clipped = text.slice(0, limit);
+  const boundary = clipped.lastIndexOf(' ');
+  return `${clipped.slice(0, boundary > 90 ? boundary : limit).trim()}…`;
+}
+
+function methodScore(value, suffix = '/100') {
+  if (value === null || value === undefined || value === '') return '—';
+  return Number.isFinite(Number(value)) ? `${Math.round(Number(value))}${suffix}` : '—';
+}
+
 function toneForScore(score) {
   if (typeof score !== 'number' || !Number.isFinite(score)) return { id: 'neutral', label: 'Chưa đủ bằng chứng' };
   if (score >= 80) return { id: 'green', label: 'Độ tin cậy cao' };
@@ -76,8 +91,8 @@ function fallbackTrust(data, reviews) {
     tone: tone.id,
     label: tone.label,
     summary: 'Backend chưa cung cấp đủ dữ liệu để tính TrustScore. Bạn vẫn có thể đọc các review đã lọc, nhưng giao diện không tự suy ra điểm từ số sao.',
-    pros: [{ title: 'Phản hồi tích cực', detail: `${included.filter((review) => Number(review.rating) >= 4).length} review hữu ích chấm từ 4 sao.`, mentions: included.filter((review) => Number(review.rating) >= 4).length }],
-    cons: [{ title: 'Phản hồi cần cân nhắc', detail: `${included.filter((review) => Number(review.rating) <= 3).length} review hữu ích chấm từ 3 sao trở xuống.`, mentions: included.filter((review) => Number(review.rating) <= 3).length }],
+    pros: [{ title: 'Phản hồi tích cực', detail: 'Các review này ghi nhận trải nghiệm tích cực với sản phẩm.', mentions: included.filter((review) => Number(review.rating) >= 4).length, evidenceIds: included.map((review, index) => ({ review, index })).filter(({ review }) => Number(review.rating) >= 4).map(({ review, index }) => reviewEvidenceId(review, index)) }],
+    cons: [{ title: 'Phản hồi cần cân nhắc', detail: 'Các review này nêu trải nghiệm chưa tốt hoặc điểm cần cân nhắc.', mentions: included.filter((review) => Number(review.rating) <= 3).length, evidenceIds: included.map((review, index) => ({ review, index })).filter(({ review }) => Number(review.rating) <= 3).map(({ review, index }) => reviewEvidenceId(review, index)) }],
     drivers: [
       { impact: usefulRatio >= .6 ? 'up' : 'down', title: 'Tỷ lệ review hữu ích', detail: `${included.length}/${reviews.length} review vượt qua bước giảm nhiễu.` },
       {
@@ -103,13 +118,17 @@ function authorName(review) {
   return !author || /^\*+$/.test(author) ? 'Người mua Shopee' : author;
 }
 
+function reviewEvidenceId(review, index) {
+  return String(review?.labelId || `kept-${index + 1}`);
+}
+
 function reviewCard(review, included, index) {
   const name = authorName(review);
   const initial = name.replace(/\*+/g, '').trim().charAt(0).toLocaleUpperCase('vi') || 'R';
   const rating = Math.round(clamp(review.rating, 0, 5));
   const reason = review.exclusionReason || 'Nội dung chưa đủ thông tin để đưa vào kết quả chính.';
   return `
-    <article class="evidence-card ${included ? 'is-kept' : 'is-excluded'}" aria-label="Review ${index + 1}, ${rating} trên 5 sao">
+    <article class="evidence-card ${included ? 'is-kept' : 'is-excluded'}" data-evidence-id="${escapeHtml(reviewEvidenceId(review, index))}" tabindex="-1" aria-label="Review ${index + 1}, ${rating} trên 5 sao">
       <header>
         <span class="evidence-avatar" aria-hidden="true">${escapeHtml(initial)}</span>
         <span class="evidence-person"><strong>${escapeHtml(name)}</strong><small>${review.verified ? 'Đã xác minh mua hàng' : 'Chưa có tín hiệu xác minh'} · ${escapeHtml(review.date || 'Không rõ ngày')}</small></span>
@@ -131,11 +150,13 @@ function renderSentimentList(selector, items, totalReviews) {
   root.innerHTML = items.map((item) => {
     const rawMentions = Math.max(0, Math.round(Number(item.mentions) || 0));
     const mentions = sampleSize ? Math.min(rawMentions, sampleSize) : 0;
+    const evidenceIds = Array.isArray(item.evidenceIds) ? item.evidenceIds.map(String).filter(Boolean) : [];
+    const evidenceAttribute = escapeHtml(evidenceIds.join('|'));
     return `
     <article class="sentiment-item">
       <span class="sentiment-check" aria-hidden="true">${selector.includes('pros') ? '✓' : '!'}</span>
       <div><h4>${escapeHtml(item.title)}</h4><p>${escapeHtml(item.detail)}</p></div>
-      ${mentions > 0 ? `<span class="sentiment-mentions" aria-label="${mentions} trên ${sampleSize} review đáng tham khảo đề cập chủ đề này"><b>${mentions}</b><small>/${sampleSize} review</small></span>` : ''}
+      ${mentions > 0 ? `<button class="sentiment-mentions" type="button" data-evidence-ids="${evidenceAttribute}" data-topic-title="${escapeHtml(item.title)}" aria-pressed="false" aria-label="Xem ${mentions} trên ${sampleSize} review đáng tham khảo về ${escapeHtml(item.title)}"${evidenceIds.length ? '' : ' disabled'}><b>${mentions}</b><small>/${sampleSize} review</small></button>` : ''}
     </article>`;
   }).join('');
 }
@@ -188,7 +209,7 @@ function renderDriverGroups(drivers) {
         <article class="driver-card" data-impact="${group.impact}">
           <span class="driver-number">${String(driverNumber).padStart(2, '0')}</span>
           <span class="driver-impact" aria-hidden="true">${driverIcon(group.impact)}</span>
-          <div><small>${group.eyebrow}</small><h4>${escapeHtml(driver.title)}</h4><p>${escapeHtml(driver.detail)}</p></div>
+          <div><small>${group.eyebrow}</small><h4>${escapeHtml(driver.title)}</h4><details class="driver-detail"><summary>Xem chi tiết</summary><p>${escapeHtml(driver.detail)}</p></details></div>
         </article>`;
     }).join('');
 
@@ -244,7 +265,7 @@ function setupReviewCarousel(root) {
     const currentPage = Math.min(totalPages, Math.round(progress * (totalPages - 1)) + 1);
     previous.disabled = track.scrollLeft <= 2;
     next.disabled = maxScroll - track.scrollLeft <= 2;
-    status.textContent = `${cardCount} review · Trang ${currentPage}/${totalPages}`;
+    status.textContent = track.dataset.topicLabel || `${cardCount} review · Trang ${currentPage}/${totalPages}`;
   }
 
   previous.addEventListener('click', () => {
@@ -256,9 +277,48 @@ function setupReviewCarousel(root) {
     track.scrollBy({ left: step, behavior: 'smooth' });
   });
   track.addEventListener('scroll', updateControls, { passive: true });
+  track.addEventListener('topicchange', updateControls);
   root.closest('details')?.addEventListener('toggle', () => requestAnimationFrame(updateControls));
   window.addEventListener('resize', updateControls);
   requestAnimationFrame(updateControls);
+}
+
+function linkSentimentEvidence() {
+  const details = document.querySelector('#kept-reviews');
+  const track = document.querySelector('#kept-list');
+  if (!details || !track) return;
+
+  const buttons = Array.from(document.querySelectorAll('.sentiment-mentions:not(:disabled)'));
+  buttons.forEach((button) => button.addEventListener('click', () => {
+    const selected = button.getAttribute('aria-pressed') === 'true';
+    buttons.forEach((item) => item.setAttribute('aria-pressed', 'false'));
+    const cards = Array.from(track.querySelectorAll('.evidence-card'));
+    cards.forEach((card) => card.classList.remove('is-topic-match'));
+
+    if (selected) {
+      delete track.dataset.topicLabel;
+      track.dispatchEvent(new Event('topicchange'));
+      return;
+    }
+
+    const evidenceIds = new Set(String(button.dataset.evidenceIds || '').split('|').filter(Boolean));
+    const matches = cards.filter((card) => evidenceIds.has(card.dataset.evidenceId));
+    if (!matches.length) return;
+
+    button.setAttribute('aria-pressed', 'true');
+    matches.forEach((card) => card.classList.add('is-topic-match'));
+    const topicTitle = String(button.dataset.topicTitle || 'chủ đề đã chọn');
+    track.dataset.topicLabel = `${matches.length} review về “${topicTitle}” đang được đánh dấu`;
+    details.open = true;
+    track.dispatchEvent(new Event('topicchange'));
+
+    requestAnimationFrame(() => {
+      details.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const first = matches[0];
+      track.scrollTo({ left: Math.max(0, first.offsetLeft - track.offsetLeft - 12), behavior: 'smooth' });
+      window.setTimeout(() => first.focus({ preventScroll: true }), 450);
+    });
+  }));
 }
 
 function renderResult(data) {
@@ -309,8 +369,22 @@ function renderResult(data) {
   document.querySelector('#action-score').textContent = scoreText;
   document.querySelector('#trust-label').textContent = trust.label || tone.label;
   renderScoreLegend(scoreAvailable ? score : null);
-  document.querySelector('#trust-summary').textContent = trust.summary || data.verdict;
+  const fullSummary = String(trust.summary || data.verdict || '');
+  const shortSummary = conciseSummary(fullSummary);
+  const summaryDetail = fullSummary.slice(shortSummary.endsWith('…') ? 0 : shortSummary.length).trim();
+  document.querySelector('#trust-summary').textContent = shortSummary;
+  document.querySelector('#trust-summary-detail').textContent = summaryDetail || fullSummary;
+  document.querySelector('#trust-summary-more').hidden = !fullSummary || fullSummary === shortSummary;
   document.querySelector('#analysis-source').textContent = trust.engine === 'gemini' ? 'Gemini AI + bộ lọc RealView' : 'Bộ lọc minh bạch RealView';
+
+  const method = trust.method || {};
+  document.querySelector('#method-text-score').textContent = methodScore(method.components?.text?.score);
+  document.querySelector('#method-auth-score').textContent = methodScore(method.components?.authenticity?.score);
+  document.querySelector('#method-label-score').textContent = methodScore(method.components?.labeling?.score);
+  document.querySelector('#method-coverage-score').textContent = methodScore(
+    Number.isFinite(Number(method.adequacy?.coverage)) ? Number(method.adequacy.coverage) * 100 : null,
+    '%'
+  );
 
   const scanned = Number(stats.scanned ?? reviews.length) || 0;
   const kept = Number(stats.included ?? stats.genuine ?? keptReviews.length) || 0;
@@ -333,9 +407,12 @@ function renderResult(data) {
   document.querySelector('#kept-list').innerHTML = keptReviews.length ? keptReviews.map((review, index) => reviewCard(review, true, index)).join('') : emptyReviewState(true);
   document.querySelector('#excluded-list').innerHTML = excludedReviews.length ? excludedReviews.map((review, index) => reviewCard(review, false, index)).join('') : emptyReviewState(false);
   document.querySelectorAll('[data-review-carousel]').forEach(setupReviewCarousel);
+  linkSentimentEvidence();
 
   content.classList.remove('hidden');
   document.querySelector('#result-action-bar').classList.remove('hidden');
+  const introDialog = document.querySelector('#trust-intro-dialog');
+  if (introDialog?.showModal && !introDialog.open) requestAnimationFrame(() => introDialog.showModal());
 }
 
 let data;
@@ -347,6 +424,21 @@ try {
 
 if (data?.reviews && data?.product) renderResult(data);
 else emptyState.classList.remove('hidden');
+
+const trustIntroDialog = document.querySelector('#trust-intro-dialog');
+trustIntroDialog?.querySelector('.trust-intro-close')?.addEventListener('click', () => trustIntroDialog.close());
+trustIntroDialog?.querySelector('.trust-intro-primary')?.addEventListener('click', () => trustIntroDialog.close());
+trustIntroDialog?.addEventListener('click', (event) => {
+  if (event.target === trustIntroDialog) trustIntroDialog.close();
+});
+document.querySelector('#trust-intro-method')?.addEventListener('click', () => {
+  trustIntroDialog?.close();
+  const method = document.querySelector('#trust-method');
+  if (method) {
+    method.open = true;
+    method.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+});
 
 // Setup scroll to top button
 const backToTop = document.querySelector('.back-to-top');
@@ -361,4 +453,3 @@ if (backToTop) {
   window.addEventListener('scroll', updateBackToTop, { passive: true });
   updateBackToTop();
 }
-

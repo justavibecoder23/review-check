@@ -7,6 +7,7 @@
     <meta name="theme-color" content="#EFEFEB" />
     <title>TrustScore sản phẩm | RealView</title>
     <link rel="icon" type="image/png" href="/assets/realview-rv.png" />
+    <link rel="shortcut icon" type="image/png" href="/assets/realview-rv.png" />
     <link rel="apple-touch-icon" href="/assets/realview-rv.png" />
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/results-v2.css" />
@@ -87,6 +88,20 @@
                       <li class="legend-green" data-score-tone="green" data-score-range="80–100" aria-label="80–100 điểm: độ tin cậy cao">≥80</li>
                     </ul>
                   </div>
+                  <details id="trust-method" class="trust-method">
+                    <summary>Xem cách tính điểm</summary>
+                    <div class="trust-method-panel">
+                      <p>TrustScore đo độ đáng tin của tập review, không chấm chất lượng sản phẩm.</p>
+                      <dl class="trust-components">
+                        <div><dt>Chất lượng nội dung</dt><dd id="method-text-score">—</dd></div>
+                        <div><dt>Mức ít nhiễu</dt><dd id="method-auth-score">—</dd></div>
+                        <div><dt>Độ phủ kiểm định</dt><dd id="method-label-score">—</dd></div>
+                        <div><dt>Độ phủ mẫu</dt><dd id="method-coverage-score">—</dd></div>
+                      </dl>
+                      <p class="trust-formula"><b>Q</b> = (Nội dung + Ít nhiễu + Kiểm định) ÷ 3</p>
+                      <p class="trust-formula">Nếu Q &gt; 50: <b>TrustScore</b> = 50 + Độ phủ mẫu × (Q − 50). Nếu Q ≤ 50: TrustScore = Q.</p>
+                    </div>
+                  </details>
                 </div>
                 <div class="trust-copy">
                   <div class="trust-heading-row">
@@ -94,10 +109,10 @@
                   </div>
                   <h2>Kết luận nhanh</h2>
                   <p id="trust-summary">RealView đang tổng hợp chất lượng và độ tin cậy của các review.</p>
-                  <div class="trustscore-note" role="note" aria-label="Lưu ý quan trọng về TrustScore">
-                    <span class="trustscore-note-icon" aria-hidden="true">!</span>
-                    <p><strong>TrustScore đánh giá độ tin cậy của review</strong><span>Điểm này cho biết tập review đáng tin đến đâu. Đây không phải điểm chất lượng sản phẩm và không khẳng định sản phẩm chắc chắn phù hợp với bạn.</span></p>
-                  </div>
+                  <details id="trust-summary-more" class="trust-summary-more">
+                    <summary>Đọc giải thích chi tiết</summary>
+                    <p id="trust-summary-detail"></p>
+                  </details>
                   <div class="overview-stats" aria-label="Thống kê review">
                     <span><strong id="scanned-count">0</strong> đã quét</span>
                     <span><strong id="kept-count-top">0</strong> đáng tham khảo</span>
@@ -106,14 +121,13 @@
                 </div>
               </article>
             </div>
-            <p class="result-disclaimer"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 10v6M12 7h.01" /></svg><span><strong>TrustScore không phải điểm chất lượng sản phẩm.</strong> Chỉ số này hỗ trợ sàng lọc độ đáng tin của review và không thay thế việc kiểm tra mô tả, bảo hành hoặc chính sách trả hàng trước khi mua.</span></p>
           </div>
         </section>
 
         <section class="insight-section" aria-labelledby="summary-title">
           <div class="container">
             <div class="section-heading compact-heading">
-              <div><p class="section-kicker">01 · Tóm tắt review</p><h2 id="summary-title">Điều người mua thực sự nói</h2><p>Mỗi ý dưới đây cho biết người mua thích hoặc chưa hài lòng điều gì, ảnh hưởng thực tế ra sao và có bao nhiêu review cùng đề cập.</p></div>
+              <div><p class="section-kicker">01 · Tóm tắt review</p><h2 id="summary-title">Điều người mua thực sự nói</h2><p>Xem nhanh chủ đề nổi bật; mở chi tiết khi cần kiểm chứng.</p></div>
               <span class="source-chip"><i aria-hidden="true"></i><b id="analysis-source">AI + bộ lọc RealView</b></span>
             </div>
             <div class="insight-sample" role="note" aria-label="Phạm vi dữ liệu dùng để tổng hợp ưu và nhược điểm">
@@ -126,7 +140,7 @@
                 <i aria-hidden="true">→</i>
                 <span><b id="insight-excluded-count">0</b> bị loại</span>
               </div>
-              <p>Mỗi review có thể nhắc nhiều chủ đề hoặc không thuộc nhóm nổi bật. Vì vậy, số review đề cập ở các ý bên dưới không phải phép cộng để ra tổng mẫu.</p>
+              <p>Một review có thể nhắc nhiều chủ đề, nên các lượt đề cập không cộng thành tổng mẫu.</p>
             </div>
             <div class="sentiment-layout">
               <article class="sentiment-card sentiment-card--positive">
@@ -148,7 +162,7 @@
         <section class="explanation-section" aria-labelledby="explanation-title">
           <div class="container">
             <div class="section-heading">
-              <div><p class="section-kicker">02 · Giải thích điểm số</p><h2 id="explanation-title">Vì sao TrustScore ở mức này?</h2><p>Các lý do được viết bằng ngôn ngữ dễ hiểu: RealView đã thấy gì trong review và vì sao điều đó làm kết quả đáng tin hơn hoặc cần thận trọng hơn.</p></div>
+              <div><p class="section-kicker">02 · Giải thích điểm số</p><h2 id="explanation-title">Vì sao TrustScore ở mức này?</h2><p>Xem ba nhóm tín hiệu; mở từng yếu tố để đọc bằng chứng chi tiết.</p></div>
             </div>
             <div id="trust-drivers" class="driver-groups"></div>
           </div>
@@ -224,6 +238,25 @@
     <button class="back-to-top" type="button" aria-label="Về đầu trang" title="Về đầu trang">
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 14 6-6 6 6" /><path d="M12 8v10" /></svg>
     </button>
+
+    <dialog id="trust-intro-dialog" class="trust-intro-dialog" aria-labelledby="trust-intro-title">
+      <div class="trust-intro-card">
+        <button class="trust-intro-close" type="button" aria-label="Đóng giải thích TrustScore">×</button>
+        <span class="trust-intro-mark" aria-hidden="true">RV</span>
+        <p class="results-eyebrow">Trước khi xem kết quả</p>
+        <h2 id="trust-intro-title">TrustScore nói gì?</h2>
+        <p>Đây là điểm độ tin cậy của <strong>tập review</strong>, không phải điểm chất lượng sản phẩm.</p>
+        <ul>
+          <li>Nội dung càng rõ và ít nhiễu, điểm càng được củng cố.</li>
+          <li>Mẫu thiếu độ phủ hoặc nhiều review bị loại sẽ làm điểm thận trọng hơn.</li>
+          <li>Bạn vẫn có thể mở review gốc để tự kiểm chứng.</li>
+        </ul>
+        <div class="trust-intro-actions">
+          <button class="trust-intro-primary" type="button">Đã hiểu</button>
+          <button id="trust-intro-method" class="trust-intro-secondary" type="button">Xem cách tính điểm</button>
+        </div>
+      </div>
+    </dialog>
     
     <nav id="result-action-bar" class="result-action-bar hidden" aria-label="Thao tác với kết quả">
       <div class="action-bar-context"><span id="action-score">0</span><small>TrustScore</small></div>
@@ -236,4 +269,3 @@
     <script src="/chatbot.js" defer></script>
   </body>
 </html>
-

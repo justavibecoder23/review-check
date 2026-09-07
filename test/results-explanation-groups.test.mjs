@@ -63,8 +63,8 @@ test('phần tóm tắt công khai rõ số đã quét, được dùng và bị 
     assert.match(html, new RegExp(`id="${id}"`));
     assert.match(script, new RegExp(`#${id}`));
   }
-  assert.match(html, /Mỗi review có thể nhắc nhiều chủ đề/);
-  assert.match(html, /không phải phép cộng để ra tổng mẫu/);
+  assert.match(html, /Một review có thể nhắc nhiều chủ đề/);
+  assert.match(html, /không cộng thành tổng mẫu/);
   assert.match(css, /\.insight-sample/);
 });
 
@@ -85,3 +85,30 @@ test('bố cục nhóm có chế độ một cột cho màn hình nhỏ', () => 
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.driver-grid \{ grid-template-columns: 1fr; \}/);
 });
 
+test('tóm tắt ưu nhược điểm hiển thị trực tiếp và số liệu liên kết review nguồn', () => {
+  const { context, roots } = resultsHarness();
+  context.renderSentimentList('#pros-list', [
+    { title: 'Chất liệu', detail: 'Nội dung giải thích ngắn gọn.', mentions: 3, evidenceIds: ['r1', 'r2', 'r3'] }
+  ], 20);
+  const driverMarkup = context.renderDriverGroups([
+    { impact: 'up', title: 'Tín hiệu tốt', detail: 'Giải thích đầy đủ về tín hiệu.' }
+  ]);
+
+  assert.doesNotMatch(roots['#pros-list'].innerHTML, /sentiment-detail|Xem chi tiết/);
+  assert.match(roots['#pros-list'].innerHTML, /<p>Nội dung giải thích ngắn gọn\.<\/p>/);
+  assert.match(roots['#pros-list'].innerHTML, /<button class="sentiment-mentions"/);
+  assert.match(roots['#pros-list'].innerHTML, /data-evidence-ids="r1\|r2\|r3"/);
+  assert.match(driverMarkup, /<details class="driver-detail">/);
+  assert.match(driverMarkup, /Xem chi tiết/);
+  assert.match(html, /id="trust-summary-more"/);
+});
+
+test('trang kết quả có popup giới thiệu và phần mở rộng công thức TrustScore', () => {
+  assert.match(html, /<dialog id="trust-intro-dialog"/);
+  assert.match(html, /Đây là điểm độ tin cậy của <strong>tập review<\/strong>/);
+  assert.match(html, /id="trust-method"/);
+  assert.match(html, /Xem cách tính điểm/);
+  assert.match(html, /TrustScore<\/b> = 50 \+ Độ phủ mẫu × \(Q − 50\)/);
+  assert.match(script, /showModal\(\)/);
+  assert.match(css, /\.trust-intro-dialog::backdrop/);
+});
