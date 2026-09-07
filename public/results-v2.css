@@ -726,7 +726,7 @@
 
 body.chatbot-open .result-action-bar { opacity: 0; pointer-events: none; }
 
-/* Đồng bộ kích thước chữ với main để nội dung kết quả dễ đọc hơn. */
+/* Keep the result page content readable without changing primary headings or product title. */
 .results-page .results-main .result-breadcrumb { font-size: 13px; }
 .results-page .results-main .results-eyebrow { font-size: 13px; }
 .results-page .results-main .product-meta,
@@ -778,6 +778,15 @@ body.chatbot-open .result-action-bar { opacity: 0; pointer-events: none; }
 .results-page .results-main .excluded-intro p { font-size: 12px; }
 .results-page .results-main .review-empty strong { font-size: 16px; }
 .results-page .results-main .review-empty span { font-size: 12px; }
+.results-page .results-main .trust-copy > p,
+.results-page .results-main .trustscore-note p,
+.results-page .results-main .result-disclaimer,
+.results-page .results-main .section-heading > div:first-child > p:last-child,
+.results-page .results-main .insight-sample > p,
+.results-page .results-main .sentiment-item p,
+.results-page .results-main .driver-card p,
+.results-page .results-main .excluded-intro p { font-size: 15px; }
+.results-page .results-main .evidence-card > p { font-size: 15px; }
 
 @media (prefers-reduced-motion: reduce) {
   .action-button, .accordion-chevron { transition: none; }
