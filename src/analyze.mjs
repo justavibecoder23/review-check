@@ -15,6 +15,7 @@ const exclusionReasonByCode = Object.freeze({
   LOW_VALUE_LOGISTICS_ONLY: 'Chỉ đề cập giao hàng hoặc đóng gói, không đánh giá sản phẩm',
   LOW_VALUE_RESALE_ONLY: 'Nội dung chủ yếu rao bán hoặc sang tay sản phẩm, không đánh giá chất lượng',
   LOW_VALUE_REWARD_CONTENT: 'Nội dung hoặc hình ảnh được đăng để nhận xu/thưởng, không dùng làm bằng chứng',
+  LOW_VALUE_PROMOTIONAL_CONTENT: 'Nội dung quảng cáo cửa hàng hoặc liệt kê mặt hàng khác, không đánh giá sản phẩm',
   LOW_VALUE_NO_USAGE_EXPERIENCE: 'Chưa sử dụng hoặc chưa trải nghiệm sản phẩm, không đủ thông tin đánh giá',
   LOW_VALUE_NO_USAGE: 'Chưa sử dụng hoặc chưa trải nghiệm sản phẩm, không đủ thông tin đánh giá',
   LOW_VALUE_REPETITION: 'Nội dung lặp ký tự hoặc biểu tượng, không đủ làm bằng chứng',
@@ -208,5 +209,4 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   progress('complete', 100, 'Phân tích hoàn tất.');
   return result;
 }
-
 
