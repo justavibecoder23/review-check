@@ -145,6 +145,15 @@ function resaleOnlyReview(text) {
   return resaleCuePattern.test(text) && resaleTransactionPattern.test(text);
 }
 
+const promotionalCatalogPattern = /\b(?:shop|cua hang).{0,80}\b(?:co ban|ban tat ca|chuyen ban|day du)\b.{0,100}\b(?:mat hang|hang gia dung|san pham)\b/u;
+const promotionalCallToActionPattern = /\b(?:ghe|vao|tham khao|ung ho|theo doi|mua hang|dat hang).{0,40}\b(?:shop|cua hang)\b|\b(?:shop|cua hang).{0,40}\b(?:tham khao|ung ho|mua hang|dat hang)\b/u;
+
+function promotionalCatalogReview(text) {
+  if (!promotionalCatalogPattern.test(text)) return false;
+  const listSeparators = (String(text).match(/[,;:]/gu) || []).length;
+  return promotionalCallToActionPattern.test(text) || listSeparators >= 4;
+}
+
 // Chỉ dùng cụm từ có nghĩa sản phẩm rõ ràng. Không dùng từ đơn mơ hồ sau khi
 // bỏ dấu (ví dụ "đẹp" và "dép" đều thành "dep").
 const productFamilies = Object.freeze({
@@ -154,6 +163,8 @@ const productFamilies = Object.freeze({
   clothing: ['ao', 'ao thun', 'ao khoac', 'quan', 'quan jean', 'quan ao', 'vay', 'vay dam'],
   footwear: ['giay', 'giay the thao', 'giay cao got', 'doi giay', 'doi dep', 'dep quai', 'dep sandal'],
   display: ['man hinh', 'gaming monitor', 'monitor', 'ultragear'],
+  babyCare: ['bim', 'ta quan', 'ta dan', 'diaper'],
+  household: ['hang gia dung', 'choi quet nha', 'choi quet bui', 'cay lau nha', 'cay cao nuoc', 'ban chai cha san', 'co rua toilet'],
   phoneAccessory: ['op lung', 'kinh cuong luc', 'cap sac', 'day sac', 'dau sac', 'sac du phong', 'cap type c', 'cap lightning'],
   storage: ['hop dung do', 'hop vai', 'tu vai', 'dung quan ao', 'dung do da nang']
 });
@@ -217,7 +228,7 @@ function assessProductRelevance(reviewText, product = {}) {
 }
 
 function assessInformationValue(text, defects, flags = {}) {
-  if (flags.gibberish || flags.iconOnly || flags.repeated || flags.resaleOnly || flags.rewardMotivated) return 'none';
+  if (flags.gibberish || flags.iconOnly || flags.repeated || flags.resaleOnly || flags.rewardMotivated || flags.promotional) return 'none';
   if (flags.logisticsOnly || flags.generic || flags.noUsageExperience || !text) return 'low';
   const structuralSpecificity = assessStructuralSpecificity(text);
   if (defects.length || (meaningfulFeedbackPattern.test(text) && concreteFeedbackPattern.test(text)) || structuralSpecificity === 'high') return 'high';
@@ -297,10 +308,10 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
   // Bài đăng sang tay/thanh lý không phải đánh giá chất lượng. Chỉ khóa khi
   // đồng thời có lời rao bán, giá/liên hệ giao dịch và không có lỗi sản phẩm.
   const resaleOnly = resaleOnlyReview(effectiveText) && defects.length === 0;
+  const promotional = promotionalCatalogReview(effectiveText);
   const tooShort = effectiveText.length < Number(rules.spam_and_low_value.min_character_length)
     || tokens.length < Number(rules.spam_and_low_value.min_token_count);
   const repeated = repeatedCharacterSpam(effectiveText);
-  const deterministicHardReject = gibberish || iconOnly || repeated || resaleOnly || rewardMotivated;
   const relevanceAssessment = assessProductRelevance(originalText, product);
   const offTopicCandidate = relevanceAssessment.state === 'needs_review';
 
@@ -308,15 +319,20 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
   const meaningfulFeedback = !generic && meaningfulFeedbackPattern.test(effectiveText);
   const hasConcreteEvidence = defects.length > 0
     || (meaningfulFeedback && concreteFeedbackPattern.test(effectiveText));
+  // Nội dung dưới ngưỡng tối thiểu và không nêu được thuộc tính/lỗi cụ thể
+  // không đủ làm bằng chứng. Câu ngắn nhưng có bằng chứng cụ thể vẫn được giữ.
+  const shortWithoutEvidence = tooShort && !hasConcreteEvidence;
+  const deterministicHardReject = gibberish || iconOnly || repeated || resaleOnly
+    || rewardMotivated || promotional || shortWithoutEvidence;
   const noUsageExperience = !hasConcreteEvidence && explicitNoUsagePattern.test(effectiveText);
 
-  const lowValueCandidate = !effectiveText || generic || iconOnly || repeated || gibberish || logisticsOnly || resaleOnly || rewardMotivated || tooShort || noUsageExperience;
+  const lowValueCandidate = !effectiveText || generic || iconOnly || repeated || gibberish || logisticsOnly || resaleOnly || rewardMotivated || promotional || tooShort || noUsageExperience;
   // Tín hiệu rác chắc chắn không được phép bị một tiền tố chung như
   // "Chất lượng sản phẩm:" mở khóa.
-  const isLowValue = rewardMotivated || (defects.length === 0
+  const isLowValue = rewardMotivated || promotional || shortWithoutEvidence || (defects.length === 0
     && (deterministicHardReject || (lowValueCandidate && !meaningfulFeedback)));
   const informationValue = assessInformationValue(effectiveText, defects, {
-    generic, iconOnly, repeated, gibberish, logisticsOnly, resaleOnly, rewardMotivated, tooShort, noUsageExperience
+    generic, iconOnly, repeated, gibberish, logisticsOnly, resaleOnly, rewardMotivated, promotional, tooShort, noUsageExperience
   });
   const rantKeyword = rules.vague_rant_detection.rant_keywords.find((keyword) => text.includes(normalizeVietnamese(keyword)));
   const vagueRating = rules.vague_rant_detection.trigger_ratings.includes(rating);
@@ -329,11 +345,15 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
     reasonCodes.push('LOW_VALUE_REWARD_CONTENT');
     evidence.push({ label: 'reward_motivated_content', rule: exactSeeding || strongSeeding, quote: originalText.slice(0, 180) });
   }
+  if (promotional) {
+    reasonCodes.push('LOW_VALUE_PROMOTIONAL_CONTENT');
+    evidence.push({ label: 'promotional_catalog', rule: 'catalog_listing_with_shop_promotion', quote: originalText.slice(0, 180) });
+  }
   if (weakSeeding && !rewardMotivated) {
     reasonCodes.push('SEEDING_WEAK_CUE');
     evidence.push({ label: 'seeding_candidate', rule: weakSeeding, quote: originalText.slice(0, 180) });
   }
-  if (isLowValue && !rewardMotivated) {
+  if (isLowValue && !rewardMotivated && !promotional) {
     reasonCodes.push(
       gibberish ? 'LOW_VALUE_GIBBERISH'
         : logisticsOnly ? 'LOW_VALUE_LOGISTICS_ONLY'
@@ -365,7 +385,9 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
   const conflicts = [];
   if (isSeeding && defects.length) conflicts.push('SEEDING_WITH_CONCRETE_DEFECT');
   if (weakSeeding && !isSeeding) conflicts.push('WEAK_SEEDING_CUE_ONLY');
-  const signalConfidence = gibberish ? 0.97
+  const signalConfidence = promotional ? 0.98
+    : shortWithoutEvidence ? 0.97
+    : gibberish ? 0.97
     : exactSeeding ? 0.99
     : strongSeeding ? 0.94
       : defects.length ? 0.92
@@ -523,7 +545,7 @@ function normalizeLayer2Label(candidate, review, layer1, product = {}) {
       return { decision: 'abstain', confidence, reason_code: 'DEFECT_EVIDENCE_REUSED_ACROSS_CATEGORIES' };
     }
   }
-  const lockedLowValue = layer1.reason_codes.some((code) => ['LOW_VALUE_GIBBERISH', 'LOW_VALUE_ICON_ONLY', 'LOW_VALUE_REPETITION', 'LOW_VALUE_RESALE_ONLY', 'LOW_VALUE_REWARD_CONTENT'].includes(code));
+  const lockedLowValue = layer1.reason_codes.some((code) => ['LOW_VALUE_GIBBERISH', 'LOW_VALUE_ICON_ONLY', 'LOW_VALUE_REPETITION', 'LOW_VALUE_RESALE_ONLY', 'LOW_VALUE_REWARD_CONTENT', 'LOW_VALUE_PROMOTIONAL_CONTENT'].includes(code));
   // Các tín hiệu deterministic này không được để LLM mở khóa bằng một category
   // defect được suy diễn. Review lỗi thật đã được Layer 1 ưu tiên defect và sẽ
   // không mang lockedLowValue ngay từ đầu.
