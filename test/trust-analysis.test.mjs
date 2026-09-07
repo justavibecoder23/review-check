@@ -70,6 +70,20 @@ test('backend luôn chỉ ra yếu tố thực sự hạ điểm và Gemini khô
   }
 });
 
+test('thành phần cao hơn mốc trung lập được hiển thị là yếu tố củng cố', () => {
+  const sample = Array.from({ length: 20 }, (_value, index) => ({
+    rating: index % 5 + 1,
+    text: `Review ${index + 1} mô tả trải nghiệm sử dụng rõ ràng, chất liệu chắc chắn và hiệu quả có thể đối chiếu sau nhiều ngày.`,
+    verified: true,
+    included: true,
+    labels: { information_value: 'high', is_seeding: false, is_vague: false, is_low_value: false, layer2_unavailable: false, defect_categories: [] }
+  }));
+  const trust = buildRuleBasedTrust(sample);
+
+  assert.equal(trust.drivers.some((driver) => driver.impact === 'up'), true);
+  assert.match(trust.drivers.filter((driver) => driver.impact === 'up').map((driver) => driver.title).join(' '), /review|nội dung|kiểm định|mẫu/i);
+});
+
 test('nhược điểm hiển thị dùng cùng nhãn cuối với bộ đếm TrustScore', () => {
   const labeled = [
     {
@@ -130,7 +144,7 @@ test('giao diện bỏ Confidence và làm nổi bật ý nghĩa đúng của Tr
   const html = readFileSync(new URL('../public/results.html', import.meta.url), 'utf8');
   const clientScript = readFileSync(new URL('../public/results.js', import.meta.url), 'utf8');
   assert.doesNotMatch(`${html} ${clientScript}`, /Confidence/i);
-  assert.match(html, /TrustScore đánh giá độ tin cậy của review/i);
+  assert.match(html, /điểm độ tin cậy của <strong>tập review<\/strong>/i);
   assert.match(html, /không phải điểm chất lượng sản phẩm/i);
 });
 
