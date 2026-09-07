@@ -35,4 +35,3 @@ test('trang chủ khai báo favicon RealView hình vuông cho tab và máy tìm 
   assert.match(favicon, /viewBox="0 0 64 64"/);
   assert.match(favicon, /aria-label="RealView"/);
 });
-
