@@ -13,6 +13,7 @@ const lowValuePatterns = [/^ok+([.! ]*)$/i, /tốt([.! ]*)$/i, /^đẹp([.! ]*)$
 const exclusionReasonByCode = Object.freeze({
   LOW_VALUE_GIBBERISH: 'Nội dung là chuỗi ký tự ngẫu nhiên hoặc không có nghĩa',
   LOW_VALUE_LOGISTICS_ONLY: 'Chỉ đề cập giao hàng hoặc đóng gói, không đánh giá sản phẩm',
+  LOW_VALUE_RESALE_ONLY: 'Nội dung chủ yếu rao bán hoặc sang tay sản phẩm, không đánh giá chất lượng',
   LOW_VALUE_NO_USAGE_EXPERIENCE: 'Chưa sử dụng hoặc chưa trải nghiệm sản phẩm, không đủ thông tin đánh giá',
   LOW_VALUE_NO_USAGE: 'Chưa sử dụng hoặc chưa trải nghiệm sản phẩm, không đủ thông tin đánh giá',
   LOW_VALUE_REPETITION: 'Nội dung lặp ký tự hoặc biểu tượng, không đủ làm bằng chứng',
@@ -206,5 +207,6 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   progress('complete', 100, 'Phân tích hoàn tất.');
   return result;
 }
+
 
 
