@@ -230,9 +230,11 @@
 .trust-gauge {
   position: relative;
   width: 184px;
+  height: auto;
   aspect-ratio: 1;
   display: grid;
   flex: 0 0 184px;
+  align-self: center;
   place-items: center;
   border-radius: 50%;
   background: conic-gradient(var(--trust-color) calc(var(--score) * 1%), rgba(22, 22, 22, .09) 0);
@@ -250,7 +252,9 @@
 .trust-gauge-inner {
   position: relative;
   width: 146px;
+  height: auto;
   aspect-ratio: 1;
+  align-self: center;
   border-radius: 50%;
   background: white;
   text-align: center;
