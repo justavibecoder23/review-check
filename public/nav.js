@@ -50,6 +50,7 @@
     <span class="nav-indicator" aria-hidden="true"></span>
     ${navItem('home', 'Trang chủ', isHome ? '#home' : '/#home', homeItems)}
     ${navItem('criteria', 'Tiêu chí lọc', '/criteria.html', criteriaItems)}
+    <button class="nav-history-trigger" type="button" data-history-open>Lịch sử <span data-history-count hidden>0</span></button>
     <span class="nav-link nav-blog" aria-disabled="true">Blog <small>Sắp ra mắt</small></span>`;
 
   const dropdownWraps = [...nav.querySelectorAll('.nav-parent-wrap')];

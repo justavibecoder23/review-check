@@ -1,4 +1,5 @@
 import { validateMarketplaceInput } from './url-validation.js';
+import { saveToHistory } from './history-manager.js';
 
 const form = document.querySelector('#analyze-form');
 const input = document.querySelector('#product-url');
@@ -243,6 +244,8 @@ function render(data) {
 }
 
 function openResultsPage(data) {
+  saveToHistory(data);
+  window.dispatchEvent(new CustomEvent('realview:history-changed'));
   try {
     sessionStorage.setItem('realview:last-analysis', JSON.stringify(data));
     window.location.assign('/results.html');

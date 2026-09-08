@@ -11,6 +11,7 @@
     <link rel="apple-touch-icon" href="/assets/realview-rv.png" />
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/results-v2.css" />
+    <link rel="stylesheet" href="/history.css" />
     <link rel="stylesheet" href="/chatbot.css" />
   </head>
   <body class="results-page">
@@ -258,10 +259,12 @@
       <div class="action-bar-context"><span id="action-score">0</span><small>TrustScore</small></div>
       <a id="open-product" class="action-button action-button--product" href="/#home" target="_blank" rel="noreferrer"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 8h12l1 13H5L6 8Z" /><path d="M9 10V6a3 3 0 0 1 6 0v4" /></svg><span>Xem sản phẩm trên Shopee</span><b aria-hidden="true">↗</b></a>
       <a class="action-button action-button--analyze" href="/#home"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v6h6" /></svg><span>Phân tích sản phẩm khác</span><b aria-hidden="true">→</b></a>
+      <button class="action-button action-button--history" type="button" data-history-open><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v6h6"/><path d="M12 7v5l3 2"/></svg><span>Xem lịch sử phân tích</span><b data-history-count hidden>0</b></button>
     </nav>
 
     <script type="module" src="/results.js"></script>
     <script src="/nav.js" defer></script>
+    <script type="module" src="/history-ui.js"></script>
     <script src="/chatbot.js" defer></script>
   </body>
 </html>
