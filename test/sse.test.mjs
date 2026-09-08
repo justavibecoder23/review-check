@@ -42,6 +42,7 @@ test('ngắt kết nối SSE phát AbortSignal để dừng backend', () => {
 test('trang chủ chuyển ngay sang kết quả và giao diện tiến trình không lộ tài nguyên backend', async () => {
   const appSource = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
   const resultsSource = await readFile(new URL('../public/results.js', import.meta.url), 'utf8');
+  const resultsStyles = await readFile(new URL('../public/results-v2.css', import.meta.url), 'utf8');
   assert.match(appSource, /results\.html\?url=/);
   assert.match(resultsSource, /product_meta/);
   assert.match(resultsSource, /reviews_sample/);
@@ -49,6 +50,7 @@ test('trang chủ chuyển ngay sang kết quả và giao diện tiến trình k
   assert.match(resultsSource, /progress\.stage/);
   assert.doesNotMatch(resultsSource, /progress\.phase/);
   assert.doesNotMatch(resultsSource, /5 tài khoản|20\/20|Apify/i);
+  assert.match(resultsStyles, /\.analysis-stepper li\.is-done > span::after\s*{[^}]*position:\s*absolute;[^}]*inset:\s*0;[^}]*place-items:\s*center;/s);
 });
 
 test('SSE phát các mốc dữ liệu tiệm tiến ngoài kết quả cuối', async () => {

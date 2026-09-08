@@ -183,6 +183,7 @@
 }
 
 .analysis-stepper li > span {
+  position: relative;
   width: 33px;
   height: 33px;
   display: grid;
@@ -192,6 +193,7 @@
   color: #77736d;
   font-size: 12px;
   font-weight: 900;
+  line-height: 1;
 }
 
 .analysis-stepper strong, .analysis-stepper small { display: block; }
@@ -201,7 +203,17 @@
 .analysis-stepper li.is-active > span { background: var(--orange); color: white; box-shadow: 0 0 0 6px rgba(252,120,31,.12); animation: analysis-pulse 1.7s ease-in-out infinite; }
 .analysis-stepper li.is-done { background: #eff7f2; opacity: 1; }
 .analysis-stepper li.is-done > span { background: var(--trust-green); color: transparent; }
-.analysis-stepper li.is-done > span::after { color: white; content: "✓"; }
+.analysis-stepper li.is-done > span::after {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: white;
+  content: "✓";
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1;
+}
 
 .analysis-slow-note,
 .analysis-progress-error { margin-top: 18px; padding: 14px 16px; border-radius: 15px; font-size: 13px; line-height: 1.5; }
