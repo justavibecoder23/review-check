@@ -289,7 +289,7 @@
   line-height: 1;
 }
 
-.trust-copy { min-width: 0; padding-left: 18px; border-left: 4px solid var(--trust-color); }
+.trust-copy { min-width: 0; padding-left: 18px; border-left: 3px solid color-mix(in srgb, var(--trust-color) 70%, white); }
 .trust-heading-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .trust-status {
   padding: 8px 12px;
@@ -304,7 +304,7 @@
 .trust-copy h2 { margin: 18px 0 0; font-size: 24px; line-height: 1.05; letter-spacing: -1px; }
 .trust-copy > p { max-width: 500px; margin: 10px 0 0; color: #50504b; font-size: 11px; line-height: 1.58; }
 .trust-summary-more { max-width: 500px; margin-top: 9px; text-align: left; }
-.trust-summary-more > summary { width: fit-content; color: var(--orange-dark); font-size: 10px; font-weight: 850; list-style: none; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; cursor: pointer; }
+.trust-summary-more > summary { width: fit-content; color: var(--orange-dark); font-size: 10px; font-weight: 850; list-style: none; text-decoration: none; cursor: pointer; }
 .trust-summary-more > summary::-webkit-details-marker { display: none; }
 .trust-summary-more > summary::after { content: " +"; text-decoration: none; }
 .trust-summary-more[open] > summary::after { content: " −"; }
