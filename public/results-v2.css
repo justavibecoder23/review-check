@@ -230,8 +230,7 @@
 .trust-gauge {
   position: relative;
   width: 184px;
-  height: auto;
-  aspect-ratio: 1;
+  height: 184px;
   display: grid;
   flex: 0 0 184px;
   align-self: center;
@@ -252,8 +251,7 @@
 .trust-gauge-inner {
   position: relative;
   width: 146px;
-  height: auto;
-  aspect-ratio: 1;
+  height: 146px;
   align-self: center;
   border-radius: 50%;
   background: white;
@@ -624,8 +622,8 @@
   .product-summary { grid-template-columns: 160px minmax(0, 1fr); }
   .product-visual { width: 160px; }
   .trust-card { grid-template-columns: 224px minmax(0, 1fr); }
-  .trust-gauge { width: 162px; flex-basis: 162px; }
-  .trust-gauge-inner { width: 128px; }
+  .trust-gauge { width: 162px; height: 162px; flex-basis: 162px; }
+  .trust-gauge-inner { width: 128px; height: 128px; }
   .trust-gauge-inner strong { font-size: 49px; }
   .sentiment-layout { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .insight-illustration { min-height: 0; grid-column: 1 / -1; display: flex; align-items: stretch; }
@@ -646,8 +644,8 @@
   .trust-card { padding: 22px 18px; grid-template-columns: minmax(0, 1fr); gap: 24px; justify-items: center; text-align: center; }
   .trust-score-panel { max-width: 16rem; }
   .trust-heading-row, .overview-stats { justify-content: center; }
-  .trust-gauge { width: 132px; flex-basis: 132px; }
-  .trust-gauge-inner { width: 103px; }
+  .trust-gauge { width: 132px; height: 132px; flex-basis: 132px; }
+  .trust-gauge-inner { width: 103px; height: 103px; }
   .trust-gauge-label { font-size: 7px; }
   .trust-gauge-inner strong { font-size: 41px; letter-spacing: -3px; }
   .trust-gauge-inner small { bottom: 3px; margin-left: 3px; font-size: 8px; }
