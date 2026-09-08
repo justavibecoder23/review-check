@@ -16,6 +16,8 @@ test('kết luận nhanh đưa ra khuyến nghị hành động theo đúng dả
   assert.match(plainTrustSummary(55), /tin cậy trung bình.*kiểm tra kỹ/i);
   assert.match(plainTrustSummary(39), /tin cậy thấp.*chưa nên dựa/i);
   assert.match(plainTrustSummary(88), /không phải điểm chất lượng tuyệt đối/i);
+  assert.match(plainTrustSummary(88), /độ rõ ràng.*ít nhiễu.*kết quả kiểm định.*độ phủ của mẫu/i);
+  assert.doesNotMatch(plainTrustSummary(88), /;/);
 });
 
 test('mẫu quá nhỏ không công bố điểm nhưng vẫn trả ưu nhược điểm và giải thích', () => {

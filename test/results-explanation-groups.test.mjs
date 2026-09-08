@@ -58,14 +58,12 @@ test('nhóm rỗng vẫn hiển thị trạng thái rõ ràng và dữ liệu đ
   assert.match(safeMarkup, /&lt;script&gt;/);
 });
 
-test('phần tóm tắt công khai rõ số đã quét, được dùng và bị loại', () => {
-  for (const id of ['insight-scanned-count', 'insight-kept-count', 'insight-excluded-count']) {
-    assert.match(html, new RegExp(`id="${id}"`));
-    assert.match(script, new RegExp(`#${id}`));
-  }
+test('phần tóm tắt chỉ giữ lưu ý không cộng lượt đề cập thành tổng mẫu', () => {
+  assert.doesNotMatch(html, /insight-(?:scanned|kept|excluded)-count/);
+  assert.doesNotMatch(script, /#insight-(?:scanned|kept|excluded)-count/);
   assert.match(html, /Một review có thể nhắc nhiều chủ đề/);
   assert.match(html, /không cộng thành tổng mẫu/);
-  assert.match(css, /\.insight-sample/);
+  assert.match(css, /\.insight-sample-note/);
 });
 
 test('mỗi chủ đề hiển thị trên cùng mẫu review đáng tham khảo và không vượt quá mẫu', () => {
@@ -98,17 +96,20 @@ test('tóm tắt ưu nhược điểm hiển thị trực tiếp và số liệu
   assert.match(roots['#pros-list'].innerHTML, /<p>Nội dung giải thích ngắn gọn\.<\/p>/);
   assert.match(roots['#pros-list'].innerHTML, /<button class="sentiment-mentions"/);
   assert.match(roots['#pros-list'].innerHTML, /data-evidence-ids="r1\|r2\|r3"/);
-  assert.match(driverMarkup, /<details class="driver-detail">/);
-  assert.match(driverMarkup, /Xem chi tiết/);
+  assert.match(driverMarkup, /<p class="driver-detail">Giải thích đầy đủ về tín hiệu\.<\/p>/);
+  assert.doesNotMatch(driverMarkup, /<details|Xem chi tiết/);
   assert.match(html, /id="trust-summary-more"/);
 });
 
-test('trang kết quả có popup giới thiệu và phần mở rộng công thức TrustScore', () => {
+test('popup giới thiệu chỉ có nút xác nhận và công thức mở trong bong bóng riêng', () => {
   assert.match(html, /<dialog id="trust-intro-dialog"/);
   assert.match(html, /Đây là điểm độ tin cậy của <strong>tập review<\/strong>/);
-  assert.match(html, /id="trust-method"/);
+  assert.doesNotMatch(html, /id="trust-intro-method"/);
+  assert.match(html, /id="trust-method-trigger"[^>]*popovertarget="trust-method-popover"/);
+  assert.match(html, /id="trust-method-popover"[^>]*popover/);
   assert.match(html, /Xem cách tính điểm/);
   assert.match(html, /TrustScore<\/b> = 50 \+ Độ phủ mẫu × \(Q − 50\)/);
   assert.match(script, /showModal\(\)/);
   assert.match(css, /\.trust-intro-dialog::backdrop/);
+  assert.match(css, /\.trust-method-popover:popover-open/);
 });

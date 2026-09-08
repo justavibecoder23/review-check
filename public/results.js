@@ -99,7 +99,7 @@ function fallbackTrust(data, reviews) {
         impact: verifiedRatio === null ? 'neutral' : verifiedRatio >= .6 ? 'up' : 'down',
         title: 'Khả năng kiểm chứng',
         detail: verifiedRatio === null
-          ? 'Nguồn dữ liệu không cung cấp trạng thái xác minh mua hàng; hệ thống không tự suy diễn.'
+          ? 'Nguồn dữ liệu không cung cấp trạng thái xác minh mua hàng. Hệ thống không tự suy diễn.'
           : `${Math.round(verifiedRatio * 100)}% review có trạng thái xác minh rõ ràng đến từ người mua đã xác minh.`
       },
       ...(excluded.length ? [{ impact: 'neutral', title: 'Review đã bị loại', detail: `${excluded.length} phản hồi không được dùng để kết luận sản phẩm.` }] : [])
@@ -209,7 +209,7 @@ function renderDriverGroups(drivers) {
         <article class="driver-card" data-impact="${group.impact}">
           <span class="driver-number">${String(driverNumber).padStart(2, '0')}</span>
           <span class="driver-impact" aria-hidden="true">${driverIcon(group.impact)}</span>
-          <div><small>${group.eyebrow}</small><h4>${escapeHtml(driver.title)}</h4><details class="driver-detail"><summary>Xem chi tiết</summary><p>${escapeHtml(driver.detail)}</p></details></div>
+          <div><small>${group.eyebrow}</small><h4>${escapeHtml(driver.title)}</h4><p class="driver-detail">${escapeHtml(driver.detail)}</p></div>
         </article>`;
     }).join('');
 
@@ -394,10 +394,6 @@ function renderResult(data) {
   document.querySelector('#excluded-count-top').textContent = excluded;
   document.querySelector('#kept-count').textContent = kept;
   document.querySelector('#excluded-count').textContent = excluded;
-  document.querySelector('#insight-scanned-count').textContent = scanned;
-  document.querySelector('#insight-kept-count').textContent = kept;
-  document.querySelector('#insight-excluded-count').textContent = excluded;
-
   renderSentimentList('#pros-list', Array.isArray(trust.pros) && trust.pros.length ? trust.pros : fallbackTrust(data, reviews).pros, kept);
   renderSentimentList('#cons-list', Array.isArray(trust.cons) && trust.cons.length ? trust.cons : fallbackTrust(data, reviews).cons, kept);
 
@@ -431,14 +427,32 @@ trustIntroDialog?.querySelector('.trust-intro-primary')?.addEventListener('click
 trustIntroDialog?.addEventListener('click', (event) => {
   if (event.target === trustIntroDialog) trustIntroDialog.close();
 });
-document.querySelector('#trust-intro-method')?.addEventListener('click', () => {
-  trustIntroDialog?.close();
-  const method = document.querySelector('#trust-method');
-  if (method) {
-    method.open = true;
-    method.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
-});
+const trustMethodTrigger = document.querySelector('#trust-method-trigger');
+const trustMethodPopover = document.querySelector('#trust-method-popover');
+if (trustMethodTrigger && trustMethodPopover) {
+  const positionTrustMethodPopover = () => {
+    if (!trustMethodPopover.matches(':popover-open')) return;
+    const triggerRect = trustMethodTrigger.getBoundingClientRect();
+    const width = Math.min(360, window.innerWidth - 24);
+    const height = trustMethodPopover.offsetHeight;
+    const left = Math.max(12, Math.min(window.innerWidth - width - 12, triggerRect.left + triggerRect.width / 2 - width / 2));
+    const openAbove = triggerRect.bottom + height + 18 > window.innerHeight && triggerRect.top > height + 18;
+    const top = openAbove ? triggerRect.top - height - 12 : triggerRect.bottom + 12;
+    const arrowLeft = Math.max(24, Math.min(width - 24, triggerRect.left + triggerRect.width / 2 - left));
+    trustMethodPopover.style.width = `${width}px`;
+    trustMethodPopover.style.left = `${left}px`;
+    trustMethodPopover.style.top = `${Math.max(12, top)}px`;
+    trustMethodPopover.style.setProperty('--method-arrow-left', `${arrowLeft}px`);
+    trustMethodPopover.dataset.placement = openAbove ? 'top' : 'bottom';
+  };
+
+  trustMethodPopover.addEventListener('toggle', (event) => {
+    trustMethodTrigger.setAttribute('aria-expanded', String(event.newState === 'open'));
+    if (event.newState === 'open') requestAnimationFrame(positionTrustMethodPopover);
+  });
+  window.addEventListener('resize', positionTrustMethodPopover, { passive: true });
+  window.addEventListener('scroll', positionTrustMethodPopover, { passive: true, capture: true });
+}
 
 // Setup scroll to top button
 const backToTop = document.querySelector('.back-to-top');
