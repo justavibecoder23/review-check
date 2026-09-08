@@ -730,6 +730,46 @@ test('Layer 2 dùng tối đa hai route tuần tự, không tạo hedge song son
   assert.equal(result.retry.credentialAttempts, 1);
 });
 
+test('mỗi lượt phân tích mới đều gọi lại Layer 2, không tái sử dụng quyết định cũ', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  const text = 'Màn hình mới dùng ba ngày đã xuất hiện sọc ngang.';
+  let calls = 0;
+  const requestGeminiImpl = async () => {
+    calls += 1;
+    return {
+      value: [{
+        id: 'r0001', decision: 'correct', is_seeding: false, is_low_value: false,
+        is_vague: false, is_off_topic: false, relevance: 'on_topic', information_value: 'high',
+        has_defect: true, defect_categories: ['su-dung'], defect_quote: 'xuất hiện sọc ngang',
+        defect_evidence: [{ category: 'su-dung', quote: 'xuất hiện sọc ngang' }],
+        evidence_quote: 'xuất hiện sọc ngang', confidence: 0.98, reason_code: 'SPECIFIC_PRODUCT_DEFECT'
+      }],
+      model: 'gemini-3.5-flash-lite',
+      attemptedModels: ['gemini-3.5-flash-lite'],
+      attemptedCredentialIds: ['test-key']
+    };
+  };
+  try {
+    const options = {
+      mode: 'all',
+      product: { title: 'Màn hình Gaming LG UltraGear' },
+      requestGeminiImpl
+    };
+    const first = await labelReviewsTwoLayer([{ rating: 1, text }], options);
+    const second = await labelReviewsTwoLayer([{ rating: 1, text }], options);
+
+    assert.equal(calls, 2);
+    assert.equal(first.stats.layer2Batches.succeeded, 1);
+    assert.equal(second.stats.layer2Batches.succeeded, 1);
+    assert.equal(first.stats.layer2CacheHits, 0);
+    assert.equal(second.stats.layer2CacheHits, 0);
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
 test('Layer 1 khóa chuỗi kéo dài dù có tiền tố “Chất lượng sản phẩm”', () => {
   const label = labelReviewLayer1({ rating: 4, text: 'Chất lượng sản phẩm: Okkkkkkkkkkkkkkkkkkkkkkkkkkkk' });
   assert.equal(label.hard_reject, true);

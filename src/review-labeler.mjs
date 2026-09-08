@@ -1,7 +1,6 @@
 import { createRequire } from 'node:module';
 import { geminiThinkingConfig, parseGeminiJson, requestGeminiWithFallback } from './gemini-response.mjs';
 import { isRedisConfigured } from './redis-rest.mjs';
-import { readLayer2Cache, writeLayer2Cache } from './layer2-cache.mjs';
 import { annotateReviewDuplicates } from './review-deduplication.mjs';
 import { REVIEW_PIPELINE_VERSION } from './review-pipeline-version.mjs';
 
@@ -719,18 +718,19 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
     process.env.LABELER_LLM_BATCH_SIZE || String(LAYER2_DEFAULT_BATCH_SIZE), 10
   ) || LAYER2_DEFAULT_BATCH_SIZE));
   const warnings = [];
-  const layer2ById = await readLayer2Cache(selected, options.product, { fetchImpl: options.redisFetchImpl });
-  const cacheHits = layer2ById.size;
+  // Mỗi yêu cầu phân tích mới phải được Gemini kiểm định lại. localStorage chỉ
+  // phục vụ thao tác mở lịch sử ở trình duyệt, không được thay thế lượt Layer 2.
+  const layer2ById = new Map();
+  const cacheHits = 0;
   const model = 'gemini-3.5-flash-lite';
-  const uncached = selected.filter((item) => !layer2ById.has(String(item.layer1.id)));
-  const batches = chunks(uncached, batchSize);
+  const batches = chunks(selected, batchSize);
   let succeededBatches = 0;
   let failedBatches = 0;
   let retryAttempts = 0;
   let credentialSwitches = 0;
   const modelsUsed = new Set();
   const batchDurationsMs = [];
-  if (uncached.length && (process.env.GEMINI_API_KEY || isRedisConfigured())) {
+  if (selected.length && (process.env.GEMINI_API_KEY || isRedisConfigured())) {
     const results = await mapWithConcurrency(batches, LAYER2_MAX_CONCURRENCY, async (batch, batchIndex) => {
       try {
         const result = await classifyBatchWithGemini(batch, options.product, {
@@ -741,7 +741,6 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
           redisFetchImpl: options.redisFetchImpl,
           requestGeminiImpl: options.requestGeminiImpl
         });
-        await writeLayer2Cache(batch, result.labels, options.product, { fetchImpl: options.redisFetchImpl });
         succeededBatches += 1;
         const attemptedCount = result.retry?.attemptedModels?.length || 1;
         retryAttempts += Math.max(0, attemptedCount - 1);
@@ -784,7 +783,7 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
       if (result.warning) warnings.push(result.warning);
       for (const candidate of result.labels) layer2ById.set(String(candidate.id), candidate);
     }
-  } else if (uncached.length) {
+  } else if (selected.length) {
     warnings.push('Layer 2 chưa chạy vì GEMINI_API_KEY chưa được cấu hình; nhãn Layer 1 vẫn được lưu đầy đủ.');
   }
 
