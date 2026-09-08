@@ -486,8 +486,6 @@ function renderProgressSample(sample = {}) {
   const distribution = sample.starDistribution || {};
   const total = Math.max(0, Number(sample.total) || 0);
   document.querySelector('#analysis-review-total').textContent = total ? `${total} review` : '0 review';
-  const sourceState = document.querySelector('#analysis-source-state');
-  sourceState.textContent = sample.source?.type === 'cached' ? 'Dữ liệu đã lưu gần đây' : 'Dữ liệu trực tiếp';
   const maximum = Math.max(1, ...[1, 2, 3, 4, 5].map((rating) => Number(distribution[rating]) || 0));
   for (const rating of [1, 2, 3, 4, 5]) {
     const count = Math.max(0, Number(distribution[rating]) || 0);
