@@ -399,7 +399,7 @@ blockquote footer { margin-top: 7px; color: #9a4507; font-size: 10px; }
 .benefit-title h3 {
   margin: 1px 0 0;
   color: var(--ink);
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 820;
   letter-spacing: -.35px;
   line-height: 1.22;
@@ -652,7 +652,7 @@ blockquote footer { margin-top: 7px; color: #9a4507; font-size: 10px; }
   border-radius: 17px;
 }
 .feature-illustration img { padding: 12px 8px 10px; }
-.feature-item h3 { margin: 0 0 8px; color: var(--ink); font-size: 14px; letter-spacing: -.25px; line-height: 1.25; }
+.feature-item h3 { margin: 0 0 8px; color: var(--ink); font-size: 16px; letter-spacing: -.25px; line-height: 1.25; }
 .feature-item p { margin: 0; color: #5e5e58; font-size: 10.25px; line-height: 1.58; }
 
 .contact-section { background: white; }
@@ -1046,7 +1046,9 @@ main .value-kicker { font-size: 12px; }
 main .value-heading p { font-size: 14px; }
 main .feature-item p { font-size: 11px; }
 main .benefit-card p,
-main .feature-item p,
+main .feature-item p { font-size: 15px; }
+main .benefit-card p,
+main .feature-item p { color: #555550; }
 main .results-preview-product-copy p,
 main .results-preview-trust-copy > p { font-size: 13px; }
 main .results-preview-note p { font-size: 12px; }
@@ -1078,7 +1080,7 @@ main .step-copy p,
 main .value-heading p { font-size: 15px; }
 main .project-path span { font-size: 14px; }
 main .project-path small { font-size: 11px; }
-main .feature-item p { font-size: 12px; }
+main .feature-item p { font-size: 15px; }
 main .results-preview-product-copy p,
 main .results-preview-product-copy > b,
 main .results-preview-trust-copy > p,
