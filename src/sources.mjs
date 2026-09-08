@@ -4,7 +4,12 @@ import { collectTikTokReviews } from './apify-tiktok-review-scraper.mjs';
 import { getTikTokProductId, isTikTokUrl, resolveTikTokProductUrl } from './tiktok-url.mjs';
 import { createProgressReporter } from './sse.mjs';
 import { combineAbortSignals, throwIfAborted } from './abort.mjs';
-import { getCachedShopeeDataset, recordShopeeCacheHit, recordShopeeServed } from './product-cache.mjs';
+import {
+  getCachedShopeeDataset,
+  getFallbackTikTokDataset,
+  recordShopeeCacheHit,
+  recordShopeeServed
+} from './product-cache.mjs';
 
 const DEMO_REVIEWS = [
   { rating: 5, text: 'Nhận xu nên đánh giá cho shop 5 sao nha mọi người.', date: '12/08/2026', verified: false },
@@ -492,6 +497,52 @@ export async function getReviews(url, options = {}) {
   }
   if (tiktokProduct?.wasShortened) {
     warnings.push('Đã mở link chia sẻ TikTok và khôi phục đúng mã sản phẩm trước khi thu thập review.');
+  }
+
+  // Temporary demo-only replacement for the unavailable TikTok Actor. When
+  // disabled or when no usable Blob dataset exists, the live flow below is
+  // left completely unchanged.
+  if (platform === 'TikTok Shop'
+    && String(process.env.TIKTOK_DATASET_FALLBACK || '').trim().toLowerCase() === 'true'
+    && tiktokProduct?.productId) {
+    progress('cache', 12, 'Đang tải dữ liệu TikTok dự phòng...');
+    const fallback = await getFallbackTikTokDataset(tiktokProduct.productId, {
+      blobListImpl: options.blobListImpl,
+      blobGetImpl: options.blobGetImpl,
+      blobToken: options.blobToken
+    });
+    if (fallback?.dataset) {
+      const cachedProduct = fallback.dataset.product || {};
+      warnings.push(fallback.isExactMatch
+        ? 'Chế độ dự phòng TikTok đang bật: sử dụng dataset đã lưu của đúng sản phẩm trong khi scraper trực tiếp bảo trì.'
+        : 'Chế độ dự phòng demo đang bật: sử dụng mẫu review TikTok gần nhất từ sản phẩm khác trong khi scraper trực tiếp bảo trì.');
+      return {
+        reviews: fallback.dataset.reviews,
+        source: {
+          type: 'cached',
+          label: 'Vercel Blob Storage · TikTok Demo Fallback',
+          reviewLimit: fallback.dataset.reviews.length,
+          collection: fallback.dataset.source?.collection || { strategy: 'dataset-fallback' },
+          cache: {
+            hit: true,
+            runId: fallback.dataset.runId || null,
+            createdAt: fallback.dataset.createdAt || null,
+            fallback: true,
+            exactMatch: fallback.isExactMatch
+          }
+        },
+        product: {
+          ...cachedProduct,
+          platform: 'TikTok Shop',
+          url: productUrl,
+          originalUrl: parsed.href,
+          productId: tiktokProduct.productId,
+          resolvedFromShortLink: tiktokProduct.wasShortened
+        },
+        warnings
+      };
+    }
+    warnings.push('Không tìm thấy dataset TikTok dự phòng hợp lệ; hệ thống đã chuyển về luồng thu thập trực tiếp.');
   }
 
   if (shopeeProduct?.itemId) {

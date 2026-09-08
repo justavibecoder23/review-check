@@ -4,6 +4,9 @@ export const SHOPEE_CACHE_TTL_SECONDS = 5 * 24 * 60 * 60;
 export const SHOPEE_CACHE_HITS_KEY = 'realview:shopee:cache:hits';
 export const SHOPEE_TOTAL_SERVED_KEY = 'realview:shopee:total_served';
 const MAX_DATASET_BYTES = 5 * 1024 * 1024;
+const TIKTOK_DATASET_PREFIX = 'review-datasets/';
+const TIKTOK_RAW_DATASET_PATTERN = /\/tiktok-[^/]+\/[^/]+\/reviews\.raw\.json$/u;
+const MIN_TIKTOK_FALLBACK_REVIEWS = 20;
 
 export function isShopeeCacheEligible(platform) {
   return String(platform || '').trim().toLowerCase() === 'shopee';
@@ -78,6 +81,61 @@ export async function readPrivateBlobDataset(blobLocation, options = {}) {
     const text = await blobResultText(result);
     return text ? JSON.parse(text) : null;
   } catch {
+    return null;
+  }
+}
+
+function usableTikTokFallbackDataset(dataset, minimumReviews = MIN_TIKTOK_FALLBACK_REVIEWS) {
+  if (!dataset || typeof dataset !== 'object' || !Array.isArray(dataset.reviews)) return false;
+  const reviewsWithText = dataset.reviews.filter((review) => String(review?.text || '').trim());
+  return reviewsWithText.length >= minimumReviews;
+}
+
+/**
+ * Temporary TikTok demo fallback. It is intentionally independent from the
+ * Shopee Redis cache: Blob is scanned only when the feature toggle is enabled.
+ */
+export async function getFallbackTikTokDataset(productId, options = {}) {
+  const normalizedProductId = String(productId || '').trim();
+  if (!/^\d{8,25}$/.test(normalizedProductId)) return null;
+  const token = options.blobToken || process.env.BLOB_READ_WRITE_TOKEN;
+  if (!token) return null;
+
+  try {
+    const listBlobs = options.blobListImpl || (await import('@vercel/blob')).list;
+    const result = await listBlobs({
+      prefix: TIKTOK_DATASET_PREFIX,
+      token,
+      limit: 1000
+    });
+    const blobs = (Array.isArray(result?.blobs) ? result.blobs : [])
+      .filter((blob) => TIKTOK_RAW_DATASET_PATTERN.test(String(blob?.pathname || '')))
+      .sort((left, right) => (
+        (Date.parse(String(right?.uploadedAt || '')) || 0)
+        - (Date.parse(String(left?.uploadedAt || '')) || 0)
+      ));
+    if (!blobs.length) return null;
+
+    const productSegment = `/tiktok-${normalizedProductId}/`;
+    const exactBlob = blobs.find((blob) => String(blob.pathname).includes(productSegment));
+    const candidates = exactBlob
+      ? [exactBlob, ...blobs.filter((blob) => blob !== exactBlob)]
+      : blobs;
+    for (const blob of candidates) {
+      const dataset = await readPrivateBlobDataset({
+        rawPath: blob.pathname,
+        rawUrl: blob.url
+      }, options);
+      if (!usableTikTokFallbackDataset(dataset, options.minimumReviews)) continue;
+      return {
+        dataset,
+        isExactMatch: String(blob.pathname).includes(productSegment),
+        blobPath: blob.pathname
+      };
+    }
+    return null;
+  } catch {
+    // Fallback failure must never replace the existing live collection error.
     return null;
   }
 }

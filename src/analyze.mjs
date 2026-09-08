@@ -93,6 +93,7 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
     signal: options.signal,
     redisFetchImpl: options.redisFetchImpl,
     blobGetImpl: options.blobGetImpl,
+    blobListImpl: options.blobListImpl,
     blobToken: options.blobToken,
     now: options.now
   });

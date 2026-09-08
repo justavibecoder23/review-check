@@ -4,6 +4,7 @@ import {
   SHOPEE_CACHE_HITS_KEY,
   SHOPEE_TOTAL_SERVED_KEY,
   getCachedShopeeDataset,
+  getFallbackTikTokDataset,
   getShopeeCacheKey,
   isShopeeCacheEligible,
   recordShopeeCacheHit,
@@ -87,6 +88,22 @@ function blobGetFor(dataset) {
   });
 }
 
+function tiktokDataset(productId, count = 20) {
+  return {
+    schemaVersion: '1.0.0',
+    datasetKind: 'raw-reviews',
+    runId: `run-${productId}`,
+    createdAt: '2026-09-07T00:00:00.000Z',
+    product: { platform: 'TikTok Shop', productId, title: `TikTok ${productId}` },
+    source: { type: 'live', collection: { strategy: 'parallel-star-filters', targetMaximum: 100 } },
+    reviewCount: count,
+    reviews: Array.from({ length: count }, (_, index) => ({
+      rating: (index % 5) + 1,
+      text: `Trải nghiệm TikTok ${index + 1}`
+    }))
+  };
+}
+
 test('cache dataset chỉ áp dụng cho Shopee', () => {
   assert.equal(isShopeeCacheEligible('Shopee'), true);
   assert.equal(isShopeeCacheEligible('TikTok Shop'), false);
@@ -167,4 +184,72 @@ test('getReviews dùng Blob cache Shopee và bỏ qua hoàn toàn Apify', async 
   assert.equal(redis.values.get(SHOPEE_CACHE_HITS_KEY), '1');
   assert.equal(redis.values.get(SHOPEE_TOTAL_SERVED_KEY), '1');
   assert.equal(redis.commands.some((command) => command[0] === 'HINCRBY'), false);
+});
+
+test('TikTok fallback ưu tiên dataset đúng productId và không cần Redis', async () => {
+  const target = tiktokDataset('1729736382033660305');
+  const other = tiktokDataset('1111111111111111111');
+  const datasets = new Map([
+    ['review-datasets/2026/09/07/tiktok-1729736382033660305/run-target/reviews.raw.json', target],
+    ['review-datasets/2026/09/08/tiktok-1111111111111111111/run-newer/reviews.raw.json', other]
+  ]);
+  const fallback = await getFallbackTikTokDataset('1729736382033660305', {
+    blobToken: 'blob-token',
+    blobListImpl: async () => ({
+      blobs: [...datasets.keys()].map((pathname, index) => ({
+        pathname,
+        url: `https://blob.test/${index}`,
+        uploadedAt: index ? '2026-09-08T00:00:00.000Z' : '2026-09-07T00:00:00.000Z'
+      }))
+    }),
+    blobGetImpl: async (pathname) => blobGetFor(datasets.get(pathname))()
+  });
+  assert.equal(fallback.isExactMatch, true);
+  assert.equal(fallback.dataset.product.productId, '1729736382033660305');
+});
+
+test('TikTok fallback dùng dataset mới nhất khi chưa có đúng productId', async () => {
+  const older = tiktokDataset('1111111111111111111');
+  const newest = tiktokDataset('2222222222222222222');
+  const datasets = new Map([
+    ['review-datasets/2026/09/07/tiktok-1111111111111111111/run-old/reviews.raw.json', older],
+    ['review-datasets/2026/09/08/tiktok-2222222222222222222/run-new/reviews.raw.json', newest]
+  ]);
+  const fallback = await getFallbackTikTokDataset('1729736382033660305', {
+    blobToken: 'blob-token',
+    blobListImpl: async () => ({
+      blobs: [...datasets.keys()].map((pathname, index) => ({
+        pathname,
+        url: `https://blob.test/${index}`,
+        uploadedAt: index ? '2026-09-08T00:00:00.000Z' : '2026-09-07T00:00:00.000Z'
+      }))
+    }),
+    blobGetImpl: async (pathname) => blobGetFor(datasets.get(pathname))()
+  });
+  assert.equal(fallback.isExactMatch, false);
+  assert.equal(fallback.dataset.product.productId, '2222222222222222222');
+});
+
+test('getReviews dùng TikTok Blob fallback khi bật cờ và bỏ qua Actor', async (context) => {
+  const previous = process.env.TIKTOK_DATASET_FALLBACK;
+  process.env.TIKTOK_DATASET_FALLBACK = 'true';
+  context.after(() => {
+    if (previous === undefined) delete process.env.TIKTOK_DATASET_FALLBACK;
+    else process.env.TIKTOK_DATASET_FALLBACK = previous;
+  });
+  const productId = '1729736382033660305';
+  const dataset = tiktokDataset(productId);
+  const pathname = `review-datasets/2026/09/08/tiktok-${productId}/run/reviews.raw.json`;
+  const result = await getReviews(`https://shop.tiktok.com/vn/pdp/product/${productId}`, {
+    blobToken: 'blob-token',
+    blobListImpl: async () => ({
+      blobs: [{ pathname, url: 'https://blob.test/raw', uploadedAt: '2026-09-08T00:00:00.000Z' }]
+    }),
+    blobGetImpl: blobGetFor(dataset)
+  });
+  assert.equal(result.source.type, 'cached');
+  assert.equal(result.source.cache.fallback, true);
+  assert.equal(result.source.cache.exactMatch, true);
+  assert.equal(result.reviews.length, 20);
+  assert.match(result.warnings.at(-1), /đúng sản phẩm/);
 });
