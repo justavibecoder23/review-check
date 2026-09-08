@@ -149,7 +149,11 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   const processedReviews = checked.map(({ filter, ...review }) => ({
     ...review,
     included: filter.keep,
-    verificationStatus: review.labels?.layer2_unavailable ? 'unverified' : filter.keep ? 'accepted' : 'excluded',
+    verificationStatus: review.labels?.layer2_fallback_accepted
+      ? 'fallback'
+      : review.labels?.layer2_unavailable
+        ? 'unverified'
+        : filter.keep ? 'accepted' : 'excluded',
     exclusionReason: filter.reason
   }));
   const unverifiedCount = processedReviews.filter((review) => review.verificationStatus === 'unverified').length;

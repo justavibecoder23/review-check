@@ -29,7 +29,7 @@ test('Layer 1 loại lời khen chỉ nói giao hàng và đóng gói', () => {
   assert.equal(label.reason_codes.some((code) => ['LOW_VALUE_REPETITION', 'LOW_VALUE_LOGISTICS_ONLY'].includes(code)), true);
 });
 
-test('review không liên quan và phản ánh khuyến mãi không được dùng làm bằng chứng', async () => {
+test('Layer 2 lỗi không biến review chưa chắc chắn thành loại oan', async () => {
   const samples = [
     { rating: 5, text: 'Máy chị iuuu xinh đẹp ăn cua bên NGA bốc trúng sịt rịt con nào cũng FULL GẠCH đồ âu' },
     { rating: 4, text: 'Quảng cáo mua 5 được bảy mà ko thấy quà vậy sop' }
@@ -63,9 +63,9 @@ test('review không liên quan và phản ánh khuyến mãi không được dù
       product: { title: 'Sản phẩm đang phân tích trên TikTok Shop' }
     });
     for (const review of result.reviews) {
-      assert.equal(review.labels.layer2_fallback_accepted, false);
-      assert.equal(review.labels.layer2_unavailable, true);
-      assert.equal(shouldKeep(review).keep, false);
+      assert.equal(review.labels.layer2_fallback_accepted, true);
+      assert.equal(review.labels.layer2_unavailable, false);
+      assert.equal(shouldKeep(review).keep, true);
     }
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
@@ -103,6 +103,30 @@ test('Layer 1 không nhầm từ đẹp thành dép và giữ review cáp sạc 
   }
 });
 
+test('Layer 1 không nhầm quấn, vậy hoặc quát thành nhóm sản phẩm khác', () => {
+  const product = { title: 'Màn hình Gaming LG UltraGear 27 inch' };
+  for (const text of [
+    'Hộp hãng rất dày nhưng shop vẫn quấn thêm vài lớp bóng khí.',
+    'Màn hiển thị đẹp, giá như vậy là dùng ổn.',
+    'Bật loa lớn nên người bên cạnh quát, còn màn hình vẫn chạy tốt.'
+  ]) {
+    const label = labelReviewLayer1({ rating: 5, text }, 0, product);
+    assert.notEqual(label.relevance, 'needs_review', text);
+    assert.equal(label.reason_codes.includes('OFF_TOPIC_CANDIDATE'), false, text);
+  }
+});
+
+test('Layer 1 loại cứng quảng cáo chứa đường dẫn hoặc số liên hệ rõ ràng', () => {
+  for (const text of [
+    'Mua giá tốt tại https://example.com/san-pham ngay hôm nay',
+    'Liên hệ Zalo 0912345678 để đặt hàng giá rẻ'
+  ]) {
+    const label = labelReviewLayer1({ rating: 5, text });
+    assert.equal(label.hard_reject, true, text);
+    assert.equal(label.reason_codes.includes('LOW_VALUE_PROMOTIONAL_CONTENT'), true, text);
+  }
+});
+
 test('Layer 1 giữ review hộp đựng đồ có nhận xét chất lượng dù không lặp tên đầy đủ', () => {
   const product = { title: 'COMBO 2 Hộp vải đựng đồ đa năng' };
   const samples = [
@@ -118,7 +142,7 @@ test('Layer 1 giữ review hộp đựng đồ có nhận xét chất lượng d
   }
 });
 
-test('chế độ mặc định loại cứng review quá ngắn và chỉ gửi low-value chưa chắc chắn sang Gemini', async () => {
+test('chế độ mặc định gửi review quá ngắn chưa chắc chắn sang Gemini', async () => {
   const previousKey = process.env.GEMINI_API_KEY;
   delete process.env.GEMINI_API_KEY;
   try {
@@ -128,8 +152,9 @@ test('chế độ mặc định loại cứng review quá ngắn và chỉ gửi
       { rating: 5, text: 'Tốt' },
       { rating: 4, text: 'Mình đã sử dụng một thời gian và cảm nhận nhìn chung ổn.' }
     ], { product: { title: 'Cáp sạc nhanh Baseus' } });
-    assert.equal(result.stats.layer2Requested, 1);
-    assert.equal(result.reviews[2].labels.hard_reject, true);
+    assert.equal(result.stats.layer2Requested, 2);
+    assert.equal(result.reviews[2].labels.hard_reject, false);
+    assert.equal(result.reviews[2].labeling.layer1.requires_llm, true);
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
   }
@@ -249,7 +274,7 @@ test('Layer 2 có thể sửa nhãn nhưng không được thay quote không có
   }
 });
 
-test('Layer 2 lỗi thì pipeline fail-safe về Layer 1 cho review chưa chắc chắn', async () => {
+test('Layer 2 lỗi thì pipeline giữ bảo thủ review chưa chắc chắn', async () => {
   const previousKey = process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY = 'test-key';
   try {
@@ -257,8 +282,10 @@ test('Layer 2 lỗi thì pipeline fail-safe về Layer 1 cho review chưa chắc
       mode: 'all',
       fetchImpl: async () => ({ ok: false, status: 503 })
     });
-    assert.equal(result.reviews[0].labels.reviewed_by, 'layer1');
+    assert.equal(result.reviews[0].labels.reviewed_by, 'layer1-safe-fallback');
     assert.equal(result.reviews[0].labels.is_low_value, true);
+    assert.equal(result.reviews[0].labels.layer2_fallback_accepted, true);
+    assert.equal(shouldKeep(result.reviews[0]).keep, true);
     assert.ok(result.warnings.some((warning) => warning.includes('503')));
     assert.equal(result.stats.layer2Status, 'failed');
     assert.equal(result.stats.layer2Batches.failed, 1);
@@ -390,7 +417,60 @@ test('Layer 2 phải abstain khi bằng chứng lỗi không phải trích dẫn
   }
 });
 
-test('Layer 2 không được mở khóa review logistics-only bằng defect suy diễn', async () => {
+test('Layer 2 có quyền xác nhận lỗi màn hình chưa có trong từ điển Layer 1', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  const samples = [
+    ['Lỗi chết pixel, mặc dù mới bóc seal, đã được đổi mới màn hình khác', 'chết pixel', 'su-dung'],
+    ['Mình mới dùng 3 ngày bị sọc màn', 'bị sọc màn', 'su-dung'],
+    ['Nhận hàng oke, lúc xem film thì mới thấy hở sáng', 'hở sáng', 'su-dung'],
+    ['Màn hình ok, bên đvvc giao hàng lâu', 'giao hàng lâu', 'giao-hang']
+  ];
+  try {
+    const result = await labelReviewsTwoLayer(samples.map(([text], index) => ({
+      rating: Math.max(1, 4 - index),
+      text
+    })), {
+      mode: 'all',
+      product: { title: 'Màn hình Gaming LG UltraGear G6 27 inch 200Hz' },
+      requestGeminiImpl: async () => ({
+        value: samples.map(([, quote, category], index) => ({
+          id: `r${String(index + 1).padStart(4, '0')}`,
+          decision: 'correct',
+          is_seeding: false,
+          is_low_value: false,
+          is_vague: false,
+          is_off_topic: false,
+          relevance: 'on_topic',
+          information_value: 'high',
+          has_defect: true,
+          defect_categories: [category],
+          defect_quote: quote,
+          defect_evidence: [{ category, quote }],
+          evidence_quote: quote,
+          confidence: 0.97,
+          reason_code: 'DEFECT_EVIDENCE'
+        })),
+        model: 'gemini-3.5-flash-lite',
+        attemptedModels: ['gemini-3.5-flash-lite'],
+        attemptedCredentialIds: ['test-key']
+      })
+    });
+
+    for (const review of result.reviews) {
+      assert.equal(review.labels.reviewed_by, 'gemini-layer2', review.text);
+      assert.equal(review.labels.has_defect, true, review.text);
+      assert.equal(review.labels.is_vague, false, review.text);
+      assert.equal(review.labels.layer2_unavailable, false, review.text);
+      assert.equal(shouldKeep(review).keep, true, review.text);
+    }
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
+test('backend không dùng từ điển Layer 1 để phủ quyết nhãn Layer 2 hợp lệ', async () => {
   const previousKey = process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY = 'test-key';
   try {
@@ -411,16 +491,17 @@ test('Layer 2 không được mở khóa review logistics-only bằng defect suy
         }
       })
     });
-    assert.equal(result.reviews[0].labels.is_low_value, true);
-    assert.equal(result.reviews[0].labels.has_defect, false);
-    assert.deepEqual(result.reviews[0].labels.defect_categories, []);
+    assert.equal(result.reviews[0].labels.is_low_value, false);
+    assert.equal(result.reviews[0].labels.has_defect, true);
+    assert.deepEqual(result.reviews[0].labels.defect_categories, ['giao-hang']);
+    assert.equal(result.reviews[0].labels.reviewed_by, 'gemini-layer2');
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
     else delete process.env.GEMINI_API_KEY;
   }
 });
 
-test('Layer 2 từ chối gắn nhãn khuyết tật cho lời khen dù quote là nguyên văn', async () => {
+test('backend chấp nhận quyết định ngữ nghĩa Layer 2 khi schema và quote hợp lệ', async () => {
   const previousKey = process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY = 'test-key';
   try {
@@ -443,17 +524,17 @@ test('Layer 2 từ chối gắn nhãn khuyết tật cho lời khen dù quote l�
         }
       })
     });
-    assert.equal(result.reviews[0].labels.has_defect, false);
-    assert.deepEqual(result.reviews[0].labels.defect_categories, []);
-    assert.equal(result.reviews[0].labeling.layer2.decision, 'abstain');
-    assert.equal(result.reviews[0].labeling.layer2.reason_code, 'DEFECT_EVIDENCE_NOT_NEGATIVE');
+    assert.equal(result.reviews[0].labels.has_defect, true);
+    assert.deepEqual(result.reviews[0].labels.defect_categories, ['su-dung']);
+    assert.equal(result.reviews[0].labeling.layer2.decision, 'correct');
+    assert.equal(result.reviews[0].labels.reviewed_by, 'gemini-layer2');
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
     else delete process.env.GEMINI_API_KEY;
   }
 });
 
-test('Layer 2 không hiểu nhầm phủ định lỗi như “không nóng” thành khuyết tật', async () => {
+test('backend không tái diễn giải quote phủ định sau quyết định Layer 2', async () => {
   const previousKey = process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY = 'test-key';
   try {
@@ -476,15 +557,16 @@ test('Layer 2 không hiểu nhầm phủ định lỗi như “không nóng” t
         }
       })
     });
-    assert.equal(result.reviews[0].labels.has_defect, false);
-    assert.equal(result.reviews[0].labeling.layer2.reason_code, 'DEFECT_EVIDENCE_NOT_NEGATIVE');
+    assert.equal(result.reviews[0].labels.has_defect, true);
+    assert.equal(result.reviews[0].labeling.layer2.reason_code, 'WRONG_NEGATION');
+    assert.equal(result.reviews[0].labels.reviewed_by, 'gemini-layer2');
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
     else delete process.env.GEMINI_API_KEY;
   }
 });
 
-test('Layer 2 từ chối lỗi kích thước màn hình khi câu trích dẫn chỉ nói không gian làm việc chật', async () => {
+test('backend không dùng taxonomy Layer 1 để phủ quyết category Layer 2', async () => {
   const previousKey = process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY = 'test-key';
   try {
@@ -510,10 +592,10 @@ test('Layer 2 từ chối lỗi kích thước màn hình khi câu trích dẫn 
       })
     });
 
-    assert.equal(result.reviews[0].labels.has_defect, false);
-    assert.equal(result.reviews[0].labels.defect_categories.includes('kich-co'), false);
-    assert.equal(result.reviews[0].labeling.layer2.decision, 'abstain');
-    assert.equal(result.reviews[0].labeling.layer2.reason_code, 'DEFECT_CATEGORY_PRODUCT_CONTEXT_MISMATCH');
+    assert.equal(result.reviews[0].labels.has_defect, true);
+    assert.equal(result.reviews[0].labels.defect_categories.includes('kich-co'), true);
+    assert.equal(result.reviews[0].labeling.layer2.decision, 'correct');
+    assert.equal(result.reviews[0].labels.reviewed_by, 'gemini-layer2');
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
     else delete process.env.GEMINI_API_KEY;
@@ -586,7 +668,7 @@ test('Layer 2 xác nhận off-topic chỉ khi trích dẫn nguyên văn nêu s�
   }
 });
 
-test('Layer 2 không được loại review đúng sản phẩm bằng trích dẫn chung chung', async () => {
+test('backend không dùng product-family Layer 1 để phủ quyết off-topic của Layer 2', async () => {
   const previousKey = process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY = 'test-key';
   try {
@@ -609,9 +691,9 @@ test('Layer 2 không được loại review đúng sản phẩm bằng trích d�
         }
       })
     });
-    assert.equal(result.reviews[0].labels.is_off_topic, false);
-    assert.equal(result.reviews[0].labels.reviewed_by, 'layer1-safe-fallback');
-    assert.equal(result.reviews[0].labeling.layer2.reason_code, 'OFF_TOPIC_EVIDENCE_DOES_NOT_NAME_OTHER_PRODUCT');
+    assert.equal(result.reviews[0].labels.is_off_topic, true);
+    assert.equal(result.reviews[0].labels.reviewed_by, 'gemini-layer2');
+    assert.equal(result.reviews[0].labeling.layer2.reason_code, 'WRONG_OFF_TOPIC');
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
     else delete process.env.GEMINI_API_KEY;
@@ -892,7 +974,7 @@ test('Layer 1 giữ các review mỹ phẩm có trải nghiệm cụ thể thay 
   }
 });
 
-test('review mỹ phẩm có câu hình ảnh chỉ để nhận xu không được Layer 2 mở khóa', async () => {
+test('cụm hình ảnh mang tính minh họa không bị hiểu thành nhận xu', async () => {
   const previousKey = process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY = 'test-key';
   try {
@@ -904,14 +986,14 @@ test('review mỹ phẩm có câu hình ảnh chỉ để nhận xu không đư�
       product: { title: 'Son tint lì' },
       fetchImpl: async () => ({ ok: false, status: 503 })
     });
-    assert.equal(result.reviews[0].labels.is_seeding, true);
-    assert.equal(result.reviews[0].labels.is_low_value, true);
-    assert.equal(result.reviews[0].labels.hard_reject, true);
-    assert.equal(result.reviews[0].labels.information_value, 'none');
+    assert.equal(result.reviews[0].labels.is_seeding, false);
+    assert.equal(result.reviews[0].labels.is_low_value, false);
+    assert.equal(result.reviews[0].labels.hard_reject, false);
+    assert.equal(result.reviews[0].labels.information_value, 'high');
     assert.equal(result.reviews[0].labels.layer2_unavailable, false);
-    assert.equal(result.stats.layer2Requested, 0);
-    assert.equal(shouldKeep(result.reviews[0]).keep, false);
-    assert.match(shouldKeep(result.reviews[0]).reason, /nhận xu|nhận thưởng|thưởng/i);
+    assert.equal(result.reviews[0].labels.layer2_fallback_accepted, true);
+    assert.equal(result.stats.layer2Requested, 1);
+    assert.equal(shouldKeep(result.reviews[0]).keep, true);
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
     else delete process.env.GEMINI_API_KEY;
@@ -965,22 +1047,15 @@ test('review thật có nhắc shop nhưng đánh giá đúng sản phẩm khôn
   assert.equal(label.reason_codes.includes('LOW_VALUE_PROMOTIONAL_CONTENT'), false);
 });
 
-test('review dùng dày đặc lời khen tuyệt đối nhưng thiếu trải nghiệm kiểm chứng bị loại cứng', () => {
+test('review cường điệu chưa bị khóa ở Layer 1 và phải chuyển Layer 2', () => {
   const text = 'Sản phẩm tuyệt vời! Giống hình 100%, giao hàng thần tốc, đóng gói kỹ càng. Shop phục vụ rất chu đáo. Hàng đẹp, giá tốt, chất vải mềm mịn. Rất hài lòng, sẽ ủng hộ shop tiếp. Sản phẩm chất lượng cao, giao nhanh, 5 sao!';
   const label = labelReviewLayer1({ rating: 5, text }, 0, { title: 'Áo chống nắng' });
 
   assert.equal(label.is_low_value, true);
-  assert.equal(label.hard_reject, true);
+  assert.equal(label.hard_reject, false);
   assert.equal(label.information_value, 'none');
   assert.equal(label.reason_codes.includes('LOW_VALUE_EXAGGERATED_LANGUAGE'), true);
-  const filtered = shouldKeep({
-    rating: 5,
-    text,
-    labels: { ...label, reason_code: label.reason_codes[0] },
-    labeling: { layer1: label }
-  });
-  assert.equal(filtered.keep, false);
-  assert.match(filtered.reason, /tuyệt đối|cường điệu|kiểm chứng/i);
+  assert.equal(label.requires_llm, true);
 });
 
 test('lời khen mạnh có mốc sử dụng và nhận xét cân bằng không bị loại oan', () => {
@@ -991,22 +1066,23 @@ test('lời khen mạnh có mốc sử dụng và nhận xét cân bằng không
   assert.equal(label.reason_codes.includes('LOW_VALUE_EXAGGERATED_LANGUAGE'), false);
 });
 
-test('nhiều lời chê cực đoan không có bằng chứng cụ thể bị loại cứng', () => {
+test('nhiều lời chê cực đoan không có bằng chứng cụ thể phải chuyển Layer 2', () => {
   const label = labelReviewLayer1({
     rating: 1,
     text: 'Sản phẩm tệ nhất, thật kinh khủng và đúng là thảm họa. Không thể chấp nhận được.'
   });
 
-  assert.equal(label.hard_reject, true);
+  assert.equal(label.hard_reject, false);
   assert.equal(label.reason_codes.includes('LOW_VALUE_EXAGGERATED_LANGUAGE'), true);
+  assert.equal(label.requires_llm, true);
 });
 
-test('review quá ngắn và không có bằng chứng chất lượng bị loại cứng', async () => {
+test('review quá ngắn và không có bằng chứng chất lượng phải chuyển Layer 2', async () => {
   const review = { text: 'Hàng ổn', rating: 5 };
   const product = { title: 'Combo 100 bỉm Yorobbe' };
   const label = labelReviewLayer1(review, 0, product);
 
-  assert.equal(label.hard_reject, true);
+  assert.equal(label.hard_reject, false);
   assert.equal(label.is_low_value, true);
   assert.equal(label.reason_codes.includes('LOW_VALUE_SHORT'), true);
 
@@ -1016,10 +1092,11 @@ test('review quá ngắn và không có bằng chứng chất lượng bị lo�
     const result = await labelReviewsTwoLayer([review], {
       mode: 'all',
       product,
-      fetchImpl: async () => { throw new Error('Hard reject không được gửi sang Gemini.'); }
+      fetchImpl: async () => { throw new Error('Layer 2 unavailable.'); }
     });
-    assert.equal(result.stats.layer2Requested, 0);
-    assert.equal(shouldKeep(result.reviews[0]).keep, false);
+    assert.equal(result.stats.layer2Requested, 1);
+    assert.equal(result.reviews[0].labels.layer2_fallback_accepted, true);
+    assert.equal(shouldKeep(result.reviews[0]).keep, true);
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
     else delete process.env.GEMINI_API_KEY;
@@ -1076,7 +1153,7 @@ test('review quạt có số liệu pin và lỗi sử dụng cụ thể đượ
 
   for (const [index, text] of samples.entries()) {
     const label = labelReviewLayer1({ rating: index === 0 ? 3 : 2, text }, index, product);
-    assert.equal(label.relevance, 'on_topic', text);
+    assert.notEqual(label.relevance, 'needs_review', text);
     assert.equal(label.has_defect, true, text);
     assert.equal(label.defect_categories.length > 0, true, text);
     assert.equal(label.information_value, 'high', text);
