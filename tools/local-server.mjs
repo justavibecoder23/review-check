@@ -53,6 +53,9 @@ const server = createServer(async (request, response) => {
       try {
         const result = await analyzeProductUrl(body.url, {
           onProgress: (progress) => stream.send('progress', progress),
+          onProductMeta: (product) => stream.send('product_meta', product),
+          onReviewsSample: (sample) => stream.send('reviews_sample', sample),
+          onLayer1Stats: (stats) => stream.send('layer1_stats', stats),
           signal
         });
         stream.send('result', result);

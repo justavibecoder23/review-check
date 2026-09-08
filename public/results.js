@@ -411,15 +411,240 @@ function renderResult(data) {
   if (introDialog?.showModal && !introDialog.open) requestAnimationFrame(() => introDialog.showModal());
 }
 
-let data;
-try {
-  data = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || 'null');
-} catch {
-  data = null;
+const progressPanel = document.querySelector('#analysis-progress');
+const progressTrack = progressPanel?.querySelector('.analysis-progress-track');
+const progressBar = document.querySelector('#analysis-progress-bar');
+const progressMessage = document.querySelector('#analysis-progress-message');
+const elapsedTime = document.querySelector('#analysis-elapsed-time');
+const slowNote = document.querySelector('#analysis-slow-note');
+const progressError = document.querySelector('#analysis-progress-error');
+const progressErrorMessage = document.querySelector('#analysis-progress-error-message');
+const retryButton = document.querySelector('#analysis-retry');
+const analysisSteps = Array.from(document.querySelectorAll('[data-analysis-step]'));
+const hasBrowserWindow = typeof window !== 'undefined';
+const requestedUrl = hasBrowserWindow ? new URLSearchParams(window.location.search).get('url')?.trim() || '' : '';
+let activeAnalysisUrl = requestedUrl;
+let activeStepIndex = 0;
+let elapsedTimer;
+let analysisStartedAt;
+let analysisController;
+let productMetaReceived = false;
+
+function setProgress(percent) {
+  const value = clamp(percent, 0, 100);
+  if (progressBar) progressBar.style.width = `${value}%`;
+  progressTrack?.setAttribute('aria-valuenow', String(Math.round(value)));
 }
 
-if (data?.reviews && data?.product) renderResult(data);
-else emptyState.classList.remove('hidden');
+function setAnalysisStep(index) {
+  activeStepIndex = Math.max(activeStepIndex, clamp(index, 0, analysisSteps.length - 1));
+  analysisSteps.forEach((step, stepIndex) => {
+    const done = stepIndex < activeStepIndex;
+    const active = stepIndex === activeStepIndex;
+    step.classList.toggle('is-done', done);
+    step.classList.toggle('is-active', active);
+    if (active) step.setAttribute('aria-current', 'step');
+    else step.removeAttribute('aria-current');
+  });
+}
+
+function updateElapsed() {
+  const seconds = Math.max(0, Math.floor((Date.now() - analysisStartedAt) / 1000));
+  if (elapsedTime) elapsedTime.textContent = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+  if (seconds >= 20 && slowNote) slowNote.classList.remove('hidden');
+  if (seconds >= 45 && progressMessage) progressMessage.textContent = 'Vẫn đang xử lý những đánh giá cuối cùng. Bạn có thể giữ trang này mở.';
+}
+
+function renderProgressProduct(product = {}) {
+  const title = String(product.title || '').trim();
+  const platform = String(product.platform || '').trim();
+  const imageUrl = safeImageUrl(product.image || product.imageUrl || product.thumbnail);
+  document.querySelector('#analysis-platform').textContent = platform || 'Đã nhận diện sản phẩm';
+  const titleElement = document.querySelector('#analysis-product-title');
+  titleElement.textContent = title || `Sản phẩm trên ${platform || 'sàn thương mại điện tử'}`;
+  titleElement.classList.remove('skeleton-line', 'skeleton-line--title');
+  const meta = [product.price, product.rating ? `${product.rating} sao trên sàn` : ''].filter(Boolean).join(' · ');
+  document.querySelector('#analysis-product-meta').textContent = meta || 'Đã xác nhận đúng sản phẩm. Đang thu thập các đánh giá công khai.';
+  if (imageUrl) {
+    const image = document.querySelector('#analysis-product-image');
+    const visual = document.querySelector('#analysis-product-visual');
+    image.src = imageUrl;
+    image.alt = `Ảnh ${title || 'sản phẩm đang phân tích'}`;
+    image.classList.remove('hidden');
+    visual.classList.remove('is-skeleton');
+    image.addEventListener('error', () => {
+      image.classList.add('hidden');
+      visual.classList.add('is-skeleton');
+    }, { once: true });
+  }
+  productMetaReceived = true;
+  setAnalysisStep(1);
+  setProgress(28);
+}
+
+function renderProgressSample(sample = {}) {
+  const distribution = sample.starDistribution || {};
+  const total = Math.max(0, Number(sample.total) || 0);
+  document.querySelector('#analysis-review-total').textContent = total ? `${total} review` : '0 review';
+  const sourceState = document.querySelector('#analysis-source-state');
+  sourceState.textContent = sample.source?.type === 'cached' ? 'Dữ liệu đã lưu gần đây' : 'Dữ liệu trực tiếp';
+  const maximum = Math.max(1, ...[1, 2, 3, 4, 5].map((rating) => Number(distribution[rating]) || 0));
+  for (const rating of [1, 2, 3, 4, 5]) {
+    const count = Math.max(0, Number(distribution[rating]) || 0);
+    const bar = document.querySelector(`[data-star-bar="${rating}"]`);
+    const countElement = document.querySelector(`[data-star-count="${rating}"]`);
+    if (bar) bar.style.width = `${(count / maximum) * 100}%`;
+    if (countElement) countElement.textContent = String(count);
+  }
+  setAnalysisStep(2);
+  setProgress(55);
+}
+
+function handleProgressEvent(progress = {}) {
+  const stage = String(progress.stage || '');
+  if (['collecting', 'cache'].includes(stage)) {
+    if (productMetaReceived) setAnalysisStep(1);
+    setProgress(productMetaReceived ? 28 : 12);
+    if (progressMessage) progressMessage.textContent = stage === 'cache'
+      ? 'Đang mở dữ liệu đã lưu gần đây cho sản phẩm này.'
+      : 'Đang thu thập mẫu đánh giá công khai từ sàn.';
+  }
+  if (['labeling', 'filtering'].includes(stage)) {
+    setAnalysisStep(2);
+    setProgress(stage === 'filtering' ? 72 : 62);
+    if (progressMessage) progressMessage.textContent = 'Đang giảm nhiễu và thẩm định ý nghĩa của từng review.';
+  }
+  if (['saving', 'scoring'].includes(stage)) {
+    setAnalysisStep(3);
+    setProgress(stage === 'scoring' ? 90 : 82);
+    if (progressMessage) progressMessage.textContent = 'Đang tính TrustScore và tổng hợp các bằng chứng quan trọng.';
+  }
+}
+
+async function readAnalysisStream(url) {
+  analysisController?.abort();
+  analysisController = new AbortController();
+  const response = await fetch('/api/analyze-stream', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'text/event-stream' },
+    body: JSON.stringify({ url }),
+    signal: analysisController.signal
+  });
+  if (!response.ok || !(response.headers.get('content-type') || '').includes('text/event-stream')) {
+    let message = 'Không thể mở luồng phân tích.';
+    try { message = (await response.json()).error || message; } catch { /* Non-JSON upstream response. */ }
+    throw new Error(message);
+  }
+  if (!response.body) throw new Error('Trình duyệt không hỗ trợ nhận tiến trình trực tiếp.');
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let finalResult;
+  const handleBlock = (block) => {
+    let eventName = 'message';
+    const dataLines = [];
+    for (const line of block.replace(/\r/g, '').split('\n')) {
+      if (line.startsWith('event:')) eventName = line.slice(6).trim();
+      if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart());
+    }
+    if (!dataLines.length) return;
+    const payload = JSON.parse(dataLines.join('\n'));
+    if (eventName === 'progress') handleProgressEvent(payload);
+    if (eventName === 'product_meta') renderProgressProduct(payload);
+    if (eventName === 'reviews_sample') renderProgressSample(payload);
+    if (eventName === 'layer1_stats') {
+      setAnalysisStep(2);
+      setProgress(64);
+      if (progressMessage) progressMessage.textContent = `${payload.total || 0} review đã được chuẩn hóa; đang thẩm định các trường hợp cần đọc hiểu ngữ cảnh.`;
+    }
+    if (eventName === 'result') finalResult = payload;
+    if (eventName === 'error') throw new Error(payload.error || 'Không thể hoàn tất phân tích.');
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+    const blocks = buffer.split(/\r?\n\r?\n/);
+    buffer = blocks.pop() || '';
+    for (const block of blocks) handleBlock(block);
+    if (done) break;
+  }
+  if (buffer.trim()) handleBlock(buffer);
+  if (!finalResult) throw new Error('Luồng phân tích kết thúc trước khi có kết quả.');
+  return finalResult;
+}
+
+async function startProgressiveAnalysis(url) {
+  activeAnalysisUrl = url;
+  activeStepIndex = 0;
+  productMetaReceived = false;
+  content.classList.add('hidden');
+  emptyState.classList.add('hidden');
+  progressPanel?.classList.remove('hidden');
+  progressError?.classList.add('hidden');
+  slowNote?.classList.add('hidden');
+  analysisSteps.forEach((step, index) => {
+    step.classList.toggle('is-active', index === 0);
+    step.classList.remove('is-done');
+    if (index === 0) step.setAttribute('aria-current', 'step');
+    else step.removeAttribute('aria-current');
+  });
+  setProgress(4);
+  if (progressMessage) progressMessage.textContent = 'RealView đang xác thực liên kết sản phẩm.';
+  analysisStartedAt = Date.now();
+  updateElapsed();
+  clearInterval(elapsedTimer);
+  elapsedTimer = window.setInterval(updateElapsed, 1000);
+
+  try {
+    const resultData = await readAnalysisStream(url);
+    setAnalysisStep(3);
+    analysisSteps.forEach((step) => {
+      step.classList.remove('is-active');
+      step.classList.add('is-done');
+      step.removeAttribute('aria-current');
+    });
+    setProgress(100);
+    try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(resultData)); } catch { /* Result remains visible without browser storage. */ }
+    try {
+      const { saveToHistory } = await import('./history-manager.js');
+      saveToHistory(resultData);
+      window.dispatchEvent(new CustomEvent('realview:history-changed'));
+    } catch {
+      // Local history is an enhancement and must not block a completed result.
+    }
+    window.history.replaceState({}, '', '/results.html');
+    renderResult(resultData);
+    window.scrollTo({ top: 0, behavior: 'auto' });
+    progressPanel?.classList.add('hidden');
+  } catch (error) {
+    if (error?.name === 'AbortError') return;
+    if (progressMessage) progressMessage.textContent = 'Tiến trình đã dừng trước khi có kết quả.';
+    if (progressErrorMessage) progressErrorMessage.textContent = error?.message || 'Có lỗi khi phân tích sản phẩm.';
+    progressError?.classList.remove('hidden');
+  } finally {
+    clearInterval(elapsedTimer);
+  }
+}
+
+if (hasBrowserWindow) retryButton?.addEventListener('click', () => {
+  if (activeAnalysisUrl) startProgressiveAnalysis(activeAnalysisUrl);
+});
+if (hasBrowserWindow) window.addEventListener('pagehide', () => analysisController?.abort(), { once: true });
+
+if (hasBrowserWindow && requestedUrl) {
+  startProgressiveAnalysis(requestedUrl);
+} else if (hasBrowserWindow) {
+  let data;
+  try {
+    data = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || 'null');
+  } catch {
+    data = null;
+  }
+  if (data?.reviews && data?.product) renderResult(data);
+  else emptyState.classList.remove('hidden');
+}
 
 const trustIntroDialog = document.querySelector('#trust-intro-dialog');
 trustIntroDialog?.querySelector('.trust-intro-close')?.addEventListener('click', () => trustIntroDialog.close());

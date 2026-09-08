@@ -1,35 +1,9 @@
 import { validateMarketplaceInput } from './url-validation.js';
-import { saveToHistory } from './history-manager.js';
 
 const form = document.querySelector('#analyze-form');
 const input = document.querySelector('#product-url');
-const button = document.querySelector('#submit-button');
-const loading = document.querySelector('#loading');
-const result = document.querySelector('#result');
 const errorBox = document.querySelector('#form-error');
-const sourceNotice = document.querySelector('#source-notice');
-const loadingCopy = document.querySelector('#loading-copy');
-const loadingProgress = document.querySelector('.loading-progress');
-
-function publicProgressMessage(progress = {}) {
-  if (progress.stage === 'complete') return 'Phân tích hoàn tất.';
-  if (progress.stage === 'collecting') {
-    return Number(progress.percent) <= 14
-      ? 'Đang khởi tạo hệ thống lấy reviews...'
-      : 'Đang lấy reviews...';
-  }
-  if (['labeling', 'filtering'].includes(progress.stage)) return 'Đang phân tích reviews...';
-  if (['saving', 'scoring'].includes(progress.stage)) return 'Đang hoàn thiện kết quả...';
-  return 'Đang khởi tạo hệ thống...';
-}
 const backToTop = document.querySelector('.back-to-top');
-const defaultButtonContent = button?.innerHTML;
-const delayLines = [
-  'Đang khởi tạo hệ thống...',
-  'Đang khởi tạo hệ thống lấy reviews...',
-  'Đang lấy reviews...',
-  'Đang hoàn thiện kết quả...'
-];
 
 function showInputError(message, { focus = false } = {}) {
   if (!form || !input || !errorBox) return;
@@ -195,145 +169,9 @@ if (navSections.length) {
   });
 }
 
-function escapeHtml(value) {
-  return String(value).replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
-}
-
-function renderIssues(issues) {
-  const root = document.querySelector('#issues');
-  if (!issues.length) {
-    root.innerHTML = '<div class="empty">Chưa có nhược điểm nào xuất hiện lặp lại trong các review đã giữ lại.</div>';
-    return;
-  }
-  root.innerHTML = issues.map((issue) => `
-    <article class="issue">
-      <div class="issue-top"><h3>${escapeHtml(issue.label)}</h3><span>${issue.count} đề cập</span></div>
-      <p class="issue-level">${escapeHtml(issue.level)}</p>
-      ${issue.examples.map((example) => `<blockquote>“${escapeHtml(example.text)}”<footer>${'★'.repeat(example.rating)}${'☆'.repeat(5 - example.rating)} · ${escapeHtml(example.date)}</footer></blockquote>`).join('')}
-    </article>`).join('');
-}
-
-function renderReviews(reviews) {
-  document.querySelector('#review-count').textContent = reviews.length;
-  document.querySelector('#review-list').innerHTML = reviews.map((review) => `
-    <article class="review ${review.included ? 'included' : 'excluded'}">
-      <div><span class="stars">${'★'.repeat(review.rating)}${'☆'.repeat(5 - review.rating)}</span><small>${escapeHtml(review.date)}</small></div>
-      <p>${escapeHtml(review.text)}</p>
-      <em>${review.included ? 'Được tính vào kết quả' : escapeHtml(review.exclusionReason)}</em>
-    </article>`).join('');
-}
-
-function render(data) {
-  const { product, source, warnings, stats, verdict, issues, reviews } = data;
-  document.querySelector('#platform-tag').textContent = product.platform;
-  document.querySelector('#verdict').textContent = verdict;
-  document.querySelector('#original-link').href = product.url;
-  for (const key of ['scanned', 'genuine', 'excluded']) document.querySelector(`#${key}`).textContent = stats[key];
-  renderIssues(issues);
-  renderReviews(reviews);
-
-  if (source.type === 'demo') {
-    sourceNotice.className = 'notice demo';
-    sourceNotice.innerHTML = `<strong>Chế độ mô phỏng</strong><span>${escapeHtml(warnings.at(-1))}</span>`;
-  } else {
-    sourceNotice.className = 'notice live';
-    sourceNotice.innerHTML = `<strong>Đã dùng dữ liệu trực tiếp</strong><span>Nguồn: ${escapeHtml(source.label)}</span>`;
-  }
-  result.classList.remove('hidden');
-  result.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-function openResultsPage(data) {
-  saveToHistory(data);
-  window.dispatchEvent(new CustomEvent('realview:history-changed'));
-  try {
-    sessionStorage.setItem('realview:last-analysis', JSON.stringify(data));
-    window.location.assign('/results.html');
-  } catch {
-    // Giữ giao diện kết quả cũ làm phương án dự phòng nếu trình duyệt chặn sessionStorage.
-    render(data);
-  }
-}
-
-async function analyzeWithSse(url, onProgress) {
-  const response = await fetch('/api/analyze-stream', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', accept: 'text/event-stream' },
-    body: JSON.stringify({ url })
-  });
-  const contentType = response.headers.get('content-type') || '';
-  if (!response.ok || !contentType.includes('text/event-stream')) {
-    let message = 'Không thể mở luồng phân tích.';
-    try { message = (await response.json()).error || message; } catch { /* Phản hồi không phải JSON. */ }
-    throw new Error(message);
-  }
-  if (!response.body) throw new Error('Trình duyệt không hỗ trợ đọc tiến độ trực tiếp.');
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let finalResult;
-
-  const handleBlock = (block) => {
-    let event = 'message';
-    const dataLines = [];
-    for (const line of block.replace(/\r/g, '').split('\n')) {
-      if (line.startsWith('event:')) event = line.slice(6).trim();
-      if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart());
-    }
-    if (!dataLines.length) return;
-    const data = JSON.parse(dataLines.join('\n'));
-    if (event === 'progress') onProgress(data);
-    if (event === 'result') finalResult = data;
-    if (event === 'error') throw new Error(data.error || 'Không thể phân tích link này.');
-  };
-
-  while (true) {
-    const { value, done } = await reader.read();
-    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-    const blocks = buffer.split(/\r?\n\r?\n/);
-    buffer = blocks.pop() || '';
-    for (const block of blocks) handleBlock(block);
-    if (done) break;
-  }
-  if (buffer.trim()) handleBlock(buffer);
-  if (!finalResult) throw new Error('Luồng phân tích kết thúc trước khi có kết quả.');
-  return finalResult;
-}
-
-if (form) form.addEventListener('submit', async (event) => {
+if (form) form.addEventListener('submit', (event) => {
   event.preventDefault();
   const validation = validateCurrentInput({ focus: true });
   if (!validation) return;
-  result.classList.add('hidden');
-  loading.classList.remove('hidden');
-  button.disabled = true;
-  button.setAttribute('aria-busy', 'true');
-  button.innerHTML = 'Đang phân tích <span aria-hidden="true">•••</span>';
-  form.setAttribute('aria-busy', 'true');
-  if (loadingCopy) loadingCopy.textContent = delayLines[0];
-  loadingProgress?.classList.add('is-live');
-  loadingProgress?.style.setProperty('--analysis-progress', '0%');
-  loadingProgress?.setAttribute('aria-valuenow', '0');
-  requestAnimationFrame(() => {
-    loading.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  });
-  try {
-    const data = await analyzeWithSse(validation.url, (progress) => {
-      if (loadingCopy) loadingCopy.textContent = publicProgressMessage(progress);
-      const percent = Math.min(100, Math.max(0, Number(progress.percent) || 0));
-      loadingProgress?.style.setProperty('--analysis-progress', `${percent}%`);
-      loadingProgress?.setAttribute('aria-valuenow', String(percent));
-    });
-    openResultsPage(data);
-  } catch (error) {
-    showInputError(error.message);
-  } finally {
-    loading.classList.add('hidden');
-    loadingProgress?.classList.remove('is-live');
-    button.disabled = false;
-    button.removeAttribute('aria-busy');
-    form.removeAttribute('aria-busy');
-    if (defaultButtonContent) button.innerHTML = defaultButtonContent;
-  }
+  window.location.assign(`/results.html?url=${encodeURIComponent(validation.url)}`);
 });

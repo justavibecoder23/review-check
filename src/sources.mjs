@@ -57,6 +57,8 @@ function firstValue(source, paths) {
   return undefined;
 }
 
+const trustedProductImage = Symbol('trustedProductImage');
+
 export function normaliseProductMeta(source = {}) {
   if (!source || typeof source !== 'object') return {};
   const title = firstValue(source, ['title', 'name', 'productName', 'product_name', 'productTitle', 'itemName', 'product.name', 'item.name']);
@@ -65,12 +67,14 @@ export function normaliseProductMeta(source = {}) {
   const image = firstValue(source, ['productImage', 'product_image', 'product_image_url', 'productCover', 'product_cover_url', 'product_images.0', 'product.image', 'product.images.0', 'item.image']);
   const price = firstValue(source, ['price', 'productPrice', 'currentPrice', 'product.price', 'item.price']);
   const rating = firstValue(source, ['productRating', 'ratingAverage', 'averageRating', 'product.rating', 'item.rating']);
-  return {
+  const metadata = {
     ...(title ? { title: String(title) } : {}),
     ...(image ? { image: String(image) } : {}),
     ...(price ? { price: String(price) } : {}),
     ...(rating ? { rating: Number(rating) || String(rating) } : {})
   };
+  if (image) Object.defineProperty(metadata, trustedProductImage, { value: true });
+  return metadata;
 }
 
 function decodeHtmlEntities(value) {
@@ -424,9 +428,9 @@ export async function fetchProductPageMetaCandidates(urls, options = {}) {
 
 export function mergeProductMetadata(pageMeta = {}, collectedMeta = {}, platform = '') {
   const title = collectedMeta.title || pageMeta.title;
-  // collectedMeta chỉ chứa các trường được đặt tên rõ là ảnh sản phẩm. Vì vậy
-  // đây là fallback an toàn cho Shopee, không phải ảnh người mua trong review.
-  const image = pageMeta.image || collectedMeta.image;
+  // Dataset Shopee có thể đặt ảnh review của người mua vào trường ảnh chung.
+  // Chỉ ảnh đã xác nhận từ trang/API sản phẩm mới được phép hiển thị ở Shopee.
+  const image = pageMeta.image || (platform === 'Shopee' && !collectedMeta[trustedProductImage] ? null : collectedMeta.image);
   const merged = {
     ...collectedMeta,
     ...pageMeta,
@@ -491,6 +495,10 @@ export async function getReviews(url, options = {}) {
   const productUrl = shopeeProduct?.canonicalUrl || tiktokProduct?.productUrl || parsed.href;
   const perStarLimit = platform === 'Shopee' ? getShopeeReviewsPerStar() : null;
   const reviewLimit = 100;
+  const emitProductMeta = (product) => {
+    if (typeof options.onProductMeta !== 'function') return;
+    try { options.onProductMeta(product); } catch { /* UI progress must not break collection. */ }
+  };
 
   if (shopeeProduct?.wasShortened) {
     warnings.push('Đã mở link chia sẻ Shopee và chuẩn hóa về đúng sản phẩm trước khi thu thập review.');
@@ -516,6 +524,15 @@ export async function getReviews(url, options = {}) {
       warnings.push(fallback.isExactMatch
         ? 'Chế độ dự phòng TikTok đang bật: sử dụng dataset đã lưu của đúng sản phẩm trong khi scraper trực tiếp bảo trì.'
         : 'Chế độ dự phòng demo đang bật: sử dụng mẫu review TikTok gần nhất từ sản phẩm khác trong khi scraper trực tiếp bảo trì.');
+      const product = {
+        ...cachedProduct,
+        platform: 'TikTok Shop',
+        url: productUrl,
+        originalUrl: parsed.href,
+        productId: tiktokProduct.productId,
+        resolvedFromShortLink: tiktokProduct.wasShortened
+      };
+      emitProductMeta(product);
       return {
         reviews: fallback.dataset.reviews,
         source: {
@@ -531,14 +548,7 @@ export async function getReviews(url, options = {}) {
             exactMatch: fallback.isExactMatch
           }
         },
-        product: {
-          ...cachedProduct,
-          platform: 'TikTok Shop',
-          url: productUrl,
-          originalUrl: parsed.href,
-          productId: tiktokProduct.productId,
-          resolvedFromShortLink: tiktokProduct.wasShortened
-        },
+        product,
         warnings
       };
     }
@@ -559,6 +569,16 @@ export async function getReviews(url, options = {}) {
         recordShopeeServed({ redisFetchImpl: options.redisFetchImpl })
       ]);
       const cachedProduct = cached.dataset.product || {};
+      const product = {
+        ...cachedProduct,
+        platform: 'Shopee',
+        url: productUrl,
+        originalUrl: parsed.href,
+        shopId: shopeeProduct.shopId,
+        itemId: shopeeProduct.itemId,
+        resolvedFromShortLink: shopeeProduct.wasShortened
+      };
+      emitProductMeta(product);
       return {
         reviews: cached.dataset.reviews,
         source: {
@@ -573,15 +593,7 @@ export async function getReviews(url, options = {}) {
             ageMs: cached.validation.ageMs
           }
         },
-        product: {
-          ...cachedProduct,
-          platform: 'Shopee',
-          url: productUrl,
-          originalUrl: parsed.href,
-          shopId: shopeeProduct.shopId,
-          itemId: shopeeProduct.itemId,
-          resolvedFromShortLink: shopeeProduct.wasShortened
-        },
+        product,
         warnings
       };
     }
@@ -605,6 +617,24 @@ export async function getReviews(url, options = {}) {
       : Promise.resolve({})
   ])
     .then(([pageMeta, platformMeta]) => ({ ...pageMeta, ...platformMeta }))
+    .then((metadata) => {
+      emitProductMeta({
+        platform,
+        url: productUrl,
+        originalUrl: parsed.href,
+        ...metadata,
+        ...(shopeeProduct ? {
+          shopId: shopeeProduct.shopId,
+          itemId: shopeeProduct.itemId,
+          resolvedFromShortLink: shopeeProduct.wasShortened
+        } : {}),
+        ...(tiktokProduct ? {
+          productId: tiktokProduct.productId,
+          resolvedFromShortLink: tiktokProduct.wasShortened
+        } : {})
+      });
+      return metadata;
+    })
     .catch(() => ({}));
   try {
     progress('collecting', 14, 'Đang khởi tạo hệ thống lấy reviews...');

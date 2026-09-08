@@ -39,11 +39,22 @@ test('ngắt kết nối SSE phát AbortSignal để dừng backend', () => {
   assert.equal(signal.reason.name, 'AbortError');
 });
 
-test('spinner chỉ hiển thị thông tin chung, không lộ số account hoặc tiến trình backend', async () => {
+test('trang chủ chuyển ngay sang kết quả và giao diện tiến trình không lộ tài nguyên backend', async () => {
   const appSource = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
-  assert.match(appSource, /Đang khởi tạo hệ thống lấy reviews/);
-  assert.match(appSource, /Đang lấy reviews/);
-  assert.match(appSource, /progress\.stage/);
-  assert.doesNotMatch(appSource, /progress\.phase/);
-  assert.doesNotMatch(appSource, /5 tài khoản|20\/20|Apify/i);
+  const resultsSource = await readFile(new URL('../public/results.js', import.meta.url), 'utf8');
+  assert.match(appSource, /results\.html\?url=/);
+  assert.match(resultsSource, /product_meta/);
+  assert.match(resultsSource, /reviews_sample/);
+  assert.match(resultsSource, /layer1_stats/);
+  assert.match(resultsSource, /progress\.stage/);
+  assert.doesNotMatch(resultsSource, /progress\.phase/);
+  assert.doesNotMatch(resultsSource, /5 tài khoản|20\/20|Apify/i);
+});
+
+test('SSE phát các mốc dữ liệu tiệm tiến ngoài kết quả cuối', async () => {
+  const handlerSource = await readFile(new URL('../api/analyze-stream.mjs', import.meta.url), 'utf8');
+  assert.match(handlerSource, /stream\.send\('product_meta'/);
+  assert.match(handlerSource, /stream\.send\('reviews_sample'/);
+  assert.match(handlerSource, /stream\.send\('layer1_stats'/);
+  assert.match(handlerSource, /stream\.send\('result'/);
 });

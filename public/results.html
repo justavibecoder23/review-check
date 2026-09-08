@@ -40,6 +40,69 @@
     </header>
 
     <main id="main-content" class="results-main">
+      <section id="analysis-progress" class="analysis-progress hidden" aria-labelledby="analysis-progress-title" aria-live="polite">
+        <div class="container analysis-progress-shell">
+          <div class="analysis-progress-head">
+            <div>
+              <p class="results-eyebrow">Phân tích đang diễn ra</p>
+              <h1 id="analysis-progress-title">Đang làm rõ tín hiệu từ các review</h1>
+              <p id="analysis-progress-message">RealView đang xác thực liên kết sản phẩm.</p>
+            </div>
+            <div class="analysis-elapsed" aria-label="Thời gian đã xử lý">
+              <span id="analysis-elapsed-time">00:00</span>
+              <small>đã xử lý</small>
+            </div>
+          </div>
+
+          <div class="analysis-progress-track" role="progressbar" aria-label="Tiến trình phân tích" aria-valuemin="0" aria-valuemax="100" aria-valuenow="4">
+            <span id="analysis-progress-bar"></span>
+          </div>
+
+          <div class="analysis-workspace">
+            <article class="analysis-product-preview">
+              <div class="analysis-product-visual is-skeleton" id="analysis-product-visual">
+                <img id="analysis-product-image" class="hidden" alt="" decoding="async" referrerpolicy="no-referrer" />
+              </div>
+              <div class="analysis-product-copy">
+                <span id="analysis-platform" class="analysis-platform">Đang nhận diện sàn</span>
+                <h2 id="analysis-product-title" class="skeleton-line skeleton-line--title">Đang nhận diện sản phẩm…</h2>
+                <p id="analysis-product-meta">Tên và hình ảnh sẽ xuất hiện ngay khi nguồn dữ liệu phản hồi.</p>
+              </div>
+            </article>
+
+            <article class="analysis-sample-card">
+              <div class="analysis-sample-head">
+                <div><small>Mẫu đánh giá</small><strong id="analysis-review-total">—</strong></div>
+                <span id="analysis-source-state">Đang kết nối nguồn</span>
+              </div>
+              <div class="analysis-star-bars" aria-label="Phân bố số sao trong mẫu">
+                <div><b>5★</b><span><i data-star-bar="5"></i></span><em data-star-count="5">—</em></div>
+                <div><b>4★</b><span><i data-star-bar="4"></i></span><em data-star-count="4">—</em></div>
+                <div><b>3★</b><span><i data-star-bar="3"></i></span><em data-star-count="3">—</em></div>
+                <div><b>2★</b><span><i data-star-bar="2"></i></span><em data-star-count="2">—</em></div>
+                <div><b>1★</b><span><i data-star-bar="1"></i></span><em data-star-count="1">—</em></div>
+              </div>
+            </article>
+          </div>
+
+          <ol class="analysis-stepper" aria-label="Các bước phân tích">
+            <li data-analysis-step="product" class="is-active" aria-current="step"><span>1</span><div><strong>Nhận diện sản phẩm</strong><small>Kiểm tra đúng link và thông tin sản phẩm</small></div></li>
+            <li data-analysis-step="reviews"><span>2</span><div><strong>Thu thập đánh giá</strong><small>Lấy mẫu và kiểm tra phân bố số sao</small></div></li>
+            <li data-analysis-step="validation"><span>3</span><div><strong>Kiểm định nội dung</strong><small>Giảm nhiễu và thẩm định ngữ nghĩa</small></div></li>
+            <li data-analysis-step="result"><span>4</span><div><strong>Hoàn thiện kết quả</strong><small>Tính TrustScore và tổng hợp bằng chứng</small></div></li>
+          </ol>
+
+          <div id="analysis-slow-note" class="analysis-slow-note hidden" role="status">
+            Nguồn dữ liệu đang phản hồi chậm hơn thường lệ. Bạn có thể giữ trang này mở; tiến trình vẫn đang tiếp tục.
+          </div>
+          <div id="analysis-progress-error" class="analysis-progress-error hidden" role="alert">
+            <strong>Chưa thể hoàn tất phân tích</strong>
+            <p id="analysis-progress-error-message"></p>
+            <div><button id="analysis-retry" type="button">Thử lại</button><a href="/#home">Nhập link khác</a></div>
+          </div>
+        </div>
+      </section>
+
       <section id="results-empty" class="container results-empty hidden" aria-labelledby="empty-title">
         <img src="/assets/illustrations/undraw-online-review.svg" alt="Minh họa thủ công về người dùng đang đọc đánh giá trực tuyến" />
         <div>

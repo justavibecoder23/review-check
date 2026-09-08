@@ -81,6 +81,10 @@ export function shouldKeep(review) {
 
 export async function analyzeProductUrl(rawUrl, options = {}) {
   const progress = createProgressReporter(options.onProgress);
+  const emit = (callback, payload) => {
+    if (typeof callback !== 'function') return;
+    try { callback(payload); } catch { /* Streaming updates must never break analysis. */ }
+  };
   if (typeof rawUrl !== 'string' || !rawUrl.trim()) {
     const error = new Error('Hãy dán link sản phẩm Shopee hoặc TikTok Shop.');
     error.statusCode = 400;
@@ -90,12 +94,26 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   progress('validating', 3, 'Đang khởi tạo hệ thống...');
   const { reviews, source, product, warnings } = await getReviews(rawUrl.trim(), {
     onProgress: options.onProgress,
+    onProductMeta: (metadata) => emit(options.onProductMeta, metadata),
     signal: options.signal,
     redisFetchImpl: options.redisFetchImpl,
     blobGetImpl: options.blobGetImpl,
     blobListImpl: options.blobListImpl,
     blobToken: options.blobToken,
     now: options.now
+  });
+  const starDistribution = Object.fromEntries([1, 2, 3, 4, 5].map((rating) => [
+    rating,
+    reviews.filter((review) => Number(review.rating) === rating).length
+  ]));
+  emit(options.onReviewsSample, {
+    total: reviews.length,
+    starDistribution,
+    source: {
+      type: source?.type || 'live',
+      label: source?.label || '',
+      cache: source?.cache || null
+    }
   });
   try {
     assertEnoughReviews(reviews);
@@ -115,7 +133,12 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
     busyRouteIds: new Set(),
     failedRouteIds: new Set()
   };
-  const labeling = await labelReviewsTwoLayer(reviews, { product, geminiContext, signal: options.signal });
+  const labeling = await labelReviewsTwoLayer(reviews, {
+    product,
+    geminiContext,
+    signal: options.signal,
+    onLayer1Stats: (stats) => emit(options.onLayer1Stats, stats)
+  });
   progress('filtering', 76, 'Đang phân tích reviews...');
   // Labeler đã khử trùng trước Gemini. Chỉ bản đại diện được kiểm định; chạy
   // lại sau đó sẽ nhầm nhãn mới của đại diện với nhãn cũ của bản sao.

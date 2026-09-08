@@ -703,6 +703,18 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
   // chế độ nào để AI không thể mở khóa nội dung nhận xu hoặc rác chắc chắn.
   const selected = selectedByMode.filter((item) => !item.layer1.hard_reject);
   const selectedIds = new Set(selected.map((item) => String(item.layer1.id)));
+  if (typeof options.onLayer1Stats === 'function') {
+    try {
+      options.onLayer1Stats({
+        total: reviews.length,
+        duplicateCount: duplicateAudit.duplicateCount,
+        hardRejected: prepared.filter(({ layer1 }) => layer1.hard_reject).length,
+        semanticReviewCount: selected.length
+      });
+    } catch {
+      // A disconnected progress consumer must not interrupt the labeler.
+    }
+  }
   const batchSize = Math.min(12, Math.max(8, Number.parseInt(
     process.env.LABELER_LLM_BATCH_SIZE || String(LAYER2_DEFAULT_BATCH_SIZE), 10
   ) || LAYER2_DEFAULT_BATCH_SIZE));
