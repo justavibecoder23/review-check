@@ -430,12 +430,6 @@ trustIntroDialog?.addEventListener('click', (event) => {
 const trustMethodTrigger = document.querySelector('#trust-method-trigger');
 const trustMethodPopover = document.querySelector('#trust-method-popover');
 if (trustMethodTrigger && trustMethodPopover) {
-  document.querySelector('#trust-method-close')?.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    trustMethodPopover.hidePopover();
-  });
-  
   const positionTrustMethodPopover = () => {
     if (!trustMethodPopover.matches(':popover-open')) return;
     const triggerRect = trustMethodTrigger.getBoundingClientRect();
