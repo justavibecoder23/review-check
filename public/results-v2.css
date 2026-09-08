@@ -289,7 +289,7 @@
   line-height: 1;
 }
 
-.trust-copy { min-width: 0; }
+.trust-copy { min-width: 0; padding-left: 18px; border-left: 4px solid var(--trust-color); }
 .trust-heading-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .trust-status {
   padding: 8px 12px;
@@ -739,7 +739,7 @@ body.chatbot-open .result-action-bar { opacity: 0; pointer-events: none; }
 .results-page .results-main .product-meta,
 .results-page .results-main .product-inline-link { font-size: 13px; }
 .results-page .results-main .product-platform { font-size: 10px; }
-.results-page .results-main .trust-scale-caption { font-size: .9375rem; }
+.results-page .results-main .trust-scale-caption { color: #73736d; font-size: .8125rem; }
 .results-page .results-main .trust-status { font-size: 14px; }
 .results-page .results-main .trust-copy > p { font-size: 14px; }
 .results-page .results-main .trustscore-note p { font-size: 13px; }
@@ -789,6 +789,7 @@ body.chatbot-open .result-action-bar { opacity: 0; pointer-events: none; }
 .results-page .results-main .sentiment-item p,
 .results-page .results-main .driver-card p,
 .results-page .results-main .excluded-intro p { font-size: 15px; }
+.results-page .results-main .trust-copy > p { color: #454541; }
 .results-page .results-main .evidence-card > p { font-size: 15px; }
 .results-page .results-main .trust-summary-more > summary,
 .results-page .results-main .trust-summary-more > p,
