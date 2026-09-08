@@ -10,6 +10,7 @@
     <link rel="shortcut icon" type="image/png" href="/assets/realview-rv.png" />
     <link rel="apple-touch-icon" href="/assets/realview-rv.png" />
     <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/history.css" />
     <link rel="stylesheet" href="/chatbot.css" />
   </head>
   <body>
@@ -67,6 +68,14 @@
             <div class="supported"><span><i class="status-dot"></i> Hỗ trợ link Shopee &amp; TikTok Shop</span><span>Không cần đăng nhập</span><span>Dữ liệu công khai</span></div>
           </div>
         </div>
+
+        <section class="container history-section" data-history-section hidden aria-labelledby="history-home-title">
+          <div class="history-section-heading">
+            <div><span>Lưu trên thiết bị này</span><h2 id="history-home-title">Lịch sử phân tích gần đây</h2></div>
+            <button type="button" data-history-clear>Xóa tất cả</button>
+          </div>
+          <div class="history-grid" data-history-list></div>
+        </section>
 
         <div class="container proof-strip" aria-label="Số liệu về độ tin cậy của Realview">
           <article><strong class="proof-value">361 TRIỆU</strong><p>Tổng số đánh giá đang hoạt động trên Realview tính đến tháng 12 năm 2025.</p></article>
@@ -267,6 +276,7 @@
     </footer>
 
     <script src="/nav.js" defer></script>
+    <script type="module" src="/history-ui.js"></script>
     <script type="module" src="/app.js"></script>
     <script src="/chatbot.js" defer></script>
   </body>
