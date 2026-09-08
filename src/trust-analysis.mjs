@@ -183,7 +183,7 @@ function coverageNotice(method) {
     return 'Mẫu hiện chưa có review đủ điều kiện làm bằng chứng để nhận định ưu, nhược điểm sản phẩm.';
   }
   if (method.scoreStatus === 'limited' || method.scoreStatus === 'provisional') {
-    return 'Độ phủ bằng chứng còn hạn chế; hãy đọc kết quả như nhận định tạm thời trên phần review đã thu thập.';
+    return 'Độ phủ bằng chứng còn hạn chế. Hãy đọc kết quả như nhận định tạm thời trên phần review đã thu thập.';
   }
   return '';
 }
@@ -198,13 +198,13 @@ export function plainTrustSummary(score, scoreStatus = 'valid') {
     return 'Chưa có đủ review có nội dung chữ để đạt ngưỡng tối thiểu 20 review và công bố TrustScore.';
   }
   const meaning = score >= 80
-    ? 'Tập review có độ tin cậy cao; bạn có thể dùng kết quả này làm cơ sở cân nhắc sản phẩm.'
+    ? 'Tập review có độ tin cậy cao, bạn có thể dùng kết quả này làm cơ sở cân nhắc sản phẩm.'
     : score >= 60
-      ? 'Tập review khá đáng tin; bạn có thể tham khảo để cân nhắc sản phẩm, nhưng nên đọc kỹ các điểm chưa đồng nhất.'
+      ? 'Tập review khá đáng tin, bạn có thể tham khảo để cân nhắc sản phẩm nhưng nên đọc kỹ các điểm chưa đồng nhất.'
       : score >= 50
-        ? 'Tập review có độ tin cậy trung bình; hãy xem đây là nguồn tham khảo và kiểm tra kỹ các review liên quan trước khi quyết định.'
-        : 'Tập review có độ tin cậy thấp; chưa nên dựa chủ yếu vào kết quả này để quyết định mua.';
-  return `${meaning} TrustScore ${score}/100 đo độ đáng tin của tập review, không phải điểm chất lượng tuyệt đối của sản phẩm.`;
+        ? 'Tập review có độ tin cậy trung bình, hãy xem đây là nguồn tham khảo và kiểm tra kỹ các review liên quan trước khi quyết định.'
+        : 'Tập review có độ tin cậy thấp, bạn chưa nên dựa chủ yếu vào kết quả này để quyết định mua.';
+  return `${meaning} Điểm ${score}/100 được tổng hợp từ độ rõ ràng của nội dung, mức độ ít nhiễu, tỷ lệ review có kết quả kiểm định và độ phủ của mẫu. TrustScore chỉ cho biết tập review đáng tin đến đâu, không phải điểm chất lượng tuyệt đối của sản phẩm.`;
 }
 
 function componentImpact(score) {
@@ -259,10 +259,10 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
           : 'Chưa thấy một lỗi cụ thể bị nhắc lặp lại',
       detail: controlledDefectSample
         ? (mostFrequentDefect?.count
-          ? `${mostFrequentDefect.count} review đáng tham khảo cùng đề cập đến “${mostFrequentDefect.label.toLowerCase()}”. Vì mẫu được lấy gần đều theo mức sao, hệ thống cân bằng mức lỗi giữa các nhóm sao khi tổng hợp nhược điểm; con số này không được diễn giải là tỷ lệ lỗi của toàn bộ sản phẩm và không tham gia TrustScore.`
+          ? `${mostFrequentDefect.count} review đáng tham khảo cùng đề cập đến “${mostFrequentDefect.label.toLowerCase()}”. Vì mẫu được lấy gần đều theo mức sao, hệ thống cân bằng mức lỗi giữa các nhóm sao khi tổng hợp nhược điểm. Con số này không được diễn giải là tỷ lệ lỗi của toàn bộ sản phẩm và không tham gia TrustScore.`
           : `Trong ${method.sample.afterSeedingRemoval} review sau bước lọc nhiễu, chưa có một nhược điểm cụ thể được nhắc lặp lại rõ ràng. Với mẫu chia tầng, thuật toán so sánh cân bằng giữa các mức sao thay vì giả định đây là phân bố tự nhiên.`)
         : mostFrequentDefect?.count
-          ? `${mostFrequentDefect.count} review đáng tham khảo cùng đề cập đến “${mostFrequentDefect.label.toLowerCase()}”. Đây là thông tin để người dùng cân nhắc về sản phẩm; bản thân việc nêu lỗi rõ ràng không làm review kém đáng tin.`
+          ? `${mostFrequentDefect.count} review đáng tham khảo cùng đề cập đến “${mostFrequentDefect.label.toLowerCase()}”. Đây là thông tin để người dùng cân nhắc về sản phẩm. Bản thân việc nêu lỗi rõ ràng không làm review kém đáng tin.`
           : `Trong ${method.sample.afterSeedingRemoval} review còn lại sau bước lọc nhiễu, chưa có một nhóm lỗi nào được người mua nhắc lại đủ rõ. Thống kê này không trực tiếp tăng hoặc giảm TrustScore.`
     },
     {
@@ -276,8 +276,8 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
       detail: labelingImpact === 'up'
         ? `${reviews.length - labelingUnavailableCount}/${reviews.length} review đã có quyết định từ bộ quy tắc hoặc lớp AI kiểm định. Độ phủ này đang củng cố TrustScore.`
         : labelingImpact === 'down'
-          ? `${labelingUnavailableCount} review chưa nhận được kết quả kiểm định đầy đủ nên không được dùng làm bằng chứng; khoảng trống này trực tiếp kéo điểm xuống.`
-          : `${reviews.length - labelingUnavailableCount}/${reviews.length} review đã có kết quả kiểm định; thành phần này hiện không đẩy điểm lên hoặc xuống.`
+          ? `${labelingUnavailableCount} review chưa nhận được kết quả kiểm định đầy đủ nên không được dùng làm bằng chứng. Khoảng trống này trực tiếp kéo điểm xuống.`
+          : `${reviews.length - labelingUnavailableCount}/${reviews.length} review đã có kết quả kiểm định. Thành phần này hiện không đẩy điểm lên hoặc xuống.`
     },
     {
       impact: 'neutral',
@@ -304,10 +304,10 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
       detail: method.scoreStatus === 'valid' && !coverageLowersScore
         ? `Độ phủ mẫu đạt ${Math.round(method.adequacy.coverage * 100)}% theo thiết kế lấy review hiện tại.`
         : method.scoreStatus === 'insufficient'
-          ? `Mẫu hiện có ${method.sample.total}/20 review; hệ thống chỉ không công bố TrustScore khi chưa đạt 20 review.`
+          ? `Mẫu hiện có ${method.sample.total}/20 review. Hệ thống chỉ không công bố TrustScore khi chưa đạt 20 review.`
           : coverageLowersScore
-            ? `Độ phủ mẫu hiện là ${Math.round(method.adequacy.coverage * 100)}%; vì chưa đạt mục tiêu, thuật toán đã kéo phần điểm trên mức trung lập về mức thận trọng hơn.`
-            : `Độ phủ mẫu hiện là ${Math.round(method.adequacy.coverage * 100)}%; TrustScore vẫn được công bố nhưng đi kèm trạng thái ${method.scoreStatus === 'limited' ? 'hạn chế' : 'tạm thời'}.`
+            ? `Độ phủ mẫu hiện là ${Math.round(method.adequacy.coverage * 100)}%. Vì chưa đạt mục tiêu, thuật toán đã kéo phần điểm trên mức trung lập về mức thận trọng hơn.`
+            : `Độ phủ mẫu hiện là ${Math.round(method.adequacy.coverage * 100)}%. TrustScore vẫn được công bố nhưng đi kèm trạng thái ${method.scoreStatus === 'limited' ? 'hạn chế' : 'tạm thời'}.`
     },
   ];
 
@@ -549,7 +549,7 @@ async function analyzeWithGemini(reviews, fallback, options = {}) {
     'Điểm đã được backend tính bằng thuật toán RealView v4.2: ba thành phần chất lượng bằng chứng, mức ít nhiễu và độ phủ kiểm định tạo điểm chất lượng cơ sở; độ phủ mẫu chỉ điều chỉnh bảo thủ phần điểm trên 50 đúng một lần. Nhược điểm sản phẩm không trực tiếp làm giảm TrustScore.',
     'Nội dung hiển thị cho người dùng tuyệt đối không được nhắc Fisher, p-value, odds ratio, binomial, logistic, Bonferroni, guardrail, điểm thành phần hoặc công thức.',
     'Summary đã được backend khóa trong fixedBackendDraft; phải chép nguyên văn, không viết lại.',
-    'Mỗi ưu/nhược điểm chỉ viết một câu ngắn, cụ thể: người mua thích hoặc chưa hài lòng điều gì và ảnh hưởng thực tế ra sao. Không lặp số lượt review, không thêm câu “cùng đề cập” và không chèn dẫn chứng vì giao diện đã liên kết trực tiếp tới review nguồn.',
+    'Mỗi ưu/nhược điểm chỉ viết một câu ngắn, cụ thể: người mua thích hoặc chưa hài lòng điều gì và ảnh hưởng thực tế ra sao. Không lặp số lượt review, không thêm câu “cùng đề cập” và không chèn dẫn chứng vì giao diện đã liên kết trực tiếp tới review nguồn. Không dùng dấu chấm phẩy trong nội dung hiển thị.',
     'Danh sách drivers trong fixedBackendDraft đã được backend xác định và sẽ được giữ nguyên; không đổi impact, thứ tự, tiêu đề hoặc nội dung của các driver.',
     Number.isFinite(fallback.score)
       ? `Điểm cố định phải giữ nguyên: ${fallback.score}/100.`
