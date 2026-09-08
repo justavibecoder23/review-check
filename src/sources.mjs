@@ -52,7 +52,7 @@ function firstValue(source, paths) {
   return undefined;
 }
 
-function normaliseProductMeta(source = {}) {
+export function normaliseProductMeta(source = {}) {
   if (!source || typeof source !== 'object') return {};
   const title = firstValue(source, ['title', 'name', 'productName', 'product_name', 'productTitle', 'itemName', 'product.name', 'item.name']);
   // Chỉ nhận các trường được đặt tên rõ là ảnh sản phẩm. Các trường `image`,
@@ -397,22 +397,31 @@ export function productMetadataUrls(productUrl, product = {}) {
 }
 
 export async function fetchProductPageMetaCandidates(urls, options = {}) {
-  const settled = await Promise.allSettled(
-    [...new Set(urls)].map((url) => fetchProductPageMeta(url, options))
-  );
-  return settled
-    .filter((result) => result.status === 'fulfilled')
-    .map((result) => result.value)
-    .reduce((combined, metadata) => ({
-      ...combined,
-      ...(!combined.title && metadata.title ? { title: metadata.title } : {}),
-      ...(!combined.image && metadata.image ? { image: metadata.image } : {})
-    }), {});
+  let combined = {};
+  // Shopee thường chặn khi hai biến thể URL của cùng sản phẩm được gọi đồng
+  // thời. Đọc tuần tự và dừng ngay khi đã có đủ title + ảnh giúp giảm tỷ lệ
+  // challenge mà không làm chậm đường thành công phổ biến.
+  for (const url of [...new Set(urls)]) {
+    try {
+      const metadata = await fetchProductPageMeta(url, options);
+      combined = {
+        ...combined,
+        ...(!combined.title && metadata.title ? { title: metadata.title } : {}),
+        ...(!combined.image && metadata.image ? { image: metadata.image } : {})
+      };
+      if (combined.title && combined.image) break;
+    } catch {
+      // Một URL bị challenge không được ngăn thử biến thể URL còn lại.
+    }
+  }
+  return combined;
 }
 
 export function mergeProductMetadata(pageMeta = {}, collectedMeta = {}, platform = '') {
   const title = collectedMeta.title || pageMeta.title;
-  const image = pageMeta.image || (platform === 'TikTok Shop' ? collectedMeta.image : '');
+  // collectedMeta chỉ chứa các trường được đặt tên rõ là ảnh sản phẩm. Vì vậy
+  // đây là fallback an toàn cho Shopee, không phải ảnh người mua trong review.
+  const image = pageMeta.image || collectedMeta.image;
   const merged = {
     ...collectedMeta,
     ...pageMeta,
