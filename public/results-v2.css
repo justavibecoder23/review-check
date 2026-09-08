@@ -308,7 +308,7 @@
 .trust-summary-more > summary::-webkit-details-marker { display: none; }
 .trust-summary-more > summary::after { content: " +"; text-decoration: none; }
 .trust-summary-more[open] > summary::after { content: " −"; }
-.trust-summary-more > p { margin: 8px 0 0; padding-left: 11px; border-left: 2px solid color-mix(in srgb, var(--trust-color) 42%, transparent); color: #555550; font-size: 10px; line-height: 1.6; }
+.trust-summary-more > p { margin: 8px 0 0; padding-left: 11px; border-left: 2px solid #d9d9d3; color: #555550; font-size: 10px; line-height: 1.6; }
 .trustscore-note {
   max-width: 560px;
   margin-top: 13px;
