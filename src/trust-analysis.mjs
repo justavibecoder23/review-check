@@ -374,6 +374,9 @@ function representativePriority(left, right) {
   if (Boolean(left.review.verified) !== Boolean(right.review.verified)) {
     return Number(Boolean(right.review.verified)) - Number(Boolean(left.review.verified));
   }
+  const leftTime = Date.parse(left.review.createdAt || '') || 0;
+  const rightTime = Date.parse(right.review.createdAt || '') || 0;
+  if (leftTime !== rightTime) return rightTime - leftTime;
   const lengthDifference = String(right.review.text || '').length - String(left.review.text || '').length;
   return lengthDifference || left.index - right.index;
 }
@@ -388,6 +391,7 @@ function compactEvidence(review, index) {
     exclusionReason: review.exclusionReason || null,
     defectCategories: defectCategories(review),
     reviewedBy: labels.reviewed_by || null,
+    createdAt: review.createdAt || null,
     text: String(review.text || '').replace(/\s+/g, ' ').trim().slice(0, 360)
   };
 }
@@ -549,7 +553,7 @@ async function analyzeWithGemini(reviews, fallback, options = {}) {
     'Điểm đã được backend tính bằng thuật toán RealView v4.2: ba thành phần chất lượng bằng chứng, mức ít nhiễu và độ phủ kiểm định tạo điểm chất lượng cơ sở; độ phủ mẫu chỉ điều chỉnh bảo thủ phần điểm trên 50 đúng một lần. Nhược điểm sản phẩm không trực tiếp làm giảm TrustScore.',
     'Nội dung hiển thị cho người dùng tuyệt đối không được nhắc Fisher, p-value, odds ratio, binomial, logistic, Bonferroni, guardrail, điểm thành phần hoặc công thức.',
     'Summary đã được backend khóa trong fixedBackendDraft; phải chép nguyên văn, không viết lại.',
-    'Mỗi ưu/nhược điểm chỉ viết một câu ngắn, cụ thể: người mua thích hoặc chưa hài lòng điều gì và ảnh hưởng thực tế ra sao. Không lặp số lượt review, không thêm câu “cùng đề cập” và không chèn dẫn chứng vì giao diện đã liên kết trực tiếp tới review nguồn. Không dùng dấu chấm phẩy trong nội dung hiển thị.',
+    'Mỗi ưu/nhược điểm chỉ viết một câu ngắn, cụ thể: người mua thích hoặc chưa hài lòng điều gì và ảnh hưởng thực tế ra sao. Không lặp số lượt review, không thêm câu “cùng đề cập” và không chèn dẫn chứng vì giao diện đã liên kết trực tiếp tới review nguồn.',
     'Danh sách drivers trong fixedBackendDraft đã được backend xác định và sẽ được giữ nguyên; không đổi impact, thứ tự, tiêu đề hoặc nội dung của các driver.',
     Number.isFinite(fallback.score)
       ? `Điểm cố định phải giữ nguyên: ${fallback.score}/100.`

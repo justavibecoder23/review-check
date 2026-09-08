@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "version": "2.8.0",
+  "version": "2.7.0",
   "description": "Labeling functions cho review tiếng Việt. Relevance và giá trị thông tin là hai trục riêng; Layer 1 chỉ tạo ứng viên off-topic và Layer 2 phải xác nhận bằng bằng chứng nguyên văn.",
   "policy": {
     "allowed_defect_categories": ["chat-lieu", "kich-co", "dung-mo-ta", "giao-hang", "su-dung"],
@@ -16,7 +16,7 @@
       "strong_regex_patterns": [
         "(nhan|lay|kiem|tich).{0,8}\\b(xu|coin|diem)\\b.{0,24}(danh gia|review|cmt|comment|5 sao|nam sao)?",
         "(danh gia|review|cmt|comment).{0,18}(de|lay|nhan|kiem).{0,8}\\b(xu|coin|diem|thuong)\\b",
-        "(hinh anh|video).{0,18}(mang tinh chat|chi de|de).{0,10}\\b(nhan xu|lay xu|kiem xu|nhan diem|lay diem|nhan thuong|lay thuong)\\b",
+        "(hinh anh|video).{0,18}(mang tinh chat|chi de|de).{0,10}\\b(nhan xu|lay xu|minh hoa)\\b",
         "chua.{0,18}(dung|su dung|mo|thu|xai|boc).{0,30}(5 sao|nam sao|cho shop)",
         "nhan du hang.{0,22}chua.{0,10}(dung|thu|xai).{0,20}(5 sao|nam sao)",
         "cho shop.{0,8}(5 sao|nam sao).{0,18}\\b(nhan xu|lay xu|kiem xu)\\b"
@@ -79,7 +79,7 @@
           "dan khong dinh", "dan k dinh", "dan ko dinh", "dinh k vao", "dinh ko vao", "dinh khong vao",
           "khong dan duoc", "dan khong duoc", "ko dan dc", "k dan dc", "roi mat", "roi ra", "rot ra",
           "de roi", "de bong", "de rot", "do ben duoc 2 ngay", "do ben kem",
-          "bi xuoc", "tray xuoc", "xuoc tum lum", "xuoc xat", "bi gay", "gay chan", "gay khung", "gay doi",
+          "bi xuoc", "bi tray", "tray nhieu", "tray xuoc", "xuoc tum lum", "xuoc xat", "bi gay", "gay chan", "gay khung", "gay doi",
           "bi mop", "mop meo", "dap bep", "buc chi", "tua vai", "vai tua", "bi xon",
           "kenh venh", "cong venh", "bi venh", "cap kenh", "khap khieng",
           "thieu vit", "thieu oc", "thieu chot", "thieu nut", "khong gan vit", "khong bat vit"
@@ -125,7 +125,7 @@
         "severity_weight": 1.5,
         "keywords": [
           "khong dung duoc", "khong dung dc", "ko dung dc", "k dung dc", "khong hoat dong", "khong len nguon", "bat khong len", "chap chon", "liet phim",
-          "ket nut", "hong nguon", "chay nguon", "pin yeu", "pin tut nhanh", "chai pin", "sac khong vao",
+          "ket nut", "hong nguon", "chay nguon", "pin yeu", "pin tut nhanh", "pin sut nhanh", "tut pin", "sut pin", "ton pin", "hao pin", "pin chua nhu mong doi", "pin khong nhu mong doi", "chai pin", "sac khong vao",
           "khong nhan sac", "nong ran", "tieng re", "mat am", "keu to", "ro ri nuoc", "chay nuoc", "kho dung",
           "chua dung da hong", "moi dung da hong", "dung vai hom thi hong", "bi loi", "hang loi", "loi san pham",
           "kho moi", "moi kho", "nut moi", "tham moi", "hu moi", "kho xai", "kho danh", "nong rat", "rat moi", "te moi", "te te", "vi man", "bi dang", "dang mieng", "kho tan", "mau kho", "nhanh kho", "bet bet",
@@ -139,4 +139,3 @@
     }
   }
 }
-

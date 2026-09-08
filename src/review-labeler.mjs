@@ -128,12 +128,6 @@ const concreteFeedbackPattern = /\b(?:khong|ko|k|bi|loi|hong|rach|bung|dut|roi|r
 // đẹp/dép...). Các trường hợp đó chỉ được chấp nhận bằng cụm có ngữ cảnh.
 // "không" đứng riêng cũng không đủ: "không nóng/không lỏng" là lời khen.
 const negativeDefectCuePattern = /\b(?:(?:khong|ko|k)\s+(?:dung duoc|dung dc|hoat dong|len nguon|nhan sac|vao dien|dinh|ben|chac|vua|giong(?:\s+(?:hinh|tren hinh|nhu quang cao))?|dung(?:\s+mo ta|\s+mau|\s+size)?|nhu mong doi|nhu quang cao|chuan mau|hai long|ung y|uy tin|li|ly|ni|co\s+li|co\s+ly|bam(?:\s+mau)?|giu\s+mau\s+lau)|chang\s+(?:dung duoc|dung dc|hoat dong|con son)|giao\s+(?:sai|nham|khac|lon)|hong|rach|bung|dut|long leo|kho dung|kho xai|kho danh|kho ngoi|kho chiu|kho moi|moi kho|nut moi|tham moi|hu moi|kho tan|mau kho|nhanh kho|son qua long|son long|qua long|rat long|tran ra|trao ra|chay son|chay nuoc|chay vao (?:rang|mieng)|lem mau|lem ban|nhanh troi|mau troi|troi nhanh|cung troi|khong con (?:son|ti nao)|ko con son|giu mau (?:khong|ko) lau|nong rat|rat moi|te moi|te te|vi man|dang mieng|bi dang|bet bet|dau (?:chan|lung|mong|tay)|qua chat|qua rong|sai mau|nham mau|thieu(?:\s+hang|\s+phu kien|\s+chot|\s+oc|\s+vit|\s+nut)?|mop(?:\s+meo)?|be vo|vo nat|rat te|bi loi|bao loi|loi san pham|hang loi|hang da su dung|da qua su dung|kem chat luong|mui hoi|tieng on|ro ri|het pin|xu long|that vong|phi tien|xuoc|tray|bi gay|gay|venh|kenh venh|cap kenh|tua vai|vai tua|bi xon|tut(?:\s+ra)?|tuot(?:\s+ra)?|bavia|chua (?:tot|ve sinh|hoan thien)|rat ban)\b/u;
-const clearlyPositiveOnlyPattern = /\b(?:giao nhanh|dong goi ky|rat em(?:\s+va\s+om chan)?|em va om chan|rat hai long|khong nong(?:\s+may)?|ko nong(?:\s+may)?|k nong(?:\s+may)?|dung tot|hoat dong tot|sac on dinh|dau cam chac chan)\b/u;
-
-function isClearlyPositiveOnlyEvidence(quote = '') {
-  const normalized = normalizeVietnamese(quote);
-  return clearlyPositiveOnlyPattern.test(normalized) && !negativeDefectCuePattern.test(normalized);
-}
 
 function logisticsOnlyReview(text) {
   if (!logisticsCuePattern.test(text) || productExperiencePattern.test(text)) return false;
@@ -166,9 +160,10 @@ const productFamilies = Object.freeze({
   drinkware: ['binh nuoc', 'binh giu nhiet', 'ly giu nhiet', 'ly nuoc', 'coc nuoc', 'chai nuoc'],
   grooming: ['dao cao rau', 'may cao rau', 'luoi dao cao'],
   audio: ['tai nghe', 'loa bluetooth', 'headphone', 'earphone'],
-  clothing: ['ao thun', 'ao khoac', 'quan jean', 'quan ao', 'vay dam'],
+  clothing: ['ao', 'ao thun', 'ao khoac', 'quan', 'quan jean', 'quan ao', 'vay', 'vay dam'],
   footwear: ['giay', 'giay the thao', 'giay cao got', 'doi giay', 'doi dep', 'dep quai', 'dep sandal'],
   display: ['man hinh', 'gaming monitor', 'monitor', 'ultragear'],
+  fan: ['quat mini', 'quat cam tay', 'quat tich dien', 'quat dien', 'quat'],
   babyCare: ['bim', 'ta quan', 'ta dan', 'diaper'],
   household: ['hang gia dung', 'choi quet nha', 'choi quet bui', 'cay lau nha', 'cay cao nuoc', 'ban chai cha san', 'co rua toilet'],
   phoneAccessory: ['op lung', 'kinh cuong luc', 'cap sac', 'day sac', 'dau sac', 'sac du phong', 'cap type c', 'cap lightning'],
@@ -289,14 +284,13 @@ function baseLabels(layer1) {
 }
 
 function canUseSafeLayer1Fallback(layer1) {
-  return !layer1.hard_reject
-    && !layer1.is_seeding
+  return !layer1.is_seeding
     && !layer1.is_low_value
-    && !layer1.is_off_topic
+    && !layer1.is_vague
     && layer1.relevance !== 'needs_review'
-    && ['medium', 'high'].includes(layer1.information_value)
     && !layer1.conflicts.length
-    && !layer1.reason_codes.includes('OFF_TOPIC_CANDIDATE');
+    && ['medium', 'high'].includes(layer1.information_value)
+    && layer1.confidence >= 0.75;
 }
 
 export function labelReviewLayer1(review = {}, index = 0, product = {}) {
@@ -309,8 +303,9 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
   const strongSeeding = exactSeeding ? null : matchAny(strongSeedingPatterns, text);
   const weakSeeding = matchAny(weakSeedingPatterns, text);
 
-  // Chỉ khóa khi văn bản nói rõ động cơ nhận xu/điểm/thưởng. Câu mô tả ảnh
-  // "mang tính chất minh họa" đứng riêng không phải bằng chứng nhận thưởng.
+  // Nội dung tự khai được đăng để nhận xu/điểm/thưởng bị loại cứng, kể cả khi
+  // phần còn lại có nhắc tới thuộc tính hoặc lỗi sản phẩm. Layer 2 không được
+  // phép mở khóa tín hiệu này.
   const rewardMotivated = Boolean(exactSeeding || strongSeeding);
   const isSeeding = rewardMotivated;
 
@@ -341,7 +336,7 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
   // không đủ làm bằng chứng. Câu ngắn nhưng có bằng chứng cụ thể vẫn được giữ.
   const shortWithoutEvidence = tooShort && !hasConcreteEvidence;
   const deterministicHardReject = gibberish || iconOnly || repeated || resaleOnly
-    || rewardMotivated || promotional || exaggerated;
+    || rewardMotivated || promotional || exaggerated || shortWithoutEvidence;
   const noUsageExperience = !hasConcreteEvidence && explicitNoUsagePattern.test(effectiveText);
 
   const lowValueCandidate = !effectiveText || generic || iconOnly || repeated || gibberish || logisticsOnly || resaleOnly || rewardMotivated || promotional || exaggerated || tooShort || noUsageExperience;
@@ -441,8 +436,9 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
     evidence,
     conflicts,
     hard_reject: deterministicHardReject,
-    // Chỉ rác/quảng cáo/rao bán/nhận thưởng có bằng chứng chắc chắn bị khóa.
-    // Review ngắn, generic hoặc chưa khớp từ điển phải qua Gemini.
+    // Tín hiệu nhận xu/thưởng và rác chắc chắn bị khóa ở Layer 1. Review ngắn,
+    // generic hoặc chỉ nhắc logistics vẫn qua Gemini để tránh loại oan nội dung
+    // hữu ích nằm ngoài từ điển heuristic.
     requires_llm: !deterministicHardReject && (
       isLowValue || offTopicCandidate || conflicts.length > 0
       || confidence < Number(policy.llm_review_confidence_below)
@@ -531,12 +527,6 @@ function normalizeLayer2Label(candidate, review, layer1, product = {}) {
           : 'DEFECT_CATEGORY_EVIDENCE_MISSING'
     };
   }
-  // Không cần từ điển Layer 1 xác nhận một lỗi mới. Chỉ chặn mâu thuẫn hiển
-  // nhiên khi chính quote được Gemini chọn hoàn toàn là một lời khen/phủ định lỗi.
-  if (candidate.has_defect && [...new Set([quote, ...evidenceByCategory.values()])]
-    .some((item) => isClearlyPositiveOnlyEvidence(item))) {
-    return { decision: 'abstain', confidence, reason_code: 'DEFECT_EVIDENCE_EXPLICITLY_POSITIVE' };
-  }
   if (candidate.has_defect && categories.some((category) => !defectCategoryFitsProductContext(
     category,
     evidenceByCategory.get(category),
@@ -544,12 +534,43 @@ function normalizeLayer2Label(candidate, review, layer1, product = {}) {
   ))) {
     return { decision: 'abstain', confidence, reason_code: 'DEFECT_CATEGORY_PRODUCT_CONTEXT_MISMATCH' };
   }
-  // Layer 2 là tầng quyết định ngữ nghĩa. Backend chỉ kiểm tra schema, taxonomy
-  // và trích dẫn nguyên văn; không dùng lại từ điển Layer 1 để phủ quyết Gemini.
-  const hasDefect = Boolean(candidate.has_defect && categories.length && quote);
+  if (candidate.has_defect && quote) {
+    const quoteHasDefectEvidence = defectMatches(quote, product).length > 0
+      || negativeDefectCuePattern.test(normalizeVietnamese(quote));
+    if (!quoteHasDefectEvidence) {
+      return { decision: 'abstain', confidence, reason_code: 'DEFECT_EVIDENCE_NOT_NEGATIVE' };
+    }
+    const unsupportedCategory = categories.find((category) => {
+      const categoryQuote = evidenceByCategory.get(category);
+      return defectMatches(categoryQuote, product).length === 0
+        && !negativeDefectCuePattern.test(normalizeVietnamese(categoryQuote));
+    });
+    if (unsupportedCategory) {
+      return { decision: 'abstain', confidence, reason_code: 'DEFECT_CATEGORY_EVIDENCE_NOT_NEGATIVE' };
+    }
+    const categoriesByQuote = new Map();
+    for (const category of categories) {
+      const categoryQuote = evidenceByCategory.get(category);
+      if (!categoriesByQuote.has(categoryQuote)) categoriesByQuote.set(categoryQuote, []);
+      categoriesByQuote.get(categoryQuote).push(category);
+    }
+    const reusedUnsupportedQuote = [...categoriesByQuote.entries()].some(([categoryQuote, quoteCategories]) => {
+      if (quoteCategories.length < 2) return false;
+      const deterministicCategories = new Set(defectMatches(categoryQuote, product).map((item) => item.id));
+      return quoteCategories.some((category) => !deterministicCategories.has(category));
+    });
+    if (reusedUnsupportedQuote) {
+      return { decision: 'abstain', confidence, reason_code: 'DEFECT_EVIDENCE_REUSED_ACROSS_CATEGORIES' };
+    }
+  }
+  const lockedLowValue = layer1.reason_codes.some((code) => ['LOW_VALUE_GIBBERISH', 'LOW_VALUE_ICON_ONLY', 'LOW_VALUE_REPETITION', 'LOW_VALUE_RESALE_ONLY', 'LOW_VALUE_REWARD_CONTENT', 'LOW_VALUE_PROMOTIONAL_CONTENT', 'LOW_VALUE_EXAGGERATED_LANGUAGE'].includes(code));
+  // Các tín hiệu deterministic này không được để LLM mở khóa bằng một category
+  // defect được suy diễn. Review lỗi thật đã được Layer 1 ưu tiên defect và sẽ
+  // không mang lockedLowValue ngay từ đầu.
+  const hasDefect = Boolean(!lockedLowValue && candidate.has_defect && categories.length && quote);
   const ratingAllowsVague = policy.vague_only_for_ratings.includes(Number(review.rating));
   const isVague = Boolean(candidate.is_vague && ratingAllowsVague && !hasDefect);
-  const isLowValue = Boolean(candidate.is_low_value && !hasDefect);
+  const isLowValue = Boolean(lockedLowValue || (candidate.is_low_value && !hasDefect));
   const requestedRelevance = ['on_topic', 'uncertain', 'off_topic'].includes(candidate.relevance)
     ? candidate.relevance
     : candidate.is_off_topic
@@ -576,6 +597,8 @@ function normalizeLayer2Label(candidate, review, layer1, product = {}) {
         reason_code: 'OFF_TOPIC_EVIDENCE_DOES_NOT_NAME_OTHER_PRODUCT'
       };
     }
+    // Khi taxonomy không nhận diện được loại sản phẩm từ title, một quote bất
+    // kỳ không đủ chứng minh mismatch. Chọn abstain để không loại oan.
     if (!titleHasKnownFamily) {
       return { decision: 'abstain', confidence, reason_code: 'OFF_TOPIC_UNKNOWN_PRODUCT_CONTEXT' };
     }
@@ -907,4 +930,3 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
 }
 
 export { rulesDocument as LAYER1_RULES, layer2Document as LAYER2_PROMPT };
-
