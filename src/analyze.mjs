@@ -64,6 +64,9 @@ export function shouldKeep(review) {
   if (review.labels?.is_low_value && !hasIssue) {
     return { keep: false, reason: lowValueReason || 'Nội dung ít thông tin, không đủ làm bằng chứng' };
   }
+  if (!hasIssue && !hasUsefulEvidence && ['low', 'none'].includes(informationValue)) {
+    return { keep: false, reason: 'Nội dung không nêu trải nghiệm hoặc chất lượng sản phẩm đủ rõ để làm bằng chứng' };
+  }
   if (review.labels?.layer2_unavailable) {
     return { keep: false, reason: 'Chưa đủ dữ liệu để kiểm định nội dung review' };
   }

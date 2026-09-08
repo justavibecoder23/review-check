@@ -294,6 +294,7 @@ function canUseSafeLayer1Fallback(layer1) {
     && !layer1.is_low_value
     && !layer1.is_off_topic
     && layer1.relevance !== 'needs_review'
+    && ['medium', 'high'].includes(layer1.information_value)
     && !layer1.conflicts.length
     && !layer1.reason_codes.includes('OFF_TOPIC_CANDIDATE');
 }

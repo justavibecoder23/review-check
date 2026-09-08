@@ -1104,3 +1104,46 @@ test('không loại oan review có giá hoặc pass lại nhưng vẫn nêu lỗ
   }
 });
 
+test('review không liên quan và phản ánh khuyến mãi không được dùng làm bằng chứng', async () => {
+  const samples = [
+    { rating: 5, text: 'Máy chị iuuu xinh đẹp ăn cua bên NGA bốc trúng sịt rịt con nào cũng FULL GẠCH đồ âu' },
+    { rating: 4, text: 'Quảng cáo mua 5 được bảy mà ko thấy quà vậy sop' }
+  ];
+
+  for (const [index, review] of samples.entries()) {
+    const layer1 = labelReviewLayer1(review, index, { title: 'Sản phẩm đang phân tích trên TikTok Shop' });
+    assert.equal(layer1.information_value, 'low');
+
+    const filtered = shouldKeep({
+      ...review,
+      labels: {
+        ...layer1,
+        relevance: 'on_topic',
+        information_value: 'low',
+        is_low_value: false,
+        layer2_unavailable: false,
+        reviewed_by: 'gemini-layer2'
+      },
+      labeling: { layer1 }
+    });
+    assert.equal(filtered.keep, false);
+    assert.match(filtered.reason, /không nêu trải nghiệm|chất lượng sản phẩm/i);
+  }
+
+  const previousKey = process.env.GEMINI_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  try {
+    const result = await labelReviewsTwoLayer(samples, {
+      product: { title: 'Sản phẩm đang phân tích trên TikTok Shop' }
+    });
+    for (const review of result.reviews) {
+      assert.equal(review.labels.layer2_fallback_accepted, false);
+      assert.equal(review.labels.layer2_unavailable, true);
+      assert.equal(shouldKeep(review).keep, false);
+    }
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
