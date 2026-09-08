@@ -76,9 +76,6 @@ function renderScoreLegend(score) {
       item.removeAttribute('aria-current');
     }
   });
-  document.querySelectorAll('[data-score-segment]').forEach((segment) => {
-    segment.classList.toggle('is-current', segment.dataset.scoreSegment === tone.id);
-  });
 }
 
 function fallbackTrust(data, reviews) {
