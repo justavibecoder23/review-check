@@ -236,7 +236,7 @@
   align-self: center;
   place-items: center;
   border-radius: 50%;
-  background: conic-gradient(var(--trust-color) calc(var(--score) * 1%), rgba(22, 22, 22, .09) 0);
+  background: conic-gradient(from calc((100 - var(--score)) * 3.6deg), var(--trust-color) calc(var(--score) * 1%), rgba(22, 22, 22, .09) 0);
   box-shadow: 0 18px 38px color-mix(in srgb, var(--trust-color) 17%, transparent);
 }
 
