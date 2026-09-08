@@ -130,7 +130,7 @@ button { border: 0; cursor: pointer; }
 .url-form button:hover:not(:disabled), .contact-form button:hover { transform: translateY(-2px); background: #ff8b3d; box-shadow: 0 10px 24px rgba(252,120,31,.28); }
 .url-form button:disabled { opacity: .62; cursor: wait; }
 .url-form button span, .contact-form button span { font-size: 18px; line-height: 0; }
-.supported { margin: 22px 7px 0; display: flex; flex-wrap: wrap; gap: 8px 19px; color: #73736d; font-size: 11px; }
+.supported { margin: 30px 7px 0; display: flex; flex-wrap: wrap; gap: 8px 19px; color: #73736d; font-size: 11px; }
 .supported span { position: relative; }
 .supported span + span::before { content: ""; position: absolute; top: 50%; left: -11px; width: 3px; height: 3px; border-radius: 50%; background: #aaa9a1; }
 .status-dot { display: inline-block; width: 7px; height: 7px; margin-right: 4px; border-radius: 50%; background: #2c9a61; }
