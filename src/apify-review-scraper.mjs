@@ -44,6 +44,14 @@ function normalizeReview(review) {
   };
 }
 
+function sortReviewsMostRecent(reviews) {
+  return reviews.sort((left, right) => {
+    const leftTime = Date.parse(left.createdAt || '') || 0;
+    const rightTime = Date.parse(right.createdAt || '') || 0;
+    return rightTime - leftTime;
+  });
+}
+
 async function runUnfiltered({ url, reviewLimit, starFilter, credential, fetchImpl, actorId, timeoutMs, signal }) {
   const startedAt = performance.now();
   const endpoint = `https://api.apify.com/v2/acts/${actorPath(actorId)}/run-sync-get-dataset-items`;
@@ -185,6 +193,7 @@ async function collectShopeeReviewsDemo(url, options = {}) {
       deduplicated.push(normalizeReview(rawReview));
     }
   }
+  sortReviewsMostRecent(deduplicated);
 
   const warnings = [...(allocation.warnings || [])];
   if (allocation.retiresAfterReservation) {
@@ -265,6 +274,7 @@ async function collectShopeeReviewsProduction(url, options = {}) {
       if (deduplicated.length < SHOPEE_PRODUCTION_REVIEW_LIMIT) deduplicated.push(normalizeReview(rawReview));
     }
   }
+  sortReviewsMostRecent(deduplicated);
 
   const warnings = [...(credentialSet.warnings || [])];
   for (const run of runs.filter((item) => !item.ok)) warnings.push(run.error);

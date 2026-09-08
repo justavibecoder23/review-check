@@ -52,6 +52,14 @@ function normalizeReview(review, productId) {
   };
 }
 
+function sortReviewsMostRecent(reviews) {
+  return reviews.sort((left, right) => {
+    const leftTime = Date.parse(left.createdAt || '') || 0;
+    const rightTime = Date.parse(right.createdAt || '') || 0;
+    return rightTime - leftTime;
+  });
+}
+
 function ratingFromFilter(reviewFilter) {
   const match = String(reviewFilter || '').match(/^([1-5])_star$/);
   return match ? Number(match[1]) : null;
@@ -72,7 +80,7 @@ async function runActor({ productId, reviewLimit, reviewFilter, credential, fetc
         product_ids: [String(productId)],
         reviews_limit: reviewLimit,
         reviews_filter: reviewFilter,
-        reviews_sort: 'recommended',
+        reviews_sort: 'most_recent',
         include_personal_information: false
       }),
       signal: timeoutAbortSignal(timeoutMs, signal)
@@ -209,6 +217,7 @@ export async function collectTikTokReviews(productId, options = {}) {
       if (deduplicated.length < MAX_REVIEWS) deduplicated.push(normalizeReview(rawReview, productId));
     }
   }
+  sortReviewsMostRecent(deduplicated);
 
   const warnings = [];
   for (const run of runs.filter((run) => !run.ok)) warnings.push(run.error);

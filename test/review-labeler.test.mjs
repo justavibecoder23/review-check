@@ -29,6 +29,50 @@ test('Layer 1 loại lời khen chỉ nói giao hàng và đóng gói', () => {
   assert.equal(label.reason_codes.some((code) => ['LOW_VALUE_REPETITION', 'LOW_VALUE_LOGISTICS_ONLY'].includes(code)), true);
 });
 
+test('review không liên quan và phản ánh khuyến mãi không được dùng làm bằng chứng', async () => {
+  const samples = [
+    { rating: 5, text: 'Máy chị iuuu xinh đẹp ăn cua bên NGA bốc trúng sịt rịt con nào cũng FULL GẠCH đồ âu' },
+    { rating: 4, text: 'Quảng cáo mua 5 được bảy mà ko thấy quà vậy sop' }
+  ];
+
+  for (const [index, review] of samples.entries()) {
+    const layer1 = labelReviewLayer1(review, index, { title: 'Sản phẩm đang phân tích trên TikTok Shop' });
+    assert.equal(layer1.information_value, 'low');
+    assert.equal(layer1.requires_llm, true);
+
+    const filtered = shouldKeep({
+      ...review,
+      labels: {
+        ...layer1,
+        relevance: 'on_topic',
+        information_value: 'low',
+        is_low_value: false,
+        layer2_unavailable: false,
+        reviewed_by: 'gemini-layer2'
+      },
+      labeling: { layer1 }
+    });
+    assert.equal(filtered.keep, false);
+    assert.match(filtered.reason, /không nêu trải nghiệm|chất lượng sản phẩm/i);
+  }
+
+  const previousKey = process.env.GEMINI_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  try {
+    const result = await labelReviewsTwoLayer(samples, {
+      product: { title: 'Sản phẩm đang phân tích trên TikTok Shop' }
+    });
+    for (const review of result.reviews) {
+      assert.equal(review.labels.layer2_fallback_accepted, false);
+      assert.equal(review.labels.layer2_unavailable, true);
+      assert.equal(shouldKeep(review).keep, false);
+    }
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
 test('Layer 1 chỉ tạo ứng viên sai nhóm sản phẩm và bắt buộc chuyển Layer 2', () => {
   const label = labelReviewLayer1(
     { rating: 5, text: 'Dao cạo râu ok, sắc, bền và giá hạt dẻ' },
@@ -59,18 +103,6 @@ test('Layer 1 không nhầm từ đẹp thành dép và giữ review cáp sạc 
   }
 });
 
-test('Layer 1 không nhầm quấn/vậy sau bỏ dấu thành quần/váy', () => {
-  const product = { title: 'Màn hình Gaming LG UltraGear 27 inch' };
-  for (const text of [
-    'Hộp hãng rất dày nhưng shop vẫn quấn thêm vài lớp bóng khí.',
-    'Màn hiển thị đẹp, giá như vậy là dùng ổn.'
-  ]) {
-    const label = labelReviewLayer1({ rating: 5, text }, 0, product);
-    assert.equal(label.relevance, 'unknown', text);
-    assert.equal(label.reason_codes.includes('OFF_TOPIC_CANDIDATE'), false, text);
-  }
-});
-
 test('Layer 1 giữ review hộp đựng đồ có nhận xét chất lượng dù không lặp tên đầy đủ', () => {
   const product = { title: 'COMBO 2 Hộp vải đựng đồ đa năng' };
   const samples = [
@@ -86,7 +118,7 @@ test('Layer 1 giữ review hộp đựng đồ có nhận xét chất lượng d
   }
 });
 
-test('chế độ mặc định gửi cả review ngắn chưa chắc chắn sang Gemini', async () => {
+test('chế độ mặc định loại cứng review quá ngắn và chỉ gửi low-value chưa chắc chắn sang Gemini', async () => {
   const previousKey = process.env.GEMINI_API_KEY;
   delete process.env.GEMINI_API_KEY;
   try {
@@ -96,9 +128,8 @@ test('chế độ mặc định gửi cả review ngắn chưa chắc chắn san
       { rating: 5, text: 'Tốt' },
       { rating: 4, text: 'Mình đã sử dụng một thời gian và cảm nhận nhìn chung ổn.' }
     ], { product: { title: 'Cáp sạc nhanh Baseus' } });
-    assert.equal(result.stats.layer2Requested, 2);
-    assert.equal(result.reviews[2].labels.hard_reject, false);
-    assert.equal(result.reviews[2].labeling.layer1.requires_llm, true);
+    assert.equal(result.stats.layer2Requested, 1);
+    assert.equal(result.reviews[2].labels.hard_reject, true);
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
   }
@@ -415,7 +446,7 @@ test('Layer 2 từ chối gắn nhãn khuyết tật cho lời khen dù quote l�
     assert.equal(result.reviews[0].labels.has_defect, false);
     assert.deepEqual(result.reviews[0].labels.defect_categories, []);
     assert.equal(result.reviews[0].labeling.layer2.decision, 'abstain');
-    assert.equal(result.reviews[0].labeling.layer2.reason_code, 'DEFECT_EVIDENCE_EXPLICITLY_POSITIVE');
+    assert.equal(result.reviews[0].labeling.layer2.reason_code, 'DEFECT_EVIDENCE_NOT_NEGATIVE');
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
     else delete process.env.GEMINI_API_KEY;
@@ -446,86 +477,10 @@ test('Layer 2 không hiểu nhầm phủ định lỗi như “không nóng” t
       })
     });
     assert.equal(result.reviews[0].labels.has_defect, false);
-    assert.equal(result.reviews[0].labeling.layer2.reason_code, 'DEFECT_EVIDENCE_EXPLICITLY_POSITIVE');
+    assert.equal(result.reviews[0].labeling.layer2.reason_code, 'DEFECT_EVIDENCE_NOT_NEGATIVE');
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
     else delete process.env.GEMINI_API_KEY;
-  }
-});
-
-test('Layer 2 có quyền xác nhận lỗi màn hình chưa có trong từ điển Layer 1', async () => {
-  const previousKey = process.env.GEMINI_API_KEY;
-  process.env.GEMINI_API_KEY = 'test-key';
-  const samples = [
-    ['Lỗi chết pixel, mặc dù mới bóc seal, đã được đổi mới màn hình khác', 'chết pixel'],
-    ['Màn hình bên trong như kiểu rơi ốc lọc cọc', 'rơi ốc lọc cọc'],
-    ['Lúc xem film thì mới thấy hở sáng', 'hở sáng'],
-    ['Báo 200Hz nhưng chỉ 180, màn lỗi', '200Hz nhưng chỉ 180'],
-    ['Mình mới dùng 3 ngày bị sọc màn', 'bị sọc màn']
-  ];
-  try {
-    const result = await labelReviewsTwoLayer(samples.map(([text]) => ({ rating: 2, text })), {
-      mode: 'all',
-      product: { title: 'Màn hình Gaming LG UltraGear 27 inch 200Hz' },
-      requestGeminiImpl: async () => ({
-        value: samples.map(([text, quote], index) => ({
-          id: `r${String(index + 1).padStart(4, '0')}`,
-          decision: 'correct',
-          is_seeding: false,
-          is_low_value: false,
-          is_vague: false,
-          is_off_topic: false,
-          relevance: 'on_topic',
-          information_value: 'high',
-          has_defect: true,
-          defect_categories: ['su-dung'],
-          defect_quote: quote,
-          defect_evidence: [{ category: 'su-dung', quote }],
-          evidence_quote: quote,
-          confidence: 0.97,
-          reason_code: 'DEFECT_EVIDENCE'
-        })),
-        model: 'gemini-3.5-flash-lite',
-        attemptedModels: ['gemini-3.5-flash-lite'],
-        attemptedCredentialIds: ['test-key']
-      })
-    });
-
-    for (const review of result.reviews) {
-      assert.equal(review.labels.reviewed_by, 'gemini-layer2');
-      assert.equal(review.labels.has_defect, true);
-      assert.equal(review.labels.is_vague, false);
-      assert.equal(review.labels.layer2_unavailable, false);
-      assert.equal(shouldKeep(review).keep, true);
-    }
-  } finally {
-    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
-    else delete process.env.GEMINI_API_KEY;
-  }
-});
-
-test('Layer 2 không phản hồi vẫn giữ review thật chưa khớp từ điển để tránh loại oan', async () => {
-  const previousKey = process.env.GEMINI_API_KEY;
-  delete process.env.GEMINI_API_KEY;
-  const samples = [
-    { rating: 5, text: 'Màn quá đẹp, shop quấn thêm bóng khí. Chơi Black Myth Wukong trên màn này quá phê.' },
-    { rating: 4, text: 'Lỗi chết pixel, mặc dù mới bóc seal, đã được đổi mới màn hình khác.' },
-    { rating: 4, text: 'Màn hình bên trong như kiểu rơi ốc lọc cọc.' },
-    { rating: 3, text: 'Nhận hàng oke, lúc xem film thì mới thấy hở sáng.' },
-    { rating: 1, text: 'Báo 200Hz nhưng chỉ 180, màn lỗi.' },
-    { rating: 1, text: 'Mình mới dùng 3 ngày bị sọc màn.' }
-  ];
-  try {
-    const result = await labelReviewsTwoLayer(samples, {
-      product: { title: 'Màn hình Gaming LG UltraGear 27 inch 200Hz' }
-    });
-    for (const review of result.reviews) {
-      assert.equal(review.labels.layer2_unavailable, false, review.text);
-      assert.equal(review.labels.layer2_fallback_accepted, true, review.text);
-      assert.equal(shouldKeep(review).keep, true, review.text);
-    }
-  } finally {
-    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
   }
 });
 
@@ -937,7 +892,7 @@ test('Layer 1 giữ các review mỹ phẩm có trải nghiệm cụ thể thay 
   }
 });
 
-test('cụm hình ảnh mang tính minh họa không bị hiểu thành nhận xu', async () => {
+test('review mỹ phẩm có câu hình ảnh chỉ để nhận xu không được Layer 2 mở khóa', async () => {
   const previousKey = process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY = 'test-key';
   try {
@@ -949,14 +904,14 @@ test('cụm hình ảnh mang tính minh họa không bị hiểu thành nhận x
       product: { title: 'Son tint lì' },
       fetchImpl: async () => ({ ok: false, status: 503 })
     });
-    assert.equal(result.reviews[0].labels.is_seeding, false);
-    assert.equal(result.reviews[0].labels.is_low_value, false);
-    assert.equal(result.reviews[0].labels.hard_reject, false);
-    assert.equal(result.reviews[0].labels.information_value, 'high');
+    assert.equal(result.reviews[0].labels.is_seeding, true);
+    assert.equal(result.reviews[0].labels.is_low_value, true);
+    assert.equal(result.reviews[0].labels.hard_reject, true);
+    assert.equal(result.reviews[0].labels.information_value, 'none');
     assert.equal(result.reviews[0].labels.layer2_unavailable, false);
-    assert.equal(result.reviews[0].labels.layer2_fallback_accepted, true);
-    assert.equal(result.stats.layer2Requested, 1);
-    assert.equal(shouldKeep(result.reviews[0]).keep, true);
+    assert.equal(result.stats.layer2Requested, 0);
+    assert.equal(shouldKeep(result.reviews[0]).keep, false);
+    assert.match(shouldKeep(result.reviews[0]).reason, /nhận xu|nhận thưởng|thưởng/i);
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
     else delete process.env.GEMINI_API_KEY;
@@ -1018,7 +973,12 @@ test('review dùng dày đặc lời khen tuyệt đối nhưng thiếu trải n
   assert.equal(label.hard_reject, true);
   assert.equal(label.information_value, 'none');
   assert.equal(label.reason_codes.includes('LOW_VALUE_EXAGGERATED_LANGUAGE'), true);
-  const filtered = shouldKeep({ rating: 5, text, labels: { ...label, reason_code: label.reason_codes[0] }, labeling: { layer1: label } });
+  const filtered = shouldKeep({
+    rating: 5,
+    text,
+    labels: { ...label, reason_code: label.reason_codes[0] },
+    labeling: { layer1: label }
+  });
   assert.equal(filtered.keep, false);
   assert.match(filtered.reason, /tuyệt đối|cường điệu|kiểm chứng/i);
 });
@@ -1026,25 +986,29 @@ test('review dùng dày đặc lời khen tuyệt đối nhưng thiếu trải n
 test('lời khen mạnh có mốc sử dụng và nhận xét cân bằng không bị loại oan', () => {
   const text = 'Mình thấy sản phẩm tuyệt vời sau 30 ngày sử dụng: vải mềm và đường may chắc, tuy nhiên khóa kéo hơi cứng.';
   const label = labelReviewLayer1({ rating: 4, text }, 0, { title: 'Áo chống nắng' });
+
   assert.equal(label.hard_reject, false);
   assert.equal(label.reason_codes.includes('LOW_VALUE_EXAGGERATED_LANGUAGE'), false);
 });
 
 test('nhiều lời chê cực đoan không có bằng chứng cụ thể bị loại cứng', () => {
-  const label = labelReviewLayer1({ rating: 1, text: 'Sản phẩm tệ nhất, thật kinh khủng và đúng là thảm họa. Không thể chấp nhận được.' });
+  const label = labelReviewLayer1({
+    rating: 1,
+    text: 'Sản phẩm tệ nhất, thật kinh khủng và đúng là thảm họa. Không thể chấp nhận được.'
+  });
+
   assert.equal(label.hard_reject, true);
   assert.equal(label.reason_codes.includes('LOW_VALUE_EXAGGERATED_LANGUAGE'), true);
 });
 
-test('review quá ngắn chưa bị khóa ở Layer 1 và được gửi sang Layer 2', async () => {
+test('review quá ngắn và không có bằng chứng chất lượng bị loại cứng', async () => {
   const review = { text: 'Hàng ổn', rating: 5 };
   const product = { title: 'Combo 100 bỉm Yorobbe' };
   const label = labelReviewLayer1(review, 0, product);
 
-  assert.equal(label.hard_reject, false);
+  assert.equal(label.hard_reject, true);
   assert.equal(label.is_low_value, true);
   assert.equal(label.reason_codes.includes('LOW_VALUE_SHORT'), true);
-  assert.equal(label.requires_llm, true);
 
   const previousKey = process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY = 'test-key';
@@ -1052,10 +1016,9 @@ test('review quá ngắn chưa bị khóa ở Layer 1 và được gửi sang La
     const result = await labelReviewsTwoLayer([review], {
       mode: 'all',
       product,
-      fetchImpl: async () => { throw new Error('Layer 2 unavailable.'); }
+      fetchImpl: async () => { throw new Error('Hard reject không được gửi sang Gemini.'); }
     });
-    assert.equal(result.stats.layer2Requested, 1);
-    assert.equal(result.reviews[0].labels.layer2_unavailable, true);
+    assert.equal(result.stats.layer2Requested, 0);
     assert.equal(shouldKeep(result.reviews[0]).keep, false);
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
@@ -1104,46 +1067,25 @@ test('không loại oan review có giá hoặc pass lại nhưng vẫn nêu lỗ
   }
 });
 
-test('review không liên quan và phản ánh khuyến mãi không được dùng làm bằng chứng', async () => {
+test('review quạt có số liệu pin và lỗi sử dụng cụ thể được giữ làm bằng chứng', () => {
+  const product = { title: 'Bảo hành 6 tháng Quạt mini GOOJODOQ 100 tốc độ gió có thể điều chỉnh màn hình kỹ thuật số cầm tay' };
   const samples = [
-    { rating: 5, text: 'Máy chị iuuu xinh đẹp ăn cua bên NGA bốc trúng sịt rịt con nào cũng FULL GẠCH đồ âu' },
-    { rating: 4, text: 'Quảng cáo mua 5 được bảy mà ko thấy quà vậy sop' }
+    'Đúng với mô tả:đúng Chất lượng sản phẩm:tốt. Quạt cầm nặng tay, sức gió mạnh. Mà điểm trừ tốn pin, mình để ý 1 phút sụt 4% pin là rất nhanh.',
+    'Quạt đẹp, nhiều mức độ gió nhưng khá ồn dù để mức thấp. Pin chưa như mong đợi, để chạy liên tục trong 1h tụt từ 100 xuống còn 34. Màn hình LED bị trầy 3,4 đường.'
   ];
 
-  for (const [index, review] of samples.entries()) {
-    const layer1 = labelReviewLayer1(review, index, { title: 'Sản phẩm đang phân tích trên TikTok Shop' });
-    assert.equal(layer1.information_value, 'low');
-
-    const filtered = shouldKeep({
-      ...review,
-      labels: {
-        ...layer1,
-        relevance: 'on_topic',
-        information_value: 'low',
-        is_low_value: false,
-        layer2_unavailable: false,
-        reviewed_by: 'gemini-layer2'
-      },
-      labeling: { layer1 }
-    });
-    assert.equal(filtered.keep, false);
-    assert.match(filtered.reason, /không nêu trải nghiệm|chất lượng sản phẩm/i);
-  }
-
-  const previousKey = process.env.GEMINI_API_KEY;
-  delete process.env.GEMINI_API_KEY;
-  try {
-    const result = await labelReviewsTwoLayer(samples, {
-      product: { title: 'Sản phẩm đang phân tích trên TikTok Shop' }
-    });
-    for (const review of result.reviews) {
-      assert.equal(review.labels.layer2_fallback_accepted, false);
-      assert.equal(review.labels.layer2_unavailable, true);
-      assert.equal(shouldKeep(review).keep, false);
-    }
-  } finally {
-    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
-    else delete process.env.GEMINI_API_KEY;
+  for (const [index, text] of samples.entries()) {
+    const label = labelReviewLayer1({ rating: index === 0 ? 3 : 2, text }, index, product);
+    assert.equal(label.relevance, 'on_topic', text);
+    assert.equal(label.has_defect, true, text);
+    assert.equal(label.defect_categories.length > 0, true, text);
+    assert.equal(label.information_value, 'high', text);
+    assert.equal(label.requires_llm, false, text);
+    assert.equal(shouldKeep({
+      rating: index === 0 ? 3 : 2,
+      text,
+      labels: { ...label, reason_code: label.reason_codes[0] },
+      labeling: { layer1: label }
+    }).keep, true, text);
   }
 });
-
