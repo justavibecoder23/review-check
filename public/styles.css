@@ -740,6 +740,7 @@ blockquote footer { margin-top: 7px; color: #9a4507; font-size: 10px; }
   .header-cta { margin-left: auto; }
   .header-contact { margin-left: auto; }
   .nav-toggle { display: grid; flex: 0 0 44px; }
+  .header-inner > .main-nav { justify-self: stretch; }
   .main-nav { position: absolute; top: calc(100% + 8px); right: 8px; left: 8px; z-index: 4; width: auto; min-width: 0; display: grid; gap: 4px; max-height: calc(100vh - 92px); max-height: calc(100dvh - 92px - env(safe-area-inset-bottom)); padding: 8px; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; visibility: hidden; opacity: 0; transform: translateY(-8px) scale(.985); transform-origin: top center; border: 1px solid rgba(22,22,22,.1); border-radius: 18px; background: rgba(248,248,245,.98); box-shadow: 0 22px 60px rgba(22,22,22,.18); pointer-events: none; transition: opacity .2s ease, transform .25s cubic-bezier(.22,1,.36,1), visibility .2s; }
   .site-header.is-menu-open .main-nav { visibility: visible; opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
   .nav-indicator { display: none; }
