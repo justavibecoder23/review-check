@@ -176,6 +176,7 @@
   cursor: pointer;
 }
 .account-tabs button[aria-selected="true"] { background: white; color: var(--ink); box-shadow: 0 5px 14px rgba(22,22,22,.08); }
+.account-tabs[hidden] { display: none; }
 
 .account-form { display: grid; gap: 14px; }
 .account-form[hidden] { display: none; }
@@ -193,6 +194,7 @@
   font-size: 16px;
 }
 .account-form input:focus { border-color: var(--orange); outline: 3px solid rgba(252,120,31,.16); }
+.account-code-input { letter-spacing: .45em; text-align: center; font-size: 22px !important; font-weight: 850; }
 .account-form-help { margin: -2px 0 0; color: #777770; font-size: 11px; line-height: 1.5; }
 .account-form-error { margin: 0; padding: 10px 12px; border-radius: 10px; background: #fae3df; color: #982f25; font-size: 12px; line-height: 1.45; }
 .account-form-error[hidden] { display: none; }
@@ -213,6 +215,7 @@
   box-shadow: 0 10px 22px rgba(168,69,4,.17);
 }
 .account-submit:disabled { opacity: .65; cursor: wait; }
+.account-forgot { justify-self: end; margin-top: -3px; padding: 2px 0; border: 0; background: none; color: var(--orange-dark); font: inherit; font-size: 12px; font-weight: 800; text-decoration: underline; cursor: pointer; }
 .account-switch { margin: 1px 0 0; color: #71716b; font-size: 12px; text-align: center; }
 .account-switch button { padding: 0; border: 0; background: none; color: var(--orange-dark); font: inherit; font-weight: 850; text-decoration: underline; cursor: pointer; }
 body.account-dialog-open { overflow: hidden; }
