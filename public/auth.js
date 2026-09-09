@@ -167,19 +167,21 @@ export async function getCurrentUser({ refresh = false } = {}) {
 }
 
 async function submitAccountForm(form) {
+  const action = form.dataset.authForm;
   const errorBox = form.querySelector('[data-auth-error]');
   const submit = form.querySelector('[type="submit"]');
   errorBox.hidden = true;
   submit.disabled = true;
   submit.dataset.label = submit.innerHTML;
-  submit.textContent = form.dataset.authForm === 'register' ? 'Đang tạo tài khoản…' : 'Đang đăng nhập…';
+  submit.textContent = action === 'register' ? 'Đang tạo tài khoản…' : 'Đang đăng nhập…';
   try {
     const values = Object.fromEntries(new FormData(form));
-    const payload = await apiRequest({ action: form.dataset.authForm, ...values });
+    const payload = await apiRequest({ action, ...values });
     currentUser = payload.user;
     statusPromise = Promise.resolve(currentUser);
     renderAccountControls();
     closeAuthDialog();
+    window.realviewTrackEvent?.(action === 'register' ? 'sign_up' : 'login', { method: 'username' });
     window.dispatchEvent(new CustomEvent('realview:auth-changed', { detail: { user: currentUser } }));
   } catch (error) {
     errorBox.textContent = error.message;
