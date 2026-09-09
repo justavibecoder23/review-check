@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 const styles = readFileSync(new URL('../public/styles.css', import.meta.url), 'utf8');
 const nav = readFileSync(new URL('../public/nav.js', import.meta.url), 'utf8');
 const app = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+const index = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
 
 test('tablet portrait uses the collapsed navigation layout', () => {
   assert.match(styles, /@media \(max-width: 1024px\) \{[\s\S]*?\.main-nav \{ position: absolute;/);
@@ -21,4 +22,11 @@ test('phone refinements win over the later readability overrides', () => {
   assert.ok(refinement > readability);
   assert.match(styles.slice(refinement), /main \.hero-description \{ font-size: 15px;/);
   assert.match(styles.slice(refinement), /main \.supported \{ font-size: clamp\(10px, 2\.8vw, 11px\);/);
+});
+
+test('hero illustration has no square dot decoration and keeps a responsive ratio', () => {
+  assert.doesNotMatch(index, /dot-grid/);
+  assert.doesNotMatch(styles, /\.dot-grid/);
+  assert.match(styles, /\.hero-visual \{ width: min\(100%, 560px\); aspect-ratio: 4 \/ 3; height: auto;/);
+  assert.match(styles, /\.hero-visual > \.hero-illustration \{ inset: 0; width: 100%; height: 100%; object-fit: contain;/);
 });
