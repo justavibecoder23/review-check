@@ -507,9 +507,8 @@ export async function getReviews(url, options = {}) {
     warnings.push('Đã mở link chia sẻ TikTok và khôi phục đúng mã sản phẩm trước khi thu thập review.');
   }
 
-  // Temporary demo-only replacement for the unavailable TikTok Actor. When
-  // disabled or when no usable Blob dataset exists, the live flow below is
-  // left completely unchanged.
+  // Optional exact-product Blob preference. When disabled or when no usable
+  // dataset exists, the live collection flow remains unchanged.
   if (platform === 'TikTok Shop'
     && String(process.env.TIKTOK_DATASET_FALLBACK || '').trim().toLowerCase() === 'true'
     && tiktokProduct?.productId) {
@@ -521,9 +520,7 @@ export async function getReviews(url, options = {}) {
     });
     if (fallback?.dataset) {
       const cachedProduct = fallback.dataset.product || {};
-      warnings.push(fallback.isExactMatch
-        ? 'Chế độ dự phòng TikTok đang bật: sử dụng dataset đã lưu của đúng sản phẩm trong khi scraper trực tiếp bảo trì.'
-        : 'Chế độ dự phòng demo đang bật: sử dụng mẫu review TikTok gần nhất từ sản phẩm khác trong khi scraper trực tiếp bảo trì.');
+      warnings.push('Chế độ dự phòng TikTok đang bật: sử dụng dataset đã lưu của đúng sản phẩm trong khi scraper trực tiếp bảo trì.');
       const product = {
         ...cachedProduct,
         platform: 'TikTok Shop',
@@ -537,7 +534,7 @@ export async function getReviews(url, options = {}) {
         reviews: fallback.dataset.reviews,
         source: {
           type: 'cached',
-          label: 'Vercel Blob Storage · TikTok Demo Fallback',
+          label: 'Vercel Blob Storage · TikTok Exact Fallback',
           reviewLimit: fallback.dataset.reviews.length,
           collection: fallback.dataset.source?.collection || { strategy: 'dataset-fallback' },
           cache: {
@@ -680,6 +677,47 @@ export async function getReviews(url, options = {}) {
       warnings
     };
   } catch (error) {
+    // On live TikTok failure, use only a previously stored dataset for this
+    // exact product. A dataset from another product is never substituted.
+    if (platform === 'TikTok Shop' && tiktokProduct?.productId) {
+      const fallback = await getFallbackTikTokDataset(tiktokProduct.productId, {
+        blobListImpl: options.blobListImpl,
+        blobGetImpl: options.blobGetImpl,
+        blobToken: options.blobToken
+      });
+      if (fallback?.dataset) {
+        const cachedProduct = fallback.dataset.product || {};
+        warnings.push(`Nguồn trực tiếp tạm thời không khả dụng: ${error.message}`);
+        warnings.push('Đã dùng dữ liệu lưu gần nhất của đúng sản phẩm TikTok.');
+        const product = {
+          ...cachedProduct,
+          platform: 'TikTok Shop',
+          url: productUrl,
+          originalUrl: parsed.href,
+          productId: tiktokProduct.productId,
+          resolvedFromShortLink: tiktokProduct.wasShortened
+        };
+        emitProductMeta(product);
+        return {
+          reviews: fallback.dataset.reviews,
+          source: {
+            type: 'cached',
+            label: 'Vercel Blob Storage · TikTok Exact Fallback',
+            reviewLimit: fallback.dataset.reviews.length,
+            collection: fallback.dataset.source?.collection || { strategy: 'dataset-fallback' },
+            cache: {
+              hit: true,
+              runId: fallback.dataset.runId || null,
+              createdAt: fallback.dataset.createdAt || null,
+              fallback: true,
+              exactMatch: true
+            }
+          },
+          product,
+          warnings
+        };
+      }
+    }
     if (process.env.ALLOW_DEMO_REVIEWS !== 'true') {
       throw Object.assign(new Error(`Không lấy được review thật từ ${platform}: ${error.message}`), { statusCode: 502 });
     }

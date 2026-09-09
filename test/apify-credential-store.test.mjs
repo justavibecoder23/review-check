@@ -9,11 +9,15 @@ import {
   APIFY_TIKTOK_RUN_COUNTERS_KEY,
   APIFY_TIKTOK_FINALIZED_RESERVATIONS_KEY,
   APIFY_TIKTOK_USED_KEY,
+  finalizeShopeeCostCredential,
   finalizeTikTokCredential,
   getApifyCredentialPoolStatus,
   reserveApifyCredential,
   reserveApifyCredentialSet,
+  reserveShopeeCostCredentialSet,
+  reserveTikTokCostCredentials,
   reserveTikTokCredentials,
+  finalizeTikTokCostCredential,
   saveApifyCredentialPool
 } from '../src/apify-credential-store.mjs';
 import { SHOPEE_CACHE_HITS_KEY, SHOPEE_TOTAL_SERVED_KEY } from '../src/product-cache.mjs';
@@ -59,6 +63,155 @@ function createRedisFake() {
       const config = JSON.parse(values.get(APIFY_POOL_KEY));
       const counters = hash(APIFY_POOL_COUNTERS_KEY);
       const used = hash(APIFY_POOL_USED_KEY);
+      if (String(command[1]).includes('TIKTOK_COST_FINALIZATION_V4')) {
+        const spent = hash(command[3]);
+        const reserved = hash(command[4]);
+        const ledger = hash(command[5]);
+        const accountCycleId = command[9];
+        const reservationId = command[11];
+        const operationId = command[12];
+        if (ledger[operationId]) return JSON.stringify({ ok: true, alreadyFinalized: true });
+        const reviews = Number(command[13]);
+        const statusCode = Number(command[14]);
+        const state = JSON.parse(reserved[accountCycleId] || '{"leases":{}}');
+        const lease = state.leases[reservationId];
+        delete state.leases[reservationId];
+        reserved[accountCycleId] = JSON.stringify(state);
+        const costMicroUsd = statusCode >= 200 && statusCode < 300
+          ? Number(lease.startupFeeMicroUsd) + reviews * Number(lease.itemCostMicroUsd)
+          : 0;
+        spent[accountCycleId] = String(Number(spent[accountCycleId] || 0) + costMicroUsd);
+        ledger[operationId] = JSON.stringify({ accountCycleId, costMicroUsd });
+        return JSON.stringify({ ok: true, alreadyFinalized: false, costMicroUsd });
+      }
+      if (String(command[1]).includes('TIKTOK_COST_RESERVATION_V4')) {
+        const desired = Number(command[16]);
+        const requested = Number(command[17]);
+        const nowMs = Number(command[18]);
+        const leaseMs = Number(command[19]);
+        const itemCost = Number(command[22]);
+        const startupFee = Number(command[23]);
+        const actorId = command[24];
+        const pricingVersion = command[25];
+        const requestId = command[27];
+        const cycles = JSON.parse(command[30]);
+        const spent = hash(command[5]);
+        const reserved = hash(command[6]);
+        const candidates = config.groups.flatMap((group) => group.credentials.map((credential) => ({ credential, group })))
+          .filter(({ credential }) => cycles[credential.id])
+          .slice(0, desired);
+        if (candidates.length < desired) return JSON.stringify({ ok: false, code: 'INSUFFICIENT_BUDGET_OR_KEYS' });
+        return JSON.stringify({
+          ok: true,
+          source: 'redis-vault-cost-ledger-v4',
+          credentials: candidates.map(({ credential, group }, index) => {
+            const cycle = cycles[credential.id];
+            const reservationId = `${requestId}:${index + 1}`;
+            const plannedCostMicroUsd = startupFee + requested * itemCost;
+            const state = JSON.parse(reserved[cycle.accountCycleId] || '{"leases":{}}');
+            state.leases[reservationId] = { costMicroUsd: plannedCostMicroUsd, startupFeeMicroUsd: startupFee, itemCostMicroUsd: itemCost, actorId, pricingVersion, expiresAtMs: nowMs + leaseMs };
+            reserved[cycle.accountCycleId] = JSON.stringify(state);
+            spent[cycle.accountCycleId] = String(cycle.observedSpentMicroUsd);
+            return {
+              ...credential,
+              groupId: group.id,
+              groupLabel: group.label,
+              billingAccountId: cycle.billingAccountId,
+              accountCycleId: cycle.accountCycleId,
+              billingCycleStartAt: cycle.cycleStartAt,
+              billingCycleEndAt: cycle.cycleEndAt,
+              runCount: 1,
+              plannedReviews: requested,
+              plannedCostMicroUsd,
+              spentMicroUsd: cycle.observedSpentMicroUsd,
+              reservedMicroUsd: plannedCostMicroUsd,
+              reservationId,
+              reservationExpiresAtMs: nowMs + leaseMs
+            };
+          })
+        });
+      }
+      if (String(command[1]).includes('SHOPEE_LIFETIME_AND_COST_FINALIZATION_V4')) {
+        const spent = hash(command[6]);
+        const reserved = hash(command[7]);
+        const ledger = hash(command[8]);
+        const accountCycleId = command[12];
+        const credentialId = command[13];
+        const reservationId = command[14];
+        const operationId = command[15];
+        if (ledger[operationId]) return JSON.stringify({ ok: true, alreadyFinalized: true });
+        const statusCode = Number(command[17]);
+        const reviewCount = Number(command[16]);
+        const state = JSON.parse(reserved[accountCycleId] || '{"leases":{}}');
+        const lease = state.leases[reservationId];
+        delete state.leases[reservationId];
+        reserved[accountCycleId] = JSON.stringify(state);
+        let usageCount = Number(counters[credentialId] || 0);
+        let costMicroUsd = 0;
+        if (statusCode >= 200 && statusCode < 300) {
+          usageCount += 1;
+          counters[credentialId] = String(usageCount);
+          costMicroUsd = Math.min(reviewCount, 20) * Number(lease.itemCostMicroUsd);
+          spent[accountCycleId] = String(Number(spent[accountCycleId] || 0) + costMicroUsd);
+        }
+        ledger[operationId] = JSON.stringify({ credentialId, accountCycleId, usageCount, costMicroUsd });
+        return JSON.stringify({ ok: true, alreadyFinalized: false, usageCount, costMicroUsd });
+      }
+      if (String(command[1]).includes('SHOPEE_LIFETIME_AND_COST_RESERVATION_V4')) {
+        const desired = Number(command[16]);
+        const stars = JSON.parse(command[17]);
+        const nowMs = Number(command[18]);
+        const leaseMs = Number(command[19]);
+        const runCost = Number(command[21]);
+        const itemCost = Number(command[22]);
+        const actorId = command[24];
+        const pricingVersion = command[25];
+        const requestId = command[26];
+        const cycles = JSON.parse(command[31]);
+        const reserved = hash(command[8]);
+        const spent = hash(command[7]);
+        const candidates = config.groups.flatMap((group) => group.credentials.map((credential) => ({ credential, group })))
+          .filter(({ credential }) => cycles[credential.id] && Number(counters[credential.id] || 0) < 10)
+          .slice(0, desired);
+        if (candidates.length < desired) return JSON.stringify({ ok: false, code: 'SHOPEE_LIFETIME_OR_BUDGET_EXHAUSTED' });
+        return JSON.stringify({
+          ok: true,
+          source: 'redis-vault-cost-ledger-v4',
+          groupId: candidates[0].group.id,
+          groupLabel: candidates[0].group.label,
+          maxUsesPerKey: 10,
+          reservedAt: command[30],
+          credentials: candidates.map(({ credential, group }, index) => {
+            const cycle = cycles[credential.id];
+            const cycleId = cycle.accountCycleId;
+            const reservationId = `${requestId}:${index + 1}`;
+            const state = JSON.parse(reserved[cycleId] || '{"leases":{}}');
+            state.leases[reservationId] = { costMicroUsd: runCost, itemCostMicroUsd: itemCost, plannedReviews: 20, actorId, pricingVersion, expiresAtMs: nowMs + leaseMs };
+            reserved[cycleId] = JSON.stringify(state);
+            spent[cycleId] = String(cycle.observedSpentMicroUsd);
+            return {
+              ...credential,
+              star: stars[index],
+              poolStar: credential.star,
+              poolGroupId: group.id,
+              poolGroupLabel: group.label,
+              billingAccountId: cycle.billingAccountId,
+              accountCycleId: cycleId,
+              billingCycleStartAt: cycle.cycleStartAt,
+              billingCycleEndAt: cycle.cycleEndAt,
+              usageCount: Number(counters[credential.id] || 0),
+              reservedUsageCount: 1,
+              remainingLifetimeUses: 9,
+              plannedReviews: 20,
+              plannedCostMicroUsd: runCost,
+              spentMicroUsd: cycle.observedSpentMicroUsd,
+              reservedMicroUsd: runCost,
+              reservationId,
+              reservationExpiresAtMs: nowMs + leaseMs
+            };
+          })
+        });
+      }
       if (String(command[1]).includes('TIKTOK_CREDENTIAL_FINALIZATION')) {
         const reviews = hash(APIFY_TIKTOK_REVIEW_COUNTERS_KEY);
         const reserved = hash(APIFY_TIKTOK_RESERVED_REVIEWS_KEY);
@@ -386,6 +539,103 @@ test('TikTok dùng chung token nhưng có bộ đếm review riêng, không tr�
       }[key];
       if (value === undefined) delete process.env[envKey];
       else process.env[envKey] = value;
+    }
+  }
+});
+
+test('Shopee v4 lấy billing cycle từ Apify, giữ lượt trọn đời và finalize idempotent', async () => {
+  const names = ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'APIFY_TOKEN_VAULT_KEY'];
+  const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.example.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'redis-test-token';
+  process.env.APIFY_TOKEN_VAULT_KEY = Buffer.alloc(32, 7).toString('base64');
+  const redis = createRedisFake();
+  try {
+    await saveApifyCredentialPool({ maxUsesPerKey: 10, groups: [group('primary', 'primary')] }, { fetchImpl: redis.fetchImpl });
+    const allocation = await reserveShopeeCostCredentialSet({
+      fetchImpl: redis.fetchImpl,
+      usageFetchImpl: async () => ({
+        ok: true,
+        async json() {
+          return { data: {
+            usageCycle: { startAt: '2026-09-14T00:00:00.000Z', endAt: '2026-10-13T23:59:59.999Z' },
+            totalUsageCreditsUsdAfterVolumeDiscount: 0.5
+          } };
+        }
+      })
+    });
+    assert.equal(allocation.credentials.length, 5);
+    assert.ok(allocation.credentials.every((item) => item.usageCount === 0));
+    assert.ok(allocation.credentials.every((item) => item.billingCycleStartAt === '2026-09-14T00:00:00.000Z'));
+
+    const credential = allocation.credentials[0];
+    const first = await finalizeShopeeCostCredential(credential, {
+      reviewCount: 20, statusCode: 200, operationId: 'shopee-run-1'
+    }, { fetchImpl: redis.fetchImpl });
+    const repeated = await finalizeShopeeCostCredential(credential, {
+      reviewCount: 20, statusCode: 200, operationId: 'shopee-run-1'
+    }, { fetchImpl: redis.fetchImpl });
+    assert.equal(first.usageCount, 1);
+    assert.equal(first.costMicroUsd, 79_800);
+    assert.equal(repeated.alreadyFinalized, true);
+    assert.equal(Number(redis.hashes.get(APIFY_POOL_COUNTERS_KEY)[credential.id]), 1);
+  } finally {
+    for (const name of names) {
+      if (previous[name] === undefined) delete process.env[name];
+      else process.env[name] = previous[name];
+    }
+  }
+});
+
+test('TikTok v4 dùng đúng billing cycle từng tài khoản và finalize chi phí idempotent', async () => {
+  const names = ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'APIFY_TOKEN_VAULT_KEY'];
+  const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.example.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'redis-test-token';
+  process.env.APIFY_TOKEN_VAULT_KEY = Buffer.alloc(32, 7).toString('base64');
+  const redis = createRedisFake();
+  try {
+    await saveApifyCredentialPool({ maxUsesPerKey: 10, groups: [group('primary', 'primary')] }, { fetchImpl: redis.fetchImpl });
+    const allocation = await reserveTikTokCostCredentials({
+      count: 1,
+      reviewsPerCredential: 100,
+      runtime: {
+        actorId: 'H2sSMaN2TZaXG8fye',
+        pricingVersion: 'pay-per-event-v1',
+        reviewCostMicroUsd: 3_000,
+        startupFeeMicroUsd: 5_000
+      },
+      fetchImpl: redis.fetchImpl,
+      usageFetchImpl: async () => ({
+        ok: true,
+        async json() {
+          return { data: {
+            usageCycle: { startAt: '2026-09-20T00:00:00.000Z', endAt: '2026-10-19T23:59:59.999Z' },
+            totalUsageCreditsUsdAfterVolumeDiscount: 0.25
+          } };
+        }
+      })
+    });
+
+    assert.equal(allocation.source, 'redis-vault-cost-ledger-v4');
+    assert.equal(allocation.credentials.length, 1);
+    const credential = allocation.credentials[0];
+    assert.equal(credential.billingCycleStartAt, '2026-09-20T00:00:00.000Z');
+    assert.equal(credential.spentMicroUsd, 250_000);
+    assert.equal(credential.plannedCostMicroUsd, 305_000);
+
+    const first = await finalizeTikTokCostCredential(credential, {
+      reviewCount: 100, statusCode: 200, operationId: 'tiktok-run-1'
+    }, { fetchImpl: redis.fetchImpl });
+    const repeated = await finalizeTikTokCostCredential(credential, {
+      reviewCount: 100, statusCode: 200, operationId: 'tiktok-run-1'
+    }, { fetchImpl: redis.fetchImpl });
+    assert.equal(first.costMicroUsd, 305_000);
+    assert.equal(repeated.alreadyFinalized, true);
+  } finally {
+    for (const name of names) {
+      if (previous[name] === undefined) delete process.env[name];
+      else process.env[name] = previous[name];
     }
   }
 });

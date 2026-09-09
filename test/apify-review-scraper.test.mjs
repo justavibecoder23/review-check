@@ -14,6 +14,16 @@ function allocation() {
   };
 }
 
+function productionCredentialSet() {
+  return {
+    groupId: 'group-production', groupLabel: 'production', source: 'test', maxUsesPerKey: 10,
+    retiresAfterReservation: false,
+    credentials: [5, 4, 3, 2, 1].map((star) => ({
+      id: `key-${star}`, label: `account-${star}`, token: `token-${star}`, star, usageCount: 1
+    }))
+  };
+}
+
 test('chỉ chạy một account, giữ written comments và không gửi starFilter', async () => {
   const inputs = [];
   const result = await collectShopeeReviews('https://shopee.vn/product-i.1.2', {
@@ -104,13 +114,7 @@ test('không tự đổi credential giữa một lượt khi account bị từ c
 
 test('mặc định production lấy tối đa 100 review bằng 5 filter sao song song và khử trùng', async () => {
   const inputs = [];
-  const credentialSet = {
-    groupId: 'group-production', groupLabel: 'production', source: 'test', maxUsesPerKey: 10,
-    retiresAfterReservation: false,
-    credentials: [5, 4, 3, 2, 1].map((star) => ({
-      id: `key-${star}`, label: `account-${star}`, token: `token-${star}`, star, usageCount: 1
-    }))
-  };
+  const credentialSet = productionCredentialSet();
   const result = await collectShopeeReviews('https://shopee.vn/product-i.1.2', {
     credentialSet,
     fetchImpl: async (_url, init) => {
@@ -137,4 +141,37 @@ test('mặc định production lấy tối đa 100 review bằng 5 filter sao so
   assert.deepEqual(result.collection.ratingStrata, [1, 2, 3, 4, 5]);
   assert.equal(result.collection.targetMaximum, 100);
   assert.equal(JSON.stringify(result).includes('token-'), false);
+});
+
+test('Shopee production chốt riêng năm reservation vào sổ cái v4', async () => {
+  const finalized = [];
+  const credentialSet = productionCredentialSet();
+  credentialSet.source = 'redis-vault-cost-ledger-v4';
+  credentialSet.credentials = credentialSet.credentials.map((credential) => ({
+    ...credential,
+    billingAccountId: `account-${credential.star}`,
+    accountCycleId: `account-${credential.star}:2026-09-14T00:00:00.000Z`,
+    billingCycleStartAt: '2026-09-14T00:00:00.000Z',
+    billingCycleEndAt: '2026-10-13T23:59:59.999Z',
+    reservationId: `reservation-${credential.star}`
+  }));
+  const result = await collectShopeeReviews('https://shopee.vn/product-i.1.2', {
+    credentialSet,
+    finalizeImpl: async (credential, run) => finalized.push({ credential, run }),
+    fetchImpl: async (_url, init) => {
+      const star = Number(JSON.parse(init.body).starFilter);
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => `actor-run-${star}` },
+        async json() {
+          return [{ reviewId: `review-${star}`, ratingStar: star, comment: `Review ${star} sao có nội dung.` }];
+        }
+      };
+    }
+  });
+  assert.equal(finalized.length, 5);
+  assert.ok(finalized.every(({ run }) => run.statusCode === 200 && run.reviewCount === 1));
+  assert.equal(result.usage.tracked, true);
+  assert.equal(result.usage.billingCycles.length, 5);
 });

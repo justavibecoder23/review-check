@@ -35,19 +35,20 @@ Tại Vercel → **Settings → Environment Variables**, thêm biến:
 APIFY_ACTOR_ID=zen-studio/shopee-product-reviews-scraper
 SHOPEE_REVIEWS_PER_STAR=20
 APIFY_RUN_TIMEOUT_MS=70000
+TIKTOK_USE_TEMPORARY_ACTOR=false
 APIFY_TOKEN_VAULT_KEY=<base64 32 byte>
 APIFY_ADMIN_KEY=<admin secret>
 UPSTASH_REDIS_REST_URL=<Upstash REST URL>
 UPSTASH_REDIS_REST_TOKEN=<Upstash REST token>
 ```
 
-Shopee production luôn dùng 5 account song song cho 5 tầng 5★/4★/3★/2★/1★, tối đa 20 review mỗi account (tổng tối đa 100), kiểm tra đúng mức sao và khử trùng trước khi phân tích. Chế độ demo một account chỉ còn có thể bật tường minh bằng `options.mode='demo'` trong test/local; biến môi trường demo cũ không thể vô tình hạ production về 20 review. Actor chỉ hỗ trợ một mức sao cho mỗi run, nên mẫu 100 review là mẫu chia tầng đại diện 5 tầng và không được diễn giải như phân bố rating tự nhiên của toàn bộ sản phẩm. TikTok cũng dùng cơ chế 5 account cho 5 mức sao tương tự. Các Apify token không nằm trong environment của Vercel: chúng được cập nhật tập trung qua API quản trị và mã hóa trong Redis. Không đưa file chứa token vào GitHub hoặc JavaScript trình duyệt.
+Shopee production luôn dùng 5 account song song cho 5 tầng 5★/4★/3★/2★/1★, tối đa 20 review mỗi account (tổng tối đa 100), kiểm tra đúng mức sao và khử trùng trước khi phân tích. Actor TikTok gốc vẫn là mặc định và dùng cùng chiến lược chia tầng. `TIKTOK_USE_TEMPORARY_ACTOR=true` chuyển toàn bộ lượt TikTok sang actor tạm thời lấy tối đa 100 review gần nhất bằng một account; `false` hoặc bỏ trống sẽ dùng actor gốc. Mẫu của actor tạm thời được gắn nhãn `most-recent-100` và `observed-sample`, không được diễn giải như phân bố đại diện của toàn bộ sản phẩm. Các Apify token không nằm trong environment của Vercel: chúng được cập nhật tập trung qua API quản trị và mã hóa trong Redis. Không đưa file chứa token vào GitHub hoặc JavaScript trình duyệt.
 
 ### Cấu hình và tự động xoay vòng Apify key
 
 Pool vẫn được lưu theo nhóm 5 key để tương thích với file quản trị hiện có. Shopee và TikTok dùng chung token nhưng có bộ đếm riêng. Shopee production cấp đủ 5 key còn lượt và tăng bộ đếm lượt của từng key bằng một lệnh Redis nguyên tử; mỗi key được dùng tối đa 10 lượt. Khi một key đủ 10 lượt, trạng thái `used` chỉ áp dụng cho Shopee—key đó vẫn có thể phục vụ TikTok.
 
-TikTok được quản lý theo số review đã trả về, không trừ bộ đếm lượt Shopee. Với mỗi key có $5 usage, bộ cấp phát luôn dành trước chi phí tối đa cho `10 lượt × 20 review` Shopee rồi mới cấp phần usage còn lại cho TikTok. Reservation TikTok có thời hạn và finalize idempotent để request lỗi hoặc retry không giữ usage vĩnh viễn hay cộng hai lần. Giới hạn TikTok theo key được tính từ usage còn lại, không còn dùng một trần review cố định tách rời ngân sách.
+Shopee giữ hạn mức 10 lượt trọn đời trong bộ đếm v2 và không reset theo kỳ thanh toán. Chi phí thực tế của cả Shopee và TikTok được quản lý trong sổ cái v4 theo `billingAccountId` và `usageCycle.startAt` do API Apify trả về. Hệ thống không giả định ngày reset là ngày đầu tháng. Trước mỗi reservation, backend đọc chu kỳ hiện tại và tổng usage thực tế của từng tài khoản; số liệu Redis được nâng lên tối thiểu bằng số Apify báo cáo để bao gồm cả chi phí phát sinh ngoài RealView. Phần bảo lưu Shopee bằng số lượt trọn đời còn lại nhân với 79.800 micro USD. Khi đủ 10 lượt, phần bảo lưu bằng 0; chi phí Shopee đã phát sinh trong chu kỳ hiện tại vẫn được tính. Giá và actor được đóng băng trong reservation. Finalization theo operation ID chống cộng hai lần. Lỗi 402 chỉ đánh dấu hết ngân sách trong đúng billing cycle, 403 chỉ chặn actor tương ứng, 429 tạo cooldown 60 giây, còn timeout và 5xx giữ reservation để đối soát. Circuit breaker mở tạm thời sau ba lỗi hạ tầng liên tiếp. Blob fallback chỉ được dùng khi dataset khớp chính xác productId.
 
 Để tạo nhanh file pool từ một danh sách dài API key, chạy `npm run generate:apify-pool`. Dán mỗi key trên một dòng, nhấn Enter ở dòng trống, chọn `replace` hoặc `append`, rồi nhập vị trí muốn lưu. Công cụ tự loại key trùng (giữ lần xuất hiện đầu tiên) và chia key thành từng nhóm 5★ → 1★. Nếu còn dư 1–4 key, backend mã hóa và lưu chúng ở trạng thái `pending`; chúng không được cấp phát cho đến khi một lần `append` sau bổ sung đủ nhóm 5. Chế độ `replace` mặc định dùng `config/apify-pool.local.json`; chế độ `append` luôn đề xuất một file mới có timestamp để không ghi đè file ban đầu. Các file này được tạo với quyền chỉ tài khoản hiện tại đọc/ghi và đã nằm trong `.gitignore`.
 

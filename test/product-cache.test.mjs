@@ -208,7 +208,7 @@ test('TikTok fallback ưu tiên dataset đúng productId và không cần Redis'
   assert.equal(fallback.dataset.product.productId, '1729736382033660305');
 });
 
-test('TikTok fallback dùng dataset mới nhất khi chưa có đúng productId', async () => {
+test('TikTok fallback không bao giờ dùng dataset của sản phẩm khác', async () => {
   const older = tiktokDataset('1111111111111111111');
   const newest = tiktokDataset('2222222222222222222');
   const datasets = new Map([
@@ -226,8 +226,7 @@ test('TikTok fallback dùng dataset mới nhất khi chưa có đúng productId'
     }),
     blobGetImpl: async (pathname) => blobGetFor(datasets.get(pathname))()
   });
-  assert.equal(fallback.isExactMatch, false);
-  assert.equal(fallback.dataset.product.productId, '2222222222222222222');
+  assert.equal(fallback, null);
 });
 
 test('getReviews dùng TikTok Blob fallback khi bật cờ và bỏ qua Actor', async (context) => {

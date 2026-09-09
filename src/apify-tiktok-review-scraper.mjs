@@ -1,15 +1,17 @@
 import { createHash } from 'node:crypto';
-import { finalizeTikTokCredential, reserveTikTokCredentials } from './apify-credential-store.mjs';
+import { finalizeTikTokCostCredential, reserveTikTokCostCredentials } from './apify-credential-store.mjs';
 import { createProgressReporter } from './sse.mjs';
 import { timeoutAbortSignal } from './abort.mjs';
+import { tikTokActorAdapter } from './apify-tiktok-adapters.mjs';
+import { classifyApifyFailure, resolveTikTokRuntimeConfig } from './apify-tiktok-runtime.mjs';
+import { assertTikTokCircuitClosed, recordTikTokActorHealth } from './apify-tiktok-health.mjs';
 
-const DEFAULT_ACTOR_ID = 'web_wanderer/tiktok-reviews-scraper';
 const MAX_REVIEWS = 100;
 const STAR_FILTERS = Object.freeze(['5_star', '4_star', '3_star', '2_star', '1_star']);
 const REVIEWS_PER_STAR = MAX_REVIEWS / STAR_FILTERS.length;
 
 function actorPath(actorId) {
-  return encodeURIComponent(String(actorId || DEFAULT_ACTOR_ID).trim().replace('/', '~'));
+  return encodeURIComponent(String(actorId).trim().replace('/', '~'));
 }
 
 function compactErrorDetail(value) {
@@ -65,9 +67,19 @@ function ratingFromFilter(reviewFilter) {
   return match ? Number(match[1]) : null;
 }
 
-async function runActor({ productId, reviewLimit, reviewFilter, credential, fetchImpl, actorId, timeoutMs, signal }) {
+function retryAfterMs(response) {
+  const raw = response?.headers?.get?.('retry-after');
+  if (!raw) return 60_000;
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds)) return Math.max(1_000, seconds * 1000);
+  const timestamp = Date.parse(raw);
+  return Number.isFinite(timestamp) ? Math.max(1_000, timestamp - Date.now()) : 60_000;
+}
+
+async function runActor({ productId, productUrl, reviewLimit, reviewFilter, credential, fetchImpl, runtime, timeoutMs, signal }) {
   const startedAt = performance.now();
-  const endpoint = `https://api.apify.com/v2/acts/${actorPath(actorId)}/run-sync-get-dataset-items`;
+  const adapter = tikTokActorAdapter(runtime);
+  const endpoint = `https://api.apify.com/v2/acts/${actorPath(runtime.actorId)}/run-sync-get-dataset-items`;
   try {
     const response = await fetchImpl(endpoint, {
       method: 'POST',
@@ -75,24 +87,19 @@ async function runActor({ productId, reviewLimit, reviewFilter, credential, fetc
         authorization: `Bearer ${credential.token}`,
         'content-type': 'application/json'
       },
-      body: JSON.stringify({
-        region: 'VN',
-        product_ids: [String(productId)],
-        reviews_limit: reviewLimit,
-        reviews_filter: reviewFilter,
-        reviews_sort: 'most_recent',
-        include_personal_information: false
-      }),
+      body: JSON.stringify(adapter.buildInput({ productId, productUrl, reviewLimit, reviewFilter, runtime })),
       signal: timeoutAbortSignal(timeoutMs, signal)
     });
     if (!response.ok) {
       const detail = compactErrorDetail(await response.text());
       throw Object.assign(new Error(`Apify trả về HTTP ${response.status}${detail ? `: ${detail}` : ''}`), {
-        statusCode: response.status
+        statusCode: response.status,
+        retryAfterMs: retryAfterMs(response)
       });
     }
-    const items = await response.json();
-    if (!Array.isArray(items)) throw new Error('Apify không trả về danh sách review TikTok hợp lệ.');
+    const datasetItems = await response.json();
+    if (!Array.isArray(datasetItems)) throw new Error('Apify không trả về dataset TikTok hợp lệ.');
+    const items = adapter.extractItems(datasetItems, productId);
     const expectedRating = ratingFromFilter(reviewFilter);
     const matching = expectedRating === null
       ? items
@@ -108,6 +115,9 @@ async function runActor({ productId, reviewLimit, reviewFilter, credential, fetc
       droppedWrongRating: items.length - matching.length,
       reviewCount: matching.filter((item) => String(item?.review_text || '').trim()).length,
       latencyMs: Math.round(performance.now() - startedAt),
+      actorRunId: response.headers?.get?.('x-apify-run-id') || null,
+      statusCode: response.status || 200,
+      failureClass: null,
       items: matching
     };
   } catch (error) {
@@ -122,32 +132,51 @@ async function runActor({ productId, reviewLimit, reviewFilter, credential, fetc
       reviewCount: 0,
       latencyMs: Math.round(performance.now() - startedAt),
       statusCode: error?.statusCode || null,
+      failureClass: classifyApifyFailure(error?.statusCode, error),
+      retryAfterMs: error?.retryAfterMs || 60_000,
       error: error?.message || 'Không lấy được reviews TikTok.',
       items: []
     };
   }
 }
 
-async function allocate(options) {
-  if (options.allocation) return { allocation: options.allocation, strategy: options.allocation.credentials.length === 5 ? 'parallel-star-filters' : 'single-unfiltered' };
+async function allocate(runtime, options) {
+  if (options.allocation) return {
+    allocation: options.allocation,
+    strategy: options.allocation.credentials.length === 5 ? 'parallel-star-filters' : 'single-unfiltered'
+  };
+  if (runtime.strategy === 'single-unfiltered') {
+    return {
+      allocation: await reserveTikTokCostCredentials({
+        count: 1,
+        reviewsPerCredential: MAX_REVIEWS,
+        runtime,
+        fetchImpl: options.redisFetchImpl,
+        usageFetchImpl: options.usageFetchImpl
+      }),
+      strategy: 'single-unfiltered'
+    };
+  }
   try {
     return {
-      allocation: await reserveTikTokCredentials({
+      allocation: await reserveTikTokCostCredentials({
         count: 5,
         reviewsPerCredential: REVIEWS_PER_STAR,
+        runtime,
         fetchImpl: options.redisFetchImpl,
-        maxReviewsPerKey: options.maxReviewsPerKey
+        usageFetchImpl: options.usageFetchImpl,
       }),
       strategy: 'parallel-star-filters'
     };
   } catch (error) {
-    if (error?.code !== 'INSUFFICIENT_KEYS') throw error;
+    if (!['INSUFFICIENT_KEYS', 'INSUFFICIENT_BUDGET_OR_KEYS'].includes(error?.code)) throw error;
     return {
-      allocation: await reserveTikTokCredentials({
+      allocation: await reserveTikTokCostCredentials({
         count: 1,
         reviewsPerCredential: MAX_REVIEWS,
+        runtime,
         fetchImpl: options.redisFetchImpl,
-        maxReviewsPerKey: options.maxReviewsPerKey
+        usageFetchImpl: options.usageFetchImpl,
       }),
       strategy: 'single-unfiltered'
     };
@@ -157,39 +186,52 @@ async function allocate(options) {
 export async function collectTikTokReviews(productId, options = {}) {
   if (!/^\d{8,25}$/.test(String(productId || ''))) throw new Error('Mã sản phẩm TikTok Shop không hợp lệ.');
   const progress = createProgressReporter(options.onProgress);
-  const { allocation, strategy } = await allocate(options);
+  // Resolve once per request. A flag change while the actor is running cannot
+  // change pricing, adapter or metadata during finalization.
+  const runtime = options.runtimeConfig || resolveTikTokRuntimeConfig(productId, {
+    ...(options.runtimeOptions || {}),
+    ...(options.actorId ? { actorId: options.actorId } : {})
+  });
+  await (options.assertCircuitImpl || assertTikTokCircuitClosed)(runtime.actorId, { fetchImpl: options.redisFetchImpl });
+  const { allocation, strategy } = await allocate(runtime, options);
   if (!allocation?.credentials?.length) throw new Error('Không có Apify key khả dụng cho TikTok.');
   const fetchImpl = options.fetchImpl || fetch;
-  const actorId = options.actorId || process.env.APIFY_TIKTOK_ACTOR_ID || DEFAULT_ACTOR_ID;
   const configuredTimeout = Number(options.timeoutMs ?? process.env.APIFY_RUN_TIMEOUT_MS ?? 70_000);
   const timeoutMs = Number.isFinite(configuredTimeout) ? Math.min(110_000, Math.max(10_000, configuredTimeout)) : 70_000;
   const startedAt = performance.now();
   const runs = await Promise.all(allocation.credentials.map((credential, index) => runActor({
     productId,
+    productUrl: options.productUrl,
     reviewLimit: Math.min(credential.plannedReviews || (strategy === 'parallel-star-filters' ? REVIEWS_PER_STAR : MAX_REVIEWS), MAX_REVIEWS),
     reviewFilter: strategy === 'parallel-star-filters' ? STAR_FILTERS[index] : 'all',
     credential,
     fetchImpl,
-    actorId,
+    runtime,
     timeoutMs,
     signal: options.signal
   })));
+  const hasInfrastructureFailure = runs.some((run) => ['timeout', 'upstream_service_error', 'unknown_error'].includes(run.failureClass));
+  const healthOutcome = runs.some((run) => run.ok) ? 'success' : hasInfrastructureFailure ? 'failure' : 'neutral';
+  await (options.recordHealthImpl || recordTikTokActorHealth)(runtime.actorId, healthOutcome, { fetchImpl: options.redisFetchImpl });
 
-  if (allocation.source === 'redis-vault') {
-    await Promise.allSettled(runs.map((run, index) => (options.finalizeImpl || finalizeTikTokCredential)(
+  if (allocation.source === 'redis-vault-cost-ledger-v4') {
+    await Promise.allSettled(runs.map((run, index) => (options.finalizeImpl || finalizeTikTokCostCredential)(
       allocation.credentials[index],
       {
         reviewCount: run.billedReviewCount,
-        quotaExhausted: [402, 403, 429].includes(run.statusCode)
+        statusCode: run.statusCode || 0,
+        failureClass: run.failureClass || '',
+        actorRunId: run.actorRunId,
+        retryAfterMs: run.retryAfterMs
       },
-      { fetchImpl: options.redisFetchImpl, maxReviewsPerKey: options.maxReviewsPerKey }
+      { fetchImpl: options.redisFetchImpl }
     )));
   }
 
   progress('collecting', 58, 'Đang lấy reviews...');
   const successful = runs.filter((run) => run.ok);
   if (!successful.length) {
-    const quotaFailure = runs.find((run) => [402, 403, 429].includes(run.statusCode));
+    const quotaFailure = runs.find((run) => run.failureClass === 'billing_exhausted');
     const detail = runs[0]?.error || 'Không có dữ liệu trả về.';
     const error = new Error(quotaFailure
       ? `Apify key TikTok không còn quyền/hạn mức hoặc đang bị giới hạn. ${detail}`
@@ -202,8 +244,13 @@ export async function collectTikTokReviews(productId, options = {}) {
   const deduplicated = [];
   let duplicateCount = 0;
   let emptyCommentCount = 0;
+  let wrongProductCount = 0;
   for (const run of runs) {
     for (const rawReview of run.items) {
+      if (rawReview?.product_id && String(rawReview.product_id) !== String(productId)) {
+        wrongProductCount += 1;
+        continue;
+      }
       if (!String(rawReview?.review_text || '').trim()) {
         emptyCommentCount += 1;
         continue;
@@ -225,7 +272,9 @@ export async function collectTikTokReviews(productId, options = {}) {
   if (wrongRatingCount) warnings.push(`Đã bỏ ${wrongRatingCount} review TikTok không khớp bộ lọc sao.`);
   if (emptyCommentCount) warnings.push(`Đã bỏ ${emptyCommentCount} review TikTok không có bình luận viết.`);
   if (duplicateCount) warnings.push(`Đã loại ${duplicateCount} review TikTok trùng trong dữ liệu trả về.`);
-  if (strategy === 'single-unfiltered') warnings.push('TikTok đang dùng một key không lọc sao vì không còn đủ 5 key có hạn mức để chia mẫu an toàn.');
+  if (wrongProductCount) warnings.push(`Đã loại ${wrongProductCount} review không thuộc đúng sản phẩm TikTok yêu cầu.`);
+  if (strategy === 'single-unfiltered' && !runtime.temporary) warnings.push('TikTok đang dùng một key không lọc sao vì không còn đủ 5 key có hạn mức để chia mẫu an toàn.');
+  if (runtime.temporary) warnings.push('Kết quả TikTok sử dụng tối đa 100 review gần nhất; phân bố sao phản ánh mẫu quan sát và có thể thiên lệch theo thời gian.');
 
   const firstItem = successful.find((run) => run.items.length)?.items[0] || null;
   return {
@@ -241,15 +290,28 @@ export async function collectTikTokReviews(productId, options = {}) {
     },
     usage: {
       provider: allocation.source,
-      tracked: allocation.source === 'redis-vault',
+      tracked: allocation.source === 'redis-vault-cost-ledger-v4',
       platform: 'tiktok',
-      maxReviewsPerKey: allocation.maxReviewsPerKey,
+      billingPeriod: allocation.billingPeriod || null,
+      billingCycles: allocation.billingCycles || [],
+      pricingVersion: runtime.pricingVersion,
+      reviewCostMicroUsd: runtime.reviewCostMicroUsd,
+      startupFeeMicroUsd: runtime.startupFeeMicroUsd,
       credentials: allocation.credentials.map(({ id, label, runCount, reviewCount, plannedReviews }) => ({
         id, label, runCount, reviewCount, plannedReviews
       }))
     },
     collection: {
       strategy,
+      actorId: runtime.actorId,
+      adapter: runtime.adapter,
+      samplingStrategy: strategy === runtime.strategy ? runtime.samplingStrategy : strategy,
+      distributionMode: runtime.distributionMode,
+      methodVersion: runtime.methodVersion,
+      pricingVersion: runtime.pricingVersion,
+      randomized: runtime.randomized,
+      region: runtime.region,
+      temporaryActor: runtime.temporary,
       ratingStrata: strategy === 'parallel-star-filters' ? [1, 2, 3, 4, 5] : null,
       filters: strategy === 'parallel-star-filters' ? STAR_FILTERS : ['all'],
       writtenCommentsOnly: true,
@@ -259,6 +321,7 @@ export async function collectTikTokReviews(productId, options = {}) {
       duplicateCount,
       emptyCommentCount,
       wrongRatingCount,
+      wrongProductCount,
       latencyMs: Math.round(performance.now() - startedAt),
       runs: runs.map(({ items: _items, error, ...run }) => ({ ...run, ...(error ? { error } : {}) }))
     }

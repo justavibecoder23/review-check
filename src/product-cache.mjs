@@ -92,8 +92,8 @@ function usableTikTokFallbackDataset(dataset, minimumReviews = MIN_TIKTOK_FALLBA
 }
 
 /**
- * Temporary TikTok demo fallback. It is intentionally independent from the
- * Shopee Redis cache: Blob is scanned only when the feature toggle is enabled.
+ * TikTok exact-product fallback. It is intentionally independent from the
+ * Shopee Redis cache and never substitutes a dataset from another product.
  */
 export async function getFallbackTikTokDataset(productId, options = {}) {
   const normalizedProductId = String(productId || '').trim();
@@ -117,10 +117,9 @@ export async function getFallbackTikTokDataset(productId, options = {}) {
     if (!blobs.length) return null;
 
     const productSegment = `/tiktok-${normalizedProductId}/`;
-    const exactBlob = blobs.find((blob) => String(blob.pathname).includes(productSegment));
-    const candidates = exactBlob
-      ? [exactBlob, ...blobs.filter((blob) => blob !== exactBlob)]
-      : blobs;
+    // Never substitute reviews from another product. A cross-product demo can
+    // look like a successful analysis while silently returning false evidence.
+    const candidates = blobs.filter((blob) => String(blob.pathname).includes(productSegment));
     for (const blob of candidates) {
       const dataset = await readPrivateBlobDataset({
         rawPath: blob.pathname,
@@ -129,7 +128,7 @@ export async function getFallbackTikTokDataset(productId, options = {}) {
       if (!usableTikTokFallbackDataset(dataset, options.minimumReviews)) continue;
       return {
         dataset,
-        isExactMatch: String(blob.pathname).includes(productSegment),
+        isExactMatch: true,
         blobPath: blob.pathname
       };
     }

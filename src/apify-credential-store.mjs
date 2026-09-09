@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
 import { isRedisConfigured, redisCommand, redisTransaction } from './redis-rest.mjs';
 import { SHOPEE_CACHE_HITS_KEY, SHOPEE_TOTAL_SERVED_KEY } from './product-cache.mjs';
 
@@ -16,6 +16,11 @@ export const APIFY_FREE_USAGE_MICRO_USD = 5_000_000;
 export const SHOPEE_USAGE_MICRO_USD_PER_REVIEW = 3_990;
 export const TIKTOK_USAGE_MICRO_USD_PER_REVIEW = 400;
 export const SHOPEE_MAX_REVIEWS_PER_RUN = 20;
+export const APIFY_COST_LEDGER_PREFIX = 'realview:apify:credential-pool:v4:cost';
+export const APIFY_TIKTOK_COOLDOWN_KEY = 'realview:apify:credential-pool:v3:tiktok:cooldown';
+export const APIFY_TIKTOK_ACTOR_DENIED_KEY = 'realview:apify:credential-pool:v3:tiktok:actor-denied';
+export const APIFY_COST_MIGRATION_KEY = 'realview:apify:credential-pool:v4:cost:migrated';
+export const APIFY_SHOPEE_LIFETIME_RESERVED_KEY = 'realview:apify:credential-pool:v4:shopee:lifetime-reserved';
 
 // TikTok được tính theo số review, không dùng chung bộ đếm lượt của Shopee.
 // Việc giữ một hash reservation riêng ngăn hai request đồng thời cùng tiêu
@@ -158,6 +163,408 @@ if reviewCount >= maxReviews then
 end
 if reservationId and reservationId ~= '' then redis.call('ZADD', KEYS[4], nowMs, reservationId) end
 return cjson.encode({ok=true, reviewCount=reviewCount, exhausted=(reviewCount >= maxReviews), alreadyFinalized=false})
+`;
+
+// The v4 ledger stores money per exact Apify account billing cycle, not review
+// counts. Pricing is frozen into each reservation so a later actor flag change
+// cannot re-price historical usage.
+const RESERVE_TIKTOK_COST_SCRIPT = String.raw`
+-- TIKTOK_COST_RESERVATION_V4
+local raw = redis.call('GET', KEYS[1])
+if not raw then return cjson.encode({ok=false, code='POOL_NOT_CONFIGURED'}) end
+local pool = cjson.decode(raw)
+local desired = tonumber(ARGV[1]) or 1
+local requested = tonumber(ARGV[2]) or 1
+local nowMs = tonumber(ARGV[3]) or 0
+local leaseMs = tonumber(ARGV[4]) or 180000
+local budget = tonumber(ARGV[5]) or 5000000
+local shopeeRunCost = tonumber(ARGV[6]) or 79800
+local itemCost = tonumber(ARGV[7]) or 800
+local startupFee = tonumber(ARGV[8]) or 0
+local actorId = ARGV[9]
+local pricingVersion = ARGV[10]
+local legacyItemCost = tonumber(ARGV[11]) or 800
+local requestId = ARGV[12]
+local maxShopeeUses = tonumber(ARGV[14]) or 10
+local usageCycles = cjson.decode(ARGV[15] or '{}')
+local selected = {}
+
+local function cleanLeases(accountId)
+  local state = {leases={}}
+  local encoded = redis.call('HGET', KEYS[4], accountId)
+  if encoded then
+    local ok, decoded = pcall(cjson.decode, encoded)
+    if ok and type(decoded) == 'table' and type(decoded.leases) == 'table' then state = decoded end
+  end
+  local total = 0
+  for id, lease in pairs(state.leases) do
+    if tonumber(lease.expiresAtMs or 0) <= nowMs then state.leases[id] = nil
+    else total = total + math.max(0, tonumber(lease.costMicroUsd) or 0) end
+  end
+  return state, total
+end
+
+local function activeShopeeSlots(credentialId)
+  local state = {leases={}}
+  local encoded = redis.call('HGET', KEYS[12], credentialId)
+  if encoded then
+    local ok, decoded = pcall(cjson.decode, encoded)
+    if ok and type(decoded) == 'table' and type(decoded.leases) == 'table' then state = decoded end
+  end
+  local count = 0
+  for id, lease in pairs(state.leases) do
+    if tonumber(lease.expiresAtMs or 0) <= nowMs then state.leases[id] = nil
+    else count = count + 1 end
+  end
+  redis.call('HSET', KEYS[12], credentialId, cjson.encode(state))
+  return count
+end
+
+for _, group in ipairs(pool.groups or {}) do
+  for _, credential in ipairs(group.credentials or {}) do
+    local usageCycle = usageCycles[credential.id]
+    if #selected < desired and usageCycle then
+      local accountId = credential.billingAccountId or credential.id
+      local accountKey = accountId .. ':' .. usageCycle.cycleStartAt
+      local cooldownUntil = tonumber(redis.call('HGET', KEYS[7], credential.id) or '0')
+      local denied = redis.call('HEXISTS', KEYS[8], credential.id .. ':' .. actorId)
+      local exhausted = redis.call('HEXISTS', KEYS[9], accountKey)
+      if cooldownUntil <= nowMs and denied == 0 and exhausted == 0 then
+        local spent = math.max(
+          tonumber(redis.call('HGET', KEYS[3], accountKey) or '0'),
+          tonumber(usageCycle.observedSpentMicroUsd) or 0
+        )
+        redis.call('HSET', KEYS[3], accountKey, spent)
+        local shopeeUses = math.min(maxShopeeUses, math.max(0, tonumber(redis.call('HGET', KEYS[2], credential.id) or '0')))
+        local shopeeSlots = activeShopeeSlots(credential.id)
+        local state, reserved = cleanLeases(accountKey)
+        local remainingShopeeUses = math.max(0, maxShopeeUses - shopeeUses - shopeeSlots)
+        local shopeeReserve = remainingShopeeUses * shopeeRunCost
+        local available = math.max(0, budget - shopeeReserve - spent - reserved)
+        local affordable = math.max(0, math.floor((available - startupFee) / itemCost))
+        local planned = math.min(requested, affordable)
+        if planned > 0 then
+          table.insert(selected, {
+            credential=credential, groupId=group.id, groupLabel=group.label,
+            accountId=accountId, accountKey=accountKey, usageCycle=usageCycle,
+            state=state, spent=spent, reserved=reserved,
+            available=available, planned=planned, shopeeReserve=shopeeReserve
+          })
+        end
+      end
+    end
+  end
+end
+if #selected < desired then
+  return cjson.encode({ok=false, code='INSUFFICIENT_BUDGET_OR_KEYS', available=#selected, requested=desired})
+end
+
+local result = {ok=true, source='redis-vault-cost-ledger-v4', credentials={}}
+for index, candidate in ipairs(selected) do
+  local reservationId = requestId .. ':' .. tostring(index)
+  local plannedCost = startupFee + candidate.planned * itemCost
+  candidate.state.leases[reservationId] = {
+    costMicroUsd=plannedCost, plannedReviews=candidate.planned,
+    itemCostMicroUsd=itemCost, startupFeeMicroUsd=startupFee,
+    actorId=actorId, pricingVersion=pricingVersion,
+    expiresAtMs=nowMs + leaseMs
+  }
+  redis.call('HSET', KEYS[4], candidate.accountKey, cjson.encode(candidate.state))
+  local runCount = tonumber(redis.call('HINCRBY', KEYS[5], candidate.accountKey, 1))
+  local allocated = {}
+  for key, value in pairs(candidate.credential) do allocated[key] = value end
+  allocated.groupId = candidate.groupId
+  allocated.groupLabel = candidate.groupLabel
+  allocated.billingAccountId = candidate.accountId
+  allocated.accountCycleId = candidate.accountKey
+  allocated.billingCycleStartAt = candidate.usageCycle.cycleStartAt
+  allocated.billingCycleEndAt = candidate.usageCycle.cycleEndAt
+  allocated.runCount = runCount
+  allocated.plannedReviews = candidate.planned
+  allocated.plannedCostMicroUsd = plannedCost
+  allocated.spentMicroUsd = candidate.spent
+  allocated.reservedMicroUsd = candidate.reserved + plannedCost
+  allocated.shopeeReservedMicroUsd = candidate.shopeeReserve
+  allocated.reservationId = reservationId
+  allocated.reservationExpiresAtMs = nowMs + leaseMs
+  table.insert(result.credentials, allocated)
+end
+return cjson.encode(result)
+`;
+
+const FINALIZE_TIKTOK_COST_SCRIPT = String.raw`
+-- TIKTOK_COST_FINALIZATION_V4
+local accountId = ARGV[1]
+local credentialId = ARGV[2]
+local reservationId = ARGV[3]
+local operationId = ARGV[4]
+local actualReviews = math.max(0, tonumber(ARGV[5]) or 0)
+local statusCode = tonumber(ARGV[6]) or 0
+local failureClass = ARGV[7]
+local nowMs = tonumber(ARGV[8]) or 0
+local retryAfterMs = tonumber(ARGV[9]) or 60000
+local billingAccountId = ARGV[10]
+if redis.call('HEXISTS', KEYS[3], operationId) == 1 then
+  return cjson.encode({ok=true, alreadyFinalized=true})
+end
+local state = {leases={}}
+local encoded = redis.call('HGET', KEYS[2], accountId)
+if encoded then
+  local ok, decoded = pcall(cjson.decode, encoded)
+  if ok and type(decoded) == 'table' and type(decoded.leases) == 'table' then state = decoded end
+end
+local lease = state.leases[reservationId]
+if not lease then return cjson.encode({ok=false, code='RESERVATION_NOT_FOUND'}) end
+
+if failureClass == 'timeout' or failureClass == 'upstream_service_error' or failureClass == 'unknown_error' then
+  lease.expiresAtMs = nowMs + 86400000
+  state.leases[reservationId] = lease
+  redis.call('HSET', KEYS[2], accountId, cjson.encode(state))
+  return cjson.encode({ok=true, pending=true, reservationId=reservationId})
+end
+
+state.leases[reservationId] = nil
+redis.call('HSET', KEYS[2], accountId, cjson.encode(state))
+local actualCost = 0
+if statusCode >= 200 and statusCode < 300 then
+  actualCost = (tonumber(lease.startupFeeMicroUsd) or 0) + actualReviews * (tonumber(lease.itemCostMicroUsd) or 0)
+  redis.call('HINCRBY', KEYS[1], accountId, actualCost)
+end
+if failureClass == 'billing_exhausted' then redis.call('HSET', KEYS[4], accountId, nowMs) end
+if failureClass == 'actor_access_denied' or failureClass == 'invalid_auth' then
+  redis.call('HSET', KEYS[5], credentialId .. ':' .. tostring(lease.actorId), nowMs)
+end
+if failureClass == 'temporary_throttle' then redis.call('HSET', KEYS[6], credentialId, nowMs + retryAfterMs) end
+local entry = {
+  operationId=operationId, reservationId=reservationId, credentialId=credentialId,
+  billingAccountId=billingAccountId, accountCycleId=accountId,
+  billingCycleStartAt=ARGV[11], billingCycleEndAt=ARGV[12], platform='tiktok',
+  actorId=lease.actorId, pricingVersion=lease.pricingVersion,
+  itemsBilled=actualReviews, startupFeeMicroUsd=tonumber(lease.startupFeeMicroUsd) or 0,
+  itemCostMicroUsd=tonumber(lease.itemCostMicroUsd) or 0,
+  totalCostMicroUsd=actualCost, statusCode=statusCode, failureClass=failureClass,
+  finalizedAt=nowMs
+}
+redis.call('HSET', KEYS[3], operationId, cjson.encode(entry))
+return cjson.encode({ok=true, alreadyFinalized=false, costMicroUsd=actualCost})
+`;
+
+const RESERVE_SHOPEE_COST_SCRIPT = String.raw`
+-- SHOPEE_LIFETIME_AND_COST_RESERVATION_V4
+local raw = redis.call('GET', KEYS[1])
+if not raw then return cjson.encode({ok=false, code='POOL_NOT_CONFIGURED'}) end
+local pool = cjson.decode(raw)
+local desired = tonumber(ARGV[1]) or 5
+local stars = cjson.decode(ARGV[2] or '[5,4,3,2,1]')
+local nowMs = tonumber(ARGV[3]) or 0
+local leaseMs = tonumber(ARGV[4]) or 180000
+local budget = tonumber(ARGV[5]) or 5000000
+local runCost = tonumber(ARGV[6]) or 79800
+local itemCost = tonumber(ARGV[7]) or 3990
+local startupFee = tonumber(ARGV[8]) or 0
+local actorId = ARGV[9]
+local pricingVersion = ARGV[10]
+local requestId = ARGV[11]
+local period = ARGV[12]
+local maxUses = tonumber(ARGV[13]) or 10
+local legacyTikTokCost = tonumber(ARGV[14]) or 800
+local usageCycles = cjson.decode(ARGV[16] or '{}')
+local selected = {}
+local order = 0
+
+local function cleanState(key, id, amountField)
+  local state = {leases={}}
+  local encoded = redis.call('HGET', key, id)
+  if encoded then
+    local ok, decoded = pcall(cjson.decode, encoded)
+    if ok and type(decoded) == 'table' and type(decoded.leases) == 'table' then state = decoded end
+  end
+  local count = 0
+  local total = 0
+  for leaseId, lease in pairs(state.leases) do
+    if tonumber(lease.expiresAtMs or 0) <= nowMs then state.leases[leaseId] = nil
+    else
+      count = count + 1
+      total = total + math.max(0, tonumber(lease[amountField]) or 0)
+    end
+  end
+  redis.call('HSET', key, id, cjson.encode(state))
+  return state, count, total
+end
+
+for groupIndex, group in ipairs(pool.groups or {}) do
+  for _, credential in ipairs(group.credentials or {}) do
+    order = order + 1
+    local usageCycle = usageCycles[credential.id]
+    local accountId = credential.billingAccountId or credential.id
+    local accountKey = usageCycle and accountId .. ':' .. usageCycle.cycleStartAt or ''
+    local used = math.max(0, tonumber(redis.call('HGET', KEYS[2], credential.id) or '0'))
+    local slotState, activeSlots = cleanState(KEYS[4], credential.id, 'slot')
+    local costState = {leases={}}
+    local reservedCost = 0
+    if usageCycle then costState, _, reservedCost = cleanState(KEYS[6], accountKey, 'costMicroUsd') end
+    local cooldownUntil = tonumber(redis.call('HGET', KEYS[11], credential.id) or '0')
+    local denied = redis.call('HEXISTS', KEYS[12], credential.id .. ':' .. actorId)
+    local exhausted = usageCycle and redis.call('HEXISTS', KEYS[13], accountKey) or 1
+    if usageCycle and used + activeSlots < maxUses and cooldownUntil <= nowMs and denied == 0 and exhausted == 0 then
+      local spent = math.max(
+        tonumber(redis.call('HGET', KEYS[5], accountKey) or '0'),
+        tonumber(usageCycle.observedSpentMicroUsd) or 0
+      )
+      redis.call('HSET', KEYS[5], accountKey, spent)
+      local remainingAfter = math.max(0, maxUses - used - activeSlots - 1)
+      local committedAfter = spent + reservedCost + runCost + remainingAfter * runCost
+      if committedAfter <= budget then
+        table.insert(selected, {
+          credential=credential, group=group, groupIndex=groupIndex, order=order,
+          accountId=accountId, accountKey=accountKey, usageCycle=usageCycle,
+          used=used, activeSlots=activeSlots,
+          slotState=slotState, costState=costState, spent=spent,
+          reservedCost=reservedCost, remainingAfter=remainingAfter
+        })
+      end
+    end
+  end
+end
+
+table.sort(selected, function(left, right)
+  if left.groupIndex ~= right.groupIndex then return left.groupIndex < right.groupIndex end
+  if left.used + left.activeSlots ~= right.used + right.activeSlots then
+    return left.used + left.activeSlots < right.used + right.activeSlots
+  end
+  return left.order < right.order
+end)
+if #selected < desired or #stars ~= desired then
+  return cjson.encode({ok=false, code='SHOPEE_LIFETIME_OR_BUDGET_EXHAUSTED', available=#selected, requested=desired})
+end
+
+local result = {ok=true, source='redis-vault-cost-ledger-v4', credentials={}, reservedAt=ARGV[15], maxUsesPerKey=maxUses}
+for index = 1, desired do
+  local candidate = selected[index]
+  local reservationId = requestId .. ':' .. tostring(index)
+  local expiresAtMs = nowMs + leaseMs
+  candidate.slotState.leases[reservationId] = {slot=1, expiresAtMs=expiresAtMs}
+  candidate.costState.leases[reservationId] = {
+    costMicroUsd=runCost, plannedReviews=20, itemCostMicroUsd=itemCost,
+    startupFeeMicroUsd=startupFee, actorId=actorId,
+    pricingVersion=pricingVersion, platform='shopee', expiresAtMs=expiresAtMs
+  }
+  redis.call('HSET', KEYS[4], candidate.credential.id, cjson.encode(candidate.slotState))
+  redis.call('HSET', KEYS[6], candidate.accountKey, cjson.encode(candidate.costState))
+  local allocated = {}
+  for key, value in pairs(candidate.credential) do allocated[key] = value end
+  allocated.star = stars[index]
+  allocated.poolStar = candidate.credential.star
+  allocated.poolGroupId = candidate.group.id
+  allocated.poolGroupLabel = candidate.group.label
+  allocated.billingAccountId = candidate.accountId
+  allocated.accountCycleId = candidate.accountKey
+  allocated.billingCycleStartAt = candidate.usageCycle.cycleStartAt
+  allocated.billingCycleEndAt = candidate.usageCycle.cycleEndAt
+  allocated.usageCount = candidate.used
+  allocated.reservedUsageCount = candidate.activeSlots + 1
+  allocated.remainingLifetimeUses = candidate.remainingAfter
+  allocated.plannedReviews = 20
+  allocated.plannedCostMicroUsd = runCost
+  allocated.spentMicroUsd = candidate.spent
+  allocated.reservedMicroUsd = candidate.reservedCost + runCost
+  allocated.reservationId = reservationId
+  allocated.reservationExpiresAtMs = expiresAtMs
+  table.insert(result.credentials, allocated)
+end
+local mixed = false
+for index = 2, desired do
+  if selected[index].group.id ~= selected[1].group.id then mixed = true end
+end
+result.groupId = mixed and 'mixed-available-keys' or selected[1].group.id
+result.groupLabel = mixed and 'mixed-available-keys' or selected[1].group.label
+result.retiresAfterReservation = false
+for index = 1, desired do
+  if selected[index].remainingAfter == 0 then result.retiresAfterReservation = true end
+end
+return cjson.encode(result)
+`;
+
+const FINALIZE_SHOPEE_COST_SCRIPT = String.raw`
+-- SHOPEE_LIFETIME_AND_COST_FINALIZATION_V4
+local accountId = ARGV[1]
+local credentialId = ARGV[2]
+local reservationId = ARGV[3]
+local operationId = ARGV[4]
+local actualReviews = math.max(0, tonumber(ARGV[5]) or 0)
+local statusCode = tonumber(ARGV[6]) or 0
+local failureClass = ARGV[7]
+local nowMs = tonumber(ARGV[8]) or 0
+local retryAfterMs = tonumber(ARGV[9]) or 60000
+local label = ARGV[10]
+local star = tonumber(ARGV[11]) or 0
+local groupId = ARGV[12]
+local groupLabel = ARGV[13]
+local maxUses = tonumber(ARGV[14]) or 10
+local billingAccountId = ARGV[16]
+if redis.call('HEXISTS', KEYS[6], operationId) == 1 then
+  return cjson.encode({ok=true, alreadyFinalized=true})
+end
+
+local function readState(key, id)
+  local state = {leases={}}
+  local encoded = redis.call('HGET', key, id)
+  if encoded then
+    local ok, decoded = pcall(cjson.decode, encoded)
+    if ok and type(decoded) == 'table' and type(decoded.leases) == 'table' then state = decoded end
+  end
+  return state
+end
+local slotState = readState(KEYS[3], credentialId)
+local costState = readState(KEYS[5], accountId)
+local lease = costState.leases[reservationId]
+if not lease or not slotState.leases[reservationId] then
+  return cjson.encode({ok=false, code='RESERVATION_NOT_FOUND'})
+end
+if failureClass == 'timeout' or failureClass == 'upstream_service_error' or failureClass == 'unknown_error' then
+  lease.expiresAtMs = nowMs + 86400000
+  costState.leases[reservationId] = lease
+  slotState.leases[reservationId].expiresAtMs = nowMs + 86400000
+  redis.call('HSET', KEYS[3], credentialId, cjson.encode(slotState))
+  redis.call('HSET', KEYS[5], accountId, cjson.encode(costState))
+  return cjson.encode({ok=true, pending=true, reservationId=reservationId})
+end
+
+slotState.leases[reservationId] = nil
+costState.leases[reservationId] = nil
+redis.call('HSET', KEYS[3], credentialId, cjson.encode(slotState))
+redis.call('HSET', KEYS[5], accountId, cjson.encode(costState))
+local usageCount = tonumber(redis.call('HGET', KEYS[1], credentialId) or '0')
+local actualCost = 0
+if statusCode >= 200 and statusCode < 300 then
+  usageCount = tonumber(redis.call('HINCRBY', KEYS[1], credentialId, 1))
+  actualReviews = math.min(actualReviews, tonumber(lease.plannedReviews) or 20)
+  actualCost = (tonumber(lease.startupFeeMicroUsd) or 0) + actualReviews * (tonumber(lease.itemCostMicroUsd) or 0)
+  redis.call('HINCRBY', KEYS[4], accountId, actualCost)
+  if usageCount >= maxUses then
+    redis.call('HSET', KEYS[2], credentialId, cjson.encode({
+      id=credentialId, label=label, star=star, groupId=groupId,
+      groupLabel=groupLabel, usageCount=usageCount, usedAt=ARGV[15]
+    }))
+  end
+end
+if failureClass == 'billing_exhausted' then redis.call('HSET', KEYS[7], accountId, nowMs) end
+if failureClass == 'actor_access_denied' or failureClass == 'invalid_auth' then
+  redis.call('HSET', KEYS[9], credentialId .. ':' .. tostring(lease.actorId), nowMs)
+end
+if failureClass == 'temporary_throttle' then redis.call('HSET', KEYS[8], credentialId, nowMs + retryAfterMs) end
+local entry = {
+  operationId=operationId, reservationId=reservationId, platform='shopee',
+  credentialId=credentialId, billingAccountId=billingAccountId, accountCycleId=accountId,
+  billingCycleStartAt=ARGV[17], billingCycleEndAt=ARGV[18], actorId=lease.actorId,
+  pricingVersion=lease.pricingVersion, itemsBilled=actualReviews,
+  startupFeeMicroUsd=tonumber(lease.startupFeeMicroUsd) or 0,
+  itemCostMicroUsd=tonumber(lease.itemCostMicroUsd) or 0,
+  totalCostMicroUsd=actualCost, lifetimeUsageCount=usageCount,
+  statusCode=statusCode, failureClass=failureClass, finalizedAt=nowMs
+}
+redis.call('HSET', KEYS[6], operationId, cjson.encode(entry))
+return cjson.encode({ok=true, alreadyFinalized=false, costMicroUsd=actualCost, usageCount=usageCount})
 `;
 
 // Chọn số key còn hạn mức theo yêu cầu và cộng bộ đếm trong cùng một lệnh Redis.
@@ -423,6 +830,7 @@ function normalizeInputCredentials(group, groupIndex) {
     byStar.set(star, {
       token,
       id: apifyCredentialId(token),
+      billingAccountId: String(item?.billingAccountId || apifyCredentialId(token)).trim(),
       star,
       label: cleanLabel(item?.label, `account-${star}-star`)
     });
@@ -801,6 +1209,328 @@ function decryptTikTokAllocation(allocation) {
       token: decryptToken(credential)
     }))
   };
+}
+
+export function apifyBillingPeriod(now = new Date()) {
+  const date = now instanceof Date ? now : new Date(now);
+  if (Number.isNaN(date.getTime())) throw new Error('Thời điểm chu kỳ Apify không hợp lệ.');
+  return date.toISOString().slice(0, 7);
+}
+
+export function calculateTikTokCostCapacity({
+  budgetMicroUsd = APIFY_FREE_USAGE_MICRO_USD,
+  shopeeReservedMicroUsd = DEFAULT_MAX_USES_PER_KEY * SHOPEE_MAX_REVIEWS_PER_RUN * SHOPEE_USAGE_MICRO_USD_PER_REVIEW,
+  spentMicroUsd = 0,
+  reservedMicroUsd = 0,
+  reviewCostMicroUsd,
+  startupFeeMicroUsd = 0
+}) {
+  const availableMicroUsd = Math.max(0, Number(budgetMicroUsd) - Number(shopeeReservedMicroUsd)
+    - Number(spentMicroUsd) - Number(reservedMicroUsd));
+  const itemCost = Math.max(1, Number(reviewCostMicroUsd) || 1);
+  return {
+    availableMicroUsd,
+    affordableReviews: Math.max(0, Math.floor((availableMicroUsd - Math.max(0, Number(startupFeeMicroUsd) || 0)) / itemCost))
+  };
+}
+
+export function calculateApifyCycleBudget({
+  budgetMicroUsd = APIFY_FREE_USAGE_MICRO_USD,
+  observedSpentMicroUsd = 0,
+  locallyTrackedSpentMicroUsd = 0,
+  reservedMicroUsd = 0,
+  shopeeLifetimeUsed = 0,
+  shopeeLifetimeReserved = 0,
+  shopeeMaxUses = DEFAULT_MAX_USES_PER_KEY,
+  shopeeRunCostMicroUsd = SHOPEE_MAX_REVIEWS_PER_RUN * SHOPEE_USAGE_MICRO_USD_PER_REVIEW
+} = {}) {
+  const spentMicroUsd = Math.max(0, Number(observedSpentMicroUsd) || 0, Number(locallyTrackedSpentMicroUsd) || 0);
+  const remainingShopeeUses = Math.max(0, Number(shopeeMaxUses) - Number(shopeeLifetimeUsed) - Number(shopeeLifetimeReserved));
+  const shopeeReservedMicroUsd = remainingShopeeUses * Number(shopeeRunCostMicroUsd);
+  const committedMicroUsd = spentMicroUsd + Math.max(0, Number(reservedMicroUsd) || 0) + shopeeReservedMicroUsd;
+  return {
+    spentMicroUsd,
+    remainingShopeeUses,
+    shopeeReservedMicroUsd,
+    committedMicroUsd,
+    availableMicroUsd: Math.max(0, Number(budgetMicroUsd) - committedMicroUsd)
+  };
+}
+
+function costLedgerKeys(period) {
+  return {
+    spent: `${APIFY_COST_LEDGER_PREFIX}:spent`,
+    reserved: `${APIFY_COST_LEDGER_PREFIX}:reserved`,
+    runs: `${APIFY_COST_LEDGER_PREFIX}:runs`,
+    ledger: `${APIFY_COST_LEDGER_PREFIX}:ledger`,
+    exhausted: `${APIFY_COST_LEDGER_PREFIX}:exhausted`
+  };
+}
+
+function legacyV3CostSpentKey(period) {
+  return `realview:apify:credential-pool:v3:cost:${period}:spent`;
+}
+
+function accountCycleId(accountId, cycleStartAt) {
+  return `${accountId}:${cycleStartAt}`;
+}
+
+async function readApifyUsageSnapshot(credential, options = {}) {
+  const response = await (options.usageFetchImpl || fetch)('https://api.apify.com/v2/users/me/usage/monthly', {
+    headers: { authorization: `Bearer ${decryptToken(credential)}` },
+    signal: AbortSignal.timeout(Math.max(2_000, Number(options.usageTimeoutMs) || 6_000))
+  });
+  if (!response.ok) throw new Error(`Apify usage trả về HTTP ${response.status}.`);
+  const body = await response.json();
+  return normalizeApifyUsageSnapshot(body?.data, credential.id, credential.billingAccountId || credential.id);
+}
+
+export function normalizeApifyUsageSnapshot(data, credentialId, billingAccountId = credentialId) {
+  const startAt = String(data?.usageCycle?.startAt || '');
+  const endAt = String(data?.usageCycle?.endAt || '');
+  if (!startAt || !endAt || !Number.isFinite(Date.parse(startAt)) || !Number.isFinite(Date.parse(endAt))) {
+    throw new Error('Apify không trả về chu kỳ usage hợp lệ.');
+  }
+  const spentUsd = Number(data?.totalUsageCreditsUsdAfterVolumeDiscount);
+  if (!Number.isFinite(spentUsd) || spentUsd < 0) throw new Error('Apify không trả về tổng usage hợp lệ.');
+  return {
+    credentialId,
+    billingAccountId,
+    accountCycleId: accountCycleId(billingAccountId, startAt),
+    cycleStartAt: startAt,
+    cycleEndAt: endAt,
+    observedSpentMicroUsd: Math.ceil(spentUsd * 1_000_000)
+  };
+}
+
+async function apifyUsageCandidates({ count, platform, minimumCostMicroUsd = 0, ...options }) {
+  const config = await readPoolConfig(options);
+  if (!config) return [];
+  const counterReply = await redisCommand(['HGETALL', APIFY_POOL_COUNTERS_KEY], options);
+  const counters = parseHashReply(counterReply);
+  const candidates = (config.groups || []).flatMap((group, groupIndex) => group.credentials.map((credential, order) => ({
+    credential, groupIndex, order, usageCount: Number(counters[credential.id] || 0)
+  }))).filter(({ usageCount }) => platform !== 'shopee' || usageCount < DEFAULT_MAX_USES_PER_KEY)
+    .sort((left, right) => left.groupIndex - right.groupIndex || left.usageCount - right.usageCount || left.order - right.order);
+  const usage = apifyUsageConfig();
+  const shopeeRunCost = usage.shopeeReviewsPerRun * usage.shopeeCostPerReviewMicroUsd;
+  const eligible = [];
+  const batchSize = Math.max(5, count * 2);
+  for (let offset = 0; offset < Math.min(candidates.length, 50) && eligible.length < count; offset += batchSize) {
+    const batch = candidates.slice(offset, offset + batchSize);
+    const settled = await Promise.allSettled(batch.map(async (candidate) => ({
+      candidate,
+      snapshot: await readApifyUsageSnapshot(candidate.credential, options)
+    })));
+    for (const result of settled) {
+      if (result.status !== 'fulfilled') continue;
+      const { candidate, snapshot } = result.value;
+      const remainingShopee = Math.max(0, DEFAULT_MAX_USES_PER_KEY - candidate.usageCount);
+      const committed = snapshot.observedSpentMicroUsd + remainingShopee * shopeeRunCost
+        + (platform === 'tiktok' ? minimumCostMicroUsd : 0);
+      if (committed <= usage.freeUsageMicroUsd) eligible.push(snapshot);
+    }
+  }
+  return eligible;
+}
+
+function decryptCostAllocation(allocation, runtime, period) {
+  const billingCycles = allocation.credentials.map((credential) => ({
+    credentialId: credential.id,
+    startAt: credential.billingCycleStartAt || null,
+    endAt: credential.billingCycleEndAt || null
+  }));
+  const distinctCycles = new Set(billingCycles.map(({ startAt, endAt }) => `${startAt}|${endAt}`));
+  return {
+    source: allocation.source,
+    billingPeriod: distinctCycles.size === 1 ? billingCycles[0]?.startAt : null,
+    billingCycles,
+    runtime,
+    credentials: allocation.credentials.map((credential) => ({
+      id: credential.id,
+      label: credential.label,
+      groupId: credential.groupId,
+      groupLabel: credential.groupLabel,
+      billingAccountId: credential.billingAccountId || credential.id,
+      accountCycleId: credential.accountCycleId,
+      billingPeriod: credential.billingCycleStartAt || period,
+      billingCycleStartAt: credential.billingCycleStartAt || null,
+      billingCycleEndAt: credential.billingCycleEndAt || null,
+      runCount: Number(credential.runCount),
+      plannedReviews: Number(credential.plannedReviews),
+      plannedCostMicroUsd: Number(credential.plannedCostMicroUsd),
+      spentMicroUsd: Number(credential.spentMicroUsd) || 0,
+      reservedMicroUsd: Number(credential.reservedMicroUsd) || 0,
+      reservationId: credential.reservationId,
+      reservationExpiresAtMs: Number(credential.reservationExpiresAtMs) || null,
+      token: decryptToken(credential)
+    }))
+  };
+}
+
+export async function reserveTikTokCostCredentials({ count = 1, reviewsPerCredential = 100, runtime, ...options } = {}) {
+  if (!isRedisConfigured()) throw new Error('Cần cấu hình Upstash Redis để cấp phát Apify key cho TikTok an toàn.');
+  if (!process.env.APIFY_TOKEN_VAULT_KEY) throw new Error('Chưa cấu hình APIFY_TOKEN_VAULT_KEY.');
+  if (!runtime?.actorId || !runtime?.pricingVersion) throw new Error('Thiếu cấu hình runtime TikTok để đặt chỗ chi phí.');
+  const desired = Math.min(5, Math.max(1, Number.parseInt(String(count), 10) || 1));
+  const requested = Math.min(100, Math.max(1, Number.parseInt(String(reviewsPerCredential), 10) || 100));
+  const now = options.now ? new Date(options.now) : new Date();
+  const period = apifyBillingPeriod(now);
+  const keys = costLedgerKeys(period);
+  const usage = apifyUsageConfig();
+  const usageSnapshots = await apifyUsageCandidates({
+    count: desired,
+    platform: 'tiktok',
+    minimumCostMicroUsd: runtime.startupFeeMicroUsd + runtime.reviewCostMicroUsd,
+    ...options
+  });
+  if (usageSnapshots.length < desired) {
+    const error = new Error('Không đọc được chu kỳ usage hiện tại của đủ tài khoản Apify cho TikTok.');
+    error.code = 'APIFY_USAGE_CYCLE_UNAVAILABLE';
+    error.statusCode = 503;
+    throw error;
+  }
+  const usageCycles = Object.fromEntries(usageSnapshots.map((snapshot) => [snapshot.credentialId, snapshot]));
+  const raw = await redisCommand([
+    'EVAL', RESERVE_TIKTOK_COST_SCRIPT, '13',
+    APIFY_POOL_KEY, APIFY_POOL_COUNTERS_KEY, keys.spent, keys.reserved, keys.runs,
+    keys.ledger, APIFY_TIKTOK_COOLDOWN_KEY, APIFY_TIKTOK_ACTOR_DENIED_KEY, keys.exhausted, APIFY_TIKTOK_REVIEW_COUNTERS_KEY,
+    APIFY_COST_MIGRATION_KEY, APIFY_SHOPEE_LIFETIME_RESERVED_KEY, legacyV3CostSpentKey(period),
+    String(desired), String(requested), String(now.getTime()),
+    String(Math.max(120_000, Number.parseInt(String(options.reservationLeaseMs || 180_000), 10) || 180_000)),
+    String(usage.freeUsageMicroUsd), String(usage.shopeeReviewsPerRun * usage.shopeeCostPerReviewMicroUsd),
+    String(runtime.reviewCostMicroUsd), String(runtime.startupFeeMicroUsd), runtime.actorId, runtime.pricingVersion,
+    '800', randomUUID(), period, String(DEFAULT_MAX_USES_PER_KEY), JSON.stringify(usageCycles)
+  ], options);
+  const allocation = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  if (!allocation?.ok) {
+    const error = new Error(allocation?.code === 'INSUFFICIENT_BUDGET_OR_KEYS'
+      ? `Không còn đủ ${desired} tài khoản Apify có ngân sách hoặc đang khả dụng cho actor TikTok này.`
+      : 'Chưa cấu hình pool Apify key trong /api/apify-config.');
+    error.code = allocation?.code || 'POOL_NOT_CONFIGURED';
+    error.available = Number(allocation?.available) || 0;
+    error.statusCode = 503;
+    throw error;
+  }
+  return decryptCostAllocation(allocation, runtime, period);
+}
+
+export async function finalizeTikTokCostCredential(credential, result = {}, options = {}) {
+  if (!credential?.id || !credential?.reservationId) throw new Error('Thiếu reservation để chốt sổ chi phí TikTok.');
+  const period = credential.billingPeriod || options.billingPeriod || apifyBillingPeriod(options.now || new Date());
+  const keys = costLedgerKeys(period);
+  const operationId = String(result.operationId || result.actorRunId || credential.reservationId);
+  const now = options.now ? new Date(options.now) : new Date();
+  const raw = await redisCommand([
+    'EVAL', FINALIZE_TIKTOK_COST_SCRIPT, '6',
+    keys.spent, keys.reserved, keys.ledger, keys.exhausted, APIFY_TIKTOK_ACTOR_DENIED_KEY, APIFY_TIKTOK_COOLDOWN_KEY,
+    credential.accountCycleId || accountCycleId(credential.billingAccountId || credential.id, credential.billingCycleStartAt || period),
+    credential.id, credential.reservationId, operationId,
+    String(Math.max(0, Number(result.reviewCount) || 0)), String(Number(result.statusCode) || 0),
+    String(result.failureClass || ''), String(now.getTime()), String(Math.max(1_000, Number(result.retryAfterMs) || 60_000)),
+    credential.billingAccountId || credential.id, credential.billingCycleStartAt || period, credential.billingCycleEndAt || ''
+  ], options);
+  return typeof raw === 'string' ? JSON.parse(raw) : raw;
+}
+
+function decryptShopeeCostAllocation(allocation) {
+  return {
+    source: allocation.source,
+    groupId: allocation.groupId,
+    groupLabel: allocation.groupLabel,
+    maxUsesPerKey: Number(allocation.maxUsesPerKey) || DEFAULT_MAX_USES_PER_KEY,
+    retiresAfterReservation: Boolean(allocation.retiresAfterReservation),
+    reservedAt: allocation.reservedAt,
+    credentials: allocation.credentials.map((credential) => ({
+      id: credential.id,
+      label: credential.label,
+      star: Number(credential.star),
+      poolStar: Number(credential.poolStar),
+      poolGroupId: credential.poolGroupId,
+      poolGroupLabel: credential.poolGroupLabel,
+      billingAccountId: credential.billingAccountId || credential.id,
+      accountCycleId: credential.accountCycleId,
+      billingCycleStartAt: credential.billingCycleStartAt,
+      billingCycleEndAt: credential.billingCycleEndAt,
+      usageCount: Number(credential.usageCount) || 0,
+      reservedUsageCount: Number(credential.reservedUsageCount) || 0,
+      remainingLifetimeUses: Number(credential.remainingLifetimeUses) || 0,
+      plannedReviews: Number(credential.plannedReviews) || SHOPEE_MAX_REVIEWS_PER_RUN,
+      plannedCostMicroUsd: Number(credential.plannedCostMicroUsd) || 0,
+      spentMicroUsd: Number(credential.spentMicroUsd) || 0,
+      reservedMicroUsd: Number(credential.reservedMicroUsd) || 0,
+      reservationId: credential.reservationId,
+      reservationExpiresAtMs: Number(credential.reservationExpiresAtMs) || null,
+      token: decryptToken(credential)
+    }))
+  };
+}
+
+export async function reserveShopeeCostCredentialSet(options = {}) {
+  if (!isRedisConfigured()) throw new Error('Cần cấu hình Upstash Redis để cấp phát Apify key cho Shopee an toàn.');
+  if (!process.env.APIFY_TOKEN_VAULT_KEY) throw new Error('Chưa cấu hình APIFY_TOKEN_VAULT_KEY.');
+  const stars = Array.isArray(options.stars) && options.stars.length
+    ? options.stars.map(Number).filter((star) => APIFY_STARS.includes(star))
+    : [...APIFY_STARS];
+  const desired = Math.min(5, Math.max(1, Number.parseInt(String(options.count ?? stars.length), 10) || stars.length));
+  if (stars.length !== desired || new Set(stars).size !== stars.length) throw new Error('Danh sách filter sao không hợp lệ.');
+  const actorId = String(options.actorId || process.env.APIFY_ACTOR_ID || 'zen-studio/shopee-product-reviews-scraper');
+  const pricingVersion = String(options.pricingVersion || 'zen-studio-2026-09');
+  const usage = apifyUsageConfig();
+  const runCost = usage.shopeeReviewsPerRun * usage.shopeeCostPerReviewMicroUsd;
+  const now = options.now ? new Date(options.now) : new Date();
+  const usageSnapshots = await apifyUsageCandidates({ count: desired, platform: 'shopee', ...options });
+  if (usageSnapshots.length < desired) {
+    const error = new Error('Không đọc được chu kỳ usage hiện tại của đủ tài khoản Apify cho Shopee.');
+    error.code = 'APIFY_USAGE_CYCLE_UNAVAILABLE';
+    error.statusCode = 503;
+    throw error;
+  }
+  const cycles = Object.fromEntries(usageSnapshots.map((snapshot) => [snapshot.credentialId, snapshot]));
+  const keys = costLedgerKeys();
+  const raw = await redisCommand([
+    'EVAL', RESERVE_SHOPEE_COST_SCRIPT, '13',
+    APIFY_POOL_KEY, APIFY_POOL_COUNTERS_KEY, APIFY_POOL_USED_KEY, APIFY_SHOPEE_LIFETIME_RESERVED_KEY,
+    keys.spent, keys.reserved, keys.ledger, APIFY_COST_MIGRATION_KEY, APIFY_TIKTOK_REVIEW_COUNTERS_KEY,
+    legacyV3CostSpentKey(apifyBillingPeriod(now)), APIFY_TIKTOK_COOLDOWN_KEY, APIFY_TIKTOK_ACTOR_DENIED_KEY, keys.exhausted,
+    String(desired), JSON.stringify(stars), String(now.getTime()),
+    String(Math.max(120_000, Number.parseInt(String(options.reservationLeaseMs || 180_000), 10) || 180_000)),
+    String(usage.freeUsageMicroUsd), String(runCost), String(usage.shopeeCostPerReviewMicroUsd), '0',
+    actorId, pricingVersion, randomUUID(), apifyBillingPeriod(now), String(DEFAULT_MAX_USES_PER_KEY), '800',
+    now.toISOString(), JSON.stringify(cycles)
+  ], options);
+  const allocation = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  if (!allocation?.ok) {
+    const error = new Error(allocation?.code === 'SHOPEE_LIFETIME_OR_BUDGET_EXHAUSTED'
+      ? `Không còn đủ ${desired} tài khoản có lượt Shopee trọn đời và ngân sách khả dụng.`
+      : 'Chưa cấu hình pool Apify key trong /api/apify-config.');
+    error.code = allocation?.code || 'POOL_NOT_CONFIGURED';
+    error.available = Number(allocation?.available) || 0;
+    error.statusCode = 503;
+    throw error;
+  }
+  return decryptShopeeCostAllocation(allocation);
+}
+
+export async function finalizeShopeeCostCredential(credential, result = {}, options = {}) {
+  if (!credential?.id || !credential?.reservationId || !credential?.accountCycleId) {
+    throw new Error('Thiếu reservation hoặc chu kỳ billing để chốt sổ Shopee.');
+  }
+  const keys = costLedgerKeys();
+  const operationId = String(result.operationId || result.actorRunId || credential.reservationId);
+  const now = options.now ? new Date(options.now) : new Date();
+  const raw = await redisCommand([
+    'EVAL', FINALIZE_SHOPEE_COST_SCRIPT, '9',
+    APIFY_POOL_COUNTERS_KEY, APIFY_POOL_USED_KEY, APIFY_SHOPEE_LIFETIME_RESERVED_KEY,
+    keys.spent, keys.reserved, keys.ledger, keys.exhausted, APIFY_TIKTOK_COOLDOWN_KEY, APIFY_TIKTOK_ACTOR_DENIED_KEY,
+    credential.accountCycleId, credential.id, credential.reservationId, operationId,
+    String(Math.max(0, Number(result.reviewCount) || 0)), String(Number(result.statusCode) || 0),
+    String(result.failureClass || ''), String(now.getTime()), String(Math.max(1_000, Number(result.retryAfterMs) || 60_000)),
+    credential.label || credential.id, String(credential.poolStar || credential.star || 0),
+    credential.poolGroupId || '', credential.poolGroupLabel || '', String(DEFAULT_MAX_USES_PER_KEY), now.toISOString(),
+    credential.billingAccountId || credential.id, credential.billingCycleStartAt || '', credential.billingCycleEndAt || ''
+  ], options);
+  return typeof raw === 'string' ? JSON.parse(raw) : raw;
 }
 
 export async function reserveTikTokCredentials({ count = 5, reviewsPerCredential = 40, ...options } = {}) {

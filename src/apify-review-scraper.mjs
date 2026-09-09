@@ -1,7 +1,12 @@
 import { createHash } from 'node:crypto';
-import { reserveApifyCredential, reserveApifyCredentialSet } from './apify-credential-store.mjs';
+import {
+  finalizeShopeeCostCredential,
+  reserveApifyCredential,
+  reserveShopeeCostCredentialSet
+} from './apify-credential-store.mjs';
 import { createProgressReporter } from './sse.mjs';
 import { timeoutAbortSignal } from './abort.mjs';
+import { classifyApifyFailure } from './apify-tiktok-runtime.mjs';
 
 const DEFAULT_ACTOR_ID = 'zen-studio/shopee-product-reviews-scraper';
 export const SHOPEE_DEMO_REVIEW_LIMIT = 20;
@@ -16,6 +21,15 @@ function actorPath(actorId) {
 
 function compactErrorDetail(value) {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, 240);
+}
+
+function retryAfterMs(response) {
+  const raw = response?.headers?.get?.('retry-after');
+  if (!raw) return 60_000;
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds)) return Math.max(1_000, seconds * 1000);
+  const timestamp = Date.parse(raw);
+  return Number.isFinite(timestamp) ? Math.max(1_000, timestamp - Date.now()) : 60_000;
 }
 
 function reviewKey(review) {
@@ -74,7 +88,7 @@ async function runUnfiltered({ url, reviewLimit, starFilter, credential, fetchIm
       const detail = compactErrorDetail(await response.text());
       throw Object.assign(
         new Error(`Apify trả về HTTP ${response.status}${detail ? `: ${detail}` : ''}`),
-        { statusCode: response.status }
+        { statusCode: response.status, retryAfterMs: retryAfterMs(response) }
       );
     }
     const items = await response.json();
@@ -85,8 +99,12 @@ async function runUnfiltered({ url, reviewLimit, starFilter, credential, fetchIm
       credentialId: credential.id,
       credentialLabel: credential.label,
       usageCount: credential.usageCount ?? null,
+      billedReviewCount: items.length,
       reviewCount: written.length,
       latencyMs: Math.round(performance.now() - startedAt),
+      actorRunId: response.headers?.get?.('x-apify-run-id') || null,
+      statusCode: response.status || 200,
+      failureClass: null,
       items: written
     };
   } catch (error) {
@@ -95,9 +113,12 @@ async function runUnfiltered({ url, reviewLimit, starFilter, credential, fetchIm
       credentialId: credential.id,
       credentialLabel: credential.label,
       usageCount: credential.usageCount ?? null,
+      billedReviewCount: 0,
       reviewCount: 0,
       latencyMs: Math.round(performance.now() - startedAt),
       statusCode: error?.statusCode || null,
+      failureClass: classifyApifyFailure(error?.statusCode, error),
+      retryAfterMs: error?.retryAfterMs || 60_000,
       error: error?.message || 'Không lấy được reviews.',
       items: []
     };
@@ -231,13 +252,15 @@ async function collectShopeeReviewsDemo(url, options = {}) {
 async function collectShopeeReviewsProduction(url, options = {}) {
   const progress = createProgressReporter(options.onProgress);
   const perStarLimit = SHOPEE_PRODUCTION_REVIEW_LIMIT / SHOPEE_STAR_FILTERS.length;
-  const credentialSet = validateCredentialSet(options.credentialSet || await reserveApifyCredentialSet({
+  const actorId = options.actorId || process.env.APIFY_ACTOR_ID || DEFAULT_ACTOR_ID;
+  const credentialSet = validateCredentialSet(options.credentialSet || await reserveShopeeCostCredentialSet({
     count: SHOPEE_STAR_FILTERS.length,
     stars: SHOPEE_STAR_FILTERS.map(Number),
-    fetchImpl: options.redisFetchImpl
+    actorId,
+    fetchImpl: options.redisFetchImpl,
+    usageFetchImpl: options.usageFetchImpl
   }));
   const fetchImpl = options.fetchImpl || fetch;
-  const actorId = options.actorId || process.env.APIFY_ACTOR_ID || DEFAULT_ACTOR_ID;
   const configuredTimeout = Number(options.timeoutMs ?? process.env.APIFY_RUN_TIMEOUT_MS ?? 70_000);
   const timeoutMs = Number.isFinite(configuredTimeout) ? Math.min(110_000, Math.max(10_000, configuredTimeout)) : 70_000;
   const startedAt = performance.now();
@@ -251,6 +274,19 @@ async function collectShopeeReviewsProduction(url, options = {}) {
     timeoutMs,
     signal: options.signal
   })));
+  if (credentialSet.source === 'redis-vault-cost-ledger-v4') {
+    await Promise.allSettled(runs.map((run, index) => (options.finalizeImpl || finalizeShopeeCostCredential)(
+      credentialSet.credentials[index],
+      {
+        reviewCount: run.billedReviewCount,
+        statusCode: run.statusCode || 0,
+        failureClass: run.failureClass || '',
+        actorRunId: run.actorRunId,
+        retryAfterMs: run.retryAfterMs
+      },
+      { fetchImpl: options.redisFetchImpl }
+    )));
+  }
   progress('collecting', 58, 'Đang lấy reviews...');
   const successful = runs.filter((run) => run.ok);
   if (!successful.length) {
@@ -295,9 +331,14 @@ async function collectShopeeReviewsProduction(url, options = {}) {
     },
     usage: {
       provider: credentialSet.source,
-      tracked: credentialSet.source === 'redis-vault',
+      tracked: credentialSet.source === 'redis-vault-cost-ledger-v4',
       groupId: credentialSet.groupId,
       maxUsesPerKey: credentialSet.maxUsesPerKey,
+      billingCycles: credentialSet.credentials.map(({ id, billingCycleStartAt, billingCycleEndAt }) => ({
+        credentialId: id,
+        startAt: billingCycleStartAt || null,
+        endAt: billingCycleEndAt || null
+      })),
       credentials: credentialSet.credentials.map(({ id, label, star, usageCount }) => ({ id, label, star, usageCount }))
     },
     collection: {

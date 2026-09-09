@@ -112,3 +112,56 @@ test('TikTok dùng một account unfiltered khi allocation chỉ có một key',
   assert.equal(inputs[0].reviews_limit, 100);
   assert.equal(result.collection.strategy, 'single-unfiltered');
 });
+
+test('actor tạm thời dùng URL đầy đủ, đọc schema lồng và gắn metadata phương pháp', async () => {
+  const productId = '1729384756102938475';
+  let actorInput;
+  const result = await collectTikTokReviews(productId, {
+    productUrl: `https://shop.tiktok.com/view/product/${productId}`,
+    runtimeOptions: { useTemporaryActor: true, env: {} },
+    allocation: allocation(1),
+    fetchImpl: async (_url, init) => {
+      actorInput = JSON.parse(init.body);
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => 'actor-run-1' },
+        async json() {
+          return [{ data: { reviews: [{
+            id: 'nested-1', productId, rating: 4, content: 'Đóng gói tốt và giao đúng mô tả.',
+            createdAt: '2026-09-08T00:00:00.000Z', productName: 'Sản phẩm thử nghiệm'
+          }] } }];
+        }
+      };
+    }
+  });
+  assert.deepEqual(actorInput.startUrls, [`https://shop.tiktok.com/view/product/${productId}`]);
+  assert.equal(actorInput.maxReviews, 100);
+  assert.equal(actorInput.region, 'VN');
+  assert.equal(result.reviews[0].text, 'Đóng gói tốt và giao đúng mô tả.');
+  assert.equal(result.collection.adapter, 'vistics');
+  assert.equal(result.collection.samplingStrategy, 'most-recent-100');
+  assert.equal(result.collection.distributionMode, 'observed-sample');
+  assert.equal(result.collection.temporaryActor, true);
+});
+
+test('HTTP 429 chỉ tạo cooldown, không bị phân loại hết ngân sách', async () => {
+  let finalized;
+  const costAllocation = allocation(1);
+  costAllocation.source = 'redis-vault-cost-ledger-v4';
+  costAllocation.billingPeriod = '2026-09';
+  costAllocation.credentials[0].billingAccountId = 'account-1';
+  costAllocation.credentials[0].reservationId = 'reservation-1';
+  await assert.rejects(() => collectTikTokReviews('1729384756102938475', {
+    allocation: costAllocation,
+    finalizeImpl: async (_credential, result) => { finalized = result; },
+    fetchImpl: async () => ({
+      ok: false,
+      status: 429,
+      headers: { get: () => '60' },
+      async text() { return 'rate limited'; }
+    })
+  }), /Không lấy được reviews TikTok/);
+  assert.equal(finalized.failureClass, 'temporary_throttle');
+  assert.equal(finalized.statusCode, 429);
+});
