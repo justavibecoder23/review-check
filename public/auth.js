@@ -77,6 +77,7 @@ function dialogMarkup() {
           <label><span>Mật khẩu</span><input name="password" type="password" autocomplete="current-password" minlength="8" maxlength="128" required placeholder="Nhập mật khẩu" /></label>
           <p class="account-form-error" data-auth-error role="alert" hidden></p>
           <button class="account-submit" type="submit">Đăng nhập <span aria-hidden="true">→</span></button>
+          <button class="account-forgot" type="button" data-auth-mode="request_password_reset">Quên mật khẩu?</button>
           <p class="account-switch">Chưa có tài khoản? <button type="button" data-auth-tab="register">Đăng ký ngay</button></p>
         </form>
         <form id="auth-register-panel" class="account-form" data-auth-form="register" role="tabpanel" aria-labelledby="auth-register-tab" hidden>
@@ -87,6 +88,22 @@ function dialogMarkup() {
           <p class="account-form-error" data-auth-error role="alert" hidden></p>
           <button class="account-submit" type="submit">Tạo tài khoản <span aria-hidden="true">→</span></button>
           <p class="account-switch">Đã có tài khoản? <button type="button" data-auth-tab="login">Đăng nhập</button></p>
+        </form>
+        <form id="auth-forgot-panel" class="account-form" data-auth-form="request_password_reset" hidden>
+          <label><span>Email đã đăng ký</span><input name="email" type="email" autocomplete="email" maxlength="254" required placeholder="ban@example.com" /></label>
+          <p class="account-form-help">RealView sẽ gửi mã xác minh 6 số. Mã có hiệu lực trong 10 phút.</p>
+          <p class="account-form-error" data-auth-error role="alert" hidden></p>
+          <button class="account-submit" type="submit">Gửi mã xác minh <span aria-hidden="true">→</span></button>
+          <p class="account-switch"><button type="button" data-auth-tab="login">Quay lại đăng nhập</button></p>
+        </form>
+        <form id="auth-reset-panel" class="account-form" data-auth-form="reset_password" hidden>
+          <input name="requestId" type="hidden" />
+          <label><span>Mã xác minh</span><input class="account-code-input" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required placeholder="000000" /></label>
+          <label><span>Mật khẩu mới</span><input name="password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required placeholder="Tối thiểu 8 ký tự" /></label>
+          <label><span>Nhập lại mật khẩu mới</span><input name="passwordConfirm" type="password" autocomplete="new-password" minlength="8" maxlength="128" required placeholder="Nhập lại mật khẩu" /></label>
+          <p class="account-form-error" data-auth-error role="alert" hidden></p>
+          <button class="account-submit" type="submit">Đặt mật khẩu mới <span aria-hidden="true">→</span></button>
+          <p class="account-switch">Chưa nhận được mã? <button type="button" data-auth-mode="request_password_reset">Gửi lại mã</button></p>
         </form>
       </div>
     </dialog>`;
@@ -109,7 +126,8 @@ function ensureDialog() {
 
 function setMode(mode = 'login') {
   const dialog = ensureDialog();
-  const activeMode = mode === 'register' ? 'register' : 'login';
+  const modes = ['login', 'register', 'request_password_reset', 'reset_password'];
+  const activeMode = modes.includes(mode) ? mode : 'login';
   dialog.querySelectorAll('[data-auth-tab]').forEach((tab) => {
     const active = tab.dataset.authTab === activeMode;
     if (tab.getAttribute('role') === 'tab') {
@@ -120,12 +138,15 @@ function setMode(mode = 'login') {
   dialog.querySelectorAll('[data-auth-form]').forEach((form) => {
     form.hidden = form.dataset.authForm !== activeMode;
   });
-  dialog.querySelector('#account-dialog-title').textContent = activeMode === 'register'
-    ? 'Tạo tài khoản RealView'
-    : 'Chào mừng bạn trở lại';
-  dialog.querySelector('[data-auth-description]').textContent = activeMode === 'register'
-    ? 'Lưu lịch sử phân tích riêng theo tài khoản của bạn.'
-    : 'Đăng nhập để tiếp tục xem lịch sử phân tích.';
+  dialog.querySelector('.account-tabs').hidden = !['login', 'register'].includes(activeMode);
+  const copy = {
+    login: ['Chào mừng bạn trở lại', 'Đăng nhập để tiếp tục xem lịch sử phân tích.'],
+    register: ['Tạo tài khoản RealView', 'Lưu lịch sử phân tích riêng theo tài khoản của bạn.'],
+    request_password_reset: ['Khôi phục mật khẩu', 'Nhập email đã đăng ký để nhận mã xác minh.'],
+    reset_password: ['Tạo mật khẩu mới', 'Nhập mã trong email và chọn mật khẩu mới cho tài khoản.']
+  }[activeMode];
+  dialog.querySelector('#account-dialog-title').textContent = copy[0];
+  dialog.querySelector('[data-auth-description]').textContent = copy[1];
   dialog.querySelectorAll('[data-auth-error]').forEach((error) => {
     error.hidden = true;
     error.textContent = '';
@@ -173,15 +194,37 @@ async function submitAccountForm(form) {
   errorBox.hidden = true;
   submit.disabled = true;
   submit.dataset.label = submit.innerHTML;
-  submit.textContent = action === 'register' ? 'Đang tạo tài khoản…' : 'Đang đăng nhập…';
+  const pendingLabels = {
+    register: 'Đang tạo tài khoản…',
+    login: 'Đang đăng nhập…',
+    request_password_reset: 'Đang gửi mã…',
+    reset_password: 'Đang cập nhật…'
+  };
+  submit.textContent = pendingLabels[action] || 'Đang xử lý…';
   try {
     const values = Object.fromEntries(new FormData(form));
+    if (action === 'reset_password') {
+      if (values.password !== values.passwordConfirm) {
+        throw new Error('Mật khẩu nhập lại chưa trùng khớp.');
+      }
+      delete values.passwordConfirm;
+    }
     const payload = await apiRequest({ action, ...values });
+    if (action === 'request_password_reset') {
+      const resetForm = ensureDialog().querySelector('[data-auth-form="reset_password"]');
+      resetForm.elements.requestId.value = payload.resetId;
+      setMode('reset_password');
+      const notice = ensureDialog().querySelector('[data-auth-notice]');
+      notice.textContent = payload.message;
+      notice.hidden = false;
+      return;
+    }
     currentUser = payload.user;
     statusPromise = Promise.resolve(currentUser);
     renderAccountControls();
     closeAuthDialog();
-    window.realviewTrackEvent?.(action === 'register' ? 'sign_up' : 'login', { method: 'username' });
+    const eventName = action === 'register' ? 'sign_up' : action === 'reset_password' ? 'password_reset' : 'login';
+    window.realviewTrackEvent?.(eventName, { method: action === 'reset_password' ? 'email_code' : 'username' });
     window.dispatchEvent(new CustomEvent('realview:auth-changed', { detail: { user: currentUser } }));
   } catch (error) {
     errorBox.textContent = error.message;
@@ -217,6 +260,14 @@ function initialize() {
     const tab = event.target.closest('[data-auth-tab]');
     if (tab) {
       setMode(tab.dataset.authTab);
+      return;
+    }
+    const mode = event.target.closest('[data-auth-mode]');
+    if (mode) {
+      const notice = ensureDialog().querySelector('[data-auth-notice]');
+      notice.hidden = true;
+      notice.textContent = '';
+      setMode(mode.dataset.authMode);
       return;
     }
     const menu = event.target.closest('[data-account-menu]');
