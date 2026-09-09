@@ -94,7 +94,7 @@
   .chatbot-trigger i { left: 28px; }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
   .header-actions { margin-left: auto; }
   .chatbot-panel { right: 18px; }
 }

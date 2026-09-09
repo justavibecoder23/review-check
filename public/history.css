@@ -165,7 +165,7 @@ body.history-drawer-open { overflow: hidden; }
 .action-button--history:hover { background: white; }
 .results-page .result-action-bar { width: min(1080px, calc(100% - 30px)); grid-template-columns: 86px minmax(0,1.1fr) minmax(0,1fr) minmax(0,.92fr); }
 
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
   .main-nav .nav-history-trigger { min-height: 44px; padding: 0 12px; justify-content: flex-start; font-size: 13px; }
   .history-grid { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
   .history-grid::-webkit-scrollbar { display: none; }

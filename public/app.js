@@ -163,7 +163,7 @@ if (navSections.length) {
     setMobileMenu(false);
   }));
   window.addEventListener('resize', () => {
-    if (window.innerWidth > 900) setMobileMenu(false);
+    if (window.innerWidth > 1024) setMobileMenu(false);
     const activeLink = navLinks.find((link) => link.classList.contains('is-active'));
     if (activeLink) moveNavIndicator(activeLink, false);
   });

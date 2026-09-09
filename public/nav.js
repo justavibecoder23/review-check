@@ -5,7 +5,7 @@
   const toggleLabel = document.querySelector('.nav-toggle-label');
   if (!nav) return;
 
-  const mobileQuery = window.matchMedia('(max-width: 900px)');
+  const mobileQuery = window.matchMedia('(max-width: 1024px)');
   const isMobileNav = () => mobileQuery.matches;
   const pathname = window.location.pathname.replace(/\/+$/, '') || '/';
   const isHome = pathname === '/' || pathname.endsWith('/index.html');
