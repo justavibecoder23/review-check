@@ -114,9 +114,7 @@ function ensureDialog() {
   if (dialog) return dialog;
   document.body.insertAdjacentHTML('beforeend', dialogMarkup());
   dialog = document.querySelector('#account-dialog');
-  dialog.addEventListener('click', (event) => {
-    if (event.target === dialog) closeAuthDialog();
-  });
+  dialog.addEventListener('cancel', (event) => event.preventDefault());
   dialog.addEventListener('close', () => {
     document.body.classList.remove('account-dialog-open');
     returnFocus?.focus?.();
