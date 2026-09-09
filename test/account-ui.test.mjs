@@ -27,6 +27,13 @@ test('mật khẩu chỉ gửi tới API và không được lưu trong mã giao
   assert.doesNotMatch(history, /localStorage/);
 });
 
+test('cửa sổ tài khoản chỉ đóng bằng nút X', async () => {
+  const auth = await readFile(new URL('../public/auth.js', import.meta.url), 'utf8');
+  assert.match(auth, /addEventListener\('cancel', \(event\) => event\.preventDefault\(\)\)/);
+  assert.doesNotMatch(auth, /event\.target === dialog\) closeAuthDialog/);
+  assert.match(auth, /data-auth-close/);
+});
+
 test('các nút tiện ích trên header desktop có cùng kích thước', async () => {
   const css = await readFile(new URL('../public/auth.css', import.meta.url), 'utf8');
   assert.match(css, /\.header-utilities \.header-actions \.chatbot-trigger/);

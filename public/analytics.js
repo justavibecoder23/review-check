@@ -6,6 +6,7 @@
     'analysis_error',
     'sign_up',
     'login',
+    'password_reset',
     'generate_lead'
   ]);
   const allowedParameters = new Set(['marketplace', 'method', 'error_type']);

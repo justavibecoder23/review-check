@@ -1,13 +1,16 @@
 import {
   authenticateAccount,
   createAccountSession,
+  createPasswordReset,
   deleteAccountSession,
   getAccountFromSession,
-  registerAccount
+  registerAccount,
+  resetAccountPassword
 } from '../src/account-store.mjs';
 import { createHash } from 'node:crypto';
 import { redisCommand } from '../src/redis-rest.mjs';
 import { sendWelcomeEmail } from '../src/welcome-email.mjs';
+import { sendPasswordResetEmail } from '../src/password-reset-email.mjs';
 
 const COOKIE_NAME = 'realview_session';
 
@@ -61,9 +64,9 @@ function assertSameOrigin(request) {
 }
 
 async function enforceRateLimit(request, action) {
-  const register = action === 'register';
-  const windowSeconds = register ? 60 * 60 : 15 * 60;
-  const limit = register ? 5 : 20;
+  const strict = action === 'register' || action === 'request_password_reset';
+  const windowSeconds = strict ? 60 * 60 : 15 * 60;
+  const limit = strict ? 5 : 20;
   const forwarded = String(request.headers?.['x-forwarded-for'] || '').split(',')[0].trim();
   const identity = forwarded || String(request.socket?.remoteAddress || 'local');
   const digest = createHash('sha256').update(identity).digest('hex').slice(0, 24);
@@ -108,7 +111,32 @@ export default async function handler(request, response) {
       return send(response, 200, { user: null });
     }
 
-    await enforceRateLimit(request, body.action === 'register' ? 'register' : 'login');
+    if (body.action === 'request_password_reset') {
+      await enforceRateLimit(request, body.action);
+      const reset = await createPasswordReset(body.email);
+      if (reset.user && reset.code) {
+        await sendPasswordResetEmail(reset.user, reset.code).catch(() => ({ delivered: false }));
+      }
+      return send(response, 200, {
+        resetId: reset.requestId,
+        expiresIn: reset.expiresIn,
+        message: 'Nếu email đã đăng ký với RealView, mã xác minh sẽ được gửi trong ít phút.'
+      });
+    }
+
+    if (body.action === 'reset_password') {
+      await enforceRateLimit(request, body.action);
+      const user = await resetAccountPassword(body);
+      const session = await createAccountSession(user);
+      response.setHeader('Set-Cookie', sessionCookie(request, session.token, session.expiresIn));
+      return send(response, 200, { user, message: 'Mật khẩu đã được cập nhật.' });
+    }
+
+    if (!['register', 'login'].includes(body.action)) {
+      return send(response, 400, { error: 'Yêu cầu tài khoản không hợp lệ.' });
+    }
+
+    await enforceRateLimit(request, body.action);
     const isRegistration = body.action === 'register';
     const user = isRegistration
       ? await registerAccount(body)
