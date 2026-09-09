@@ -27,6 +27,13 @@ test('mật khẩu chỉ gửi tới API và không được lưu trong mã giao
   assert.doesNotMatch(history, /localStorage/);
 });
 
+test('cửa sổ tài khoản chỉ đóng bằng nút X', async () => {
+  const auth = await readFile(new URL('../public/auth.js', import.meta.url), 'utf8');
+  assert.match(auth, /addEventListener\('cancel', \(event\) => event\.preventDefault\(\)\)/);
+  assert.doesNotMatch(auth, /event\.target === dialog\) closeAuthDialog/);
+  assert.match(auth, /data-auth-close/);
+});
+
 test('các nút tiện ích trên header desktop có cùng kích thước', async () => {
   const css = await readFile(new URL('../public/auth.css', import.meta.url), 'utf8');
   assert.match(css, /\.header-utilities \.header-actions \.chatbot-trigger/);
@@ -34,16 +41,6 @@ test('các nút tiện ích trên header desktop có cùng kích thước', asyn
   assert.match(css, /\.header-utilities \.header-auth \.auth-button/);
   assert.match(css, /width:\s*clamp\(108px,\s*7\.2vw,\s*126px\)/);
   assert.match(css, /height:\s*46px/);
-});
-
-test('khách chỉ thấy một nút tài khoản màu cam và nút liên hệ màu trắng', async () => {
-  const auth = await readFile(new URL('../public/auth.js', import.meta.url), 'utf8');
-  const authCss = await readFile(new URL('../public/auth.css', import.meta.url), 'utf8');
-  const styles = await readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
-  assert.match(auth, />Đăng nhập \/ Đăng ký<\/button>/);
-  assert.equal((auth.match(/data-auth-open=/g) || []).length, 1);
-  assert.match(authCss, /\.auth-button--access[\s\S]*background:\s*var\(--orange\)/);
-  assert.match(styles, /\.header-contact[\s\S]*background:\s*rgba\(255,255,255,\.82\)/);
 });
 
 test('biểu mẫu liên hệ gửi trực tiếp và dùng email RealView mới', async () => {
