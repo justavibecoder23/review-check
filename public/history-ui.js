@@ -3,8 +3,10 @@ import {
   deleteHistoryItem,
   formatRelativeTime,
   getHistory,
+  resetHistoryCache,
   restoreHistoryItem
 } from './history-manager.js';
+import { getCurrentUser, openAuthDialog } from './auth.js';
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>'"]/g, (character) => ({
@@ -50,19 +52,20 @@ function ensureDrawer() {
       <button class="history-drawer-backdrop" type="button" data-history-close aria-label="Đóng lịch sử"></button>
       <aside id="analysis-history-drawer" class="history-drawer" role="dialog" aria-modal="true" aria-labelledby="history-drawer-title" tabindex="-1">
         <header class="history-drawer-header">
-          <div><small>Các báo cáo trên thiết bị này</small><h2 id="history-drawer-title">Lịch sử phân tích</h2></div>
+          <div><small>Được lưu riêng theo tài khoản</small><h2 id="history-drawer-title">Lịch sử phân tích</h2></div>
           <button type="button" data-history-close aria-label="Đóng lịch sử">×</button>
         </header>
         <div class="history-drawer-toolbar"><span data-history-summary></span><button type="button" data-history-clear>Xóa tất cả</button></div>
         <div class="history-drawer-list" data-history-drawer-list></div>
-        <p class="history-privacy-note">Lịch sử chỉ được lưu trong trình duyệt này và không được gửi lên máy chủ.</p>
+        <p class="history-privacy-note">Chỉ bạn mới xem được lịch sử gắn với tài khoản này.</p>
       </aside>
     </div>`);
   return document.querySelector('#analysis-history-drawer');
 }
 
-function renderHistory() {
-  const history = getHistory();
+async function renderHistory({ force = false } = {}) {
+  const user = await getCurrentUser();
+  const history = user ? await getHistory({ force }).catch(() => []) : [];
   document.querySelectorAll('[data-history-count]').forEach((badge) => {
     badge.textContent = String(history.length);
     badge.hidden = history.length === 0;
@@ -70,7 +73,7 @@ function renderHistory() {
 
   const section = document.querySelector('[data-history-section]');
   if (section) {
-    section.hidden = history.length === 0;
+    section.hidden = !user || history.length === 0;
     const list = section.querySelector('[data-history-list]');
     if (list) list.innerHTML = history.map((item) => historyCard(item)).join('');
   }
@@ -79,7 +82,7 @@ function renderHistory() {
   if (drawerList) {
     drawerList.innerHTML = history.length
       ? history.map((item) => historyCard(item, true)).join('')
-      : '<div class="history-empty"><strong>Chưa có báo cáo nào</strong><span>Kết quả sẽ xuất hiện tại đây sau lần phân tích đầu tiên.</span></div>';
+      : '<div class="history-empty"><strong>Chưa có báo cáo nào</strong><span>Kết quả mới sẽ xuất hiện tại đây sau khi bạn phân tích sản phẩm.</span></div>';
   }
   const summary = document.querySelector('[data-history-summary]');
   if (summary) summary.textContent = history.length ? `${history.length} báo cáo gần nhất` : 'Chưa có lịch sử';
@@ -92,9 +95,17 @@ function renderHistory() {
   });
 }
 
-function openDrawer() {
+async function openDrawer() {
+  const user = await getCurrentUser();
+  if (!user) {
+    openAuthDialog({
+      mode: 'register',
+      message: 'Vui lòng đăng ký tài khoản để kích hoạt tính năng lịch sử phân tích.'
+    });
+    return;
+  }
   const drawer = ensureDrawer();
-  renderHistory();
+  await renderHistory({ force: true });
   const shell = drawer.closest('.history-drawer-shell');
   shell.classList.add('is-open');
   shell.setAttribute('aria-hidden', 'false');
@@ -110,11 +121,12 @@ function closeDrawer() {
   document.body.classList.remove('history-drawer-open');
 }
 
-function confirmClear() {
-  if (!getHistory().length) return;
-  if (window.confirm('Xóa toàn bộ lịch sử phân tích trên thiết bị này?')) {
-    clearHistory();
-    renderHistory();
+async function confirmClear() {
+  const history = await getHistory();
+  if (!history.length) return;
+  if (window.confirm('Xóa toàn bộ lịch sử phân tích của tài khoản này?')) {
+    await clearHistory();
+    await renderHistory();
   }
 }
 
@@ -140,8 +152,7 @@ function initialize() {
     }
     const deleteTrigger = event.target.closest('[data-history-delete]');
     if (deleteTrigger) {
-      deleteHistoryItem(deleteTrigger.dataset.historyDelete);
-      renderHistory();
+      deleteHistoryItem(deleteTrigger.dataset.historyDelete).then(() => renderHistory());
       return;
     }
     if (event.target.closest('[data-history-clear]')) confirmClear();
@@ -151,9 +162,15 @@ function initialize() {
   });
   window.addEventListener('storage', renderHistory);
   window.addEventListener('realview:history-changed', renderHistory);
+  window.addEventListener('realview:auth-changed', () => {
+    resetHistoryCache();
+    closeDrawer();
+    renderHistory({ force: true });
+  });
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initialize, { once: true });
 else initialize();
 
 export { renderHistory };
+

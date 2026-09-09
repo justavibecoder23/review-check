@@ -7,6 +7,9 @@ import { assertApifyAdmin, readApifyAdminStatus, updateApifyAdminPool } from '..
 import { assertGeminiAdmin, readGeminiAdminStatus, updateGeminiAdminPool } from '../src/gemini-admin.mjs';
 import { clientDisconnectSignal, openSse } from '../src/sse.mjs';
 import { normalizeApiPath } from '../src/server-route.mjs';
+import authHandler from '../api/auth.mjs';
+import historyHandler from '../api/history.mjs';
+import contactHandler from '../api/contact.mjs';
 
 const port = Number(process.env.PORT || 3000);
 const host = process.env.HOST || '127.0.0.1';
@@ -22,6 +25,20 @@ const mimeTypes = {
 function sendJson(response, status, payload) {
   response.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
   response.end(JSON.stringify(payload));
+}
+
+function vercelResponse(response) {
+  let statusCode = 200;
+  return {
+    setHeader: (name, value) => response.setHeader(name, value),
+    status(code) {
+      statusCode = code;
+      return this;
+    },
+    json(payload) {
+      return sendJson(response, statusCode, payload);
+    }
+  };
 }
 
 async function getBody(request) {
@@ -74,6 +91,21 @@ const server = createServer(async (request, response) => {
       return sendJson(response, 200, result);
     }
 
+    if (['GET', 'POST'].includes(request.method) && apiPath === '/api/auth') {
+      if (request.method === 'POST') request.body = await getBody(request);
+      return authHandler(request, vercelResponse(response));
+    }
+
+    if (['GET', 'POST', 'DELETE'].includes(request.method) && apiPath === '/api/history') {
+      if (request.method !== 'GET') request.body = await getBody(request);
+      return historyHandler(request, vercelResponse(response));
+    }
+
+    if (request.method === 'POST' && apiPath === '/api/contact') {
+      request.body = await getBody(request);
+      return contactHandler(request, vercelResponse(response));
+    }
+
     if (['GET', 'PUT'].includes(request.method) && apiPath === '/api/apify-config') {
       assertApifyAdmin(request.headers.authorization);
       if (request.method === 'GET') return sendJson(response, 200, await readApifyAdminStatus());
@@ -91,7 +123,7 @@ const server = createServer(async (request, response) => {
     }
 
     if (apiPath.startsWith('/api/')) {
-      const knownPath = ['/api/analyze', '/api/analyze-stream', '/api/chat', '/api/apify-config', '/api/gemini-config'].includes(apiPath);
+      const knownPath = ['/api/analyze', '/api/analyze-stream', '/api/chat', '/api/auth', '/api/history', '/api/contact', '/api/apify-config', '/api/gemini-config'].includes(apiPath);
       return sendJson(response, knownPath ? 405 : 404, {
         error: knownPath ? 'Phương thức không được hỗ trợ.' : 'API không tồn tại.'
       });

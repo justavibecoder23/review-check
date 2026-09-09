@@ -13,6 +13,15 @@
     "api/chat.mjs": {
       "maxDuration": 30
     },
+    "api/auth.mjs": {
+      "maxDuration": 10
+    },
+    "api/history.mjs": {
+      "maxDuration": 10
+    },
+    "api/contact.mjs": {
+      "maxDuration": 10
+    },
     "api/apify-config.mjs": {
       "maxDuration": 10
     },
@@ -24,8 +33,12 @@
     { "source": "/api/analyze", "destination": "/api/analyze.mjs" },
     { "source": "/api/analyze-stream", "destination": "/api/analyze-stream.mjs" },
     { "source": "/api/chat", "destination": "/api/chat.mjs" },
+    { "source": "/api/auth", "destination": "/api/auth.mjs" },
+    { "source": "/api/history", "destination": "/api/history.mjs" },
+    { "source": "/api/contact", "destination": "/api/contact.mjs" },
     { "source": "/api/apify-config", "destination": "/api/apify-config.mjs" },
     { "source": "/api/gemini-config", "destination": "/api/gemini-config.mjs" },
     { "source": "/(.*)", "destination": "/public/$1" }
   ]
 }
+

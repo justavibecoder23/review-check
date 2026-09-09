@@ -128,48 +128,40 @@ function normalizeHistoryItem(item) {
   };
 }
 
-function browserStorage(storage) {
-  if (storage) return storage;
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
+let historyCache = [];
+let historyLoaded = false;
+
+async function historyRequest(method = 'GET', body) {
+  const response = await fetch('/api/history', {
+    method,
+    credentials: 'same-origin',
+    headers: body ? { 'content-type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+    cache: 'no-store'
+  });
+  if (response.status === 401) return null;
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || 'Không thể tải lịch sử phân tích.');
+  return payload;
 }
 
-export function getHistory({ storage } = {}) {
-  const target = browserStorage(storage);
-  if (!target) return [];
-  try {
-    const parsed = JSON.parse(target.getItem(HISTORY_STORAGE_KEY) || '[]');
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map(normalizeHistoryItem).filter((item) => item?.id).slice(0, HISTORY_MAX_ITEMS);
-  } catch {
-    return [];
-  }
+export async function getHistory({ force = false } = {}) {
+  if (historyLoaded && !force) return historyCache;
+  const payload = await historyRequest();
+  historyLoaded = true;
+  historyCache = Array.isArray(payload?.items)
+    ? payload.items.map(normalizeHistoryItem).filter((item) => item?.id).slice(0, HISTORY_MAX_ITEMS)
+    : [];
+  return historyCache;
 }
 
-function persistWithEviction(items, storage) {
-  let candidates = items.slice(0, HISTORY_MAX_ITEMS);
-  while (candidates.length) {
-    try {
-      storage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(candidates));
-      return candidates;
-    } catch {
-      candidates = candidates.slice(0, Math.max(0, candidates.length - 2));
-    }
-  }
-  try {
-    storage.removeItem(HISTORY_STORAGE_KEY);
-  } catch {
-    // Lịch sử là tính năng phụ; lỗi bộ nhớ không được chặn trang kết quả.
-  }
-  return [];
+export function resetHistoryCache() {
+  historyCache = [];
+  historyLoaded = false;
 }
 
-export function saveToHistory(resultData, { storage, now = () => new Date() } = {}) {
-  const target = browserStorage(storage);
-  if (!target || !resultData?.product || !Array.isArray(resultData?.reviews)) return null;
+export async function saveToHistory(resultData, { now = () => new Date() } = {}) {
+  if (!resultData?.product || !Array.isArray(resultData?.reviews)) return null;
   const fullReport = pruneAnalysisReport(resultData);
   const product = fullReport.product;
   if (!product.url && !product.itemId && !product.productId) return null;
@@ -193,17 +185,22 @@ export function saveToHistory(resultData, { storage, now = () => new Date() } = 
     fullReport
   });
   if (!item) return null;
-  const history = getHistory({ storage: target }).filter((entry) => entry.id !== item.id);
-  const saved = persistWithEviction([item, ...history], target);
-  return saved.find((entry) => entry.id === item.id) || null;
+  const payload = await historyRequest('POST', { item });
+  if (!payload?.item) return null;
+  historyCache = [
+    normalizeHistoryItem(payload.item),
+    ...historyCache.filter((entry) => entry.id !== item.id)
+  ].filter(Boolean).slice(0, HISTORY_MAX_ITEMS);
+  historyLoaded = true;
+  return historyCache[0];
 }
 
-export function getHistoryItem(id, options = {}) {
-  return getHistory(options).find((item) => item.id === String(id)) || null;
+export function getHistoryItem(id) {
+  return historyCache.find((item) => item.id === String(id)) || null;
 }
 
-export function restoreHistoryItem(id, { storage, session, navigate } = {}) {
-  const item = getHistoryItem(id, { storage });
+export function restoreHistoryItem(id, { session, navigate } = {}) {
+  const item = getHistoryItem(id);
   if (!item) return false;
   try {
     const sessionTarget = session || window.sessionStorage;
@@ -216,22 +213,16 @@ export function restoreHistoryItem(id, { storage, session, navigate } = {}) {
   }
 }
 
-export function deleteHistoryItem(id, { storage } = {}) {
-  const target = browserStorage(storage);
-  if (!target) return [];
-  const history = getHistory({ storage: target }).filter((item) => item.id !== String(id));
-  persistWithEviction(history, target);
-  return history;
+export async function deleteHistoryItem(id) {
+  await historyRequest('DELETE', { id: String(id) });
+  historyCache = historyCache.filter((item) => item.id !== String(id));
+  return historyCache;
 }
 
-export function clearHistory({ storage } = {}) {
-  const target = browserStorage(storage);
-  if (!target) return;
-  try {
-    target.removeItem(HISTORY_STORAGE_KEY);
-  } catch {
-    // Không làm gián đoạn trang nếu trình duyệt chặn localStorage.
-  }
+export async function clearHistory() {
+  await historyRequest('DELETE', { clear: true });
+  historyCache = [];
+  historyLoaded = true;
 }
 
 export function formatRelativeTime(isoString, now = new Date()) {
@@ -250,3 +241,4 @@ export function formatRelativeTime(isoString, now = new Date()) {
   if (days < 7) return `${days} ngày trước`;
   return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
 }
+
