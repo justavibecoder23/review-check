@@ -226,11 +226,24 @@ body.account-dialog-open { overflow: hidden; }
 }
 
 @media (max-width: 900px) {
-  .header-contact { display: none; }
-  .header-auth { margin-left: auto; }
+  .header-contact {
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0;
+    margin-left: 0;
+    display: inline-flex;
+    gap: 0;
+    flex: 0 0 44px;
+    border-radius: 14px;
+  }
+  .header-contact svg { width: 20px; height: 20px; flex-basis: 20px; }
+  .header-contact span { display: none; }
+  .header-auth { margin-left: 0; }
 }
 
 @media (max-width: 520px) {
+  .header-inner > .brand > span:not(.brand-mark) { display: none; }
   .auth-button, .account-chip { min-height: 39px; padding-inline: 11px; font-size: 11px; }
   .account-chip b { max-width: 72px; overflow: hidden; text-overflow: ellipsis; }
   .account-dialog-shell { padding: 24px 18px 20px; border-radius: 23px; }
