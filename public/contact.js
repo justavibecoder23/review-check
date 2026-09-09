@@ -25,6 +25,7 @@ form?.addEventListener('submit', async (event) => {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || 'Không thể gửi liên hệ lúc này.');
     form.reset();
+    window.realviewTrackEvent?.('generate_lead', { method: 'contact_form' });
     if (payload.delivered) {
       showStatus('Đã gửi phản hồi đến hộp thư RealView. Cảm ơn bạn đã liên hệ.', 'success');
     } else {

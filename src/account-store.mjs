@@ -1,6 +1,7 @@
 import {
   createHash,
   randomBytes,
+  randomInt,
   randomUUID,
   scrypt as scryptCallback,
   timingSafeEqual
@@ -11,6 +12,8 @@ import { isRedisConfigured, redisCommand, redisTransaction } from './redis-rest.
 const scrypt = promisify(scryptCallback);
 const USERNAME_PATTERN = /^[a-zA-Z0-9._]{3,30}$/;
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30;
+const PASSWORD_RESET_TTL_SECONDS = 10 * 60;
+const PASSWORD_RESET_MAX_ATTEMPTS = 5;
 const HISTORY_LIMIT = 10;
 const MAX_HISTORY_BYTES = 700_000;
 const PREFIX = 'realview:account:v1';
@@ -66,6 +69,10 @@ function userKey(userId) {
 function sessionKey(token) {
   const digest = createHash('sha256').update(token).digest('hex');
   return `${PREFIX}:session:${digest}`;
+}
+
+function passwordResetKey(requestId) {
+  return `${PREFIX}:password-reset:${requestId}`;
 }
 
 function historyIndexKey(userId) {
@@ -181,6 +188,94 @@ export async function deleteAccountSession(token, options = {}) {
   await redisCommand(['DEL', sessionKey(token)], options);
 }
 
+export async function createPasswordReset(email, options = {}) {
+  ensureStorage();
+  const normalizedEmail = normalizeEmail(email);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail) || normalizedEmail.length > 254) {
+    throw accountError('Email chưa đúng định dạng.', 400, 'INVALID_EMAIL');
+  }
+
+  const requestId = randomBytes(24).toString('base64url');
+  const userId = await redisCommand(['GET', emailKey(normalizedEmail)], options);
+  const user = await readUser(userId, options);
+  const code = String(randomInt(100000, 1000000));
+  const salt = randomBytes(16).toString('hex');
+  const expiresAt = Date.now() + PASSWORD_RESET_TTL_SECONDS * 1000;
+  const record = {
+    userId: user?.id || '',
+    salt,
+    codeHash: createHash('sha256').update(`${salt}:${code}`).digest('hex'),
+    attempts: 0,
+    expiresAt
+  };
+  await redisCommand([
+    'SET',
+    passwordResetKey(requestId),
+    JSON.stringify(record),
+    'EX',
+    PASSWORD_RESET_TTL_SECONDS
+  ], options);
+  return {
+    requestId,
+    expiresIn: PASSWORD_RESET_TTL_SECONDS,
+    user: user ? publicUser(user) : null,
+    code: user ? code : null
+  };
+}
+
+export async function resetAccountPassword(input = {}, options = {}) {
+  ensureStorage();
+  const requestId = String(input.requestId || '').trim();
+  const code = String(input.code || '').trim();
+  const password = input.password;
+  if (!requestId || !/^\d{6}$/.test(code)) {
+    throw accountError('Mã xác minh không hợp lệ hoặc đã hết hạn.', 400, 'INVALID_RESET_CODE');
+  }
+  if (typeof password !== 'string' || password.length < 8 || password.length > 128) {
+    throw accountError('Mật khẩu mới cần từ 8–128 ký tự.', 400, 'INVALID_PASSWORD');
+  }
+
+  const key = passwordResetKey(requestId);
+  const serialized = await redisCommand(['GET', key], options);
+  let record;
+  try {
+    record = serialized ? JSON.parse(serialized) : null;
+  } catch {
+    record = null;
+  }
+  if (!record || !record.userId || Date.now() >= Number(record.expiresAt || 0)) {
+    if (serialized) await redisCommand(['DEL', key], options);
+    throw accountError('Mã xác minh không hợp lệ hoặc đã hết hạn.', 400, 'INVALID_RESET_CODE');
+  }
+
+  const expected = Buffer.from(String(record.codeHash || ''), 'hex');
+  const actual = Buffer.from(createHash('sha256').update(`${record.salt}:${code}`).digest('hex'), 'hex');
+  const valid = expected.length === actual.length && timingSafeEqual(actual, expected);
+  if (!valid) {
+    record.attempts = Number(record.attempts || 0) + 1;
+    if (record.attempts >= PASSWORD_RESET_MAX_ATTEMPTS) {
+      await redisCommand(['DEL', key], options);
+    } else {
+      const remainingSeconds = Math.max(1, Math.ceil((record.expiresAt - Date.now()) / 1000));
+      await redisCommand(['SET', key, JSON.stringify(record), 'EX', remainingSeconds], options);
+    }
+    throw accountError('Mã xác minh không đúng. Vui lòng kiểm tra lại.', 400, 'INVALID_RESET_CODE');
+  }
+
+  const user = await readUser(record.userId, options);
+  if (!user) {
+    await redisCommand(['DEL', key], options);
+    throw accountError('Mã xác minh không hợp lệ hoặc đã hết hạn.', 400, 'INVALID_RESET_CODE');
+  }
+  user.passwordHash = await hashPassword(password);
+  user.passwordUpdatedAt = new Date().toISOString();
+  await redisTransaction([
+    ['SET', userKey(user.id), JSON.stringify(user)],
+    ['DEL', key]
+  ], options);
+  return publicUser(user);
+}
+
 function normalizeHistoryItem(item) {
   if (!item || typeof item !== 'object' || !item.id || !item.fullReport?.product) {
     throw accountError('Báo cáo lịch sử không hợp lệ.', 400, 'INVALID_HISTORY_ITEM');
@@ -256,11 +351,14 @@ export async function clearAccountHistory(userId, options = {}) {
 
 export const accountStoreInternals = {
   SESSION_TTL_SECONDS,
+  PASSWORD_RESET_TTL_SECONDS,
+  PASSWORD_RESET_MAX_ATTEMPTS,
   normalizeEmail,
   normalizeUsername,
   usernameKey,
   emailKey,
   userKey,
-  sessionKey
+  sessionKey,
+  passwordResetKey
 };
 

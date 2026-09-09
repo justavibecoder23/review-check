@@ -2,10 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   authenticateAccount,
+  createPasswordReset,
   createAccountSession,
   getAccountFromSession,
   listAccountHistory,
   registerAccount,
+  resetAccountPassword,
   saveAccountHistory
 } from '../src/account-store.mjs';
 
@@ -120,6 +122,48 @@ test('đăng ký lưu email riêng, mật khẩu băm và đăng nhập bằng u
     const session = await createAccountSession(user, { fetchImpl: mock.fetchImpl });
     const fromSession = await getAccountFromSession(session.token, { fetchImpl: mock.fetchImpl });
     assert.equal(fromSession.username, 'Buyer_01');
+  } finally {
+    if (previousUrl === undefined) delete process.env.UPSTASH_REDIS_REST_URL;
+    else process.env.UPSTASH_REDIS_REST_URL = previousUrl;
+    if (previousToken === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    else process.env.UPSTASH_REDIS_REST_TOKEN = previousToken;
+  }
+});
+
+test('mã xác minh đặt lại mật khẩu chỉ dùng một lần và mật khẩu mới vẫn được băm', async () => {
+  const previousUrl = process.env.UPSTASH_REDIS_REST_URL;
+  const previousToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'test-token';
+  const mock = redisMock();
+  try {
+    const user = await registerAccount({
+      email: 'buyer@example.com',
+      username: 'Buyer_02',
+      password: 'mat-khau-cu'
+    }, { fetchImpl: mock.fetchImpl });
+    const reset = await createPasswordReset('BUYER@example.com', { fetchImpl: mock.fetchImpl });
+
+    assert.equal(reset.user.id, user.id);
+    assert.match(reset.code, /^\d{6}$/);
+    const storedReset = JSON.parse(mock.strings.get(`realview:account:v1:password-reset:${reset.requestId}`));
+    assert.equal(storedReset.codeHash.includes(reset.code), false);
+
+    const wrongCode = reset.code === '000000' ? '000001' : '000000';
+    await assert.rejects(
+      resetAccountPassword({ requestId: reset.requestId, code: wrongCode, password: 'mat-khau-moi' }, { fetchImpl: mock.fetchImpl }),
+      /Mã xác minh không đúng/
+    );
+    await resetAccountPassword({ requestId: reset.requestId, code: reset.code, password: 'mat-khau-moi' }, { fetchImpl: mock.fetchImpl });
+    await assert.rejects(
+      resetAccountPassword({ requestId: reset.requestId, code: reset.code, password: 'mat-khau-khac' }, { fetchImpl: mock.fetchImpl }),
+      /không hợp lệ hoặc đã hết hạn/
+    );
+    await assert.rejects(
+      authenticateAccount({ username: 'Buyer_02', password: 'mat-khau-cu' }, { fetchImpl: mock.fetchImpl }),
+      /không đúng/
+    );
+    assert.equal((await authenticateAccount({ username: 'Buyer_02', password: 'mat-khau-moi' }, { fetchImpl: mock.fetchImpl })).id, user.id);
   } finally {
     if (previousUrl === undefined) delete process.env.UPSTASH_REDIS_REST_URL;
     else process.env.UPSTASH_REDIS_REST_URL = previousUrl;

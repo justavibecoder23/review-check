@@ -584,6 +584,8 @@ async function readAnalysisStream(url) {
 }
 
 async function startProgressiveAnalysis(url) {
+  const marketplace = window.realviewMarketplaceFromUrl?.(url) || 'unknown';
+  window.realviewTrackEvent?.('analysis_start', { marketplace });
   activeAnalysisUrl = url;
   activeStepIndex = 0;
   productMetaReceived = false;
@@ -624,10 +626,15 @@ async function startProgressiveAnalysis(url) {
     }
     window.history.replaceState({}, '', '/results.html');
     renderResult(resultData);
+    window.realviewTrackEvent?.('analysis_complete', { marketplace });
     window.scrollTo({ top: 0, behavior: 'auto' });
     progressPanel?.classList.add('hidden');
   } catch (error) {
     if (error?.name === 'AbortError') return;
+    window.realviewTrackEvent?.('analysis_error', {
+      marketplace,
+      error_type: error?.name || 'analysis_error'
+    });
     if (progressMessage) progressMessage.textContent = 'Tiến trình đã dừng trước khi có kết quả.';
     if (progressErrorMessage) progressErrorMessage.textContent = error?.message || 'Có lỗi khi phân tích sản phẩm.';
     progressError?.classList.remove('hidden');
