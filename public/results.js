@@ -504,7 +504,7 @@ function handleProgressEvent(progress = {}) {
     if (productMetaReceived) setAnalysisStep(1);
     setProgress(productMetaReceived ? 28 : 12);
     if (progressMessage) progressMessage.textContent = stage === 'cache'
-      ? 'Đang mở dữ liệu đã lưu gần đây cho sản phẩm này.'
+      ? 'Đang lấy dữ liệu review của sản phẩm.'
       : 'Đang thu thập mẫu đánh giá công khai từ sàn.';
   }
   if (['labeling', 'filtering'].includes(stage)) {
