@@ -33,7 +33,7 @@ function accountControlsMarkup() {
       </div>`;
   }
   return `
-    <button class="auth-button auth-button--access" type="button" data-auth-open="login" aria-label="Mở cửa sổ đăng nhập hoặc đăng ký">Đăng nhập / Đăng ký</button>`;
+    <button class="auth-button auth-button--access" type="button" data-auth-open="login" aria-label="Mở cửa sổ đăng nhập hoặc đăng ký"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-5 3-8 8-8s8 3 8 8" /></svg><span>Đăng nhập / Đăng ký</span></button>`;
 }
 
 function renderAccountControls() {
