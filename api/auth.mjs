@@ -7,6 +7,7 @@ import {
 } from '../src/account-store.mjs';
 import { createHash } from 'node:crypto';
 import { redisCommand } from '../src/redis-rest.mjs';
+import { sendWelcomeEmail } from '../src/welcome-email.mjs';
 
 const COOKIE_NAME = 'realview_session';
 
@@ -108,12 +109,19 @@ export default async function handler(request, response) {
     }
 
     await enforceRateLimit(request, body.action === 'register' ? 'register' : 'login');
-    const user = body.action === 'register'
+    const isRegistration = body.action === 'register';
+    const user = isRegistration
       ? await registerAccount(body)
       : await authenticateAccount(body);
     const session = await createAccountSession(user);
     response.setHeader('Set-Cookie', sessionCookie(request, session.token, session.expiresIn));
-    return send(response, body.action === 'register' ? 201 : 200, { user });
+    const welcomeEmail = isRegistration
+      ? await sendWelcomeEmail(user).catch(() => ({ delivered: false, reason: 'delivery_failed' }))
+      : null;
+    return send(response, isRegistration ? 201 : 200, {
+      user,
+      ...(isRegistration ? { welcomeEmailDelivered: welcomeEmail.delivered } : {})
+    });
   } catch (error) {
     return send(response, error?.statusCode || 500, {
       error: error?.message || 'Không thể xử lý tài khoản lúc này.',
