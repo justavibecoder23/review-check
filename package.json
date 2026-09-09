@@ -12,6 +12,8 @@
     "test": "node --test"
   },
   "dependencies": {
-    "@vercel/blob": "^2.8.0"
+    "@vercel/blob": "^2.8.0",
+    "nodemailer": "^10.0.1"
   }
 }
+

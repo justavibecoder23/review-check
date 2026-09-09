@@ -10,6 +10,7 @@
     <link rel="apple-touch-icon" href="/assets/realview-rv.png" />
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/history.css" />
+    <link rel="stylesheet" href="/auth.css" />
     <link rel="stylesheet" href="/criteria.css" />
     <link rel="stylesheet" href="/chatbot.css" />
   </head>
@@ -21,7 +22,9 @@
         <nav id="main-navigation" class="main-nav" aria-label="Điều hướng chính">
           <a href="/#home">Trang chủ</a><a class="nav-about" href="/#about"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="9" cy="8" r="3" /><path d="M3.5 20c0-4 2-6 5.5-6s5.5 2 5.5 6" /><path d="M15 5.4a3 3 0 0 1 0 5.2M16.5 14.2c2.7.5 4 2.4 4 5.8" /></svg>Về RealView</a><a href="/#how-it-works">Cách dùng</a><a href="/criteria.html" aria-current="page">Tiêu chí lọc</a>
         </nav>
-        <a class="header-contact" href="/contact.html" aria-label="Mở trang Liên hệ RealView"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z" /><path d="M8 10h.01M12 10h.01M16 10h.01" /></svg><span>Liên hệ</span></a>
+        <div class="header-utilities">
+          <a class="header-contact" href="/contact.html" aria-label="Mở trang Liên hệ RealView"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z" /><path d="M8 10h.01M12 10h.01M16 10h.01" /></svg><span>Liên hệ</span></a>
+        </div>
         <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="main-navigation"><span class="nav-toggle-label sr-only">Mở menu</span><span class="nav-toggle-lines" aria-hidden="true"><i></i><i></i></span></button>
       </div>
     </header>
@@ -41,6 +44,7 @@
     </footer>
     <script src="/criteria-section.js" defer></script>
     <script src="/nav.js" defer></script>
+    <script type="module" src="/auth.js"></script>
     <script type="module" src="/history-ui.js"></script>
     <script src="/chatbot.js" defer></script>
   </body>

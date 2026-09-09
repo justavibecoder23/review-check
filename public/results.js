@@ -607,8 +607,8 @@ async function startProgressiveAnalysis(url) {
     try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(resultData)); } catch { /* Result remains visible without browser storage. */ }
     try {
       const { saveToHistory } = await import('./history-manager.js');
-      saveToHistory(resultData);
-      window.dispatchEvent(new CustomEvent('realview:history-changed'));
+      const savedHistoryItem = await saveToHistory(resultData);
+      if (savedHistoryItem) window.dispatchEvent(new CustomEvent('realview:history-changed'));
     } catch {
       // Local history is an enhancement and must not block a completed result.
     }
@@ -690,3 +690,4 @@ if (backToTop) {
   window.addEventListener('scroll', updateBackToTop, { passive: true });
   updateBackToTop();
 }
+
