@@ -20,30 +20,33 @@
   cursor: pointer;
 }
 
-.auth-button--login {
-  border: 1px solid rgba(22,22,22,.14);
-  background: rgba(255,255,255,.74);
+.auth-button--access {
+  border: 1px solid rgba(168,69,4,.38);
+  background: var(--orange);
   color: var(--ink);
+  box-shadow: 0 9px 22px rgba(168,69,4,.18), inset 0 0 0 1px rgba(255,255,255,.24);
+  transition: transform .2s ease, background-color .2s ease, box-shadow .2s ease;
 }
 
-.auth-button--register {
-  border: 1px solid rgba(168,69,4,.32);
-  background: rgba(252,120,31,.12);
-  color: #a84504;
-}
-
-.auth-button:hover { transform: translateY(-1px); }
+.auth-button:hover { transform: translateY(-2px); }
+.auth-button--access:hover { background: #ff8b3d; box-shadow: 0 12px 27px rgba(168,69,4,.22), inset 0 0 0 1px rgba(255,255,255,.3); }
 .auth-button:focus-visible, .account-chip:focus-visible { outline: 3px solid rgba(252,120,31,.45); outline-offset: 2px; }
 
 @media (min-width: 1101px) {
   .header-utilities .header-actions .chatbot-trigger,
-  .header-utilities .header-actions .header-contact,
-  .header-utilities .header-auth .auth-button {
+  .header-utilities .header-actions .header-contact {
     width: clamp(108px, 7.2vw, 126px);
     height: 46px;
     min-height: 46px;
     padding-inline: 12px;
     flex: 0 0 clamp(108px, 7.2vw, 126px);
+  }
+  .header-utilities .header-auth .auth-button {
+    width: clamp(148px, 9.4vw, 168px);
+    height: 46px;
+    min-height: 46px;
+    padding-inline: 16px;
+    flex: 0 0 clamp(148px, 9.4vw, 168px);
   }
 }
 
@@ -222,7 +225,6 @@ body.account-dialog-open { overflow: hidden; }
 @media (max-width: 900px) {
   .header-contact { display: none; }
   .header-auth { margin-left: auto; }
-  .auth-button--register { display: none; }
 }
 
 @media (max-width: 520px) {
@@ -234,7 +236,7 @@ body.account-dialog-open { overflow: hidden; }
 
 @media (max-width: 380px) {
   .account-chip b { display: none; }
-  .auth-button--login { padding-inline: 10px; }
+  .auth-button--access { padding-inline: 10px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
