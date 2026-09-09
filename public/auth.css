@@ -30,6 +30,7 @@
 
 .auth-button:hover { transform: translateY(-2px); }
 .auth-button--access:hover { background: #ff8b3d; box-shadow: 0 12px 27px rgba(168,69,4,.22), inset 0 0 0 1px rgba(255,255,255,.3); }
+.auth-button--access svg { width: 18px; height: 18px; flex: 0 0 18px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .auth-button:focus-visible, .account-chip:focus-visible { outline: 3px solid rgba(252,120,31,.45); outline-offset: 2px; }
 
 @media (min-width: 1101px) {
@@ -243,8 +244,11 @@ body.account-dialog-open { overflow: hidden; }
 }
 
 @media (max-width: 520px) {
-  .header-inner > .brand > span:not(.brand-mark) { display: none; }
+  .header-inner > .brand { gap: 6px; font-size: 15px; letter-spacing: -.55px; }
+  .header-inner > .brand .brand-mark { width: 36px; height: 30px; }
   .auth-button, .account-chip { min-height: 39px; padding-inline: 11px; font-size: 11px; }
+  .auth-button--access, .account-chip { width: 44px; height: 44px; min-height: 44px; padding: 0; flex: 0 0 44px; }
+  .auth-button--access span, .account-chip b { display: none; }
   .account-chip b { max-width: 72px; overflow: hidden; text-overflow: ellipsis; }
   .account-dialog-shell { padding: 24px 18px 20px; border-radius: 23px; }
   .account-dialog-close { top: 14px; right: 14px; }
