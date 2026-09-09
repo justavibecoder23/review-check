@@ -158,8 +158,13 @@ TrustScore là chỉ số tổng hợp theo thiết kế mẫu; không phải x�
 
 `LABELER_LLM_MODE=uncertain` là mặc định tiết kiệm: gửi ứng viên off-topic, review ngắn/low-value chưa chắc chắn, trường hợp xung đột hoặc độ tin cậy thấp; chuỗi rác, chỉ emoji và lặp ký tự chắc chắn vẫn bị Layer 1 chặn mà không tốn Gemini. `all` dùng để audit toàn bộ review; `off` tắt Layer 2.
 
-Layer 2 mặc định chia 10 review mỗi batch (cấu hình được trong khoảng 8–12) và
-chạy tối đa hai batch đồng thời. Mỗi batch dùng duy nhất model
+Layer 2 mặc định chia 10 review mỗi batch (cấu hình được trong khoảng 8–12).
+Bộ điều phối bắt đầu với ba batch đồng thời và chỉ tăng khi số lượng review,
+thời gian còn lại và số route Gemini khỏe yêu cầu; giới hạn trên là mười batch.
+Tắt nhanh bằng `LAYER2_ADAPTIVE_CONCURRENCY=false`; khi đó
+`LAYER2_FIXED_CONCURRENCY=2` giữ hành vi scheduler cũ. Scheduler không thay đổi
+tiêu chí `requires_llm`, prompt hoặc quyền xác nhận/sửa nhãn Layer 1 của Layer 2.
+Mỗi batch dùng duy nhất model
 `gemini-3.5-flash-lite`, thử tối đa hai route tuần tự; khi route đầu lỗi hoặc
 timeout, route thứ hai ưu tiên API key khỏe và ít sử dụng hơn trong Redis. Timeout
 không đánh dấu key là hết quota ngày. Kết quả trả `layer2Retry` gồm số retry, số

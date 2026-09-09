@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   GEMINI_ATTEMPT_TIMEOUT_MS,
   GEMINI_MODEL,
+  getGeminiRouteCapacity,
   geminiHttpError,
   geminiModelChain,
   geminiThinkingConfig,
@@ -271,4 +272,40 @@ test('deadline chung rút ngắn attempt thay vì cộng thêm thời gian retry
   }), /timeout|ngân sách thời gian/);
   assert.ok(calls <= 2);
   assert.ok(Date.now() - startedAt < 100);
+});
+
+test('deadline hết trước khi bắt đầu không đọc credential hoặc health từ Redis', async () => {
+  let credentialReads = 0;
+  let healthReads = 0;
+  await assert.rejects(() => requestGeminiWithFallback({
+    deadlineAt: Date.now() - 1,
+    listCredentialsImpl: async () => {
+      credentialReads += 1;
+      return credentials();
+    },
+    getHealthSnapshotImpl: async () => {
+      healthReads += 1;
+      return {};
+    },
+    fetchImpl: async () => response(200),
+    buildRequest: () => ({ method: 'POST' })
+  }), (error) => error?.code === 'GEMINI_DEADLINE_EXCEEDED');
+  assert.equal(credentialReads, 0);
+  assert.equal(healthReads, 0);
+});
+
+test('capacity snapshot chỉ đếm Gemini route đang khỏe và rảnh', async () => {
+  const nowMs = Date.now();
+  const capacity = await getGeminiRouteCapacity({
+    nowMs,
+    listCredentialsImpl: async () => credentials(3),
+    getHealthSnapshotImpl: async () => ({
+      [`key-1:${GEMINI_MODEL}`]: { ewmaLatencyMs: 12_000 },
+      [`key-2:${GEMINI_MODEL}`]: { inFlight: 1, lastStartedAtMs: nowMs },
+      [`key-3:${GEMINI_MODEL}`]: { ewmaLatencyMs: 20_000 }
+    })
+  });
+  assert.equal(capacity.totalRoutes, 3);
+  assert.equal(capacity.availableRoutes, 2);
+  assert.equal(capacity.estimatedLatencyMs, 20_000);
 });

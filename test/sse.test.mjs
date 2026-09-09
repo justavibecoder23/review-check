@@ -47,6 +47,7 @@ test('trang chủ chuyển ngay sang kết quả và giao diện tiến trình k
   assert.match(resultsSource, /product_meta/);
   assert.match(resultsSource, /reviews_sample/);
   assert.match(resultsSource, /layer1_stats/);
+  assert.match(resultsSource, /layer2_progress/);
   assert.match(resultsSource, /progress\.stage/);
   assert.doesNotMatch(resultsSource, /progress\.phase/);
   assert.doesNotMatch(resultsSource, /5 tài khoản|20\/20|Apify/i);
@@ -59,5 +60,6 @@ test('SSE phát các mốc dữ liệu tiệm tiến ngoài kết quả cuối',
   assert.match(handlerSource, /stream\.send\('product_meta'/);
   assert.match(handlerSource, /stream\.send\('reviews_sample'/);
   assert.match(handlerSource, /stream\.send\('layer1_stats'/);
+  assert.match(handlerSource, /stream\.send\('layer2_progress'/);
   assert.match(handlerSource, /stream\.send\('result'/);
 });

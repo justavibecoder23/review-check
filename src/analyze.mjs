@@ -137,7 +137,8 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
     product,
     geminiContext,
     signal: options.signal,
-    onLayer1Stats: (stats) => emit(options.onLayer1Stats, stats)
+    onLayer1Stats: (stats) => emit(options.onLayer1Stats, stats),
+    onLayer2Progress: (state) => emit(options.onLayer2Progress, state)
   });
   progress('filtering', 76, 'Đang phân tích reviews...');
   // Labeler đã khử trùng trước Gemini. Chỉ bản đại diện được kiểm định; chạy

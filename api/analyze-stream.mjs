@@ -25,6 +25,7 @@ export default async function handler(request, response) {
       onProductMeta: (product) => stream.send('product_meta', product),
       onReviewsSample: (sample) => stream.send('reviews_sample', sample),
       onLayer1Stats: (stats) => stream.send('layer1_stats', stats),
+      onLayer2Progress: (state) => stream.send('layer2_progress', state),
       signal
     });
     stream.send('result', result);

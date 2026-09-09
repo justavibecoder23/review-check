@@ -15,6 +15,22 @@ function truncate(value, maxLength = 240) {
 
 export const GEMINI_MODEL = 'gemini-3.5-flash-lite';
 export const GEMINI_ATTEMPT_TIMEOUT_MS = 25_000;
+export const GEMINI_MIN_ATTEMPT_BUDGET_MS = 10;
+
+function deadlineError(context, attempted = {}) {
+  const error = new Error(`${context} đã hết ngân sách thời gian.`);
+  error.name = 'TimeoutError';
+  error.code = 'GEMINI_DEADLINE_EXCEEDED';
+  error.attemptedModels = [...(attempted.attemptedModels || [])];
+  error.attemptedCredentialIds = [...(attempted.attemptedCredentialIds || [])];
+  error.attemptedRouteIds = [...(attempted.attemptedRouteIds || [])];
+  error.attempts = error.attemptedModels.length;
+  return error;
+}
+
+function remainingBudget(deadlineAt, nowMs = Date.now()) {
+  return Number.isFinite(Number(deadlineAt)) ? Number(deadlineAt) - nowMs : Number.POSITIVE_INFINITY;
+}
 
 async function fetchGemini(fetchImpl, url, init, context, model) {
   const startedAt = Date.now();
@@ -61,6 +77,40 @@ function healthErrorType(error) {
 
 export function geminiModelChain() {
   return [GEMINI_MODEL];
+}
+
+export async function getGeminiRouteCapacity({
+  redisFetchImpl,
+  apiKey,
+  listCredentialsImpl = listAvailableGeminiCredentials,
+  getHealthSnapshotImpl = getGeminiHealthSnapshot,
+  nowMs = Date.now()
+} = {}) {
+  let credentials = [];
+  try {
+    credentials = await listCredentialsImpl({ fetchImpl: redisFetchImpl });
+  } catch (error) {
+    if (error?.code !== 'POOL_NOT_CONFIGURED') throw error;
+  }
+  if (!credentials.length && apiKey) credentials = [{ id: null, apiKey, exhaustedModels: [] }];
+  const routeIds = credentials
+    .filter((credential) => !(credential.exhaustedModels || []).includes(GEMINI_MODEL))
+    .map((credential) => geminiRouteId(credential.id, GEMINI_MODEL));
+  if (!routeIds.length) return { availableRoutes: 0, totalRoutes: 0, estimatedLatencyMs: null };
+  const health = await getHealthSnapshotImpl({ fetchImpl: redisFetchImpl, routeIds });
+  const availableRouteIds = routeIds.filter((routeId) => Number.isFinite(
+    geminiRouteScore(health[routeId] || {}, GEMINI_MODEL, nowMs)
+  ));
+  const latencies = availableRouteIds
+    .map((routeId) => Number(health[routeId]?.ewmaLatencyMs))
+    .filter((latency) => Number.isFinite(latency) && latency > 0)
+    .sort((left, right) => left - right);
+  const estimatedLatencyMs = latencies.length ? latencies[Math.floor(latencies.length / 2)] : null;
+  return {
+    availableRoutes: availableRouteIds.length,
+    totalRoutes: routeIds.length,
+    estimatedLatencyMs
+  };
 }
 
 export async function geminiHttpError(response, context = 'Gemini') {
@@ -119,6 +169,9 @@ export async function requestGeminiWithFallback({
   const maxAttempts = 1 + Math.min(2, Math.max(0, Number.parseInt(maxRetries, 10) || 0));
   const timeoutMs = Math.min(GEMINI_ATTEMPT_TIMEOUT_MS, Math.max(10, Number.parseInt(attemptTimeoutMs, 10) || GEMINI_ATTEMPT_TIMEOUT_MS));
   let lastError;
+  if (remainingBudget(deadlineAt) < GEMINI_MIN_ATTEMPT_BUDGET_MS) {
+    throw deadlineError(context);
+  }
   let credentials = [];
   try {
     credentials = await listCredentialsImpl({ fetchImpl: redisFetchImpl });
@@ -144,6 +197,9 @@ export async function requestGeminiWithFallback({
   const routeIds = credentials.flatMap((credential) => models
     .filter((model) => !(credential.exhaustedModels || []).includes(model))
     .map((model) => geminiRouteId(credential.id, model)));
+  if (remainingBudget(deadlineAt) < GEMINI_MIN_ATTEMPT_BUDGET_MS) {
+    throw deadlineError(context);
+  }
   const health = await getHealthSnapshotImpl({ fetchImpl: redisFetchImpl, routeIds });
   for (const credential of credentials) {
     if (!credential.id || (credential.exhaustedModels || []).includes(GEMINI_MODEL)) continue;
@@ -159,13 +215,12 @@ export async function requestGeminiWithFallback({
   }
   for (let attemptIndex = 0; attemptIndex < maxAttempts; attemptIndex += 1) {
     const nowMs = Date.now();
-    if (Number.isFinite(Number(deadlineAt)) && nowMs >= Number(deadlineAt)) {
-      lastError = new Error(`${context} đã hết ngân sách thời gian.`);
-      lastError.name = 'TimeoutError';
-      lastError.attemptedModels = [...attemptedModels];
-      lastError.attemptedCredentialIds = [...attemptedCredentialIds];
-      lastError.attemptedRouteIds = [...attemptedRoutes];
-      lastError.attempts = attemptedModels.length;
+    if (remainingBudget(deadlineAt, nowMs) < GEMINI_MIN_ATTEMPT_BUDGET_MS) {
+      lastError = deadlineError(context, {
+        attemptedModels,
+        attemptedCredentialIds,
+        attemptedRouteIds: attemptedRoutes
+      });
       break;
     }
     const candidates = [];
@@ -202,6 +257,14 @@ export async function requestGeminiWithFallback({
     if (!choices.length) {
       lastError ||= new Error(`${context} đang chờ API key Gemini hết thời gian pending.`);
       lastError.code = 'GEMINI_KEYS_PENDING';
+      break;
+    }
+    if (remainingBudget(deadlineAt) < GEMINI_MIN_ATTEMPT_BUDGET_MS) {
+      lastError = deadlineError(context, {
+        attemptedModels,
+        attemptedCredentialIds,
+        attemptedRouteIds: attemptedRoutes
+      });
       break;
     }
     choices.sort((left, right) => left.score - right.score

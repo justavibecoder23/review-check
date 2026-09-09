@@ -556,6 +556,16 @@ async function readAnalysisStream(url) {
       setProgress(64);
       if (progressMessage) progressMessage.textContent = `${payload.total || 0} review đã được chuẩn hóa; đang thẩm định các trường hợp cần đọc hiểu ngữ cảnh.`;
     }
+    if (eventName === 'layer2_progress') {
+      const total = Math.max(0, Number(payload.total) || 0);
+      const completed = clamp(Number(payload.completed) || 0, 0, total || 0);
+      const ratio = total ? completed / total : 1;
+      setAnalysisStep(2);
+      setProgress(64 + ratio * 13);
+      if (progressMessage) progressMessage.textContent = total
+        ? `Đang kiểm định nội dung: đã xử lý ${completed}/${total} nhóm đánh giá.`
+        : 'Đã hoàn tất bước kiểm định nội dung.';
+    }
     if (eventName === 'result') finalResult = payload;
     if (eventName === 'error') throw new Error(payload.error || 'Không thể hoàn tất phân tích.');
   };

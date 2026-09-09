@@ -1,5 +1,10 @@
 import { createRequire } from 'node:module';
-import { geminiThinkingConfig, parseGeminiJson, requestGeminiWithFallback } from './gemini-response.mjs';
+import {
+  geminiThinkingConfig,
+  getGeminiRouteCapacity,
+  parseGeminiJson,
+  requestGeminiWithFallback
+} from './gemini-response.mjs';
 import { isRedisConfigured } from './redis-rest.mjs';
 import { annotateReviewDuplicates } from './review-deduplication.mjs';
 import { REVIEW_PIPELINE_VERSION } from './review-pipeline-version.mjs';
@@ -11,9 +16,15 @@ const rules = rulesDocument.layer1_rules;
 const policy = rulesDocument.policy;
 const layer2Config = layer2Document.layer2_config;
 const allowedCategories = new Set(policy.allowed_defect_categories);
-const LAYER2_MAX_CONCURRENCY = 2;
 const LAYER2_MAX_ROUTE_ATTEMPTS = 2;
 const LAYER2_DEFAULT_BATCH_SIZE = 10;
+const LAYER2_DEFAULT_BASE_CONCURRENCY = 3;
+const LAYER2_DEFAULT_MAX_CONCURRENCY = 10;
+const LAYER2_DEFAULT_FIXED_CONCURRENCY = 2;
+const LAYER2_DEFAULT_ESTIMATED_BATCH_MS = 22_000;
+const LAYER2_DEFAULT_DEADLINE_BUFFER_MS = 5_000;
+const LAYER2_DEFAULT_MIN_START_BUDGET_MS = 8_000;
+const LAYER2_DEFAULT_RESERVED_ROUTES = 1;
 
 export function normalizeVietnamese(value = '') {
   return String(value)
@@ -661,18 +672,116 @@ function chunks(items, size) {
   return result;
 }
 
-async function mapWithConcurrency(items, concurrency, mapper) {
+function integerSetting(value, fallback, minimum, maximum) {
+  const parsed = Number.parseInt(value, 10);
+  return Math.min(maximum, Math.max(minimum, Number.isFinite(parsed) ? parsed : fallback));
+}
+
+function booleanSetting(value, fallback = true) {
+  if (value === undefined || value === null || value === '') return fallback;
+  return !['0', 'false', 'off', 'no'].includes(String(value).trim().toLowerCase());
+}
+
+export function calculateLayer2Concurrency({
+  remainingBatches,
+  remainingMs,
+  estimatedBatchMs = LAYER2_DEFAULT_ESTIMATED_BATCH_MS,
+  baseConcurrency = LAYER2_DEFAULT_BASE_CONCURRENCY,
+  maxConcurrency = LAYER2_DEFAULT_MAX_CONCURRENCY,
+  routeCapacity = maxConcurrency
+} = {}) {
+  const batches = Math.max(0, Number.parseInt(remainingBatches, 10) || 0);
+  if (!batches) return 0;
+  const capacity = Math.max(1, Number.parseInt(routeCapacity, 10) || 1);
+  const ceiling = Math.max(1, Math.min(batches, maxConcurrency, capacity));
+  const base = Math.min(ceiling, Math.max(1, baseConcurrency));
+  if (!Number.isFinite(Number(remainingMs)) || Number(remainingMs) <= 0) return ceiling;
+  const required = Math.ceil((batches * Math.max(1, estimatedBatchMs)) / Math.max(1, Number(remainingMs)));
+  return Math.min(ceiling, Math.max(base, required));
+}
+
+async function mapWithAdaptiveConcurrency(items, options, mapper) {
+  if (!items.length) return { results: [], peakConcurrency: 0, initialConcurrency: 0, skippedDeadline: 0 };
   const results = new Array(items.length);
+  const adaptive = options.adaptive;
+  const startedAt = Date.now();
+  let estimatedBatchMs = options.estimatedBatchMs;
   let cursor = 0;
-  async function worker() {
-    while (cursor < items.length) {
-      const index = cursor;
-      cursor += 1;
-      results[index] = await mapper(items[index], index);
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
-  return results;
+  let active = 0;
+  let completed = 0;
+  let peakConcurrency = 0;
+  let initialConcurrency = 0;
+  let skippedDeadline = 0;
+
+  return new Promise((resolve) => {
+    const emitState = (targetConcurrency) => options.onState?.({
+      completed,
+      total: items.length,
+      running: active,
+      targetConcurrency,
+      peakConcurrency,
+      skippedDeadline,
+      estimatedBatchMs: Math.round(estimatedBatchMs),
+      elapsedMs: Date.now() - startedAt
+    });
+
+    const schedule = () => {
+      const nowMs = Date.now();
+      const deadlineAt = Number(options.deadlineAt);
+      const finiteDeadline = Number.isFinite(deadlineAt);
+      const usableRemainingMs = finiteDeadline
+        ? deadlineAt - nowMs - options.deadlineBufferMs
+        : Number.POSITIVE_INFINITY;
+      if (finiteDeadline && deadlineAt - nowMs < options.minStartBudgetMs) {
+        while (cursor < items.length) {
+          results[cursor] = options.skipFactory(items[cursor], cursor);
+          cursor += 1;
+          completed += 1;
+          skippedDeadline += 1;
+        }
+      }
+
+      const remainingBatches = items.length - completed;
+      const targetConcurrency = adaptive
+        ? calculateLayer2Concurrency({
+            remainingBatches,
+            remainingMs: usableRemainingMs,
+            estimatedBatchMs,
+            baseConcurrency: options.baseConcurrency,
+            maxConcurrency: options.maxConcurrency,
+            routeCapacity: options.routeCapacity
+          })
+        : Math.min(remainingBatches, options.fixedConcurrency, options.routeCapacity);
+      if (!initialConcurrency && targetConcurrency) initialConcurrency = targetConcurrency;
+      emitState(targetConcurrency);
+
+      while (cursor < items.length && active < targetConcurrency) {
+        const index = cursor;
+        cursor += 1;
+        active += 1;
+        peakConcurrency = Math.max(peakConcurrency, active);
+        const batchStartedAt = Date.now();
+        Promise.resolve(mapper(items[index], index))
+          .then((value) => { results[index] = value; })
+          .catch((error) => { results[index] = options.errorFactory(error, items[index], index); })
+          .finally(() => {
+            const observedMs = Math.max(1, Date.now() - batchStartedAt);
+            estimatedBatchMs = Math.min(25_000, Math.max(5_000,
+              Math.round(estimatedBatchMs * 0.65 + observedMs * 0.35)
+            ));
+            active -= 1;
+            completed += 1;
+            schedule();
+          });
+      }
+
+      if (completed >= items.length && active === 0) {
+        emitState(0);
+        resolve({ results, peakConcurrency, initialConcurrency, skippedDeadline });
+      }
+    };
+    schedule();
+  });
 }
 
 export async function labelReviewsTwoLayer(reviews = [], options = {}) {
@@ -730,8 +839,110 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
   let credentialSwitches = 0;
   const modelsUsed = new Set();
   const batchDurationsMs = [];
+  const schedulerOverrides = options.scheduler || {};
+  const adaptiveConcurrency = booleanSetting(
+    schedulerOverrides.adaptive ?? process.env.LAYER2_ADAPTIVE_CONCURRENCY,
+    true
+  );
+  const baseConcurrency = integerSetting(
+    schedulerOverrides.baseConcurrency ?? process.env.LAYER2_BASE_CONCURRENCY,
+    LAYER2_DEFAULT_BASE_CONCURRENCY,
+    1,
+    10
+  );
+  const maxConcurrency = integerSetting(
+    schedulerOverrides.maxConcurrency ?? process.env.LAYER2_MAX_CONCURRENCY,
+    LAYER2_DEFAULT_MAX_CONCURRENCY,
+    baseConcurrency,
+    10
+  );
+  const fixedConcurrency = integerSetting(
+    schedulerOverrides.fixedConcurrency ?? process.env.LAYER2_FIXED_CONCURRENCY,
+    LAYER2_DEFAULT_FIXED_CONCURRENCY,
+    1,
+    10
+  );
+  const deadlineBufferMs = integerSetting(
+    schedulerOverrides.deadlineBufferMs ?? process.env.LAYER2_DEADLINE_BUFFER_MS,
+    LAYER2_DEFAULT_DEADLINE_BUFFER_MS,
+    0,
+    15_000
+  );
+  const minStartBudgetMs = integerSetting(
+    schedulerOverrides.minStartBudgetMs ?? process.env.LAYER2_MIN_START_BUDGET_MS,
+    LAYER2_DEFAULT_MIN_START_BUDGET_MS,
+    1_500,
+    25_000
+  );
+  const reservedRoutes = integerSetting(
+    schedulerOverrides.reservedRoutes ?? process.env.LAYER2_RESERVED_ROUTES,
+    LAYER2_DEFAULT_RESERVED_ROUTES,
+    0,
+    5
+  );
+  let estimatedBatchMs = integerSetting(
+    schedulerOverrides.estimatedBatchMs ?? process.env.LAYER2_ESTIMATED_BATCH_MS,
+    LAYER2_DEFAULT_ESTIMATED_BATCH_MS,
+    5_000,
+    25_000
+  );
+  let availableRoutes = maxConcurrency;
+  let routeCapacity = maxConcurrency;
+  let initialConcurrency = 0;
+  let peakConcurrency = 0;
+  let skippedDeadlineBatches = 0;
   if (selected.length && (process.env.GEMINI_API_KEY || isRedisConfigured())) {
-    const results = await mapWithConcurrency(batches, LAYER2_MAX_CONCURRENCY, async (batch, batchIndex) => {
+    if (Number.isFinite(Number(schedulerOverrides.routeCapacity))) {
+      availableRoutes = integerSetting(schedulerOverrides.routeCapacity, maxConcurrency, 1, 200);
+    } else if (!options.requestGeminiImpl) {
+      try {
+        const capacity = await (options.getGeminiRouteCapacityImpl || getGeminiRouteCapacity)({
+          apiKey: process.env.GEMINI_API_KEY,
+          redisFetchImpl: options.redisFetchImpl
+        });
+        availableRoutes = Math.max(1, Number(capacity.availableRoutes) || 1);
+        if (Number(capacity.estimatedLatencyMs) > 0 && schedulerOverrides.estimatedBatchMs === undefined) {
+          estimatedBatchMs = integerSetting(capacity.estimatedLatencyMs, estimatedBatchMs, 5_000, 25_000);
+        }
+      } catch (error) {
+        availableRoutes = Math.max(1, baseConcurrency);
+        warnings.push(`Không đọc được dung lượng Gemini pool; scheduler dùng giới hạn an toàn mặc định: ${error?.message || 'không rõ lỗi'}.`);
+      }
+    }
+    routeCapacity = Math.max(1, Math.min(maxConcurrency, availableRoutes - Math.min(reservedRoutes, availableRoutes - 1)));
+    const scheduled = await mapWithAdaptiveConcurrency(batches, {
+      adaptive: adaptiveConcurrency,
+      baseConcurrency,
+      maxConcurrency,
+      fixedConcurrency,
+      routeCapacity,
+      estimatedBatchMs,
+      deadlineAt: options.geminiContext?.layer2DeadlineAt,
+      deadlineBufferMs,
+      minStartBudgetMs,
+      skipFactory: () => ({
+        labels: [],
+        skippedReason: 'deadline',
+        warning: 'Layer 2 bỏ qua batch chưa khởi chạy vì không còn đủ ngân sách thời gian.'
+      }),
+      errorFactory: (error) => {
+        failedBatches += 1;
+        return { labels: [], warning: error?.message || 'Layer 2 không phản hồi.' };
+      },
+      onState: (state) => {
+        if (typeof options.onLayer2Progress !== 'function') return;
+        try {
+          options.onLayer2Progress({
+            ...state,
+            adaptive: adaptiveConcurrency,
+            availableRoutes,
+            routeCapacity
+          });
+        } catch {
+          // Cập nhật tiến độ không được phép ảnh hưởng quyết định Layer 2.
+        }
+      }
+    }, async (batch, batchIndex) => {
       try {
         const result = await classifyBatchWithGemini(batch, options.product, {
           fetchImpl: options.fetchImpl || fetch,
@@ -779,6 +990,10 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
         return { labels: [], warning };
       }
     });
+    const results = scheduled.results;
+    initialConcurrency = scheduled.initialConcurrency;
+    peakConcurrency = scheduled.peakConcurrency;
+    skippedDeadlineBatches = scheduled.skippedDeadline;
     for (const result of results) {
       if (result.warning) warnings.push(result.warning);
       for (const candidate of result.labels) layer2ById.set(String(candidate.id), candidate);
@@ -847,10 +1062,17 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
       batches: batches.length,
       succeededBatches,
       failedBatches,
+      skippedDeadlineBatches,
       retryAttempts,
       credentialSwitches,
       batchDurationsMs,
-      cacheHits
+      cacheHits,
+      adaptiveConcurrency,
+      initialConcurrency,
+      peakConcurrency,
+      availableRoutes,
+      routeCapacity,
+      coverage: selected.length ? layer2ById.size / selected.length : 1
     }));
   }
 
@@ -863,6 +1085,15 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
       layer2Status,
       layer2Model: model,
       layer2Batches: { total: batches.length, succeeded: succeededBatches, failed: failedBatches },
+      layer2SkippedDeadlineBatches: skippedDeadlineBatches,
+      layer2Concurrency: {
+        adaptive: adaptiveConcurrency,
+        initial: initialConcurrency,
+        peak: peakConcurrency,
+        availableRoutes,
+        routeCapacity
+      },
+      layer2Coverage: selected.length ? layer2ById.size / selected.length : 1,
       layer2Retry: { retryAttempts, credentialSwitches, modelsUsed: [...modelsUsed] },
       layer2DurationMs,
       layer2CacheHits: cacheHits,

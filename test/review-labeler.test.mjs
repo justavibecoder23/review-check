@@ -2,7 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { shouldKeep } from '../src/analyze.mjs';
-import { classifyBatchWithGemini, labelReviewLayer1, labelReviewsTwoLayer } from '../src/review-labeler.mjs';
+import {
+  calculateLayer2Concurrency,
+  classifyBatchWithGemini,
+  labelReviewLayer1,
+  labelReviewsTwoLayer
+} from '../src/review-labeler.mjs';
 
 test('review generic ngắn là low_value nhưng không bị suy diễn thành seeding', () => {
   const label = labelReviewLayer1({ rating: 5, text: 'Tốt' });
@@ -818,7 +823,7 @@ test('Layer 2 không nhận nhiều category nếu thiếu quote riêng cho từ
   }
 });
 
-test('Layer 2 giới hạn tối đa hai batch Gemini chạy đồng thời', async () => {
+test('Layer 2 dùng concurrency cơ sở ba cho tải thông thường', async () => {
   const previousKey = process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY = 'test-key';
   let active = 0;
@@ -841,11 +846,155 @@ test('Layer 2 giới hạn tối đa hai batch Gemini chạy đồng thời', as
       }
     });
     assert.equal(calls, 3);
+    assert.equal(maximumActive, 3);
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
+test('tắt adaptive concurrency khôi phục scheduler cố định hai batch', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  let active = 0;
+  let maximumActive = 0;
+  try {
+    await labelReviewsTwoLayer(Array.from({ length: 30 }, (_, index) => ({
+      rating: 5,
+      text: `Review scheduler cố định ${index + 1} mô tả trải nghiệm sử dụng sản phẩm.`
+    })), {
+      mode: 'all',
+      product: { title: 'Sản phẩm thử nghiệm' },
+      scheduler: { adaptive: false, fixedConcurrency: 2, routeCapacity: 10 },
+      requestGeminiImpl: async () => {
+        active += 1;
+        maximumActive = Math.max(maximumActive, active);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        active -= 1;
+        return { value: [], model: 'gemini-3.5-flash-lite', attemptedModels: ['gemini-3.5-flash-lite'] };
+      }
+    });
     assert.equal(maximumActive, 2);
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
     else delete process.env.GEMINI_API_KEY;
   }
+});
+
+test('adaptive concurrency tăng lên năm khi chín batch không thể kịp deadline với ba worker', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  let active = 0;
+  let maximumActive = 0;
+  try {
+    const result = await labelReviewsTwoLayer(Array.from({ length: 90 }, (_, index) => ({
+      rating: 5,
+      text: `Review tải lớn ${index + 1} mô tả sản phẩm sử dụng ổn định và tiện lợi.`
+    })), {
+      mode: 'all',
+      product: { title: 'Sản phẩm thử nghiệm' },
+      geminiContext: {
+        deadlineAt: Date.now() + 75_000,
+        layer2DeadlineAt: Date.now() + 45_000,
+        busyRouteIds: new Set(),
+        failedRouteIds: new Set()
+      },
+      scheduler: { routeCapacity: 10, estimatedBatchMs: 22_000 },
+      requestGeminiImpl: async () => {
+        active += 1;
+        maximumActive = Math.max(maximumActive, active);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        active -= 1;
+        return { value: [], model: 'gemini-3.5-flash-lite', attemptedModels: ['gemini-3.5-flash-lite'] };
+      }
+    });
+    assert.equal(result.stats.layer2Batches.total, 9);
+    assert.equal(result.stats.layer2Concurrency.initial, 5);
+    assert.equal(maximumActive, 5);
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
+test('scheduler không gửi batch mới khi deadline không còn đủ ngân sách', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  let calls = 0;
+  try {
+    const result = await labelReviewsTwoLayer(Array.from({ length: 30 }, (_, index) => ({
+      rating: 5,
+      text: `Review sát deadline ${index + 1} mô tả trải nghiệm sản phẩm.`
+    })), {
+      mode: 'all',
+      product: { title: 'Sản phẩm thử nghiệm' },
+      geminiContext: {
+        deadlineAt: Date.now() + 75_000,
+        layer2DeadlineAt: Date.now() + 100,
+        busyRouteIds: new Set(),
+        failedRouteIds: new Set()
+      },
+      scheduler: { routeCapacity: 10, minStartBudgetMs: 1_500 },
+      requestGeminiImpl: async () => {
+        calls += 1;
+        return { value: [], model: 'gemini-3.5-flash-lite', attemptedModels: ['gemini-3.5-flash-lite'] };
+      }
+    });
+    assert.equal(calls, 0);
+    assert.equal(result.stats.layer2SkippedDeadlineBatches, 3);
+    assert.equal(result.stats.layer2Batches.failed, 0);
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
+test('Layer 2 vẫn có quyền sửa và phủ định kết luận ngữ nghĩa của Layer 1', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  const text = 'Hàng nhận bị xước tùm lum, dùng tạm không trả hàng.';
+  try {
+    const layer1 = labelReviewLayer1({ rating: 3, text }, 0, { title: 'Cáp sạc điện thoại' });
+    assert.equal(layer1.has_defect, true);
+    const result = await labelReviewsTwoLayer([{ rating: 3, text }], {
+      mode: 'all',
+      product: { title: 'Cáp sạc điện thoại' },
+      scheduler: { routeCapacity: 3 },
+      requestGeminiImpl: async () => ({
+        model: 'gemini-3.5-flash-lite',
+        attemptedModels: ['gemini-3.5-flash-lite'],
+        value: [{
+          id: 'r0001',
+          decision: 'correct',
+          is_seeding: false,
+          is_low_value: false,
+          is_vague: false,
+          is_off_topic: false,
+          relevance: 'on_topic',
+          information_value: 'medium',
+          has_defect: false,
+          defect_categories: [],
+          defect_quote: null,
+          evidence_quote: text,
+          confidence: 0.96,
+          reason_code: 'CONTEXT_CORRECTION'
+        }]
+      })
+    });
+    assert.equal(result.reviews[0].labeling.layer2.decision, 'correct');
+    assert.equal(result.reviews[0].labels.has_defect, false);
+    assert.equal(result.reviews[0].labels.reviewed_by, 'gemini-layer2');
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
+test('công thức concurrency tôn trọng tải, deadline và dung lượng route', () => {
+  assert.equal(calculateLayer2Concurrency({ remainingBatches: 2, remainingMs: 40_000 }), 2);
+  assert.equal(calculateLayer2Concurrency({ remainingBatches: 9, remainingMs: 40_000 }), 5);
+  assert.equal(calculateLayer2Concurrency({ remainingBatches: 9, remainingMs: 40_000, routeCapacity: 4 }), 4);
+  assert.equal(calculateLayer2Concurrency({ remainingBatches: 20, remainingMs: 10_000, maxConcurrency: 10 }), 10);
 });
 
 test('review trùng nội dung không tiêu hao thêm lượt kiểm định Layer 2', async () => {
