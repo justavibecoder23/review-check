@@ -47,7 +47,7 @@ test('khách chỉ thấy một nút tài khoản màu cam và nút liên hệ m
   const auth = await readFile(new URL('../public/auth.js', import.meta.url), 'utf8');
   const authCss = await readFile(new URL('../public/auth.css', import.meta.url), 'utf8');
   const styles = await readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
-  assert.match(auth, />Đăng nhập \/ Đăng ký<\/button>/);
+  assert.match(auth, /<span>Đăng nhập \/ Đăng ký<\/span>/);
   assert.equal((auth.match(/data-auth-open=/g) || []).length, 1);
   assert.match(authCss, /\.auth-button--access[\s\S]*background:\s*var\(--orange\)/);
   assert.match(styles, /\.header-contact[\s\S]*background:\s*rgba\(255,255,255,\.82\)/);
@@ -59,6 +59,18 @@ test('mobile luôn có nút liên hệ dạng icon với vùng chạm đạt chu
   assert.match(authCss, /\.header-contact\s*\{[\s\S]*width:\s*44px[\s\S]*height:\s*44px/);
   assert.match(authCss, /\.header-contact span\s*\{\s*display:\s*none/);
   assert.doesNotMatch(authCss, /@media \(max-width: 900px\)\s*\{\s*\.header-contact\s*\{\s*display:\s*none/);
+  assert.doesNotMatch(authCss, /\.header-inner > \.brand > span:not\(\.brand-mark\)\s*\{\s*display:\s*none/);
+});
+
+test('slogan và nội dung tổng hợp không dùng thông điệp tài chính', async () => {
+  const [home, trustAnalysis] = await Promise.all([
+    readFile(new URL('../public/index.html', import.meta.url), 'utf8'),
+    readFile(new URL('../src/trust-analysis.mjs', import.meta.url), 'utf8')
+  ]);
+  assert.match(home, /Tiết kiệm cho/);
+  assert.doesNotMatch(home, /Tiết kiệm tiền cho/);
+  assert.match(trustAnalysis, /Mức độ đáp ứng kỳ vọng/);
+  assert.doesNotMatch(trustAnalysis, /Giá trị so với chi phí|số tiền đã bỏ ra/);
 });
 
 test('biểu mẫu liên hệ gửi trực tiếp và dùng email RealView mới', async () => {
