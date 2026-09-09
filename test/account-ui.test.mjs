@@ -67,7 +67,7 @@ test('slogan và nội dung tổng hợp không dùng thông điệp tài chính
     readFile(new URL('../public/index.html', import.meta.url), 'utf8'),
     readFile(new URL('../src/trust-analysis.mjs', import.meta.url), 'utf8')
   ]);
-  assert.match(home, /Tiết kiệm cho/);
+  assert.match(home, /hero-heading-line-primary">Tiết kiệm<\/span><span class="hero-heading-line">cho quyết định đúng<\/span>/);
   assert.doesNotMatch(home, /Tiết kiệm tiền cho/);
   assert.match(trustAnalysis, /Mức độ đáp ứng kỳ vọng/);
   assert.doesNotMatch(trustAnalysis, /Giá trị so với chi phí|số tiền đã bỏ ra/);
