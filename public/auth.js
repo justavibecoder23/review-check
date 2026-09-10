@@ -61,7 +61,7 @@ function dialogMarkup() {
     <dialog id="account-dialog" class="account-dialog" aria-labelledby="account-dialog-title">
       <div class="account-dialog-shell">
         <button class="account-dialog-close" type="button" data-auth-close aria-label="Đóng cửa sổ tài khoản">×</button>
-        <div class="account-dialog-brand" aria-hidden="true"><img src="/assets/realview-logo-v1.jpg" alt="" width="128" height="75" /></div>
+        <div class="account-dialog-brand" aria-hidden="true"><img src="/assets/realview-logo-v1.webp" alt="" width="128" height="75" /></div>
         <div class="account-dialog-heading">
           <span>TÀI KHOẢN REALVIEW</span>
           <h2 id="account-dialog-title">Chào mừng bạn trở lại</h2>

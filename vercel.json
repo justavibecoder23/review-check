@@ -22,9 +22,6 @@
     "api/contact.mjs": {
       "maxDuration": 10
     },
-    "api/article-views.mjs": {
-      "maxDuration": 10
-    },
     "api/apify-config.mjs": {
       "maxDuration": 10
     },
@@ -34,23 +31,23 @@
   },
   "headers": [
     {
-      "source": "/assets/realview-logo-v1.jpg",
+      "source": "/assets/realview-logo-v1.webp",
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
     },
     {
-      "source": "/assets/favicon-v1-32.jpg",
+      "source": "/assets/favicon-v1-32.png",
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
     },
     {
-      "source": "/assets/favicon-v1-48.jpg",
+      "source": "/assets/favicon-v1-48.png",
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
     },
     {
-      "source": "/assets/apple-touch-icon-v1.jpg",
+      "source": "/assets/apple-touch-icon-v1.png",
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
     },
     {
-      "source": "/assets/illustrations/open-doodles-laying-v1.jpg",
+      "source": "/assets/illustrations/open-doodles-laying-v1.svg",
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
     }
   ],
@@ -61,7 +58,6 @@
     { "source": "/api/auth", "destination": "/api/auth.mjs" },
     { "source": "/api/history", "destination": "/api/history.mjs" },
     { "source": "/api/contact", "destination": "/api/contact.mjs" },
-    { "source": "/api/article-views", "destination": "/api/article-views.mjs" },
     { "source": "/api/apify-config", "destination": "/api/apify-config.mjs" },
     { "source": "/api/gemini-config", "destination": "/api/gemini-config.mjs" },
     { "source": "/(.*)", "destination": "/public/$1" }

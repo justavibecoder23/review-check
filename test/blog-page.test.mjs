@@ -18,7 +18,7 @@ test('blog hub has crawlable metadata and one primary heading', () => {
 });
 
 test('published article has Article and breadcrumb structured data', () => {
-  assert.match(articleHtml, /"@type": "BlogPosting"/);
+  assert.match(articleHtml, /"@type": "Article"/);
   assert.match(articleHtml, /"@type": "BreadcrumbList"/);
   assert.equal((articleHtml.match(/<h1\b/g) || []).length, 1);
   assert.match(articleHtml, /"publisher"[\s\S]+"logo"/);

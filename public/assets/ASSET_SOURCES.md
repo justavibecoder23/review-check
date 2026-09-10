@@ -2,27 +2,27 @@
 
 ## Illustration
 
-- `illustrations/open-doodles-laying.jpg` và `illustrations/open-doodles-laying-v1.jpg` (bản JPG dùng trên website)
+- `illustrations/open-doodles-laying.svg` (source)
+- `illustrations/open-doodles-laying-v1.svg` (versioned production copy)
   - Tác giả: Pablo Stanley / Open Doodles.
   - Nguồn gốc: `https://www.opendoodles.com/`.
   - Tệp gốc: `https://opendoodles.s3-us-west-1.amazonaws.com/laying.svg`.
-  - Thay đổi trong dự án: raster hóa sang JPG tối ưu, nền sáng đồng bộ giao diện.
 
 ## Nhận diện thương hiệu
 
-- `realview-rv.jpg`, `realview-logo-v1.jpg`, `favicon-v1-32.jpg`, `favicon-v1-48.jpg`, `apple-touch-icon-v1.jpg`
-  - Nguồn: các bản JPG tối ưu được tạo từ tài sản thương hiệu gốc của RealView.
+- `realview-logo-v1.webp`, `favicon-v1-32.png`, `favicon-v1-48.png`, `apple-touch-icon-v1.png`
+  - Nguồn: các bản tối ưu được tạo từ `realview-rv.png` của RealView.
   - Sử dụng: logo giao diện, favicon và biểu tượng màn hình chính với kích thước phù hợp từng ngữ cảnh.
   - Giấy phép: CC0, cho phép sao chép, chỉnh sửa và sử dụng không cần ghi công.
   - Thay đổi trong dự án: đổi màu nhấn gốc `#FF5678` thành màu thương hiệu `#FC781F`.
 
-- `illustrations/undraw-online-review.jpg`
+- `illustrations/undraw-online-review.svg`
   - Tác giả: Katerina Limpitsouni / unDraw.
   - Nguồn gốc: `https://undraw.co/illustration/online-review_08y6`.
   - Giấy phép: `https://undraw.co/license`.
   - Thay đổi trong dự án: đổi màu tím chính thành `#FC781F`, màu nét đậm thành `#161616` và màu xám phụ thành `#8E8E87` để đồng bộ bảng màu RealView.
 
-- `illustrations/undraw-user-feedback.jpg`
+- `illustrations/undraw-user-feedback.svg`
   - Tác giả: Katerina Limpitsouni / unDraw; phần code và thiết kế website unDraw: Aggelos Gesoulis.
   - Nguồn gốc: `https://undraw.co/illustration/user-feedback_5fp8`.
   - Tệp gốc: `https://cdn.undraw.co/illustration/user-feedback_5fp8.svg`.
@@ -34,17 +34,17 @@
   - Thư viện chính thức: `https://undraw.co/illustrations`.
   - Giấy phép: `https://undraw.co/license` — cho phép sử dụng, chỉnh sửa và đưa vào sản phẩm mà không bắt buộc ghi công.
   - Các cảnh gốc: `Reviews`, `Time management`, `Informed decision`, `Online shopping`, `Wishlist`, `Data analysis`, `Sentiment analysis`, `Key insights`, `Web shopping`, `Customer survey` và `Blogging`.
-  - Tệp trong dự án: `benefit-trusted.jpg`, `benefit-time.jpg`, `benefit-decision.jpg`, `benefit-shopping.jpg`, `benefit-suggestion.jpg`, `feature-ai-analysis.jpg`, `feature-filter-reviews.jpg`, `feature-summary.jpg`, `feature-alternatives.jpg`, `feature-trust-score.jpg`, `feature-blog.jpg`.
+  - Tệp trong dự án: `benefit-trusted.svg`, `benefit-time.svg`, `benefit-decision.svg`, `benefit-shopping.svg`, `benefit-suggestion.svg`, `feature-ai-analysis.svg`, `feature-filter-reviews.svg`, `feature-summary.svg`, `feature-alternatives.svg`, `feature-trust-score.svg`, `feature-blog.svg`.
   - Thay đổi trong dự án: đổi màu nhấn gốc thành `#FC781F`; giữ nguyên cấu trúc minh họa và ngôn ngữ hình ảnh thống nhất của tác giả.
 
-- `illustrations/results-review-cleanup.jpg`
+- `illustrations/results-review-cleanup.svg`
   - Tác giả/nguồn: Storyset by Freepik — bộ minh họa `Inbox Cleanup` (Rafiki).
   - Nguồn gốc: `https://storyset.com/illustration/inbox-cleanup/rafiki`.
   - Giấy phép/điều khoản: `https://storyset.com/terms`.
   - Sử dụng: minh họa có nhân vật cho thao tác xem các review đã bị loại bỏ.
   - Thay đổi trong dự án: đổi màu nhấn xanh `#407BFF` thành màu thương hiệu `#FC781F`.
 
-- `illustrations/results-review-filter.jpg`
+- `illustrations/results-review-filter.svg`
   - Tác giả/nguồn: Storyset by Freepik — bộ minh họa `Filter` (Rafiki).
   - Nguồn gốc: `https://storyset.com/illustration/filter/rafiki/animate`.
   - Giấy phép/điều khoản: `https://storyset.com/terms`.

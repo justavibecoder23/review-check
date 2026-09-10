@@ -53,7 +53,7 @@
       <div class="criteria-hero">
         <div class="criteria-hero-art criteria-reveal" aria-hidden="true">
           <div class="criteria-art-frame">
-            <img src="/assets/illustrations/undraw-online-review.jpg" alt="" />
+            <img src="/assets/illustrations/undraw-online-review.svg" alt="" />
           </div>
           <span class="criteria-art-tag">Cách chúng tôi đánh giá</span>
         </div>
