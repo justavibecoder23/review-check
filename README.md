@@ -36,6 +36,7 @@ APIFY_ACTOR_ID=zen-studio/shopee-product-reviews-scraper
 SHOPEE_REVIEWS_PER_STAR=20
 APIFY_RUN_TIMEOUT_MS=70000
 TIKTOK_USE_TEMPORARY_ACTOR=false
+TIKTOK_RECENT_RAW_CACHE=true
 APIFY_TOKEN_VAULT_KEY=<base64 32 byte>
 APIFY_ADMIN_KEY=<admin secret>
 UPSTASH_REDIS_REST_URL=<Upstash REST URL>
@@ -44,11 +45,15 @@ UPSTASH_REDIS_REST_TOKEN=<Upstash REST token>
 
 Shopee production luôn dùng 5 account song song cho 5 tầng 5★/4★/3★/2★/1★, tối đa 20 review mỗi account (tổng tối đa 100), kiểm tra đúng mức sao và khử trùng trước khi phân tích. Actor TikTok gốc vẫn là mặc định và dùng cùng chiến lược chia tầng. `TIKTOK_USE_TEMPORARY_ACTOR=true` chuyển toàn bộ lượt TikTok sang actor tạm thời lấy tối đa 100 review gần nhất bằng một account; `false` hoặc bỏ trống sẽ dùng actor gốc. Mẫu của actor tạm thời được gắn nhãn `most-recent-100` và `observed-sample`, không được diễn giải như phân bố đại diện của toàn bộ sản phẩm. Các Apify token không nằm trong environment của Vercel: chúng được cập nhật tập trung qua API quản trị và mã hóa trong Redis. Không đưa file chứa token vào GitHub hoặc JavaScript trình duyệt.
 
+`TIKTOK_RECENT_RAW_CACHE=true` (mặc định) cho phép TikTok tái sử dụng raw dataset của đúng `productId` trong tối đa năm ngày trước khi gọi actor. TikTok cache không yêu cầu dataset có đủ năm tầng sao, nên tương thích với actor tạm thời không hỗ trợ star filter. Dataset đã gắn nhãn không bao giờ được dùng làm đầu vào cache. Khi cache hit, backend vẫn chạy mới Layer 1, Layer 2, TrustScore và phần diễn giải; chỉ bước thu thập Apify được bỏ qua. Dataset phải còn ít nhất 20 review có nội dung. Đặt biến này thành `false` để quay lại luồng luôn gọi actor trực tiếp.
+
 ### Cấu hình và tự động xoay vòng Apify key
 
 Pool vẫn được lưu theo nhóm 5 key để tương thích với file quản trị hiện có. Shopee và TikTok dùng chung token nhưng có bộ đếm riêng. Shopee production cấp đủ 5 key còn lượt và tăng bộ đếm lượt của từng key bằng một lệnh Redis nguyên tử; mỗi key được dùng tối đa 10 lượt. Khi một key đủ 10 lượt, trạng thái `used` chỉ áp dụng cho Shopee—key đó vẫn có thể phục vụ TikTok.
 
-Shopee giữ hạn mức 10 lượt trọn đời trong bộ đếm v2 và không reset theo kỳ thanh toán. Chi phí thực tế của cả Shopee và TikTok được quản lý trong sổ cái v4 theo `billingAccountId` và `usageCycle.startAt` do API Apify trả về. Hệ thống không giả định ngày reset là ngày đầu tháng. Trước mỗi reservation, backend đọc chu kỳ hiện tại và tổng usage thực tế của từng tài khoản; số liệu Redis được nâng lên tối thiểu bằng số Apify báo cáo để bao gồm cả chi phí phát sinh ngoài RealView. Phần bảo lưu Shopee bằng số lượt trọn đời còn lại nhân với 79.800 micro USD. Khi đủ 10 lượt, phần bảo lưu bằng 0; chi phí Shopee đã phát sinh trong chu kỳ hiện tại vẫn được tính. Giá và actor được đóng băng trong reservation. Finalization theo operation ID chống cộng hai lần. Lỗi 402 chỉ đánh dấu hết ngân sách trong đúng billing cycle, 403 chỉ chặn actor tương ứng, 429 tạo cooldown 60 giây, còn timeout và 5xx giữ reservation để đối soát. Circuit breaker mở tạm thời sau ba lỗi hạ tầng liên tiếp. Blob fallback chỉ được dùng khi dataset khớp chính xác productId.
+Shopee giữ hạn mức 10 lượt trọn đời trong bộ đếm v2 và không reset theo kỳ thanh toán. Chi phí thực tế của cả Shopee và TikTok được quản lý trong sổ cái v4 theo `billingAccountId` và `usageCycle.startAt` do API Apify trả về. Hệ thống không giả định ngày reset là ngày đầu tháng. Trước mỗi reservation, backend đọc chu kỳ hiện tại và tổng usage thực tế của từng tài khoản; số liệu Redis được nâng lên tối thiểu bằng số Apify báo cáo để bao gồm cả chi phí phát sinh ngoài RealView. Phần bảo lưu Shopee bằng số lượt trọn đời còn lại nhân với 79.800 micro USD. Khi đủ 10 lượt, phần bảo lưu bằng 0; chi phí Shopee đã phát sinh trong chu kỳ hiện tại vẫn được tính. Giá và actor được đóng băng trong reservation. Finalization theo operation ID chống cộng hai lần. Lỗi 402 chỉ đánh dấu hết ngân sách trong đúng billing cycle, 403 chỉ chặn actor tương ứng, 429 tạo cooldown 60 giây, còn timeout và 5xx giữ reservation để đối soát. Circuit breaker mở tạm thời sau ba lỗi hạ tầng liên tiếp. Blob cache/fallback chỉ dùng raw dataset còn hạn năm ngày và khớp chính xác mã sản phẩm; riêng Shopee tiếp tục yêu cầu đủ thiết kế năm tầng sao.
+
+Để tạo lại Redis index từ các raw dataset gần đây trong Blob cho cả Shopee và TikTok, chạy `npm run sync:product-cache`. Tên lệnh cũ `npm run sync:shopee-cache` vẫn được giữ để tương thích.
 
 Để tạo nhanh file pool từ một danh sách dài API key, chạy `npm run generate:apify-pool`. Dán mỗi key trên một dòng, nhấn Enter ở dòng trống, chọn `replace` hoặc `append`, rồi nhập vị trí muốn lưu. Công cụ tự loại key trùng (giữ lần xuất hiện đầu tiên) và chia key thành từng nhóm 5★ → 1★. Nếu còn dư 1–4 key, backend mã hóa và lưu chúng ở trạng thái `pending`; chúng không được cấp phát cho đến khi một lần `append` sau bổ sung đủ nhóm 5. Chế độ `replace` mặc định dùng `config/apify-pool.local.json`; chế độ `append` luôn đề xuất một file mới có timestamp để không ghi đè file ban đầu. Các file này được tạo với quyền chỉ tài khoản hiện tại đọc/ghi và đã nằm trong `.gitignore`.
 
@@ -82,7 +87,7 @@ curl 'https://<domain>/api/apify-config' \
 
 Lượt sử dụng được cộng ngay khi cấp phát; vì vậy request đã gửi đi nhưng Apify lỗi vẫn được tính là một lượt dùng. Sau bước cấp phát, backend không chờ thêm lần ghi Redis nào mà phát ngay một request Apify để giữ độ trễ thấp.
 
-TikTok Shop hiện vẫn dùng collector độc lập nếu đã cấu hình:
+Collector độc lập dưới đây là tùy chọn dự phòng nếu được cấu hình:
 
 Bot nhận `POST /reviews` với JSON `{ "url": "...", "platform": "Shopee", "limit": 50 }` và trả `{ "reviews": [{ "rating": 1-5, "text": "...", "date": "...", "verified": true, "author": "..." }] }`.
 
@@ -109,7 +114,7 @@ REVIEWS_BOT_TOKEN=<cung-gia-tri-voi-bot>
 
 Vercel sẽ gửi link sản phẩm sang bot; bot không trả review mô phỏng. Khi Shopee từ chối phiên thu thập, giao diện báo lỗi thay vì hiển thị review của sản phẩm khác.
 
-TikTok Shop chưa có collector trong phiên bản này và sẽ báo rõ là chưa hỗ trợ nếu chưa cấu hình bot.
+Luồng TikTok production sử dụng Apify actor đã cấu hình; collector độc lập chỉ được dùng khi triển khai riêng.
 
 ## TrustScore và phân tích Gemini
 
@@ -153,7 +158,7 @@ Mỗi lượt thu thập review chạy theo thứ tự:
 2. Backend khử trùng exact/near-duplicate trước Gemini để chỉ kiểm định bản đại diện. Khi có khóa môi trường hoặc Gemini pool khả dụng, Layer 2 kiểm tra các trường hợp chưa chắc chắn theo batch bằng schema trong `src/sample_ai_payload.json`. LLM chỉ được `confirm`, `correct` hoặc `abstain`; mọi lần sửa nhãn phải kèm trích dẫn nguyên văn. Nhãn off-topic còn phải trích đúng đoạn nêu một sản phẩm khác; kết quả sai ID, category lạ, quote không nguyên văn hoặc vi phạm bất biến sẽ bị backend từ chối.
 3. Bộ lọc cuối dùng kết quả khử trùng và nhãn của labeler, không khử trùng lại sau Gemini. TrustScore v4.2 tổng hợp chất lượng bằng chứng, mức ít nhiễu và độ phủ kiểm định. Độ phủ bằng chứng điều chỉnh phần điểm trên 50; tầng thiếu đóng góp 0 vào độ phủ và không thể được bù bằng cách lấy dư tầng khác. `defectScore` được giữ riêng để mô tả nhược điểm, không trực tiếp làm giảm TrustScore.
 
-Thiết kế hiện tại của cả Shopee và TikTok là 5 tầng 1★–5★, tối đa 20 review mỗi tầng. Endpoint chỉ chặn vì thiếu mẫu khi thu được dưới 20 review có nội dung chữ; từ 20 trở lên vẫn công bố điểm và trạng thái `limited`, `provisional` hoặc `valid`. Lỗi Layer 2 có fallback ghi rõ provenance. URL không hợp lệ hoặc nguồn thu thập thất bại vẫn trả lỗi kỹ thuật.
+Shopee và actor TikTok gốc dùng thiết kế 5 tầng 1★–5★, tối đa 20 review mỗi tầng. Actor TikTok tạm thời và TikTok recent raw cache dùng mẫu gần nhất không phân tầng. Endpoint chỉ chặn vì thiếu mẫu khi thu được dưới 20 review có nội dung chữ; từ 20 trở lên vẫn công bố điểm và trạng thái `limited`, `provisional` hoặc `valid`. Lỗi Layer 2 có fallback ghi rõ provenance. URL không hợp lệ hoặc nguồn thu thập thất bại vẫn trả lỗi kỹ thuật.
 
 TrustScore là chỉ số tổng hợp theo thiết kế mẫu; không phải xác suất review thật hay tỷ lệ đại diện cho toàn bộ sản phẩm. Công thức, mẫu số, trạng thái và ví dụ được ghi tại [Thuật toán TrustScore v4.2](docs/trust-score-v4.2.md).
 

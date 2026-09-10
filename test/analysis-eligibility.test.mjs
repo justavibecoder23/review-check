@@ -40,6 +40,17 @@ test('TikTok không bị chặn cứng khi thiếu tầng sao trong 5 tầng', (
   assert.doesNotThrow(() => assertSamplingCoverage(reviews, { strategy: 'parallel-star-filters', ratingStrata: [1, 2, 3, 4, 5] }));
 });
 
+test('TikTok raw cache bỏ kiểm tra tầng sao kể cả provenance cũ là parallel', () => {
+  const reviews = Array.from({ length: 20 }, () => ({ rating: 5, text: 'Có nội dung sản phẩm rõ ràng' }));
+  const coverage = checkSamplingCoverage(reviews, {
+    strategy: 'parallel-star-filters',
+    ratingStrata: [1, 2, 3, 4, 5],
+    ratingStrataRequired: false,
+    rawOnly: true
+  });
+  assert.deepEqual(coverage, { complete: true, missingRatings: [], requiredRatings: [] });
+});
+
 test('cho phép phân tích từ đúng ngưỡng 20 review', () => {
   const reviews = Array.from({ length: MINIMUM_REVIEWS_FOR_ANALYSIS }, () => ({ text: 'Review đủ dữ liệu' }));
   assert.equal(assertEnoughReviews(reviews), 20);

@@ -6,9 +6,11 @@ import { createProgressReporter } from './sse.mjs';
 import { combineAbortSignals, throwIfAborted } from './abort.mjs';
 import {
   getCachedShopeeDataset,
+  getCachedTikTokDataset,
   getFallbackTikTokDataset,
   recordShopeeCacheHit,
-  recordShopeeServed
+  recordShopeeServed,
+  setCachedTikTokDataset
 } from './product-cache.mjs';
 
 const DEMO_REVIEWS = [
@@ -47,6 +49,23 @@ function platformFrom(url) {
   if (isShopeeUrl(url)) return 'Shopee';
   if (isTikTokUrl(url)) return 'TikTok Shop';
   throw Object.assign(new Error('Link chưa thuộc Shopee hoặc TikTok Shop.'), { statusCode: 400 });
+}
+
+export function isTikTokRecentRawCacheEnabled(env = process.env) {
+  const configured = env.TIKTOK_RECENT_RAW_CACHE;
+  if (configured != null && String(configured).trim()) {
+    return !['false', '0', 'off', 'no'].includes(String(configured).trim().toLowerCase());
+  }
+  return true;
+}
+
+function unstratifiedTikTokCollection(collection = {}) {
+  return {
+    ...collection,
+    ratingStrataRequired: false,
+    cachePolicy: 'recent-raw-exact-product',
+    rawOnly: true
+  };
 }
 
 function firstValue(source, paths) {
@@ -543,20 +562,37 @@ export async function getReviews(url, options = {}) {
     warnings.push('Đã mở link chia sẻ TikTok và khôi phục đúng mã sản phẩm trước khi thu thập review.');
   }
 
-  // Optional exact-product Blob preference. When disabled or when no usable
-  // dataset exists, the live collection flow remains unchanged.
+  // TikTok ưu tiên raw dataset không quá năm ngày của đúng productId. Cache
+  // không yêu cầu năm tầng sao vì actor tạm thời chỉ hỗ trợ lấy mẫu gần nhất.
   if (platform === 'TikTok Shop'
-    && String(process.env.TIKTOK_DATASET_FALLBACK || '').trim().toLowerCase() === 'true'
+    && isTikTokRecentRawCacheEnabled()
     && tiktokProduct?.productId) {
-    progress('cache', 12, 'Đang tải dữ liệu TikTok dự phòng...');
-    const fallback = await getFallbackTikTokDataset(tiktokProduct.productId, {
-      blobListImpl: options.blobListImpl,
+    progress('cache', 12, 'Đang lấy dữ liệu review của sản phẩm...');
+    let cached = await getCachedTikTokDataset(tiktokProduct.productId, {
+      redisFetchImpl: options.redisFetchImpl,
       blobGetImpl: options.blobGetImpl,
-      blobToken: options.blobToken
+      blobToken: options.blobToken,
+      now: options.now
     });
-    if (fallback?.dataset) {
-      const cachedProduct = fallback.dataset.product || {};
-      warnings.push('Chế độ dự phòng TikTok đang bật: sử dụng dataset đã lưu của đúng sản phẩm trong khi scraper trực tiếp bảo trì.');
+    if (!cached) {
+      const fallback = await getFallbackTikTokDataset(tiktokProduct.productId, {
+        blobListImpl: options.blobListImpl,
+        blobGetImpl: options.blobGetImpl,
+        blobToken: options.blobToken,
+        now: options.now
+      });
+      if (fallback?.dataset) {
+        cached = fallback;
+        await setCachedTikTokDataset(tiktokProduct.productId, {
+          rawPath: fallback.blobPath
+        }, fallback.dataset, {
+          redisFetchImpl: options.redisFetchImpl,
+          now: options.now
+        }).catch(() => null);
+      }
+    }
+    if (cached?.dataset) {
+      const cachedProduct = cached.dataset.product || {};
       const product = {
         ...cachedProduct,
         platform: 'TikTok Shop',
@@ -567,25 +603,27 @@ export async function getReviews(url, options = {}) {
       };
       emitProductMeta(product);
       return {
-        reviews: fallback.dataset.reviews,
+        reviews: cached.dataset.reviews,
         source: {
           type: 'cached',
-          label: 'Vercel Blob Storage · TikTok Exact Fallback',
-          reviewLimit: fallback.dataset.reviews.length,
-          collection: fallback.dataset.source?.collection || { strategy: 'dataset-fallback' },
+          label: 'TikTok Product Reviews',
+          reviewLimit: cached.dataset.reviews.length,
+          collection: unstratifiedTikTokCollection(
+            cached.dataset.source?.collection || { strategy: 'single-unfiltered' }
+          ),
           cache: {
             hit: true,
-            runId: fallback.dataset.runId || null,
-            createdAt: fallback.dataset.createdAt || null,
-            fallback: true,
-            exactMatch: fallback.isExactMatch
+            runId: cached.dataset.runId || null,
+            createdAt: cached.dataset.createdAt || null,
+            ageMs: cached.validation?.ageMs ?? null,
+            rawOnly: true,
+            exactMatch: true
           }
         },
         product,
         warnings
       };
     }
-    warnings.push('Không tìm thấy dataset TikTok dự phòng hợp lệ; hệ thống đã chuyển về luồng thu thập trực tiếp.');
   }
 
   if (shopeeProduct?.itemId) {
@@ -719,7 +757,8 @@ export async function getReviews(url, options = {}) {
       const fallback = await getFallbackTikTokDataset(tiktokProduct.productId, {
         blobListImpl: options.blobListImpl,
         blobGetImpl: options.blobGetImpl,
-        blobToken: options.blobToken
+        blobToken: options.blobToken,
+        now: options.now
       });
       if (fallback?.dataset) {
         const cachedProduct = fallback.dataset.product || {};
@@ -740,12 +779,16 @@ export async function getReviews(url, options = {}) {
             type: 'cached',
             label: 'Vercel Blob Storage · TikTok Exact Fallback',
             reviewLimit: fallback.dataset.reviews.length,
-            collection: fallback.dataset.source?.collection || { strategy: 'dataset-fallback' },
+            collection: unstratifiedTikTokCollection(
+              fallback.dataset.source?.collection || { strategy: 'single-unfiltered' }
+            ),
             cache: {
               hit: true,
               runId: fallback.dataset.runId || null,
               createdAt: fallback.dataset.createdAt || null,
+              ageMs: fallback.validation?.ageMs ?? null,
               fallback: true,
+              rawOnly: true,
               exactMatch: true
             }
           },

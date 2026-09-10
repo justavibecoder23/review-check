@@ -33,7 +33,7 @@ export function assertEnoughReviews(reviews, minimum = MINIMUM_REVIEWS_FOR_ANALY
 }
 
 export function checkSamplingCoverage(reviews, collection = {}) {
-  if (collection?.strategy !== 'parallel-star-filters') {
+  if (collection?.ratingStrataRequired === false || collection?.strategy !== 'parallel-star-filters') {
     return { complete: true, missingRatings: [], requiredRatings: [] };
   }
   const ratings = new Set((Array.isArray(reviews) ? reviews : [])

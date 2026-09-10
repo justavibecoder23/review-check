@@ -6,7 +6,7 @@ import { saveReviewDatasets } from './review-dataset-storage.mjs';
 import { createProgressReporter } from './sse.mjs';
 import { assertEnoughReviews, checkSamplingCoverage } from './analysis-eligibility.mjs';
 import { throwIfAborted } from './abort.mjs';
-import { setCachedShopeeDataset } from './product-cache.mjs';
+import { setCachedShopeeDataset, setCachedTikTokDataset } from './product-cache.mjs';
 
 const issueDefinitions = ISSUE_DEFINITIONS.map(({ id, label, words }) => ({ id, label, words }));
 const lowValuePatterns = [/^ok+([.! ]*)$/i, /tốt([.! ]*)$/i, /^đẹp([.! ]*)$/i, /^5\s*sao/i, /chưa.{0,12}(dùng|thử)/i];
@@ -213,6 +213,14 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
       now: options.now
     }).catch((error) => ({ saved: false, reason: error?.message || 'UNKNOWN_CACHE_ERROR' }));
     if (!cached.saved) warnings.push(`Dataset Shopee đã lưu nhưng chưa tạo được cache index: ${cached.reason}.`);
+  }
+  if (product.platform === 'TikTok Shop' && source?.type === 'live'
+    && dataset.saved && dataset.provider === 'vercel-blob-private') {
+    const cached = await setCachedTikTokDataset(product.productId, dataset, dataset.rawDataset, {
+      redisFetchImpl: options.redisFetchImpl,
+      now: options.now
+    }).catch((error) => ({ saved: false, reason: error?.message || 'UNKNOWN_CACHE_ERROR' }));
+    if (!cached.saved) warnings.push(`Dataset TikTok đã lưu nhưng chưa tạo được cache index: ${cached.reason}.`);
   }
   warnings.push(...labeling.warnings);
   progress('scoring', 91, 'Đang hoàn thiện kết quả...');

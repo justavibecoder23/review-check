@@ -3,17 +3,22 @@ import assert from 'node:assert/strict';
 import {
   SHOPEE_CACHE_HITS_KEY,
   SHOPEE_TOTAL_SERVED_KEY,
+  TIKTOK_CACHE_TTL_SECONDS,
   getCachedShopeeDataset,
+  getCachedTikTokDataset,
   getFallbackTikTokDataset,
   getShopeeCacheKey,
+  getTikTokCacheKey,
   isShopeeCacheEligible,
   recordShopeeCacheHit,
   recordShopeeServed,
   setCachedShopeeDataset,
-  validateShopeeCachedDataset
+  setCachedTikTokDataset,
+  validateShopeeCachedDataset,
+  validateTikTokCachedDataset
 } from '../src/product-cache.mjs';
 import { APIFY_POOL_COUNTERS_KEY } from '../src/apify-credential-store.mjs';
-import { getReviews } from '../src/sources.mjs';
+import { getReviews, isTikTokRecentRawCacheEnabled } from '../src/sources.mjs';
 
 function shopeeDataset(overrides = {}) {
   return {
@@ -95,7 +100,7 @@ function tiktokDataset(productId, count = 20) {
     runId: `run-${productId}`,
     createdAt: '2026-09-07T00:00:00.000Z',
     product: { platform: 'TikTok Shop', productId, title: `TikTok ${productId}` },
-    source: { type: 'live', collection: { strategy: 'parallel-star-filters', targetMaximum: 100 } },
+    source: { type: 'live', collection: { strategy: 'single-unfiltered', targetMaximum: 100 } },
     reviewCount: count,
     reviews: Array.from({ length: count }, (_, index) => ({
       rating: (index % 5) + 1,
@@ -128,6 +133,59 @@ test('chỉ chấp nhận dataset Shopee đủ đúng năm tầng, target 100 v�
   assert.equal(validateShopeeCachedDataset(shopeeDataset({ createdAt: '2026-09-07T00:00:01.000Z' }), {
     itemId: '123', now
   }).reason, 'INVALID_CREATED_AT');
+});
+
+test('TikTok cache chỉ nhận raw dataset đúng sản phẩm trong năm ngày và không yêu cầu tầng sao', () => {
+  const productId = '1729736382033660305';
+  const now = new Date('2026-09-10T00:00:00.000Z');
+  const dataset = tiktokDataset(productId);
+  assert.equal(validateTikTokCachedDataset(dataset, { productId, now }).valid, true);
+  assert.equal(validateTikTokCachedDataset({
+    ...dataset,
+    source: { collection: { strategy: 'parallel-star-filters', ratingStrata: [5] } },
+    reviews: dataset.reviews.map((review) => ({ ...review, rating: 5 }))
+  }, { productId, now }).valid, true);
+  assert.equal(validateTikTokCachedDataset({ ...dataset, datasetKind: 'labeled-reviews' }, {
+    productId, now
+  }).reason, 'NOT_RAW_DATASET');
+  assert.equal(validateTikTokCachedDataset(tiktokDataset(productId, 19), {
+    productId, now
+  }).reason, 'INSUFFICIENT_REVIEWS');
+  assert.equal(validateTikTokCachedDataset({ ...dataset, product: { ...dataset.product, productId: '1111111111111111111' } }, {
+    productId, now
+  }).reason, 'PRODUCT_ID_MISMATCH');
+  assert.equal(validateTikTokCachedDataset({ ...dataset, createdAt: '2026-09-04T23:59:59.000Z' }, {
+    productId, now
+  }).reason, 'EXPIRED');
+});
+
+test('TikTok recent raw cache bật mặc định và có thể rollback bằng một biến', () => {
+  assert.equal(isTikTokRecentRawCacheEnabled({}), true);
+  assert.equal(isTikTokRecentRawCacheEnabled({ TIKTOK_RECENT_RAW_CACHE: 'true' }), true);
+  assert.equal(isTikTokRecentRawCacheEnabled({ TIKTOK_RECENT_RAW_CACHE: 'false' }), false);
+});
+
+test('ghi và đọc TikTok raw cache với TTL năm ngày', async (context) => {
+  enableRedisEnv(context);
+  const redis = createRedisFake();
+  const productId = '1729736382033660305';
+  const dataset = tiktokDataset(productId);
+  const now = new Date('2026-09-10T00:00:00.000Z');
+  const saved = await setCachedTikTokDataset(productId, {
+    rawPath: `review-datasets/2026/09/07/tiktok-${productId}/run/reviews.raw.json`
+  }, dataset, { redisFetchImpl: redis.fetchImpl, now });
+  assert.equal(saved.saved, true);
+  assert.equal(saved.ttlSeconds, 2 * 24 * 60 * 60);
+  assert.equal(TIKTOK_CACHE_TTL_SECONDS, 5 * 24 * 60 * 60);
+
+  const cached = await getCachedTikTokDataset(productId, {
+    redisFetchImpl: redis.fetchImpl,
+    blobGetImpl: blobGetFor(dataset),
+    now
+  });
+  assert.equal(cached.dataset.datasetKind, 'raw-reviews');
+  assert.equal(cached.dataset.product.productId, productId);
+  assert.equal(JSON.parse(redis.values.get(getTikTokCacheKey(productId))).ratingStrataRequired, false);
 });
 
 test('ghi và đọc mapping cache với TTL còn lại của mốc năm ngày', async (context) => {
@@ -202,7 +260,8 @@ test('TikTok fallback ưu tiên dataset đúng productId và không cần Redis'
         uploadedAt: index ? '2026-09-08T00:00:00.000Z' : '2026-09-07T00:00:00.000Z'
       }))
     }),
-    blobGetImpl: async (pathname) => blobGetFor(datasets.get(pathname))()
+    blobGetImpl: async (pathname) => blobGetFor(datasets.get(pathname))(),
+    now: new Date('2026-09-10T00:00:00.000Z')
   });
   assert.equal(fallback.isExactMatch, true);
   assert.equal(fallback.dataset.product.productId, '1729736382033660305');
@@ -224,17 +283,18 @@ test('TikTok fallback không bao giờ dùng dataset của sản phẩm khác', 
         uploadedAt: index ? '2026-09-08T00:00:00.000Z' : '2026-09-07T00:00:00.000Z'
       }))
     }),
-    blobGetImpl: async (pathname) => blobGetFor(datasets.get(pathname))()
+    blobGetImpl: async (pathname) => blobGetFor(datasets.get(pathname))(),
+    now: new Date('2026-09-10T00:00:00.000Z')
   });
   assert.equal(fallback, null);
 });
 
-test('getReviews dùng TikTok Blob fallback khi bật cờ và bỏ qua Actor', async (context) => {
-  const previous = process.env.TIKTOK_DATASET_FALLBACK;
-  process.env.TIKTOK_DATASET_FALLBACK = 'true';
+test('getReviews ưu tiên TikTok raw cache năm ngày và bỏ qua Actor', async (context) => {
+  const previous = process.env.TIKTOK_RECENT_RAW_CACHE;
+  process.env.TIKTOK_RECENT_RAW_CACHE = 'true';
   context.after(() => {
-    if (previous === undefined) delete process.env.TIKTOK_DATASET_FALLBACK;
-    else process.env.TIKTOK_DATASET_FALLBACK = previous;
+    if (previous === undefined) delete process.env.TIKTOK_RECENT_RAW_CACHE;
+    else process.env.TIKTOK_RECENT_RAW_CACHE = previous;
   });
   const productId = '1729736382033660305';
   const dataset = tiktokDataset(productId);
@@ -244,11 +304,12 @@ test('getReviews dùng TikTok Blob fallback khi bật cờ và bỏ qua Actor', 
     blobListImpl: async () => ({
       blobs: [{ pathname, url: 'https://blob.test/raw', uploadedAt: '2026-09-08T00:00:00.000Z' }]
     }),
-    blobGetImpl: blobGetFor(dataset)
+    blobGetImpl: blobGetFor(dataset),
+    now: new Date('2026-09-10T00:00:00.000Z')
   });
   assert.equal(result.source.type, 'cached');
-  assert.equal(result.source.cache.fallback, true);
+  assert.equal(result.source.cache.rawOnly, true);
   assert.equal(result.source.cache.exactMatch, true);
+  assert.equal(result.source.collection.ratingStrataRequired, false);
   assert.equal(result.reviews.length, 20);
-  assert.match(result.warnings.at(-1), /đúng sản phẩm/);
 });

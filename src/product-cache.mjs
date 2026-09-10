@@ -1,12 +1,14 @@
 import { isRedisConfigured, redisCommand, redisTransaction } from './redis-rest.mjs';
 
 export const SHOPEE_CACHE_TTL_SECONDS = 5 * 24 * 60 * 60;
+export const TIKTOK_CACHE_TTL_SECONDS = 5 * 24 * 60 * 60;
 export const SHOPEE_CACHE_HITS_KEY = 'realview:shopee:cache:hits';
 export const SHOPEE_TOTAL_SERVED_KEY = 'realview:shopee:total_served';
 const MAX_DATASET_BYTES = 5 * 1024 * 1024;
 const TIKTOK_DATASET_PREFIX = 'review-datasets/';
 const TIKTOK_RAW_DATASET_PATTERN = /\/tiktok-[^/]+\/[^/]+\/reviews\.raw\.json$/u;
 const MIN_TIKTOK_FALLBACK_REVIEWS = 20;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function isShopeeCacheEligible(platform) {
   return String(platform || '').trim().toLowerCase() === 'shopee';
@@ -16,6 +18,12 @@ export function getShopeeCacheKey(itemId) {
   const normalized = String(itemId || '').trim();
   if (!/^\d+$/.test(normalized)) throw new Error('Shopee itemId không hợp lệ cho cache.');
   return `realview:cache:product:shopee:${normalized}`;
+}
+
+export function getTikTokCacheKey(productId) {
+  const normalized = String(productId || '').trim();
+  if (!/^\d{8,25}$/.test(normalized)) throw new Error('TikTok productId không hợp lệ cho cache.');
+  return `realview:cache:product:tiktok:${normalized}`;
 }
 
 function parseDate(value) {
@@ -61,6 +69,38 @@ export function validateShopeeCachedDataset(dataset, options = {}) {
   };
 }
 
+export function validateTikTokCachedDataset(dataset, options = {}) {
+  if (!dataset || typeof dataset !== 'object') return { valid: false, reason: 'INVALID_DATASET' };
+  const expectedProductId = String(options.productId || '').trim();
+  const datasetProductId = String(dataset.product?.productId || '').trim();
+  if (String(dataset.product?.platform || '').trim().toLowerCase() !== 'tiktok shop') {
+    return { valid: false, reason: 'NOT_TIKTOK' };
+  }
+  if (dataset.datasetKind !== 'raw-reviews') return { valid: false, reason: 'NOT_RAW_DATASET' };
+  if (expectedProductId && datasetProductId !== expectedProductId) {
+    return { valid: false, reason: 'PRODUCT_ID_MISMATCH' };
+  }
+  if (!Array.isArray(dataset.reviews)) return { valid: false, reason: 'REVIEWS_MISSING' };
+  const minimumReviews = Math.max(1, Number.parseInt(options.minimumReviews, 10) || MIN_TIKTOK_FALLBACK_REVIEWS);
+  const reviewsWithText = dataset.reviews.filter((review) => String(review?.text || '').trim()).length;
+  if (reviewsWithText < minimumReviews) return { valid: false, reason: 'INSUFFICIENT_REVIEWS' };
+
+  const createdAtMs = parseDate(dataset.createdAt);
+  const nowMs = (options.now instanceof Date ? options.now : new Date(options.now || Date.now())).getTime();
+  if (!Number.isFinite(nowMs) || createdAtMs === null || createdAtMs > nowMs) {
+    return { valid: false, reason: 'INVALID_CREATED_AT' };
+  }
+  const ageMs = nowMs - createdAtMs;
+  const maxAgeMs = TIKTOK_CACHE_TTL_SECONDS * 1000;
+  if (ageMs > maxAgeMs) return { valid: false, reason: 'EXPIRED' };
+  return {
+    valid: true,
+    ageMs,
+    reviewCount: reviewsWithText,
+    ttlSeconds: Math.max(1, Math.ceil((maxAgeMs - ageMs) / 1000))
+  };
+}
+
 async function blobResultText(result) {
   if (!result || result.statusCode !== 200 || !result.stream) return null;
   if (Number(result.blob?.size) > MAX_DATASET_BYTES) return null;
@@ -85,10 +125,23 @@ export async function readPrivateBlobDataset(blobLocation, options = {}) {
   }
 }
 
-function usableTikTokFallbackDataset(dataset, minimumReviews = MIN_TIKTOK_FALLBACK_REVIEWS) {
-  if (!dataset || typeof dataset !== 'object' || !Array.isArray(dataset.reviews)) return false;
-  const reviewsWithText = dataset.reviews.filter((review) => String(review?.text || '').trim());
-  return reviewsWithText.length >= minimumReviews;
+function recentDatasetPrefixes(now = new Date()) {
+  const prefixes = [];
+  for (let offset = 0; offset <= 5; offset += 1) {
+    prefixes.push(`${TIKTOK_DATASET_PREFIX}${new Date(now.getTime() - offset * DAY_MS).toISOString().slice(0, 10).replaceAll('-', '/')}/`);
+  }
+  return prefixes;
+}
+
+async function listAllBlobs(listBlobs, prefix, token) {
+  const blobs = [];
+  let cursor;
+  do {
+    const result = await listBlobs({ prefix, cursor, token, limit: 1000 });
+    blobs.push(...(Array.isArray(result?.blobs) ? result.blobs : []));
+    cursor = result?.hasMore ? result.cursor : undefined;
+  } while (cursor);
+  return blobs;
 }
 
 /**
@@ -103,13 +156,11 @@ export async function getFallbackTikTokDataset(productId, options = {}) {
 
   try {
     const listBlobs = options.blobListImpl || (await import('@vercel/blob')).list;
-    const result = await listBlobs({
-      prefix: TIKTOK_DATASET_PREFIX,
-      token,
-      limit: 1000
-    });
-    const blobs = (Array.isArray(result?.blobs) ? result.blobs : [])
+    const now = options.now instanceof Date ? options.now : new Date(options.now || Date.now());
+    const pages = await Promise.all(recentDatasetPrefixes(now).map((prefix) => listAllBlobs(listBlobs, prefix, token)));
+    const blobs = [...new Map(pages.flat()
       .filter((blob) => TIKTOK_RAW_DATASET_PATTERN.test(String(blob?.pathname || '')))
+      .map((blob) => [blob.pathname, blob])).values()]
       .sort((left, right) => (
         (Date.parse(String(right?.uploadedAt || '')) || 0)
         - (Date.parse(String(left?.uploadedAt || '')) || 0)
@@ -125,9 +176,15 @@ export async function getFallbackTikTokDataset(productId, options = {}) {
         rawPath: blob.pathname,
         rawUrl: blob.url
       }, options);
-      if (!usableTikTokFallbackDataset(dataset, options.minimumReviews)) continue;
+      const validation = validateTikTokCachedDataset(dataset, {
+        productId: normalizedProductId,
+        minimumReviews: options.minimumReviews,
+        now
+      });
+      if (!validation.valid) continue;
       return {
         dataset,
+        validation,
         isExactMatch: true,
         blobPath: blob.pathname
       };
@@ -137,6 +194,58 @@ export async function getFallbackTikTokDataset(productId, options = {}) {
     // Fallback failure must never replace the existing live collection error.
     return null;
   }
+}
+
+export async function getCachedTikTokDataset(productId, options = {}) {
+  if (!isRedisConfigured() && !options.redisFetchImpl) return null;
+  const key = getTikTokCacheKey(productId);
+  try {
+    const value = await redisCommand(['GET', key], {
+      fetchImpl: options.redisFetchImpl,
+      timeoutMs: options.redisTimeoutMs || 900
+    });
+    const mapping = parseMapping(value);
+    if (!mapping || String(mapping.productId || '') !== String(productId)) return null;
+    const dataset = await readPrivateBlobDataset(mapping, options);
+    const validation = validateTikTokCachedDataset(dataset, {
+      productId,
+      minimumReviews: options.minimumReviews,
+      now: options.now
+    });
+    if (!validation.valid) return null;
+    return { dataset, mapping, validation };
+  } catch {
+    return null;
+  }
+}
+
+export async function setCachedTikTokDataset(productId, blobLocation, dataset, options = {}) {
+  if (!isRedisConfigured() && !options.redisFetchImpl) return { saved: false, reason: 'REDIS_NOT_CONFIGURED' };
+  const validation = validateTikTokCachedDataset(dataset, {
+    productId,
+    minimumReviews: options.minimumReviews,
+    now: options.now
+  });
+  if (!validation.valid) return { saved: false, reason: validation.reason };
+  const rawPath = String(blobLocation?.rawPath || '').trim();
+  const rawUrl = String(blobLocation?.rawUrl || '').trim();
+  if (!rawPath && !rawUrl) return { saved: false, reason: 'BLOB_LOCATION_MISSING' };
+  const mapping = {
+    version: 1,
+    platform: 'TikTok Shop',
+    productId: String(productId),
+    rawPath: rawPath || null,
+    rawUrl: rawUrl || null,
+    createdAt: dataset.createdAt,
+    expiresAt: new Date(Date.parse(dataset.createdAt) + TIKTOK_CACHE_TTL_SECONDS * 1000).toISOString(),
+    rawOnly: true,
+    ratingStrataRequired: false
+  };
+  await redisCommand(['SET', getTikTokCacheKey(productId), JSON.stringify(mapping), 'EX', String(validation.ttlSeconds)], {
+    fetchImpl: options.redisFetchImpl,
+    timeoutMs: options.redisTimeoutMs || 1200
+  });
+  return { saved: true, key: getTikTokCacheKey(productId), ttlSeconds: validation.ttlSeconds };
 }
 
 function parseMapping(value) {

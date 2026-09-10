@@ -147,6 +147,25 @@ test('mẫu chia tầng không được giả là phân bố rating tự nhiên'
   assert.deepEqual(result.adequacy.missingRatings, []);
 });
 
+test('TikTok raw cache từ actor tạm được tính như mẫu quan sát không phân tầng', () => {
+  const reviews = Array.from({ length: 20 }, (_, index) => usefulReview(index, {
+    rating: index < 18 ? 5 : 4
+  }));
+  const result = calculateTrustScoreV31(reviews, {
+    sampling: {
+      strategy: 'single-unfiltered',
+      samplingStrategy: 'most-recent-100',
+      distributionMode: 'observed-sample',
+      ratingStrata: null,
+      ratingStrataRequired: false
+    }
+  });
+  assert.equal(result.sampling.controlledStarStrata, false);
+  assert.equal(result.sampling.distributionMode, 'observed-sample');
+  assert.equal(result.sampling.perStarLimit, null);
+  assert.equal(result.sample.excludedBySamplingDesign, 0);
+});
+
 test('defectScore chỉ là chẩn đoán sản phẩm và không tham gia TrustScore', () => {
   const clean = Array.from({ length: 20 }, (_, index) => usefulReview(index));
   const defective = clean.map((review, index) => index < 10
