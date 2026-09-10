@@ -33,7 +33,7 @@ function accountControlsMarkup() {
       </div>`;
   }
   return `
-    <button class="auth-button auth-button--access" type="button" data-auth-open="login" aria-label="Mở cửa sổ đăng nhập hoặc đăng ký"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-5 3-8 8-8s8 3 8 8" /></svg><span>Đăng nhập / Đăng ký</span></button>`;
+    <button class="auth-button auth-button--access" type="button" data-auth-open="login" aria-label="Đăng nhập / Đăng ký"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-5 3-8 8-8s8 3 8 8" /></svg><span>Đăng nhập / Đăng ký</span></button>`;
 }
 
 function renderAccountControls() {
@@ -61,7 +61,7 @@ function dialogMarkup() {
     <dialog id="account-dialog" class="account-dialog" aria-labelledby="account-dialog-title">
       <div class="account-dialog-shell">
         <button class="account-dialog-close" type="button" data-auth-close aria-label="Đóng cửa sổ tài khoản">×</button>
-        <div class="account-dialog-brand" aria-hidden="true"><img src="/assets/realview-rv.png" alt="" /></div>
+        <div class="account-dialog-brand" aria-hidden="true"><img src="/assets/realview-logo-v1.webp" alt="" width="128" height="75" /></div>
         <div class="account-dialog-heading">
           <span>TÀI KHOẢN REALVIEW</span>
           <h2 id="account-dialog-title">Chào mừng bạn trở lại</h2>

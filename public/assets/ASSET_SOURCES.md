@@ -2,7 +2,9 @@
 
 ## Illustration
 
-- `illustrations/open-doodles-laying.svg`
+- `illustrations/open-doodles-laying.svg` (source)
+- `illustrations/open-doodles-laying-v1.svg` (versioned production copy)
+- `realview-logo-v1.webp`, `favicon-v1-32.png`, `favicon-v1-48.png`, `apple-touch-icon-v1.png` (optimized derivatives of `realview-rv.png`)
   - Tác giả: Pablo Stanley / Open Doodles.
   - Nguồn gốc: `https://www.opendoodles.com/`.
   - Tệp gốc: `https://opendoodles.s3-us-west-1.amazonaws.com/laying.svg`.

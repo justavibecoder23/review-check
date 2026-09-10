@@ -7,12 +7,13 @@ const pages = ['index.html', 'results.html', 'criteria.html', 'contact.html'];
 test('Google Analytics is initialized on every public page', async () => {
   for (const page of pages) {
     const html = await readFile(new URL(`../public/${page}`, import.meta.url), 'utf8');
-    assert.match(html, /<head>\s*<script src="\/analytics\.js"><\/script>/);
+    assert.match(html, /<head>\s*<script defer src="\/analytics\.js"><\/script>/);
   }
 
   const analytics = await readFile(new URL('../public/analytics.js', import.meta.url), 'utf8');
   assert.match(analytics, /G-VRX4RKBXN6/);
   assert.match(analytics, /allowedParameters/);
+  assert.match(analytics, /requestIdleCallback/);
   assert.doesNotMatch(analytics, /\b(email|username|review_content|product_url)\b/);
 });
 
