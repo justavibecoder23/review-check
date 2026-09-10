@@ -188,8 +188,9 @@ export function geminiRoutePressure(state, model, nowMs = Date.now()) {
   const rpmRatio = limits.rpm ? recentStarts.length / limits.rpm : recentStarts.length / 10;
   const tpmRatio = limits.tpm ? recentTokens / limits.tpm : 0;
   const rpdRatio = limits.rpd ? current.dayRequests / limits.rpd : 0;
-  const minuteLimited = Boolean((limits.rpm && recentStarts.length >= limits.rpm)
-    || (limits.tpm && recentTokens >= limits.tpm));
+  const rpmLimited = Boolean(limits.rpm && recentStarts.length >= limits.rpm);
+  const tpmLimited = Boolean(limits.tpm && recentTokens >= limits.tpm);
+  const minuteLimited = rpmLimited || tpmLimited;
   const dailyLimited = Boolean(limits.rpd && current.dayRequests >= limits.rpd);
   const utilization = Math.max(rpmRatio, tpmRatio, rpdRatio);
   const quotaPressure = utilization + Math.max(0, utilization - 0.8) * 20;
@@ -201,9 +202,12 @@ export function geminiRoutePressure(state, model, nowMs = Date.now()) {
     recentTokens,
     dayRequests: current.dayRequests,
     limits,
+    rpmLimited,
+    tpmLimited,
     minuteLimited,
     dailyLimited,
     inFlight: current.inFlight,
+    degraded: latencyPressure > 0 || failurePressure > 0,
     value: quotaPressure + current.inFlight * 0.35 + latencyPressure + failurePressure
   };
 }

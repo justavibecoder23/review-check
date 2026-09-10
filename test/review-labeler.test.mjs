@@ -881,7 +881,7 @@ test('tắt adaptive concurrency khôi phục scheduler cố định hai batch',
   }
 });
 
-test('adaptive concurrency tăng lên năm khi chín batch không thể kịp deadline với ba worker', async () => {
+test('adaptive concurrency xử lý chín batch trong một wave khi pool đủ route', async () => {
   const previousKey = process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY = 'test-key';
   let active = 0;
@@ -899,7 +899,7 @@ test('adaptive concurrency tăng lên năm khi chín batch không thể kịp de
         busyRouteIds: new Set(),
         failedRouteIds: new Set()
       },
-      scheduler: { routeCapacity: 10, estimatedBatchMs: 22_000 },
+      scheduler: { routeCapacity: 10, estimatedBatchMs: 22_000, rampIntervalMs: 0 },
       requestGeminiImpl: async () => {
         active += 1;
         maximumActive = Math.max(maximumActive, active);
@@ -909,8 +909,8 @@ test('adaptive concurrency tăng lên năm khi chín batch không thể kịp de
       }
     });
     assert.equal(result.stats.layer2Batches.total, 9);
-    assert.equal(result.stats.layer2Concurrency.initial, 5);
-    assert.equal(maximumActive, 5);
+    assert.equal(result.stats.layer2Concurrency.initial, 9);
+    assert.equal(maximumActive, 9);
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
     else delete process.env.GEMINI_API_KEY;
@@ -990,9 +990,9 @@ test('Layer 2 vẫn có quyền sửa và phủ định kết luận ngữ nghĩ
   }
 });
 
-test('công thức concurrency tôn trọng tải, deadline và dung lượng route', () => {
+test('công thức concurrency ưu tiên một wave và tôn trọng dung lượng route', () => {
   assert.equal(calculateLayer2Concurrency({ remainingBatches: 2, remainingMs: 40_000 }), 2);
-  assert.equal(calculateLayer2Concurrency({ remainingBatches: 9, remainingMs: 40_000 }), 5);
+  assert.equal(calculateLayer2Concurrency({ remainingBatches: 9, remainingMs: 40_000 }), 9);
   assert.equal(calculateLayer2Concurrency({ remainingBatches: 9, remainingMs: 40_000, routeCapacity: 4 }), 4);
   assert.equal(calculateLayer2Concurrency({ remainingBatches: 20, remainingMs: 10_000, maxConcurrency: 10 }), 10);
 });

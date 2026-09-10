@@ -128,6 +128,9 @@ test('reservation nguyên tử từ chối route quá tải trước khi gọi G
   });
   assert.equal(result.credentialId, 'key-2');
   assert.deepEqual(requests, ['secret-2']);
+  assert.equal(result.attempts, 1);
+  assert.deepEqual(result.attemptedModels, [GEMINI_MODEL]);
+  assert.deepEqual(result.reservationRejects.map((item) => item.code), ['RPM_LIMIT']);
 });
 
 test('ưu tiên API key có bộ đếm ngày thấp nhất', async () => {
@@ -137,6 +140,19 @@ test('ưu tiên API key có bộ đếm ngày thấp nhất', async () => {
       [`key-1:${GEMINI_MODEL}`]: { day: pacificDay(), dayRequests: 20 },
       [`key-2:${GEMINI_MODEL}`]: { day: pacificDay(), dayRequests: 3 },
       [`key-3:${GEMINI_MODEL}`]: { day: pacificDay(), dayRequests: 7 }
+    }),
+    fetchImpl: async () => response(200),
+    buildRequest: () => ({ method: 'POST' })
+  });
+  assert.equal(result.credentialId, 'key-2');
+});
+
+test('ưu tiên route phản hồi nhanh hơn khi chênh lệch quota ngày còn nhỏ', async () => {
+  const result = await requestGeminiWithFallback({
+    listCredentialsImpl: async () => credentials(2),
+    getHealthSnapshotImpl: async () => ({
+      [`key-1:${GEMINI_MODEL}`]: { day: pacificDay(), dayRequests: 3, ewmaLatencyMs: 20_000 },
+      [`key-2:${GEMINI_MODEL}`]: { day: pacificDay(), dayRequests: 4, ewmaLatencyMs: 4_000 }
     }),
     fetchImpl: async () => response(200),
     buildRequest: () => ({ method: 'POST' })

@@ -25,6 +25,8 @@ const LAYER2_DEFAULT_ESTIMATED_BATCH_MS = 22_000;
 const LAYER2_DEFAULT_DEADLINE_BUFFER_MS = 5_000;
 const LAYER2_DEFAULT_MIN_START_BUDGET_MS = 8_000;
 const LAYER2_DEFAULT_RESERVED_ROUTES = 1;
+const LAYER2_DEFAULT_RAMP_GROUP_SIZE = 3;
+const LAYER2_DEFAULT_RAMP_INTERVAL_MS = 150;
 
 export function normalizeVietnamese(value = '') {
   return String(value)
@@ -660,6 +662,7 @@ export async function classifyBatchWithGemini(batch, product, options = {}) {
       model: geminiResult.model,
       attemptedModels: geminiResult.attemptedModels || [],
       credentialAttempts: geminiResult.attemptedCredentialIds?.length || (geminiResult.credentialId ? 1 : 0),
+      reservationRejects: geminiResult.reservationRejects || [],
       durationMs: geminiResult.totalDurationMs || 0,
       finalAttemptLatencyMs: geminiResult.finalAttemptLatencyMs || 0
     }
@@ -684,9 +687,6 @@ function booleanSetting(value, fallback = true) {
 
 export function calculateLayer2Concurrency({
   remainingBatches,
-  remainingMs,
-  estimatedBatchMs = LAYER2_DEFAULT_ESTIMATED_BATCH_MS,
-  baseConcurrency = LAYER2_DEFAULT_BASE_CONCURRENCY,
   maxConcurrency = LAYER2_DEFAULT_MAX_CONCURRENCY,
   routeCapacity = maxConcurrency
 } = {}) {
@@ -694,10 +694,9 @@ export function calculateLayer2Concurrency({
   if (!batches) return 0;
   const capacity = Math.max(1, Number.parseInt(routeCapacity, 10) || 1);
   const ceiling = Math.max(1, Math.min(batches, maxConcurrency, capacity));
-  const base = Math.min(ceiling, Math.max(1, baseConcurrency));
-  if (!Number.isFinite(Number(remainingMs)) || Number(remainingMs) <= 0) return ceiling;
-  const required = Math.ceil((batches * Math.max(1, estimatedBatchMs)) / Math.max(1, Number(remainingMs)));
-  return Math.min(ceiling, Math.max(base, required));
+  // Ưu tiên một wave khi pool còn route kỹ thuật khả dụng. Deadline vẫn được
+  // kiểm tra trước mỗi lần schedule, còn EWMA chỉ dùng xếp hạng route.
+  return ceiling;
 }
 
 async function mapWithAdaptiveConcurrency(items, options, mapper) {
@@ -837,6 +836,7 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
   let failedBatches = 0;
   let retryAttempts = 0;
   let credentialSwitches = 0;
+  let reservationRejectCount = 0;
   const modelsUsed = new Set();
   const batchDurationsMs = [];
   const schedulerOverrides = options.scheduler || {};
@@ -879,6 +879,18 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
     LAYER2_DEFAULT_RESERVED_ROUTES,
     0,
     5
+  );
+  const rampGroupSize = integerSetting(
+    schedulerOverrides.rampGroupSize ?? process.env.LAYER2_RAMP_GROUP_SIZE,
+    LAYER2_DEFAULT_RAMP_GROUP_SIZE,
+    1,
+    10
+  );
+  const rampIntervalMs = integerSetting(
+    schedulerOverrides.rampIntervalMs ?? process.env.LAYER2_RAMP_INTERVAL_MS,
+    LAYER2_DEFAULT_RAMP_INTERVAL_MS,
+    0,
+    1_000
   );
   let estimatedBatchMs = integerSetting(
     schedulerOverrides.estimatedBatchMs ?? process.env.LAYER2_ESTIMATED_BATCH_MS,
@@ -944,6 +956,8 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
       }
     }, async (batch, batchIndex) => {
       try {
+        const rampDelayMs = Math.floor(batchIndex / rampGroupSize) * rampIntervalMs;
+        if (rampDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, rampDelayMs));
         const result = await classifyBatchWithGemini(batch, options.product, {
           fetchImpl: options.fetchImpl || fetch,
           deadlineAt: options.geminiContext?.layer2DeadlineAt,
@@ -956,6 +970,7 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
         const attemptedCount = result.retry?.attemptedModels?.length || 1;
         retryAttempts += Math.max(0, attemptedCount - 1);
         credentialSwitches += Math.max(0, (result.retry?.credentialAttempts || 1) - 1);
+        reservationRejectCount += result.retry?.reservationRejects?.length || 0;
         if (result.retry?.model) modelsUsed.add(result.retry.model);
         if (result.retry?.durationMs) batchDurationsMs.push(result.retry.durationMs);
         if ((attemptedCount > 1 || result.retry?.credentialAttempts > 1) && (process.env.VERCEL || options.logLayer2Errors)) {
@@ -973,6 +988,7 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
         const attemptedCount = error?.attemptedModels?.length || 0;
         retryAttempts += Math.max(0, attemptedCount - 1);
         credentialSwitches += Math.max(0, (error?.attemptedCredentialIds?.length || 0) - 1);
+        reservationRejectCount += error?.reservationRejects?.length || 0;
         for (const attemptedModel of error?.attemptedModels || []) modelsUsed.add(attemptedModel);
         const warning = error?.message || 'Layer 2 không phản hồi.';
         if (process.env.VERCEL || options.logLayer2Errors) {
@@ -983,6 +999,7 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
             model,
             attemptedModels: error?.attemptedModels || [],
             attemptedRouteIds: error?.attemptedRouteIds || [],
+            reservationRejects: error?.reservationRejects || [],
             credentialAttempts: error?.attemptedCredentialIds?.length || 0,
             error: warning
           });
@@ -1065,6 +1082,7 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
       skippedDeadlineBatches,
       retryAttempts,
       credentialSwitches,
+      reservationRejectCount,
       batchDurationsMs,
       cacheHits,
       adaptiveConcurrency,
@@ -1072,6 +1090,8 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
       peakConcurrency,
       availableRoutes,
       routeCapacity,
+      rampGroupSize,
+      rampIntervalMs,
       coverage: selected.length ? layer2ById.size / selected.length : 1
     }));
   }
@@ -1094,7 +1114,7 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
         routeCapacity
       },
       layer2Coverage: selected.length ? layer2ById.size / selected.length : 1,
-      layer2Retry: { retryAttempts, credentialSwitches, modelsUsed: [...modelsUsed] },
+      layer2Retry: { retryAttempts, credentialSwitches, reservationRejectCount, modelsUsed: [...modelsUsed] },
       layer2DurationMs,
       layer2CacheHits: cacheHits,
       duplicateContentCount: duplicateAudit.duplicateCount,

@@ -192,6 +192,7 @@ export async function requestGeminiWithFallback({
   const attemptedModels = [];
   const attemptedCredentialIds = [];
   const attemptedRoutes = new Set();
+  const reservationRejects = [];
   const sharedBusyRoutes = routeContext?.busyRouteIds instanceof Set ? routeContext.busyRouteIds : new Set();
   const sharedFailedRoutes = routeContext?.failedRouteIds instanceof Set ? routeContext.failedRouteIds : new Set();
   const routeIds = credentials.flatMap((credential) => models
@@ -213,7 +214,10 @@ export async function requestGeminiWithFallback({
     }
     credential.exhaustedModels = [GEMINI_MODEL];
   }
-  for (let attemptIndex = 0; attemptIndex < maxAttempts; attemptIndex += 1) {
+  let actualAttempts = 0;
+  let routeSelections = 0;
+  const maxRouteSelections = Math.max(maxAttempts, routeIds.length);
+  while (actualAttempts < maxAttempts && routeSelections < maxRouteSelections) {
     const nowMs = Date.now();
     if (remainingBudget(deadlineAt, nowMs) < GEMINI_MIN_ATTEMPT_BUDGET_MS) {
       lastError = deadlineError(context, {
@@ -242,10 +246,11 @@ export async function requestGeminiWithFallback({
           routeId,
           state,
           pressure,
-          score: pressureDetails.dayRequests * 1_000_000
-            + pressureDetails.recentRequests * 10_000
-            + pressureDetails.inFlight * 1_000
-            + pressure * 10
+          // Pressure (quota, EWMA latency, failure) là ưu tiên mềm. Chỉ trạng
+          // thái kỹ thuật không khả dụng mới bị geminiRouteScore loại hẳn.
+          score: pressure * 1_000
+            + pressureDetails.recentRequests * 25
+            + pressureDetails.dayRequests * 2
             + credentialIndex * 0.01
         });
       });
@@ -271,10 +276,9 @@ export async function requestGeminiWithFallback({
       || Number(left.state?.cooldownUntilMs || 0) - Number(right.state?.cooldownUntilMs || 0));
     const selected = choices[0];
     const { credential, model, routeId } = selected;
+    routeSelections += 1;
     attemptedRoutes.add(routeId);
     sharedBusyRoutes.add(routeId);
-    attemptedModels.push(model);
-    if (credential.id && !attemptedCredentialIds.includes(credential.id)) attemptedCredentialIds.push(credential.id);
 
     let attempt;
     let request;
@@ -299,10 +303,15 @@ export async function requestGeminiWithFallback({
         error.model = model;
         error.credentialId = credential.id;
         lastError = error;
-        sharedFailedRoutes.add(routeId);
+        reservationRejects.push({ routeId, code: error.code });
+        // BUSY/COOLDOWN/RPM/TPM là kết quả giữ chỗ, chưa gọi Gemini nên không
+        // được tiêu hao retry. Thử ngay route khác trong cùng lượt gọi thực tế.
         continue;
       }
       if (reservation?.state) health[routeId] = reservation.state;
+      actualAttempts += 1;
+      attemptedModels.push(model);
+      if (credential.id && !attemptedCredentialIds.includes(credential.id)) attemptedCredentialIds.push(credential.id);
       const remainingMs = Number.isFinite(Number(deadlineAt)) ? Number(deadlineAt) - Date.now() : timeoutMs;
       attempt = await fetchGemini(
         fetchImpl,
@@ -355,7 +364,8 @@ export async function requestGeminiWithFallback({
           credentialId: credential.id,
           attemptedCredentialIds,
           attemptedRouteIds: [...attemptedRoutes],
-          attempts: attemptIndex + 1,
+          reservationRejects,
+          attempts: actualAttempts,
           finalAttemptLatencyMs: attempt.latencyMs,
           totalDurationMs: Date.now() - requestStartedAt,
           value: validatedValue
@@ -368,7 +378,8 @@ export async function requestGeminiWithFallback({
     lastError.credentialId = credential.id;
     lastError.attemptedModels = [...attemptedModels];
     lastError.attemptedCredentialIds = [...attemptedCredentialIds];
-    lastError.attempts = attemptIndex + 1;
+    lastError.reservationRejects = [...reservationRejects];
+    lastError.attempts = actualAttempts;
     lastError.totalDurationMs = Date.now() - requestStartedAt;
     lastError.attemptedRouteIds = [...attemptedRoutes];
     const state = await finishRouteImpl(routeId, {
@@ -401,7 +412,14 @@ export async function requestGeminiWithFallback({
     // Mọi lỗi của route hiện tại đều đưa key vào pending/used và chuyển ngay
     // sang key khác. attemptedRoutes đảm bảo không gọi lại cùng key trong request này.
   }
-  throw lastError || new Error(`${context} không còn route Gemini khả dụng sau ${maxAttempts} lần thử.`);
+  const terminalError = lastError || new Error(`${context} không còn route Gemini khả dụng sau ${maxAttempts} lần thử.`);
+  terminalError.attemptedModels ||= [...attemptedModels];
+  terminalError.attemptedCredentialIds ||= [...attemptedCredentialIds];
+  terminalError.attemptedRouteIds ||= [...attemptedRoutes];
+  terminalError.reservationRejects ||= [...reservationRejects];
+  terminalError.attempts ??= actualAttempts;
+  terminalError.totalDurationMs ??= Date.now() - requestStartedAt;
+  throw terminalError;
 }
 
 export function parseGeminiJson(payload, context = 'Gemini') {
