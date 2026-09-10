@@ -10,6 +10,7 @@ import { normalizeApiPath } from '../src/server-route.mjs';
 import authHandler from '../api/auth.mjs';
 import historyHandler from '../api/history.mjs';
 import contactHandler from '../api/contact.mjs';
+import articleViewsHandler from '../api/article-views.mjs';
 
 const port = Number(process.env.PORT || 3000);
 const host = process.env.HOST || '127.0.0.1';
@@ -109,6 +110,10 @@ const server = createServer(async (request, response) => {
       return contactHandler(request, vercelResponse(response));
     }
 
+    if (['GET', 'POST'].includes(request.method) && apiPath === '/api/article-views') {
+      return articleViewsHandler(request, vercelResponse(response));
+    }
+
     if (['GET', 'PUT'].includes(request.method) && apiPath === '/api/apify-config') {
       assertApifyAdmin(request.headers.authorization);
       if (request.method === 'GET') return sendJson(response, 200, await readApifyAdminStatus());
@@ -126,7 +131,7 @@ const server = createServer(async (request, response) => {
     }
 
     if (apiPath.startsWith('/api/')) {
-      const knownPath = ['/api/analyze', '/api/analyze-stream', '/api/chat', '/api/auth', '/api/history', '/api/contact', '/api/apify-config', '/api/gemini-config'].includes(apiPath);
+      const knownPath = ['/api/analyze', '/api/analyze-stream', '/api/chat', '/api/auth', '/api/history', '/api/contact', '/api/article-views', '/api/apify-config', '/api/gemini-config'].includes(apiPath);
       return sendJson(response, knownPath ? 405 : 404, {
         error: knownPath ? 'Phương thức không được hỗ trợ.' : 'API không tồn tại.'
       });

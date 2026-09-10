@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://www.realview.com.vn/</loc><lastmod>2026-09-10</lastmod></url>
-  <url><loc>https://www.realview.com.vn/criteria.html</loc><lastmod>2026-09-10</lastmod></url>
-  <url><loc>https://www.realview.com.vn/contact.html</loc><lastmod>2026-09-10</lastmod></url>
-  <url><loc>https://www.realview.com.vn/blog.html</loc><lastmod>2026-09-10</lastmod></url>
-  <url><loc>https://www.realview.com.vn/blog/cach-doc-review-thong-minh.html</loc><lastmod>2026-09-10</lastmod></url>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <url><loc>https://www.realview.com.vn/</loc><lastmod>2026-09-11</lastmod><image:image><image:loc>https://www.realview.com.vn/assets/illustrations/open-doodles-laying-v1.jpg</image:loc></image:image></url>
+  <url><loc>https://www.realview.com.vn/criteria.html</loc><lastmod>2026-09-11</lastmod><image:image><image:loc>https://www.realview.com.vn/assets/realview-rv.jpg</image:loc></image:image></url>
+  <url><loc>https://www.realview.com.vn/contact.html</loc><lastmod>2026-09-11</lastmod><image:image><image:loc>https://www.realview.com.vn/assets/realview-rv.jpg</image:loc></image:image></url>
+  <url><loc>https://www.realview.com.vn/blog.html</loc><lastmod>2026-09-11</lastmod><image:image><image:loc>https://www.realview.com.vn/assets/photos/pexels-pavel-danilyuk-7190922.jpg</image:loc></image:image></url>
+  <url><loc>https://www.realview.com.vn/blog/cach-doc-review-thong-minh.html</loc><lastmod>2026-09-11</lastmod><image:image><image:loc>https://www.realview.com.vn/assets/photos/pexels-monstera-production-9429449.jpg</image:loc></image:image></url>
 </urlset>
