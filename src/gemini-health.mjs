@@ -3,6 +3,13 @@ import { isRedisConfigured, redisCommand } from './redis-rest.mjs';
 export const GEMINI_HEALTH_KEY = 'realview:gemini:route-health:v1';
 const MINUTE_MS = 60_000;
 const MAX_EVENT_AGE_MS = 5 * MINUTE_MS;
+const FAILURE_STREAK_WINDOW_MS = 10 * MINUTE_MS;
+const LATENCY_HALF_LIFE_MS = 10 * MINUTE_MS;
+const LATENCY_OBSERVATION_MAX_AGE_MS = 30 * MINUTE_MS;
+const FAST_LATENCY_MS = 8_000;
+const SLOW_LATENCY_MS = 15_000;
+const ATTEMPT_TIMEOUT_MS = 25_000;
+const MAX_LATENCY_PRESSURE = 0.15;
 export const GEMINI_TIMEOUT_COOLDOWN_MS = 5_000;
 export const GEMINI_MODEL_LIMITS = Object.freeze({
   'gemini-3.5-flash-lite': { rpm: 15, tpm: 250_000, rpd: 500 }
@@ -88,10 +95,16 @@ if not neutral then
 end
 if ok then
   state.consecutiveFailures = 0
+  state.successfulRequests = math.max(0, tonumber(state.successfulRequests or 0)) + 1
+  state.lastSuccessAt = ARGV[3]
+  state.lastSuccessAtMs = nowMs
   state.lastStatusCode = statusCode > 0 and statusCode or cjson.null
   state.lastError = cjson.null
 elseif not neutral then
   state.consecutiveFailures = math.max(0, tonumber(state.consecutiveFailures or 0)) + 1
+  state.failedRequests = math.max(0, tonumber(state.failedRequests or 0)) + 1
+  state.lastFailureAt = ARGV[3]
+  state.lastFailureAtMs = nowMs
   state.lastStatusCode = statusCode > 0 and statusCode or cjson.null
   state.lastError = ARGV[8]
 end
@@ -126,6 +139,19 @@ return cjson.encode(state)
 function number(value, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function clamp(value, minimum, maximum) {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+function booleanSetting(value, fallback = true) {
+  if (value == null || value === '') return fallback;
+  return !['0', 'false', 'off', 'no'].includes(String(value).trim().toLowerCase());
+}
+
+export function geminiHealthScoringV2Enabled() {
+  return booleanSetting(process.env.GEMINI_HEALTH_SCORING_V2, true);
 }
 
 function parseJson(value, fallback) {
@@ -174,8 +200,46 @@ function normalizeState(state, nowMs) {
   }
   next.dayRequests = Math.max(0, number(next.dayRequests));
   next.consecutiveFailures = Math.max(0, number(next.consecutiveFailures));
+  next.successfulRequests = Math.max(0, number(next.successfulRequests));
+  next.failedRequests = Math.max(0, number(next.failedRequests));
+  const successfulEvents = next.events.filter((event) => event?.ok);
+  const failedEvents = next.events.filter((event) => !event?.ok);
+  next.lastSuccessAtMs = Math.max(0, number(
+    next.lastSuccessAtMs,
+    successfulEvents.length ? number(successfulEvents.at(-1)?.at) : 0
+  ));
+  next.lastFailureAtMs = Math.max(0, number(
+    next.lastFailureAtMs,
+    failedEvents.length ? number(failedEvents.at(-1)?.at) : 0
+  ));
+  next.lastFinishedAtMs = Math.max(0, number(next.lastFinishedAtMs));
   next.cooldownUntilMs = Math.max(0, number(next.cooldownUntilMs));
   return next;
+}
+
+function latencyHealth(current, nowMs) {
+  const ewmaLatencyMs = Math.max(0, number(current.ewmaLatencyMs));
+  const idleMs = current.lastFinishedAtMs > 0 ? Math.max(0, nowMs - current.lastFinishedAtMs) : Number.POSITIVE_INFINITY;
+  const hasFreshObservation = ewmaLatencyMs > 0 && idleMs <= LATENCY_OBSERVATION_MAX_AGE_MS;
+  const latencyFreshness = hasFreshObservation
+    ? Math.pow(0.5, idleMs / LATENCY_HALF_LIFE_MS)
+    : 0;
+  let performanceTier = 'unknown';
+  if (hasFreshObservation) {
+    if (ewmaLatencyMs <= FAST_LATENCY_MS) performanceTier = 'fast';
+    else if (ewmaLatencyMs <= SLOW_LATENCY_MS) performanceTier = 'normal';
+    else performanceTier = 'slow';
+  }
+  const normalizedLatency = clamp(
+    (ewmaLatencyMs - FAST_LATENCY_MS) / Math.max(1, ATTEMPT_TIMEOUT_MS - FAST_LATENCY_MS),
+    0,
+    1
+  );
+  return {
+    performanceTier,
+    latencyFreshness,
+    latencyPressure: normalizedLatency * latencyFreshness * MAX_LATENCY_PRESSURE
+  };
 }
 
 export function geminiRoutePressure(state, model, nowMs = Date.now()) {
@@ -194,8 +258,26 @@ export function geminiRoutePressure(state, model, nowMs = Date.now()) {
   const dailyLimited = Boolean(limits.rpd && current.dayRequests >= limits.rpd);
   const utilization = Math.max(rpmRatio, tpmRatio, rpdRatio);
   const quotaPressure = utilization + Math.max(0, utilization - 0.8) * 20;
-  const latencyPressure = Math.max(0, number(current.ewmaLatencyMs) - 2_500) / 7_500;
-  const failurePressure = recent.length ? failures / recent.length : 0;
+  const v2Enabled = geminiHealthScoringV2Enabled();
+  const latency = latencyHealth(current, nowMs);
+  const unresolvedFailure = current.lastFailureAtMs > current.lastSuccessAtMs;
+  const recentFailure = unresolvedFailure && current.lastFailureAtMs >= nowMs - MAX_EVENT_AGE_MS;
+  const activeFailureStreak = current.consecutiveFailures >= 2
+    && current.lastFailureAtMs >= nowMs - FAILURE_STREAK_WINDOW_MS;
+  const degraded = v2Enabled
+    ? recentFailure || activeFailureStreak
+    : Math.max(0, number(current.ewmaLatencyMs) - 2_500) > 0 || failures > 0;
+  const healthReason = recentFailure
+    ? 'recent_failure'
+    : activeFailureStreak
+      ? 'consecutive_failures'
+      : null;
+  const failurePressure = v2Enabled
+    ? (recentFailure ? Math.min(1, failures || 1) : 0) + (activeFailureStreak ? 0.5 : 0)
+    : recent.length ? failures / recent.length : 0;
+  const latencyPressure = v2Enabled
+    ? latency.latencyPressure
+    : Math.max(0, number(current.ewmaLatencyMs) - 2_500) / 7_500;
   return {
     cooldown: current.cooldownUntilMs > nowMs,
     recentRequests: recentStarts.length,
@@ -207,7 +289,13 @@ export function geminiRoutePressure(state, model, nowMs = Date.now()) {
     minuteLimited,
     dailyLimited,
     inFlight: current.inFlight,
-    degraded: latencyPressure > 0 || failurePressure > 0,
+    degraded,
+    healthStatus: degraded ? 'degraded' : 'healthy',
+    healthReason,
+    performanceTier: latency.performanceTier,
+    latencyFreshness: latency.latencyFreshness,
+    lastSuccessAtMs: current.lastSuccessAtMs,
+    lastFailureAtMs: current.lastFailureAtMs,
     value: quotaPressure + current.inFlight * 0.35 + latencyPressure + failurePressure
   };
 }

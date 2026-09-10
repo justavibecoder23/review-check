@@ -147,6 +147,34 @@ test('mốc reset Gemini là 00:00 America/Los_Angeles kể cả khi DST', () =>
   assert.equal(nextPacificResetAt('2026-12-01T12:00:00.000Z'), '2026-12-02T08:00:00.000Z');
 });
 
+test('append pool tiếp tục đánh số label mặc định thay vì tạo label trùng', async () => {
+  const redis = createRedisFake();
+  const previous = {
+    url: process.env.UPSTASH_REDIS_REST_URL,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    vault: process.env.GEMINI_API_KEY_VAULT_KEY
+  };
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'redis-secret';
+  process.env.GEMINI_API_KEY_VAULT_KEY = Buffer.alloc(32, 9).toString('base64');
+  try {
+    await saveGeminiCredentialPool({
+      mode: 'replace',
+      credentials: ['gemini-secret-key-number-01', 'gemini-secret-key-number-02']
+    }, { fetchImpl: redis.fetchImpl });
+    const status = await saveGeminiCredentialPool({
+      mode: 'append',
+      credentials: ['gemini-secret-key-number-03', 'gemini-secret-key-number-04']
+    }, { fetchImpl: redis.fetchImpl });
+    const labels = [status.active, ...status.backup].map((credential) => credential.label);
+    assert.deepEqual(labels, ['gemini-key-01', 'gemini-key-02', 'gemini-key-03', 'gemini-key-04']);
+  } finally {
+    if (previous.url) process.env.UPSTASH_REDIS_REST_URL = previous.url; else delete process.env.UPSTASH_REDIS_REST_URL;
+    if (previous.token) process.env.UPSTASH_REDIS_REST_TOKEN = previous.token; else delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    if (previous.vault) process.env.GEMINI_API_KEY_VAULT_KEY = previous.vault; else delete process.env.GEMINI_API_KEY_VAULT_KEY;
+  }
+});
+
 test('reserve retry bỏ qua credential vừa timeout mà không đánh dấu used', async () => {
   const redis = createRedisFake();
   const now = '2026-09-01T12:00:00.000Z';

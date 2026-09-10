@@ -130,9 +130,10 @@ GEMINI_API_KEY=<khóa Gemini của bạn>
 GEMINI_MODEL=gemini-3.5-flash-lite
 GEMINI_API_KEY_VAULT_KEY=<kết quả openssl rand -base64 32>
 GEMINI_ADMIN_KEY=<khóa quản trị; có thể bỏ trống để dùng APIFY_ADMIN_KEY>
+GEMINI_HEALTH_SCORING_V2=true
 ```
 
-Gemini pool được lưu mã hóa trong Upstash Redis và chỉ dùng `Gemini 3.5 Flash Lite`. Router ưu tiên key có bộ đếm ngày thấp nhất. Key lỗi hoặc chạm quota phút được đưa vào `pending`; key chạm 500 request/ngày hoặc Gemini xác nhận hết quota ngày được đưa vào `used`. Bộ đếm ngày và trạng thái `used` tự mở lại sau 00:00 `America/Los_Angeles`, không cần cron. Mỗi lần gọi có tối đa hai retry và mỗi retry bắt buộc dùng một API key khác. Các key phải thuộc Google Cloud project khác nhau nếu muốn có quota độc lập; nhiều key trong cùng project vẫn chia sẻ một quota.
+Gemini pool được lưu mã hóa trong Upstash Redis và chỉ dùng `Gemini 3.5 Flash Lite`. Router tách riêng khả dụng (`available`, `busy`, `cooldown`, `rate_limited`, `used`), sức khỏe lỗi (`healthy`, `degraded`) và hiệu năng (`unknown`, `fast`, `normal`, `slow`). Độ trễ chỉ là ưu tiên mềm, giảm một nửa trọng số sau mỗi mười phút không hoạt động và không làm key mất khả dụng. Key lỗi hoặc chạm quota phút được đưa vào `pending`; key chạm 500 request/ngày hoặc Gemini xác nhận hết quota ngày được đưa vào `used`. Bộ đếm ngày và trạng thái `used` tự mở lại sau 00:00 `America/Los_Angeles`, không cần cron. Mỗi lần gọi có tối đa hai retry và mỗi retry bắt buộc dùng một API key khác. Các key phải thuộc Google Cloud project khác nhau nếu muốn có quota độc lập; nhiều key trong cùng project vẫn chia sẻ một quota. Đặt `GEMINI_HEALTH_SCORING_V2=false` để quay lại cách tính route score cũ mà không rollback code.
 
 Nạp hoặc bổ sung key bằng:
 

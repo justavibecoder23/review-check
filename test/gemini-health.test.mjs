@@ -82,3 +82,72 @@ test('health tính request đang reserve vào RPM và TPM trước khi response 
   assert.equal(pressure.recentTokens, 20_000);
   assert.equal(pressure.minuteLimited, true);
 });
+
+test('độ trễ cao được tách thành slow nhưng không làm route thành degraded', () => {
+  const nowMs = Date.now();
+  const pressure = geminiRoutePressure({
+    ewmaLatencyMs: 16_000,
+    lastFinishedAtMs: nowMs - 1_000,
+    lastSuccessAtMs: nowMs - 1_000,
+    consecutiveFailures: 0,
+    events: [{ at: nowMs - 1_000, ok: true, latencyMs: 16_000 }]
+  }, 'gemini-3.5-flash-lite', nowMs);
+  assert.equal(pressure.healthStatus, 'healthy');
+  assert.equal(pressure.degraded, false);
+  assert.equal(pressure.performanceTier, 'slow');
+  assert.ok(Number.isFinite(geminiRouteScore({
+    ewmaLatencyMs: 16_000,
+    lastFinishedAtMs: nowMs - 1_000,
+    lastSuccessAtMs: nowMs - 1_000
+  }, 'gemini-3.5-flash-lite', nowMs)));
+});
+
+test('lỗi gần đây làm degraded và một thành công mới hơn phục hồi healthy', () => {
+  const nowMs = Date.now();
+  const failed = geminiRoutePressure({
+    lastFailureAtMs: nowMs - 2_000,
+    consecutiveFailures: 1,
+    events: [{ at: nowMs - 2_000, ok: false }]
+  }, 'gemini-3.5-flash-lite', nowMs);
+  assert.equal(failed.healthStatus, 'degraded');
+  assert.equal(failed.healthReason, 'recent_failure');
+
+  const recovered = geminiRoutePressure({
+    lastFailureAtMs: nowMs - 2_000,
+    lastSuccessAtMs: nowMs - 1_000,
+    consecutiveFailures: 0,
+    events: [{ at: nowMs - 2_000, ok: false }, { at: nowMs - 1_000, ok: true }]
+  }, 'gemini-3.5-flash-lite', nowMs);
+  assert.equal(recovered.healthStatus, 'healthy');
+  assert.equal(recovered.healthReason, null);
+});
+
+test('lịch sử độ trễ cũ hết hạn và không tiếp tục phạt route', () => {
+  const nowMs = Date.now();
+  const fresh = geminiRoutePressure({
+    ewmaLatencyMs: 20_000,
+    lastFinishedAtMs: nowMs,
+    lastSuccessAtMs: nowMs
+  }, 'gemini-3.5-flash-lite', nowMs);
+  const stale = geminiRoutePressure({
+    ewmaLatencyMs: 20_000,
+    lastFinishedAtMs: nowMs - 31 * 60_000,
+    lastSuccessAtMs: nowMs - 31 * 60_000
+  }, 'gemini-3.5-flash-lite', nowMs);
+  assert.equal(stale.performanceTier, 'unknown');
+  assert.equal(stale.latencyFreshness, 0);
+  assert.ok(stale.value < fresh.value);
+});
+
+test('cờ rollback khôi phục cách đánh dấu degraded theo latency cũ', () => {
+  const previous = process.env.GEMINI_HEALTH_SCORING_V2;
+  const nowMs = Date.now();
+  process.env.GEMINI_HEALTH_SCORING_V2 = 'false';
+  try {
+    const pressure = geminiRoutePressure({ ewmaLatencyMs: 8_000 }, 'gemini-3.5-flash-lite', nowMs);
+    assert.equal(pressure.degraded, true);
+  } finally {
+    if (previous == null) delete process.env.GEMINI_HEALTH_SCORING_V2;
+    else process.env.GEMINI_HEALTH_SCORING_V2 = previous;
+  }
+});

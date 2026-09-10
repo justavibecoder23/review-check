@@ -115,11 +115,12 @@ function cleanLabel(value, fallback) {
   return label;
 }
 
-function normalizeCredentials(credentials) {
+function normalizeCredentials(credentials, options = {}) {
   if (!Array.isArray(credentials) || !credentials.length || credentials.length > 200) {
     throw new Error('Pool Gemini phải có từ 1 đến 200 API key.');
   }
   const seen = new Set();
+  const fallbackStartIndex = Math.max(0, Number.parseInt(options.fallbackStartIndex, 10) || 0);
   return credentials.map((item, index) => {
     const apiKey = String(typeof item === 'string' ? item : item?.apiKey || item?.key || item?.token || '').trim();
     if (apiKey.length < 16 || apiKey.length > 500) throw new Error(`Gemini API key ${index + 1} không hợp lệ.`);
@@ -128,7 +129,10 @@ function normalizeCredentials(credentials) {
     seen.add(id);
     return {
       id,
-      label: cleanLabel(typeof item === 'string' ? null : item?.label, `gemini-key-${String(index + 1).padStart(2, '0')}`),
+      label: cleanLabel(
+        typeof item === 'string' ? null : item?.label,
+        `gemini-key-${String(fallbackStartIndex + index + 1).padStart(2, '0')}`
+      ),
       apiKey
     };
   });
@@ -176,8 +180,10 @@ async function readConfig(options = {}) {
 export async function saveGeminiCredentialPool({ credentials = [], mode = 'replace' }, options = {}) {
   if (!isRedisConfigured()) throw new Error('Chưa cấu hình Upstash Redis.');
   if (!['replace', 'append'].includes(mode)) throw new Error('mode chỉ nhận replace hoặc append.');
-  const incoming = normalizeCredentials(credentials);
   const existing = mode === 'append' ? await readConfig(options) : null;
+  const incoming = normalizeCredentials(credentials, {
+    fallbackStartIndex: existing?.credentials?.length || 0
+  });
   const existingIds = new Set((existing?.credentials || []).map((credential) => credential.id));
   if (incoming.some((credential) => existingIds.has(credential.id))) {
     throw new Error('Có Gemini API key đã tồn tại trong pool.');

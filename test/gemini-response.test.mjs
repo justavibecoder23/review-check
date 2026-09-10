@@ -148,11 +148,16 @@ test('ưu tiên API key có bộ đếm ngày thấp nhất', async () => {
 });
 
 test('ưu tiên route phản hồi nhanh hơn khi chênh lệch quota ngày còn nhỏ', async () => {
+  const nowMs = Date.now();
   const result = await requestGeminiWithFallback({
     listCredentialsImpl: async () => credentials(2),
     getHealthSnapshotImpl: async () => ({
-      [`key-1:${GEMINI_MODEL}`]: { day: pacificDay(), dayRequests: 3, ewmaLatencyMs: 20_000 },
-      [`key-2:${GEMINI_MODEL}`]: { day: pacificDay(), dayRequests: 4, ewmaLatencyMs: 4_000 }
+      [`key-1:${GEMINI_MODEL}`]: {
+        day: pacificDay(), dayRequests: 3, ewmaLatencyMs: 20_000, lastFinishedAtMs: nowMs
+      },
+      [`key-2:${GEMINI_MODEL}`]: {
+        day: pacificDay(), dayRequests: 4, ewmaLatencyMs: 4_000, lastFinishedAtMs: nowMs
+      }
     }),
     fetchImpl: async () => response(200),
     buildRequest: () => ({ method: 'POST' })
@@ -247,11 +252,11 @@ test('chạm RPD 500 đưa key vào used và bỏ qua key đó', async () => {
   assert.deepEqual(marked, [`key-1:${GEMINI_MODEL}`]);
 });
 
-test('các batch song song trong cùng pipeline dùng các key khác nhau', async () => {
+test('mười batch song song trong cùng pipeline dùng mười key khác nhau', async () => {
   const routeContext = { busyRouteIds: new Set(), failedRouteIds: new Set() };
   const keys = [];
   const makeRequest = () => requestGeminiWithFallback({
-    listCredentialsImpl: async () => credentials(2),
+    listCredentialsImpl: async () => credentials(10),
     getHealthSnapshotImpl: async () => ({}),
     beginRouteImpl: async () => new Promise((resolve) => setTimeout(resolve, 5)),
     finishRouteImpl: async () => ({}),
@@ -263,8 +268,8 @@ test('các batch song song trong cùng pipeline dùng các key khác nhau', asyn
     },
     buildRequest: (_model, apiKey) => ({ headers: { 'x-goog-api-key': apiKey } })
   });
-  await Promise.all([makeRequest(), makeRequest()]);
-  assert.deepEqual(new Set(keys), new Set(['secret-1', 'secret-2']));
+  await Promise.all(Array.from({ length: 10 }, () => makeRequest()));
+  assert.equal(new Set(keys).size, 10);
 });
 
 test('deadline chung rút ngắn attempt thay vì cộng thêm thời gian retry', async () => {
