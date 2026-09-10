@@ -11,6 +11,7 @@
   const isHome = pathname === '/' || pathname.endsWith('/index.html');
   const isCriteria = document.body.classList.contains('criteria-page') || pathname.endsWith('/criteria.html');
   const isContact = document.body.classList.contains('contact-page') || pathname.endsWith('/contact.html');
+  const isBlog = document.body.classList.contains('blog-page') || pathname.endsWith('/blog.html') || pathname.includes('/blog/');
 
   const homeItems = [
     ['#about', 'Về RealView'],
@@ -22,7 +23,7 @@
     ['#evaluation-process', 'Quy trình đánh giá'],
     ['#criteria-library', 'Bộ tiêu chí đánh giá'],
   ];
-  const activeGroup = isHome ? 'home' : isCriteria ? 'criteria' : '';
+  const activeGroup = isHome ? 'home' : isCriteria ? 'criteria' : isBlog ? 'blog' : '';
   const pageHref = (href, group) => {
     if (group === 'criteria') return isCriteria ? href : `/criteria.html${href}`;
     return isHome ? href : `/${href}`;
@@ -51,7 +52,7 @@
     ${navItem('home', 'Trang chủ', isHome ? '#home' : '/#home', homeItems)}
     ${navItem('criteria', 'Tiêu chí lọc', '/criteria.html', criteriaItems)}
     <button class="nav-history-trigger" type="button" data-history-open>Lịch sử <span data-history-count hidden>0</span></button>
-    <span class="nav-link nav-blog" aria-disabled="true">Blog <small>Sắp ra mắt</small></span>`;
+    <a class="nav-link nav-blog${isBlog ? ' is-active' : ''}" href="/blog.html"${isBlog ? ' aria-current="page"' : ''}>Blog</a>`;
 
   const dropdownWraps = [...nav.querySelectorAll('.nav-parent-wrap')];
 
