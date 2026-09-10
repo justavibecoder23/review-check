@@ -25,7 +25,15 @@
   const loader = document.createElement('script');
   loader.async = true;
   loader.src = `https://www.googletagmanager.com/gtag/js?id=${measurementId}`;
-  document.head.appendChild(loader);
+  const loadAnalytics = () => {
+    if (loader.isConnected) return;
+    document.head.appendChild(loader);
+  };
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(loadAnalytics, { timeout: 2000 });
+  } else {
+    window.setTimeout(loadAnalytics, 1000);
+  }
 
   window.realviewMarketplaceFromUrl = function realviewMarketplaceFromUrl(value) {
     const normalized = String(value || '').toLowerCase();

@@ -2,10 +2,17 @@
 
 ## Illustration
 
-- `illustrations/open-doodles-laying.svg`
+- `illustrations/open-doodles-laying.svg` (source)
+- `illustrations/open-doodles-laying-v1.svg` (versioned production copy)
   - Tác giả: Pablo Stanley / Open Doodles.
   - Nguồn gốc: `https://www.opendoodles.com/`.
   - Tệp gốc: `https://opendoodles.s3-us-west-1.amazonaws.com/laying.svg`.
+
+## Nhận diện thương hiệu
+
+- `realview-logo-v1.webp`, `favicon-v1-32.png`, `favicon-v1-48.png`, `apple-touch-icon-v1.png`
+  - Nguồn: các bản tối ưu được tạo từ `realview-rv.png` của RealView.
+  - Sử dụng: logo giao diện, favicon và biểu tượng màn hình chính với kích thước phù hợp từng ngữ cảnh.
   - Giấy phép: CC0, cho phép sao chép, chỉnh sửa và sử dụng không cần ghi công.
   - Thay đổi trong dự án: đổi màu nhấn gốc `#FF5678` thành màu thương hiệu `#FC781F`.
 
