@@ -1,5 +1,6 @@
 import { geminiThinkingConfig, parseGeminiJson, requestGeminiWithFallback } from './gemini-response.mjs';
 import { calculateTrustScoreV31 } from './trust-score-v31.mjs';
+import { domainAwareSummaryEnabled, resolveProductDomain } from './product-domain.mjs';
 
 const positiveDefinitions = [
   { id: 'chat-luong', title: 'Chất lượng sản phẩm', description: 'Người mua mô tả sản phẩm chắc chắn, hoàn thiện ổn hoặc có độ bền tốt.', words: ['chất lượng tốt', 'chất tốt', 'xịn', 'chắc chắn', 'bền', 'đường may đẹp', 'hoàn thiện tốt'] },
@@ -7,10 +8,10 @@ const positiveDefinitions = [
   { id: 'phu-hop', title: 'Trải nghiệm sử dụng tốt', description: 'Người mua cho biết sản phẩm dễ dùng, thoải mái hoặc đáp ứng đúng nhu cầu thực tế.', words: ['dùng tốt', 'dùng ổn', 'hoạt động tốt', 'mặc đẹp', 'thoải mái', 'vừa vặn', 'êm', 'tiện'] },
   { id: 'giao-hang', title: 'Giao hàng và đóng gói', description: 'Đơn hàng đến nhanh, được đóng gói cẩn thận và sản phẩm còn nguyên vẹn.', words: ['giao nhanh', 'đóng gói kỹ', 'đóng gói tốt', 'gói hàng kỹ', 'hàng nguyên vẹn'] },
   { id: 'gia-tri', title: 'Mức độ đáp ứng kỳ vọng', description: 'Người mua cho biết sản phẩm đáp ứng nhu cầu và trải nghiệm sử dụng mong đợi.', words: ['đáng tiền', 'đáng mua', 'giá tốt', 'hợp giá', 'giá hợp lý'] },
-  { id: 'mau-sac', title: 'Màu sắc và độ lên màu', description: 'Người mua hài lòng với màu thực tế hoặc cách sản phẩm lên màu.', words: ['màu đẹp', 'màu xinh', 'lên màu đẹp', 'lên màu chuẩn', 'màu ưng', 'màu cũng ok', 'màu cũng được'] },
-  { id: 'do-bam', title: 'Độ bám và độ lì', description: 'Một số người mua ghi nhận màu bám tương đối tốt hoặc giữ được trên môi.', words: ['son lì', 'son lỳ', 'son li', 'son ly', 'lì lắm', 'lỳ lắm', 'lì phết', 'lỳ phết', 'bám màu', 'lâu trôi', 'độ lì'] },
-  { id: 'cam-giac', title: 'Cảm giác khi sử dụng', description: 'Người mua mô tả sản phẩm nhẹ, mềm hoặc dễ chịu khi dùng.', words: ['nhẹ môi', 'mềm môi', 'không khô môi', 'ko khô môi', 'không dính', 'ko dính', 'mùi thơm', 'thơm'] },
-  { id: 'thao-tac', title: 'Dễ sử dụng và che phủ', description: 'Sản phẩm được nhận xét là dễ dùng hoặc có độ che phủ ổn.', words: ['dễ đánh', 'che phủ tốt', 'độ che phủ ok', 'độ che phủ: ok'] }
+  { id: 'mau-sac', title: 'Màu sắc và độ lên màu', description: 'Người mua hài lòng với màu thực tế hoặc cách sản phẩm lên màu.', domains: ['beauty'], words: ['màu đẹp', 'màu xinh', 'lên màu đẹp', 'lên màu chuẩn', 'màu ưng', 'màu cũng ok', 'màu cũng được'] },
+  { id: 'do-bam', title: 'Độ bám và độ lì', description: 'Một số người mua ghi nhận màu bám tương đối tốt hoặc giữ được trên môi.', domains: ['beauty'], words: ['son lì', 'son lỳ', 'son li', 'son ly', 'lì lắm', 'lỳ lắm', 'lì phết', 'lỳ phết', 'bám màu', 'lâu trôi', 'độ lì'] },
+  { id: 'cam-giac', title: 'Cảm giác khi sử dụng', description: 'Người mua mô tả sản phẩm nhẹ, mềm hoặc dễ chịu khi dùng.', domains: ['beauty'], words: ['nhẹ môi', 'mềm môi', 'không khô môi', 'ko khô môi', 'không dính', 'ko dính'] },
+  { id: 'thao-tac', title: 'Dễ sử dụng và che phủ', description: 'Sản phẩm được nhận xét là dễ dùng hoặc có độ che phủ ổn.', domains: ['beauty'], words: ['dễ đánh', 'che phủ tốt', 'độ che phủ ok', 'độ che phủ: ok'] }
 ];
 
 const negativeDefinitions = [
@@ -19,10 +20,12 @@ const negativeDefinitions = [
   { id: 'dung-mo-ta', title: 'Khác mô tả / hình ảnh', description: 'Sản phẩm thực nhận có điểm khác về màu, mẫu, số lượng hoặc hình thức so với thông tin đăng bán.', words: ['khác hình', 'không giống', 'khác mô tả', 'sai màu', 'màu khác', 'thiếu', 'không đúng mẫu', 'lỗi'] },
   { id: 'giao-hang', title: 'Giao hàng / đóng gói', description: 'Người mua gặp tình trạng giao chậm, thiếu hàng hoặc sản phẩm bị ảnh hưởng do đóng gói chưa tốt.', words: ['giao chậm', 'lâu', 'móp', 'bể', 'vỡ', 'đóng gói sơ sài', 'giao thiếu', 'trễ'] },
   { id: 'su-dung', title: 'Trải nghiệm sử dụng', description: 'Sản phẩm có thể gây khó chịu, hoạt động yếu hoặc không đáp ứng tốt khi sử dụng thực tế.', words: ['không dùng được', 'không hoạt động', 'không bền', 'nóng', 'bí', 'khó chịu', 'rò', 'hết pin', 'yếu'] },
-  { id: 'do-bam-mau', title: 'Độ bám và khả năng giữ màu', description: 'Một số người mua cho biết màu không đủ lì, dễ lem hoặc trôi nhanh khi ăn uống.', matchFromText: true, words: ['không lì', 'ko lì', 'k lì', 'không lỳ', 'ko lỳ', 'không có lì', 'ko có lì', 'không bám', 'ko bám', 'k bám', 'nhanh trôi', 'mau trôi', 'trôi nhanh', 'cũng trôi', 'không còn son', 'chẳng còn son', 'giữ màu không lâu', 'giữ màu ko lâu'] },
-  { id: 'ket-cau-thao-tac', title: 'Kết cấu và thao tác sử dụng', description: 'Sản phẩm bị nhận xét là quá lỏng, dễ chảy hoặc khô nhanh khiến người dùng khó tán đều.', matchFromText: true, words: ['quá lỏng', 'rất lỏng', 'son lỏng', 'son dạng lỏng', 'son nước', 'chảy', 'trào ra', 'tràn ra', 'lem bẩn', 'khó tán', 'khó đánh', 'mau khô', 'nhanh khô'] },
-  { id: 'cam-giac-su-dung', title: 'Cảm giác trên môi', description: 'Một số phản hồi đề cập tình trạng khô, rát, tê hoặc vị và mùi gây khó chịu.', matchFromText: true, words: ['khô môi', 'môi khô', 'nứt môi', 'nóng rát', 'rát môi', 'tê môi', 'tê tê', 'bị đắng', 'đắng miệng', 'vị mặn', 'mùi hôi'] },
-  { id: 'mau-sac-thuc-te', title: 'Màu sắc thực tế', description: 'Màu nhận được hoặc màu lên môi có chỗ chưa giống hình ảnh, quảng cáo hay kỳ vọng của người mua.', matchFromText: true, words: ['màu xỉn', 'màu tối', 'màu thâm', 'không chuẩn màu', 'ko chuẩn màu', 'màu không chuẩn', 'không giống trên hình', 'không như quảng cáo', 'không giống như quảng cáo', 'khác quảng cáo', 'hồng cánh sen'] }
+  { id: 'do-bam-mau', title: 'Độ bám và khả năng giữ màu', description: 'Một số người mua cho biết màu không đủ lì, dễ lem hoặc trôi nhanh khi ăn uống.', domains: ['beauty'], matchFromText: true, words: ['không lì', 'ko lì', 'k lì', 'không lỳ', 'ko lỳ', 'không có lì', 'ko có lì', 'không bám', 'ko bám', 'k bám', 'nhanh trôi', 'mau trôi', 'trôi nhanh', 'cũng trôi', 'không còn son', 'chẳng còn son', 'giữ màu không lâu', 'giữ màu ko lâu'] },
+  { id: 'ket-cau-thao-tac', title: 'Kết cấu và thao tác sử dụng', description: 'Sản phẩm bị nhận xét là quá lỏng, dễ chảy hoặc khô nhanh khiến người dùng khó tán đều.', domains: ['beauty'], matchFromText: true, words: ['quá lỏng', 'rất lỏng', 'son lỏng', 'son dạng lỏng', 'son nước', 'trào ra', 'tràn ra', 'lem bẩn', 'khó tán', 'khó đánh', 'mau khô', 'nhanh khô'] },
+  { id: 'cam-giac-su-dung', title: 'Cảm giác trên môi', description: 'Một số phản hồi đề cập tình trạng khô, rát hoặc tê môi gây khó chịu.', domains: ['beauty'], matchFromText: true, words: ['khô môi', 'môi khô', 'nứt môi', 'nóng rát', 'rát môi', 'tê môi', 'tê tê'] },
+  { id: 'mau-sac-thuc-te', title: 'Màu sắc thực tế', description: 'Màu nhận được hoặc màu lên môi có chỗ chưa giống hình ảnh, quảng cáo hay kỳ vọng của người mua.', domains: ['beauty'], matchFromText: true, words: ['màu xỉn', 'màu tối', 'màu thâm', 'không chuẩn màu', 'ko chuẩn màu', 'màu không chuẩn', 'không giống trên hình', 'không như quảng cáo', 'không giống như quảng cáo', 'khác quảng cáo', 'hồng cánh sen'] },
+  { id: 'huong-vi', title: 'Hương vị', description: 'Một số người mua cho biết hương vị thực tế chưa cân bằng hoặc chưa phù hợp với kỳ vọng.', domains: ['food'], matchFromText: true, words: ['quá mặn', 'hơi mặn', 'vị mặn', 'quá ngọt', 'hơi ngọt', 'quá chua', 'bị đắng', 'khó ăn'] },
+  { id: 'do-cay', title: 'Độ cay', description: 'Mức độ cay của sản phẩm được phản ánh là chưa phù hợp với mô tả hoặc kỳ vọng.', domains: ['food'], matchFromText: true, words: ['quá cay', 'cay quá', 'không cay', 'chẳng cay'] }
 ];
 
 const MAX_NARRATIVE_EVIDENCE = 18;
@@ -53,10 +56,17 @@ function hasNonNegatedPhrase(text, phrase) {
   return false;
 }
 
-function countThemes(reviews, definitions) {
+function definitionApplies(definition, domain, enabled) {
+  return !enabled || !definition.domains?.length || definition.domains.includes(domain);
+}
+
+function countThemes(reviews, definitions, domain = 'unknown', enabled = true) {
   return definitions
+    .filter((definition) => definitionApplies(definition, domain, enabled))
     .map((definition) => {
       const matching = reviews.filter((review) => {
+        const aspect = review?.labels?.aspect;
+        if (enabled && aspect?.domain === domain && aspect?.sentiment === 'positive') return false;
         const text = normalise(review.text);
         return definition.words.some((word) => hasNonNegatedPhrase(text, normalise(word)));
       });
@@ -70,14 +80,61 @@ function countThemes(reviews, definitions) {
     .sort((left, right) => right.count - left.count);
 }
 
-function countDefectThemes(reviews) {
+function dynamicAspectThemes(reviews, domain, enabled, sentiment) {
+  if (!enabled || domain === 'unknown') return [];
+  const grouped = new Map();
+  for (const review of reviews) {
+    const aspect = review?.labels?.aspect;
+    if (!aspect?.key || !aspect?.label || aspect.domain !== domain || aspect.sentiment !== sentiment) continue;
+    if (sentiment === 'negative' && review?.labels?.has_defect !== true) continue;
+    if (sentiment === 'positive' && review?.labels?.has_defect === true) continue;
+    const id = `aspect:${aspect.key}`;
+    const current = grouped.get(id) || {
+      id,
+      title: String(aspect.label).slice(0, 48),
+      description: sentiment === 'negative'
+        ? `Người mua phản ánh vấn đề cụ thể liên quan đến ${normalise(aspect.label)} trong quá trình sử dụng sản phẩm.`
+        : `Người mua ghi nhận trải nghiệm tích cực cụ thể về ${normalise(aspect.label)} của sản phẩm.`,
+      count: 0,
+      evidenceIds: []
+    };
+    current.count += 1;
+    if (review.labelId) current.evidenceIds.push(String(review.labelId));
+    grouped.set(id, current);
+  }
+  return [...grouped.values()];
+}
+
+function mergeThemes(themes) {
+  const merged = new Map();
+  for (const theme of themes) {
+    const key = normalise(theme.title);
+    const current = merged.get(key);
+    if (!current) {
+      merged.set(key, { ...theme, evidenceIds: [...new Set(theme.evidenceIds || [])] });
+      continue;
+    }
+    current.evidenceIds = [...new Set([...current.evidenceIds, ...(theme.evidenceIds || [])])];
+    current.count = current.evidenceIds.length || current.count + theme.count;
+  }
+  return [...merged.values()].sort((left, right) => right.count - left.count);
+}
+
+function countDefectThemes(reviews, product = {}, enabled = true) {
+  const domain = resolveProductDomain(product).domain;
   const themes = negativeDefinitions
+    .filter((definition) => definitionApplies(definition, domain, enabled))
     .map((definition) => {
       const matching = reviews.filter((review) => {
+        // has_defect của nhãn cuối là cổng quyết định. Khi Layer 2 phủ định
+        // Layer 1, category hoặc keyword cũ không được phép tạo lỗi trở lại.
+        if (review?.labels?.has_defect === false) return false;
+        const aspect = review?.labels?.aspect;
+        if (enabled && aspect?.domain === domain && aspect?.key && aspect?.label) return false;
         const categories = review?.labels?.defect_categories;
         if (Array.isArray(categories) && categories.includes(definition.id)) return true;
         if (!definition.matchFromText) return false;
-        if (!review?.labels?.has_defect && Number(review.rating) > 3) return false;
+        if (review?.labels?.has_defect !== true) return false;
         const text = normalise(review.text);
         return definition.words.some((word) => text.includes(normalise(word)));
       });
@@ -89,14 +146,25 @@ function countDefectThemes(reviews) {
     })
     .filter((theme) => theme.count > 0)
     .sort((left, right) => right.count - left.count);
-  const hasSpecificExperienceTheme = themes.some((theme) => [
+  const combined = mergeThemes([...dynamicAspectThemes(reviews, domain, enabled, 'negative'), ...themes]);
+  const hasSpecificExperienceTheme = combined.some((theme) => [
     'do-bam-mau',
     'ket-cau-thao-tac',
     'cam-giac-su-dung'
   ].includes(theme.id));
   return hasSpecificExperienceTheme
-    ? themes.filter((theme) => theme.id !== 'su-dung')
-    : themes;
+    ? combined.filter((theme) => theme.id !== 'su-dung')
+    : combined;
+}
+
+function productWithResolvedDomain(product = {}, reviews = []) {
+  const metadataResolution = resolveProductDomain(product);
+  if (metadataResolution.domain !== 'unknown') return { ...product, domainResolution: metadataResolution };
+  const candidates = reviews
+    .map((review) => review?.labels?.product_domain)
+    .filter((resolution) => resolution?.domain && Number(resolution.confidence) >= 0.85)
+    .sort((left, right) => Number(right.confidence) - Number(left.confidence));
+  return candidates.length ? { ...product, domainResolution: candidates[0] } : product;
 }
 
 const displayProductPattern = /(?:màn\s*hình|monitor|display|ultragear)/iu;
@@ -114,7 +182,13 @@ function contextualizeNegativeTheme(theme, product = {}) {
 }
 
 function fallbackCopy(reviews, included, excluded, product = {}) {
-  const pros = countThemes(included.filter((review) => Number(review.rating) >= 4), positiveDefinitions)
+  const enabled = domainAwareSummaryEnabled();
+  const domain = resolveProductDomain(product).domain;
+  const positiveReviews = included.filter((review) => Number(review.rating) >= 4);
+  const pros = mergeThemes([
+    ...dynamicAspectThemes(positiveReviews, domain, enabled, 'positive'),
+    ...countThemes(positiveReviews, positiveDefinitions, domain, enabled)
+  ])
     .slice(0, MAX_SUMMARY_ITEMS)
     .map((theme) => ({
       title: theme.title,
@@ -124,7 +198,7 @@ function fallbackCopy(reviews, included, excluded, product = {}) {
     }));
   // Dùng đúng nhãn cuối của pipeline, cùng nguồn dữ liệu với công thức điểm.
   // Tránh UI đếm bằng keyword khác với số khuyết tật ở backend.
-  const cons = countDefectThemes(included)
+  const cons = countDefectThemes(included, product, enabled)
     .slice(0, MAX_SUMMARY_ITEMS)
     .map((theme) => contextualizeNegativeTheme(theme, product))
     .map((theme) => ({
@@ -224,7 +298,8 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
     sampling: options.sampling
   });
   const score = method.score;
-  const { pros, cons } = fallbackCopy(reviews, included, excluded, options.product);
+  const analysisProduct = productWithResolvedDomain(options.product, reviews);
+  const { pros, cons } = fallbackCopy(reviews, included, excluded, analysisProduct);
   const tone = trustTone(score);
   const mostFrequentDefect = [...method.defects.tests].sort((left, right) => right.count - left.count)[0];
   const controlledDefectSample = method.defects.status === 'standardized-controlled-sample';
@@ -454,11 +529,17 @@ export function buildGeminiNarrativePayload(reviews = [], fallback, options = {}
   const included = reviews.filter((review) => review.included !== false);
   const excluded = reviews.filter((review) => review.included === false);
   const method = fallback?.method || {};
+  const narrativeProduct = productWithResolvedDomain(options.product, reviews);
+  const domainResolution = resolveProductDomain(narrativeProduct);
   return {
     productContext: {
-      title: String(options.product?.title || '').slice(0, 240),
-      category: String(options.product?.category || '').slice(0, 120),
-      marketplace: String(options.product?.marketplace || '').slice(0, 40)
+      title: String(narrativeProduct?.title || '').slice(0, 240),
+      category: String(narrativeProduct?.category || '').slice(0, 120),
+      categoryPath: Array.isArray(narrativeProduct?.categoryPath)
+        ? narrativeProduct.categoryPath.map((item) => String(item).slice(0, 80)).slice(0, 8)
+        : String(narrativeProduct?.categoryPath || '').slice(0, 240),
+      marketplace: String(narrativeProduct?.marketplace || '').slice(0, 40),
+      domain: domainResolution
     },
     fixedBackendDraft: {
       score: fallback.score,
@@ -498,7 +579,9 @@ function cleanItem(item, fallback) {
     .trim();
   const detail = rawDetail.length <= 190 ? rawDetail : `${rawDetail.slice(0, 187).replace(/\s+\S*$/u, '')}…`;
   return {
-    title: String(item.title || fallback?.title || '').slice(0, 90),
+    // Chủ đề, số lượt và evidence đều do backend khóa. Gemini chỉ được phép
+    // viết lại câu diễn giải của ưu điểm để tránh tạo chủ đề sai ngành hàng.
+    title: String(fallback?.title || '').slice(0, 90),
     detail,
     mentions: Math.max(0, Math.round(Number(fallback?.mentions) || 0)),
     evidenceIds: Array.isArray(fallback?.evidenceIds) ? fallback.evidenceIds : []

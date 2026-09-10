@@ -33,6 +33,8 @@ function datasetEnvelope({ kind, runId, createdAt, product, source, reviews, lab
       productId: product?.productId || null,
       title: product?.title || null,
       category: product?.category || null,
+      categoryPath: product?.categoryPath || null,
+      domainResolution: product?.domainResolution || null,
       image: product?.image || null,
       price: product?.price || null,
       rating: product?.rating || null

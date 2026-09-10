@@ -8,6 +8,13 @@ import {
 import { isRedisConfigured } from './redis-rest.mjs';
 import { annotateReviewDuplicates } from './review-deduplication.mjs';
 import { REVIEW_PIPELINE_VERSION } from './review-pipeline-version.mjs';
+import {
+  aspectCompatibleWithDomain,
+  domainAwareSummaryEnabled,
+  normalizeProductDomain,
+  reconcileProductDomain,
+  resolveProductDomain
+} from './product-domain.mjs';
 
 const require = createRequire(import.meta.url);
 const rulesDocument = require('./layer1_rules.json');
@@ -454,6 +461,15 @@ export function labelReviewLayer1(review = {}, index = 0, product = {}) {
 const layer2ResponseSchema = {
   type: 'object',
   properties: {
+    product_domain: {
+      type: 'object',
+      properties: {
+        domain: { type: 'string', enum: ['food', 'beauty', 'fashion', 'electronics', 'home', 'health', 'other', 'unknown'] },
+        subcategory: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+        confidence: { type: 'number', minimum: 0, maximum: 1 }
+      },
+      required: ['domain', 'subcategory', 'confidence']
+    },
     labels: {
       type: 'array',
       items: {
@@ -483,14 +499,27 @@ const layer2ResponseSchema = {
             }
           },
           evidence_quote: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+          aspect: {
+            anyOf: [{
+              type: 'object',
+              properties: {
+                key: { type: 'string' },
+                label: { type: 'string' },
+                quote: { type: 'string' },
+                sentiment: { type: 'string', enum: ['positive', 'negative'] },
+                confidence: { type: 'number', minimum: 0, maximum: 1 }
+              },
+              required: ['key', 'label', 'quote', 'sentiment', 'confidence']
+            }, { type: 'null' }]
+          },
           confidence: { type: 'number', minimum: 0, maximum: 1 },
           reason_code: { type: 'string' }
         },
-        required: ['id', 'decision', 'is_seeding', 'is_low_value', 'is_vague', 'is_off_topic', 'relevance', 'information_value', 'has_defect', 'defect_categories', 'defect_quote', 'defect_evidence', 'evidence_quote', 'confidence', 'reason_code']
+        required: ['id', 'decision', 'is_seeding', 'is_low_value', 'is_vague', 'is_off_topic', 'relevance', 'information_value', 'has_defect', 'defect_categories', 'defect_quote', 'defect_evidence', 'evidence_quote', 'aspect', 'confidence', 'reason_code']
       }
     }
   },
-  required: ['labels']
+  required: ['product_domain', 'labels']
 };
 
 function normalizeLayer2Label(candidate, review, layer1) {
@@ -520,6 +549,18 @@ function normalizeLayer2Label(candidate, review, layer1) {
   const evidenceQuote = typeof candidate.evidence_quote === 'string' && text.includes(candidate.evidence_quote.trim())
     ? candidate.evidence_quote.trim()
     : null;
+  const aspectCandidate = candidate.aspect && typeof candidate.aspect === 'object' ? candidate.aspect : candidate;
+  const rawAspectQuote = aspectCandidate.quote ?? aspectCandidate.aspect_quote;
+  const aspectQuote = typeof rawAspectQuote === 'string' && text.includes(rawAspectQuote.trim())
+    ? rawAspectQuote.trim()
+    : null;
+  const aspectLabel = String(aspectCandidate.label ?? aspectCandidate.aspect_label ?? '').replace(/[\u0000-\u001f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 48);
+  const aspectKey = String(aspectCandidate.key ?? aspectCandidate.aspect_key ?? '').toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 48);
+  const rawAspectSentiment = aspectCandidate.sentiment ?? aspectCandidate.aspect_sentiment;
+  const aspectSentiment = ['positive', 'negative', 'neutral'].includes(rawAspectSentiment)
+    ? rawAspectSentiment
+    : 'neutral';
+  const aspectConfidence = clamp(aspectCandidate.confidence ?? aspectCandidate.aspect_confidence);
   if (candidate.has_defect && (!categories.length || !quote || categories.some((category) => !evidenceByCategory.has(category)))) {
     return {
       decision: 'abstain',
@@ -535,6 +576,11 @@ function normalizeLayer2Label(candidate, review, layer1) {
   // và trích dẫn nguyên văn; không dùng từ điển hoặc kết luận Layer 1 để phủ
   // quyết một kết quả Gemini hợp lệ.
   const hasDefect = Boolean(candidate.has_defect && categories.length && quote);
+  const aspectPolarityValid = hasDefect ? aspectSentiment === 'negative' : aspectSentiment === 'positive';
+  const aspect = aspectPolarityValid && aspectKey && aspectLabel && aspectLabel.split(/\s+/u).length <= 8
+    && aspectQuote && aspectConfidence >= 0.85
+    ? { key: aspectKey, label: aspectLabel, sentiment: aspectSentiment, quote: aspectQuote, confidence: aspectConfidence }
+    : null;
   const isVague = Boolean(candidate.is_vague && !hasDefect);
   const isLowValue = Boolean(candidate.is_low_value && !hasDefect);
   const requestedRelevance = ['on_topic', 'uncertain', 'off_topic'].includes(candidate.relevance)
@@ -576,6 +622,7 @@ function normalizeLayer2Label(candidate, review, layer1) {
     has_defect: hasDefect,
     defect_categories: hasDefect ? categories : [],
     defect_quote: hasDefect ? quote : null,
+    aspect,
     evidence_quote: evidenceQuote,
     confidence,
     reason_code: String(candidate.reason_code || 'LLM_REVIEWED').slice(0, 80),
@@ -586,6 +633,7 @@ function normalizeLayer2Label(candidate, review, layer1) {
 export async function classifyBatchWithGemini(batch, product, options = {}) {
   const apiKey = process.env.GEMINI_API_KEY;
   const model = 'gemini-3.5-flash-lite';
+  const domainResolution = resolveProductDomain(product);
   const payload = batch.map(({ review, layer1 }) => ({
     id: layer1.id,
     rating: Number(review.rating) || 0,
@@ -609,7 +657,10 @@ export async function classifyBatchWithGemini(batch, product, options = {}) {
     ...layer2Config.decision_rules.map((rule, index) => `${index + 1}. ${rule}`),
     'decision=confirm nếu Layer 1 đúng; correct nếu có đủ bằng chứng để sửa; abstain nếu chưa đủ bằng chứng.',
     'Không được dùng rating một mình để kết luận seeding hoặc giả mạo.',
-    `Ngữ cảnh sản phẩm: ${JSON.stringify({ title: product?.title || null, category: product?.category || null, platform: product?.platform || null })}`,
+    'Trả product_domain cho toàn batch. Ưu tiên metadata; chỉ chọn domain khác unknown khi ngữ cảnh đủ rõ.',
+    'Có thể trả aspect ngắn, đúng ngành hàng cho trải nghiệm cụ thể. Dùng sentiment=negative khi has_defect=true và positive khi nêu ưu điểm; nếu không đủ bằng chứng thì aspect=null.',
+    'aspect.quote phải là trích dẫn nguyên văn. aspect.key dùng chữ thường ASCII và dấu gạch nối; aspect.label là tiếng Việt tối đa 8 từ; confidence phải phản ánh độ chắc chắn.',
+    `Ngữ cảnh sản phẩm: ${JSON.stringify({ title: product?.title || null, category: product?.category || null, categoryPath: product?.categoryPath || null, platform: product?.platform || null, resolvedDomain: domainResolution })}`,
     `Dữ liệu cần kiểm định: ${JSON.stringify(payload)}`
   ].join('\n');
   const validateResponse = async (response) => {
@@ -622,7 +673,16 @@ export async function classifyBatchWithGemini(batch, product, options = {}) {
         || returnedIds.some((id) => !expectedIds.has(id))) {
         throw new Error(`Kết quả phải chứa đúng ${expectedIds.size} nhãn với ID không trùng.`);
       }
-      return parsed.labels;
+      return {
+        labels: parsed.labels,
+        domainVote: parsed.product_domain && typeof parsed.product_domain === 'object'
+          ? {
+              domain: normalizeProductDomain(parsed.product_domain.domain),
+              subcategory: String(parsed.product_domain.subcategory || '').slice(0, 80) || null,
+              confidence: clamp(parsed.product_domain.confidence)
+            }
+          : null
+      };
   };
   const requestGemini = options.requestGeminiImpl || requestGeminiWithFallback;
   const run = (maxRetries, signal, avoidBusyRoutes = false) => requestGemini({
@@ -656,8 +716,12 @@ export async function classifyBatchWithGemini(batch, product, options = {}) {
   // Hai route tuần tự: tránh hedge tạo burst khiến mọi key cùng chạm RPM.
   // requestGeminiWithFallback luôn ưu tiên route có bộ đếm thấp nhất.
   const geminiResult = await run(LAYER2_MAX_ROUTE_ATTEMPTS - 1, options.signal, true);
+  const value = Array.isArray(geminiResult.value)
+    ? { labels: geminiResult.value, domainVote: null }
+    : geminiResult.value || { labels: [], domainVote: null };
   return {
-    labels: geminiResult.value,
+    labels: Array.isArray(value.labels) ? value.labels : [],
+    domainVote: value.domainVote || null,
     retry: {
       model: geminiResult.model,
       attemptedModels: geminiResult.attemptedModels || [],
@@ -785,7 +849,9 @@ async function mapWithAdaptiveConcurrency(items, options, mapper) {
 
 export async function labelReviewsTwoLayer(reviews = [], options = {}) {
   const layer2StartedAt = Date.now();
-  const prepared = reviews.map((review, index) => ({ review, layer1: labelReviewLayer1(review, index, options.product) }));
+  const initialDomain = resolveProductDomain(options.product);
+  const product = { ...options.product, domainResolution: initialDomain };
+  const prepared = reviews.map((review, index) => ({ review, layer1: labelReviewLayer1(review, index, product) }));
   // Phát hiện bản sao trước khi gọi Gemini để một nội dung lặp không tiêu hao
   // nhiều request/token. Bản đại diện được chọn ổn định, không phụ thuộc thứ tự.
   const duplicateAudit = annotateReviewDuplicates(prepared.map(({ review, layer1 }) => ({
@@ -829,6 +895,7 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
   // Mỗi yêu cầu phân tích mới phải được Gemini kiểm định lại. localStorage chỉ
   // phục vụ thao tác mở lịch sử ở trình duyệt, không được thay thế lượt Layer 2.
   const layer2ById = new Map();
+  const domainVotes = [];
   const cacheHits = 0;
   const model = 'gemini-3.5-flash-lite';
   const batches = chunks(selected, batchSize);
@@ -958,7 +1025,7 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
       try {
         const rampDelayMs = Math.floor(batchIndex / rampGroupSize) * rampIntervalMs;
         if (rampDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, rampDelayMs));
-        const result = await classifyBatchWithGemini(batch, options.product, {
+        const result = await classifyBatchWithGemini(batch, product, {
           fetchImpl: options.fetchImpl || fetch,
           deadlineAt: options.geminiContext?.layer2DeadlineAt,
           routeContext: options.geminiContext,
@@ -1013,6 +1080,7 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
     skippedDeadlineBatches = scheduled.skippedDeadline;
     for (const result of results) {
       if (result.warning) warnings.push(result.warning);
+      if (result.domainVote) domainVotes.push(result.domainVote);
       for (const candidate of result.labels) layer2ById.set(String(candidate.id), candidate);
     }
   } else if (selected.length) {
@@ -1029,12 +1097,18 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
 
   let corrected = 0;
   let abstained = 0;
+  const finalDomain = reconcileProductDomain(initialDomain, domainVotes, { batchCount: batches.length });
+  const useDomainAwareSummary = domainAwareSummaryEnabled(options.domainAwareSummary);
   const labeledReviews = prepared.map(({ review, layer1 }) => {
     const candidate = layer2ById.get(layer1.id);
     const layer2 = normalizeLayer2Label(candidate, review, layer1);
     if (layer2?.decision === 'abstain') abstained += 1;
     if (layer2?.changed) corrected += 1;
     const accepted = layer2 && layer2.decision !== 'abstain';
+    const acceptedAspect = useDomainAwareSummary && accepted
+      && aspectCompatibleWithDomain(layer2.aspect, finalDomain)
+      ? { ...layer2.aspect, domain: finalDomain.domain }
+      : null;
     const duplicate = duplicateById.get(String(layer1.id));
     const safeLayer1Fallback = Boolean(selectedIds.has(String(layer1.id)) && !accepted && canUseConservativeFallback(layer1));
     const layer2Unavailable = Boolean(!duplicate && layer1.requires_llm && !accepted && !safeLayer1Fallback);
@@ -1048,12 +1122,14 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
       has_defect: layer2.has_defect,
       defect_categories: layer2.defect_categories,
       defect_quote: layer2.defect_quote,
+      aspect: acceptedAspect,
       confidence: layer2.confidence,
       reason_code: layer2.reason_code,
       layer2_unavailable: false,
       reviewed_by: 'gemini-layer2'
     } : {
       ...baseLabels(layer1),
+      aspect: null,
       layer2_unavailable: layer2Unavailable,
       layer2_fallback_accepted: safeLayer1Fallback,
       reviewed_by: safeLayer1Fallback ? 'layer1-safe-fallback' : 'layer1'
@@ -1092,7 +1168,8 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
       routeCapacity,
       rampGroupSize,
       rampIntervalMs,
-      coverage: selected.length ? layer2ById.size / selected.length : 1
+      coverage: selected.length ? layer2ById.size / selected.length : 1,
+      productDomain: finalDomain
     }));
   }
 
@@ -1117,6 +1194,8 @@ export async function labelReviewsTwoLayer(reviews = [], options = {}) {
       layer2Retry: { retryAttempts, credentialSwitches, reservationRejectCount, modelsUsed: [...modelsUsed] },
       layer2DurationMs,
       layer2CacheHits: cacheHits,
+      productDomain: finalDomain,
+      domainVotes: domainVotes.length,
       duplicateContentCount: duplicateAudit.duplicateCount,
       corrected,
       abstained,

@@ -22,6 +22,21 @@ test('đọc tên và ảnh sản phẩm từ Open Graph dù thứ tự thuộc 
   });
 });
 
+test('đọc category từ Open Graph và Product JSON-LD', () => {
+  const openGraph = extractProductPageMeta(`
+    <meta property="og:title" content="Kẹo me cay">
+    <meta property="product:category" content="Thực phẩm &amp; đồ ăn vặt">
+  `, 'https://shop.tiktok.com/vn/pdp/keo-me/1732868593255220985');
+  assert.equal(openGraph.category, 'Thực phẩm & đồ ăn vặt');
+
+  const jsonLd = extractProductPageMeta(`
+    <script type="application/ld+json">
+      {"@type":"Product","name":"Son kem","category":"Trang điểm môi"}
+    </script>
+  `, 'https://shopee.vn/product-i.123.456');
+  assert.equal(jsonLd.category, 'Trang điểm môi');
+});
+
 test('đọc ảnh sản phẩm từ preload khi TikTok không trả Open Graph', () => {
   const metadata = extractProductPageMeta(`
     <title>Kính chống tia UV</title>

@@ -140,6 +140,7 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
     onLayer1Stats: (stats) => emit(options.onLayer1Stats, stats),
     onLayer2Progress: (state) => emit(options.onLayer2Progress, state)
   });
+  if (labeling.stats?.productDomain) product.domainResolution = labeling.stats.productDomain;
   progress('filtering', 76, 'Đang phân tích reviews...');
   // Labeler đã khử trùng trước Gemini. Chỉ bản đại diện được kiểm định; chạy
   // lại sau đó sẽ nhầm nhãn mới của đại diện với nhãn cũ của bản sao.

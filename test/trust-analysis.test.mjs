@@ -345,7 +345,7 @@ test('Gemini dùng khóa ở header backend và trả cấu trúc giao diện an
     assert.equal(requestPayload.generationConfig.maxOutputTokens, 2048);
     assert.equal(trust.engine, 'gemini');
     assert.equal(trust.score, statisticalScore, 'Gemini không được thay đổi điểm thống kê');
-    assert.equal(trust.pros[0].title, 'Đúng mô tả');
+    assert.equal(trust.pros[0].title, statisticalFallback.pros[0].title, 'Gemini không được đổi chủ đề backend');
     assert.equal(trust.pros[0].mentions, statisticalFallback.pros[0].mentions, 'Gemini không được thay đổi bộ đếm backend');
     assert.equal(trust.cons[0].mentions, statisticalFallback.cons[0].mentions, 'Gemini không được thay đổi bộ đếm backend');
     assert.equal(trust.drivers.length >= 6, true);
@@ -503,7 +503,7 @@ test('tóm tắt review mỹ phẩm ngắn gọn và giữ ID review nguồn cho
     { rating: 2, text: 'Giao chậm và hộp móp.', labels: { has_defect: true, defect_categories: ['giao-hang'] } }
   ].map((review, index) => ({ ...review, labelId: `r${index + 1}`, included: true, verified: true }));
 
-  const trust = buildRuleBasedTrust(useful);
+  const trust = buildRuleBasedTrust(useful, { product: { title: 'Son kem lì dưỡng môi' } });
   assert.equal(trust.pros.length, 5);
   assert.equal(trust.cons.length, 5);
   assert.ok(trust.pros.some((item) => item.title === 'Màu sắc và độ lên màu' && item.mentions >= 2));
@@ -516,4 +516,58 @@ test('tóm tắt review mỹ phẩm ngắn gọn và giữ ID review nguồn cho
     assert.equal(item.detail.length <= 190, true);
     assert.equal(item.evidenceIds.length, item.mentions);
   }
+});
+
+test('sản phẩm thực phẩm không bị gắn chủ đề cảm giác trên môi', () => {
+  const reviews = [{
+    rating: 2,
+    text: 'Kẹo có vị mặn quá, khó ăn so với mong đợi.',
+    included: true,
+    verified: true,
+    labelId: 'r-food-1',
+    labels: {
+      has_defect: true,
+      defect_categories: ['su-dung'],
+      reviewed_by: 'gemini-layer2',
+      aspect: { key: 'huong-vi', label: 'Hương vị', sentiment: 'negative', quote: 'vị mặn quá', confidence: 0.97, domain: 'food' },
+      product_domain: { domain: 'food', subcategory: 'food', confidence: 0.9, source: 'title' }
+    }
+  }];
+  const trust = buildRuleBasedTrust(reviews, { product: { title: '[TẶNG MUỐI] Kẹo me cay sấy' } });
+  assert.ok(trust.cons.some((item) => item.title === 'Hương vị'));
+  assert.ok(!trust.cons.some((item) => item.title === 'Cảm giác trên môi'));
+  assert.equal(trust.cons.find((item) => item.title === 'Hương vị').mentions, 1);
+});
+
+test('Layer 2 phủ định lỗi thì keyword không được tạo lại nhược điểm', () => {
+  const reviews = [{
+    rating: 2,
+    text: 'Vị mặn chỉ là tên phân loại, sản phẩm thực tế dùng ổn.',
+    included: true,
+    verified: true,
+    labelId: 'r-food-2',
+    labels: { has_defect: false, defect_categories: [], reviewed_by: 'gemini-layer2' }
+  }];
+  const trust = buildRuleBasedTrust(reviews, { product: { title: 'Kẹo me vị mặn' } });
+  assert.ok(!trust.cons.some((item) => item.title === 'Hương vị'));
+  assert.ok(!trust.cons.some((item) => item.title === 'Cảm giác trên môi'));
+});
+
+test('aspect tích cực từ Layer 2 được dùng mà không cần từ điển ngành hàng mới', () => {
+  const reviews = [{
+    rating: 5,
+    text: 'Vị me chua ngọt rất cân bằng và dễ ăn.',
+    included: true,
+    verified: true,
+    labelId: 'r-food-positive',
+    labels: {
+      has_defect: false,
+      defect_categories: [],
+      reviewed_by: 'gemini-layer2',
+      aspect: { key: 'huong-vi', label: 'Hương vị', sentiment: 'positive', quote: 'chua ngọt rất cân bằng', confidence: 0.96, domain: 'food' },
+      product_domain: { domain: 'food', subcategory: 'food', confidence: 0.9, source: 'title' }
+    }
+  }];
+  const trust = buildRuleBasedTrust(reviews, { product: { title: 'Kẹo me sấy' } });
+  assert.ok(trust.pros.some((item) => item.title === 'Hương vị' && item.mentions === 1));
 });

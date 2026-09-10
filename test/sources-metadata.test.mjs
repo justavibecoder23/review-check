@@ -81,3 +81,15 @@ test('Shopee chỉ dùng fallback ảnh được đặt tên rõ là ảnh sản
   assert.equal(trusted.image, PRODUCT_IMAGE_URL);
   assert.equal(mergeProductMetadata({}, trusted, 'Shopee').image, PRODUCT_IMAGE_URL);
 });
+
+test('metadata actor giữ category path để xác định ngành hàng', () => {
+  const metadata = normaliseProductMeta({
+    productName: 'Kẹo me cay',
+    categories: [{ name: 'Thực phẩm' }, { display_name: 'Đồ ăn vặt' }]
+  });
+  assert.deepEqual(metadata.categoryPath, ['Thực phẩm', 'Đồ ăn vặt']);
+  assert.deepEqual(
+    mergeProductMetadata({ category: 'Thực phẩm' }, { categoryPath: metadata.categoryPath }, 'TikTok Shop').categoryPath,
+    ['Thực phẩm', 'Đồ ăn vặt']
+  );
+});

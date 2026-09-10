@@ -775,6 +775,42 @@ test('mỗi lượt phân tích mới đều gọi lại Layer 2, không tái s�
   }
 });
 
+test('Layer 2 chỉ lưu aspect có dẫn chứng và đúng ngành hàng sản phẩm', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  const text = 'Kẹo có vị mặn quá và khó ăn so với mong đợi.';
+  const requestGeminiImpl = async () => ({
+    value: {
+      domainVote: { domain: 'food', subcategory: 'food', confidence: 0.97 },
+      labels: [{
+        id: 'r0001', decision: 'correct', is_seeding: false, is_low_value: false,
+        is_vague: false, is_off_topic: false, relevance: 'on_topic', information_value: 'high',
+        has_defect: true, defect_categories: ['su-dung'], defect_quote: 'vị mặn quá',
+        defect_evidence: [{ category: 'su-dung', quote: 'vị mặn quá' }],
+        evidence_quote: 'vị mặn quá', confidence: 0.98, reason_code: 'SPECIFIC_PRODUCT_DEFECT',
+        aspect: { key: 'huong-vi', label: 'Hương vị', quote: 'vị mặn quá', sentiment: 'negative', confidence: 0.97 }
+      }]
+    },
+    model: 'gemini-3.5-flash-lite',
+    attemptedModels: ['gemini-3.5-flash-lite'],
+    attemptedCredentialIds: ['test-key']
+  });
+  try {
+    const result = await labelReviewsTwoLayer([{ rating: 2, text }], {
+      mode: 'all',
+      product: { title: '[TẶNG MUỐI] Kẹo me cay sấy' },
+      requestGeminiImpl
+    });
+    assert.deepEqual(result.reviews[0].labels.aspect, {
+      key: 'huong-vi', label: 'Hương vị', sentiment: 'negative', quote: 'vị mặn quá', confidence: 0.97, domain: 'food'
+    });
+    assert.equal(result.stats.productDomain.domain, 'food');
+  } finally {
+    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    else delete process.env.GEMINI_API_KEY;
+  }
+});
+
 test('Layer 1 khóa chuỗi kéo dài dù có tiền tố “Chất lượng sản phẩm”', () => {
   const label = labelReviewLayer1({ rating: 4, text: 'Chất lượng sản phẩm: Okkkkkkkkkkkkkkkkkkkkkkkkkkkk' });
   assert.equal(label.hard_reject, true);

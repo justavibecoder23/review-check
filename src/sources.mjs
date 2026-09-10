@@ -59,6 +59,18 @@ function firstValue(source, paths) {
 
 const trustedProductImage = Symbol('trustedProductImage');
 
+function categoryLabel(value) {
+  if (value && typeof value === 'object') {
+    return String(value.display_name || value.displayName || value.name || value.label || '').trim();
+  }
+  return String(value || '').trim();
+}
+
+function normaliseCategoryPath(value) {
+  if (Array.isArray(value)) return value.map(categoryLabel).filter(Boolean);
+  return categoryLabel(value) || undefined;
+}
+
 export function normaliseProductMeta(source = {}) {
   if (!source || typeof source !== 'object') return {};
   const title = firstValue(source, ['title', 'name', 'productName', 'product_name', 'productTitle', 'itemName', 'product.name', 'item.name']);
@@ -67,11 +79,17 @@ export function normaliseProductMeta(source = {}) {
   const image = firstValue(source, ['productImage', 'product_image', 'product_image_url', 'productCover', 'product_cover_url', 'product_images.0', 'product.image', 'product.images.0', 'item.image']);
   const price = firstValue(source, ['price', 'productPrice', 'currentPrice', 'product.price', 'item.price']);
   const rating = firstValue(source, ['productRating', 'ratingAverage', 'averageRating', 'product.rating', 'item.rating']);
+  const rawCategory = firstValue(source, ['categoryName', 'category_name', 'productCategory', 'product.category.name', 'product.category.display_name', 'item.category.name', 'item.category.display_name', 'category']);
+  const category = categoryLabel(rawCategory);
+  const rawCategoryPath = firstValue(source, ['categoryPath', 'category_path', 'categories', 'product.categoryPath', 'item.categoryPath']);
+  const categoryPath = normaliseCategoryPath(rawCategoryPath);
   const metadata = {
     ...(title ? { title: String(title) } : {}),
     ...(image ? { image: String(image) } : {}),
     ...(price ? { price: String(price) } : {}),
-    ...(rating ? { rating: Number(rating) || String(rating) } : {})
+    ...(rating ? { rating: Number(rating) || String(rating) } : {}),
+    ...(category ? { category: String(category) } : {}),
+    ...(categoryPath && (Array.isArray(categoryPath) ? categoryPath.length : categoryPath.trim()) ? { categoryPath } : {})
   };
   if (image) Object.defineProperty(metadata, trustedProductImage, { value: true });
   return metadata;
@@ -248,7 +266,8 @@ function jsonLdProductMeta(html, baseUrl) {
   const image = safeMetadataUrl(imageValue, baseUrl);
   return {
     ...(product.name ? { title: decodeHtmlEntities(product.name) } : {}),
-    ...(image ? { image } : {})
+    ...(image ? { image } : {}),
+    ...(categoryLabel(product.category) ? { category: decodeHtmlEntities(categoryLabel(product.category)) } : {})
   };
 }
 
@@ -271,10 +290,14 @@ function shopeeEmbeddedProductMeta(html, baseUrl, options = {}) {
       if (embeddedShopId !== shopId || embeddedItemId !== itemId) continue;
       const title = firstValue(item, ['title', 'name']);
       const image = shopeeImageUrl(firstValue(item, ['image', 'images.0']));
+      const category = firstValue(item, ['category_name', 'category.display_name', 'category.name', 'categories.0.display_name', 'categories.0.name']);
+      const categoryPath = firstValue(item, ['category_path', 'categories']);
       if (title || image) {
         return {
           ...(title ? { title: String(title) } : {}),
-          ...(image ? { image } : {})
+          ...(image ? { image } : {}),
+          ...(category ? { category: String(category) } : {}),
+          ...(categoryPath ? { categoryPath: normaliseCategoryPath(categoryPath) } : {})
         };
       }
     } catch {
@@ -298,6 +321,9 @@ export function extractProductPageMeta(html, baseUrl, options = {}) {
     : {};
   const pageTitle = decodeHtmlEntities(String(html || '').match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '');
   const title = decodeHtmlEntities(metadata['og:title'] || metadata['twitter:title'] || embeddedProduct.title || structured.title || pageTitle);
+  const category = decodeHtmlEntities(
+    metadata['product:category'] || metadata['og:product:category'] || embeddedProduct.category || structured.category || ''
+  );
   const socialImageCandidate = safeMetadataUrl(
     metadata['og:image:secure_url'] || metadata['og:image'] || metadata['twitter:image'] || structured.image,
     baseUrl
@@ -312,7 +338,9 @@ export function extractProductPageMeta(html, baseUrl, options = {}) {
     || (isTikTokUrl(baseUrl) ? embeddedMarketplaceImage(html, baseUrl) : '');
   return {
     ...(title ? { title } : {}),
-    ...(image ? { image } : {})
+    ...(image ? { image } : {}),
+    ...(category ? { category } : {}),
+    ...(embeddedProduct.categoryPath ? { categoryPath: normaliseCategoryPath(embeddedProduct.categoryPath) } : {})
   };
 }
 
@@ -416,7 +444,9 @@ export async function fetchProductPageMetaCandidates(urls, options = {}) {
       combined = {
         ...combined,
         ...(!combined.title && metadata.title ? { title: metadata.title } : {}),
-        ...(!combined.image && metadata.image ? { image: metadata.image } : {})
+        ...(!combined.image && metadata.image ? { image: metadata.image } : {}),
+        ...(!combined.category && metadata.category ? { category: metadata.category } : {}),
+        ...(!combined.categoryPath && metadata.categoryPath ? { categoryPath: metadata.categoryPath } : {})
       };
       if (combined.title && combined.image) break;
     } catch {
@@ -434,7 +464,9 @@ export function mergeProductMetadata(pageMeta = {}, collectedMeta = {}, platform
   const merged = {
     ...collectedMeta,
     ...pageMeta,
-    ...(title ? { title } : {})
+    ...(title ? { title } : {}),
+    ...(collectedMeta.category || pageMeta.category ? { category: collectedMeta.category || pageMeta.category } : {}),
+    ...(collectedMeta.categoryPath || pageMeta.categoryPath ? { categoryPath: collectedMeta.categoryPath || pageMeta.categoryPath } : {})
   };
   if (image) merged.image = image;
   else delete merged.image;
@@ -446,9 +478,13 @@ export function extractShopeeProductApiMeta(payload = {}) {
   const title = firstValue(item, ['name', 'title']);
   const rawImage = firstValue(item, ['image', 'images.0', 'image_info_list.0.image']);
   const image = shopeeImageUrl(rawImage);
+  const category = firstValue(item, ['category_name', 'category.display_name', 'category.name', 'categories.0.display_name', 'categories.0.name']);
+  const categoryPath = firstValue(item, ['category_path', 'categories']);
   return {
     ...(title ? { title: String(title) } : {}),
-    ...(image ? { image } : {})
+    ...(image ? { image } : {}),
+    ...(category ? { category: String(category) } : {}),
+    ...(categoryPath ? { categoryPath: normaliseCategoryPath(categoryPath) } : {})
   };
 }
 
