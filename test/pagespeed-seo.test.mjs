@@ -53,6 +53,6 @@ test('robots, sitemap, cache and accessibility policies are explicit', async () 
   assert.match(vercel, /realview-logo-v1\.webp/);
   assert.doesNotMatch(vercel, /source": "\/api\/[^"]+"[\s\S]{0,160}immutable/);
   assert.match(auth, /aria-label="Đăng nhập \/ Đăng ký"/);
-  assert.match(styles, /--orange-text: #b44300/);
+  assert.match(styles, /--orange-text: #fc781f/);
   assert.match(styles, /\.footer-links a \{\s*min-height: 44px/);
 });
