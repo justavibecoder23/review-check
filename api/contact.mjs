@@ -7,6 +7,7 @@ import {
   verifyEmailCode
 } from '../src/email-verification.mjs';
 import { sendEmailVerificationCode } from '../src/email-verification-mail.mjs';
+import { currentAccount } from './auth.mjs';
 
 function bodyOf(request) {
   if (typeof request.body === 'string') return JSON.parse(request.body || '{}');
@@ -61,9 +62,10 @@ export default async function handler(request, response) {
     const body = bodyOf(request);
     const action = body.action || 'submit_contact';
     await enforceRateLimit(request, action);
-    const value = validateContact(body);
+    const account = await currentAccount(request);
+    const value = validateContact({ ...body, email: account?.email || body.email });
 
-    if (action === 'request_verification') {
+    if (action === 'request_verification' && !account) {
       const verification = await createEmailVerification({
         purpose: 'contact',
         email: value.email,
@@ -85,20 +87,25 @@ export default async function handler(request, response) {
       });
     }
 
-    if (action !== 'submit_contact') return send(response, 400, { error: 'Yêu cầu liên hệ không hợp lệ.' });
-    await verifyEmailCode({
-      requestId: body.verificationId,
-      code: body.code,
-      purpose: 'contact',
-      email: value.email,
-      context: contactContext(value)
-    });
+    if (!['request_verification', 'submit_contact'].includes(action)) {
+      return send(response, 400, { error: 'Yêu cầu liên hệ không hợp lệ.' });
+    }
+    if (!account) {
+      await verifyEmailCode({
+        requestId: body.verificationId,
+        code: body.code,
+        purpose: 'contact',
+        email: value.email,
+        context: contactContext(value)
+      });
+    }
     const record = await saveContactMessage(value);
     const notification = await sendContactNotification(record)
       .catch(() => ({ delivered: false, reason: 'delivery_failed' }));
     return send(response, notification.delivered ? 201 : 202, {
       stored: true,
       delivered: notification.delivered,
+      verifiedByAccount: Boolean(account),
       ...(!notification.delivered ? { deliveryReason: notification.reason || 'delivery_failed' } : {})
     });
   } catch (error) {

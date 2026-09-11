@@ -102,3 +102,15 @@ test('giao diện đăng ký và liên hệ đều yêu cầu mã dùng một l�
   assert.match(contact, /action: requestingCode \? 'request_verification' : 'submit_contact'/);
   assert.match(page, /id="contact-code"/);
 });
+
+test('người đã đăng nhập gửi liên hệ bằng email tài khoản mà không nhập OTP lại', async () => {
+  const [contactApi, contactUi] = await Promise.all([
+    readFile(new URL('../api/contact.mjs', import.meta.url), 'utf8'),
+    readFile(new URL('../public/contact.js', import.meta.url), 'utf8')
+  ]);
+  assert.match(contactApi, /const account = await currentAccount\(request\)/);
+  assert.match(contactApi, /email: account\?\.email \|\| body\.email/);
+  assert.match(contactApi, /if \(!account\) \{\s*await verifyEmailCode/);
+  assert.match(contactUi, /const requestingCode = !authenticatedUser/);
+  assert.match(contactUi, /emailInput\.readOnly = true/);
+});
