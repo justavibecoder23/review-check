@@ -29,20 +29,20 @@ test('runtime tạm thời đóng băng actor, schema, biểu phí và metadata 
   assert.equal(runtime.distributionMode, 'observed-sample');
 });
 
-test('sổ cái tính đúng trần 1.377 review', () => {
+test('sổ cái tính đúng trần review sau khi giữ cả phí khởi chạy Shopee', () => {
   const capacity = calculateTikTokCostCapacity({
     budgetMicroUsd: 5_000_000,
-    shopeeReservedMicroUsd: 798_000,
+    shopeeReservedMicroUsd: 878_000,
     reviewCostMicroUsd: 3_000,
     startupFeeMicroUsd: 5_000
   });
-  assert.equal(capacity.availableMicroUsd, 4_202_000);
+  assert.equal(capacity.availableMicroUsd, 4_122_000);
   // One reservation can afford 1,399 items; repeated 100-item runs have a
   // startup fee each, therefore the production allocator caps every run at 100.
-  assert.equal(capacity.affordableReviews, 1399);
+  assert.equal(capacity.affordableReviews, 1372);
   const thirteenFullRuns = 13 * (5_000 + 100 * 3_000);
   const finalRunCapacity = Math.floor((capacity.availableMicroUsd - thirteenFullRuns - 5_000) / 3_000);
-  assert.equal(13 * 100 + finalRunCapacity, 1377);
+  assert.equal(13 * 100 + finalRunCapacity, 1350);
 });
 
 test('chu kỳ sổ cái lấy theo billing cycle riêng do Apify trả về', () => {
@@ -58,11 +58,11 @@ test('chu kỳ sổ cái lấy theo billing cycle riêng do Apify trả về', (
   assert.equal(snapshot.observedSpentMicroUsd, 1_234_567);
 });
 
-test('Shopee đủ 10 lượt thì giải phóng bảo lưu nhưng vẫn giữ chi phí cycle hiện tại', () => {
+test('Shopee đủ 20 lượt thì giải phóng bảo lưu nhưng vẫn giữ chi phí cycle hiện tại', () => {
   const budget = calculateApifyCycleBudget({
     observedSpentMicroUsd: 900_000,
     locallyTrackedSpentMicroUsd: 850_000,
-    shopeeLifetimeUsed: 10
+    shopeeLifetimeUsed: 20
   });
   assert.equal(budget.remainingShopeeUses, 0);
   assert.equal(budget.shopeeReservedMicroUsd, 0);
@@ -71,10 +71,10 @@ test('Shopee đủ 10 lượt thì giải phóng bảo lưu nhưng vẫn giữ c
 });
 
 test('lượt Shopee đang chạy thay thế đúng một phần bảo lưu trọn đời', () => {
-  const budget = calculateApifyCycleBudget({ shopeeLifetimeUsed: 8, shopeeLifetimeReserved: 1, reservedMicroUsd: 79_800 });
+  const budget = calculateApifyCycleBudget({ shopeeLifetimeUsed: 18, shopeeLifetimeReserved: 1, reservedMicroUsd: 87_800 });
   assert.equal(budget.remainingShopeeUses, 1);
-  assert.equal(budget.shopeeReservedMicroUsd, 79_800);
-  assert.equal(budget.committedMicroUsd, 159_600);
+  assert.equal(budget.shopeeReservedMicroUsd, 87_800);
+  assert.equal(budget.committedMicroUsd, 175_600);
 });
 
 test('phân loại 402, 403 và 429 thành ba trạng thái khác nhau', () => {

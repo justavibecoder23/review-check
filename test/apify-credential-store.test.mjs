@@ -4,11 +4,18 @@ import {
   APIFY_POOL_COUNTERS_KEY,
   APIFY_POOL_KEY,
   APIFY_POOL_USED_KEY,
+  APIFY_SHOPEE_ACTOR_START_COUNTERS_KEY,
+  APIFY_SHOPEE_EMPTY_RUN_COUNTERS_KEY,
+  APIFY_SHOPEE_ACTOR_EXHAUSTED_KEY,
   APIFY_TIKTOK_REVIEW_COUNTERS_KEY,
+  APIFY_TIKTOK_ACTOR_START_COUNTERS_KEY,
+  APIFY_TIKTOK_EMPTY_RUN_COUNTERS_KEY,
+  APIFY_TIKTOK_BILLED_ITEM_COUNTERS_KEY,
   APIFY_TIKTOK_RESERVED_REVIEWS_KEY,
   APIFY_TIKTOK_RUN_COUNTERS_KEY,
   APIFY_TIKTOK_FINALIZED_RESERVATIONS_KEY,
   APIFY_TIKTOK_USED_KEY,
+  DEFAULT_MAX_USES_PER_KEY,
   finalizeShopeeCostCredential,
   finalizeTikTokCredential,
   getApifyCredentialPoolStatus,
@@ -61,18 +68,24 @@ function createRedisFake() {
     if (command[0] === 'EVAL') {
       evalCalls += 1;
       const config = JSON.parse(values.get(APIFY_POOL_KEY));
+      const maxUsesPerKey = DEFAULT_MAX_USES_PER_KEY;
       const counters = hash(APIFY_POOL_COUNTERS_KEY);
       const used = hash(APIFY_POOL_USED_KEY);
       if (String(command[1]).includes('TIKTOK_COST_FINALIZATION_V4')) {
         const spent = hash(command[3]);
         const reserved = hash(command[4]);
         const ledger = hash(command[5]);
-        const accountCycleId = command[9];
-        const reservationId = command[11];
-        const operationId = command[12];
+        const actorStarts = hash(APIFY_TIKTOK_ACTOR_START_COUNTERS_KEY);
+        const emptyRuns = hash(APIFY_TIKTOK_EMPTY_RUN_COUNTERS_KEY);
+        const billedItems = hash(APIFY_TIKTOK_BILLED_ITEM_COUNTERS_KEY);
+        const accountCycleId = command[12];
+        const credentialId = command[13];
+        const reservationId = command[14];
+        const operationId = command[15];
         if (ledger[operationId]) return JSON.stringify({ ok: true, alreadyFinalized: true });
-        const reviews = Number(command[13]);
-        const statusCode = Number(command[14]);
+        const reviews = Number(command[16]);
+        const statusCode = Number(command[17]);
+        const actorStarted = command[24] === '1';
         const state = JSON.parse(reserved[accountCycleId] || '{"leases":{}}');
         const lease = state.leases[reservationId];
         delete state.leases[reservationId];
@@ -81,6 +94,13 @@ function createRedisFake() {
           ? Number(lease.startupFeeMicroUsd) + reviews * Number(lease.itemCostMicroUsd)
           : 0;
         spent[accountCycleId] = String(Number(spent[accountCycleId] || 0) + costMicroUsd);
+        if (actorStarted) actorStarts[credentialId] = String(Number(actorStarts[credentialId] || 0) + 1);
+        if (actorStarted && statusCode >= 200 && statusCode < 300 && reviews === 0) {
+          emptyRuns[credentialId] = String(Number(emptyRuns[credentialId] || 0) + 1);
+        }
+        if (statusCode >= 200 && statusCode < 300 && reviews > 0) {
+          billedItems[credentialId] = String(Number(billedItems[credentialId] || 0) + reviews);
+        }
         ledger[operationId] = JSON.stringify({ accountCycleId, costMicroUsd });
         return JSON.stringify({ ok: true, alreadyFinalized: false, costMicroUsd });
       }
@@ -89,11 +109,13 @@ function createRedisFake() {
         const requested = Number(command[17]);
         const nowMs = Number(command[18]);
         const leaseMs = Number(command[19]);
+        const shopeeRunCost = Number(command[21]);
         const itemCost = Number(command[22]);
         const startupFee = Number(command[23]);
         const actorId = command[24];
         const pricingVersion = command[25];
         const requestId = command[27];
+        const maxShopeeUses = Number(command[29]);
         const cycles = JSON.parse(command[30]);
         const spent = hash(command[5]);
         const reserved = hash(command[6]);
@@ -125,53 +147,73 @@ function createRedisFake() {
               plannedCostMicroUsd,
               spentMicroUsd: cycle.observedSpentMicroUsd,
               reservedMicroUsd: plannedCostMicroUsd,
+              shopeeReservedMicroUsd: Math.max(0, maxShopeeUses - Number(counters[credential.id] || 0)) * shopeeRunCost,
               reservationId,
               reservationExpiresAtMs: nowMs + leaseMs
             };
           })
         });
       }
-      if (String(command[1]).includes('SHOPEE_LIFETIME_AND_COST_FINALIZATION_V4')) {
+      if (String(command[1]).includes('SHOPEE_LIFETIME_AND_COST_FINALIZATION_V5')) {
         const spent = hash(command[6]);
         const reserved = hash(command[7]);
         const ledger = hash(command[8]);
-        const accountCycleId = command[12];
-        const credentialId = command[13];
-        const reservationId = command[14];
-        const operationId = command[15];
+        const actorStarts = hash(APIFY_SHOPEE_ACTOR_START_COUNTERS_KEY);
+        const emptyRuns = hash(APIFY_SHOPEE_EMPTY_RUN_COUNTERS_KEY);
+        const actorExhausted = hash(APIFY_SHOPEE_ACTOR_EXHAUSTED_KEY);
+        const accountCycleId = command[15];
+        const credentialId = command[16];
+        const reservationId = command[17];
+        const operationId = command[18];
         if (ledger[operationId]) return JSON.stringify({ ok: true, alreadyFinalized: true });
-        const statusCode = Number(command[17]);
-        const reviewCount = Number(command[16]);
+        const statusCode = Number(command[20]);
+        const reviewCount = Number(command[19]);
+        const billingAccountId = command[30];
+        const actorStarted = command[33] === '1';
+        const freeTierExhausted = command[34] === '1';
+        const reportedCost = command[35] === '' ? null : Number(command[35]);
         const state = JSON.parse(reserved[accountCycleId] || '{"leases":{}}');
         const lease = state.leases[reservationId];
         delete state.leases[reservationId];
         reserved[accountCycleId] = JSON.stringify(state);
         let usageCount = Number(counters[credentialId] || 0);
         let costMicroUsd = 0;
-        if (statusCode >= 200 && statusCode < 300) {
+        if (actorStarted) actorStarts[credentialId] = String(Number(actorStarts[credentialId] || 0) + 1);
+        if (statusCode >= 200 && statusCode < 300 && reviewCount === 0) {
+          emptyRuns[credentialId] = String(Number(emptyRuns[credentialId] || 0) + 1);
+        }
+        if (statusCode >= 200 && statusCode < 300 && reviewCount > 0) {
           usageCount += 1;
           counters[credentialId] = String(usageCount);
-          costMicroUsd = Math.min(reviewCount, 20) * Number(lease.itemCostMicroUsd);
+        }
+        if (actorStarted) {
+          costMicroUsd = reportedCost ?? (Number(lease.startupFeeMicroUsd || 0) + Math.min(reviewCount, 20) * Number(lease.itemCostMicroUsd));
           spent[accountCycleId] = String(Number(spent[accountCycleId] || 0) + costMicroUsd);
         }
+        if (freeTierExhausted) actorExhausted[`${billingAccountId}:${lease.actorId}`] = JSON.stringify({
+          exhaustedAt: Date.now(),
+          maxUsesPerKey: DEFAULT_MAX_USES_PER_KEY
+        });
         ledger[operationId] = JSON.stringify({ credentialId, accountCycleId, usageCount, costMicroUsd });
         return JSON.stringify({ ok: true, alreadyFinalized: false, usageCount, costMicroUsd });
       }
       if (String(command[1]).includes('SHOPEE_LIFETIME_AND_COST_RESERVATION_V4')) {
-        const desired = Number(command[16]);
-        const stars = JSON.parse(command[17]);
-        const nowMs = Number(command[18]);
-        const leaseMs = Number(command[19]);
-        const runCost = Number(command[21]);
-        const itemCost = Number(command[22]);
-        const actorId = command[24];
-        const pricingVersion = command[25];
-        const requestId = command[26];
-        const cycles = JSON.parse(command[31]);
+        const desired = Number(command[17]);
+        const stars = JSON.parse(command[18]);
+        const nowMs = Number(command[19]);
+        const leaseMs = Number(command[20]);
+        const runCost = Number(command[22]);
+        const itemCost = Number(command[23]);
+        const startupFee = Number(command[24]);
+        const actorId = command[25];
+        const pricingVersion = command[26];
+        const requestId = command[27];
+        const maxUses = Number(command[29]);
+        const cycles = JSON.parse(command[32]);
         const reserved = hash(command[8]);
         const spent = hash(command[7]);
         const candidates = config.groups.flatMap((group) => group.credentials.map((credential) => ({ credential, group })))
-          .filter(({ credential }) => cycles[credential.id] && Number(counters[credential.id] || 0) < 10)
+          .filter(({ credential }) => cycles[credential.id] && Number(counters[credential.id] || 0) < maxUses)
           .slice(0, desired);
         if (candidates.length < desired) return JSON.stringify({ ok: false, code: 'SHOPEE_LIFETIME_OR_BUDGET_EXHAUSTED' });
         return JSON.stringify({
@@ -179,14 +221,14 @@ function createRedisFake() {
           source: 'redis-vault-cost-ledger-v4',
           groupId: candidates[0].group.id,
           groupLabel: candidates[0].group.label,
-          maxUsesPerKey: 10,
-          reservedAt: command[30],
+          maxUsesPerKey: maxUses,
+          reservedAt: command[31],
           credentials: candidates.map(({ credential, group }, index) => {
             const cycle = cycles[credential.id];
             const cycleId = cycle.accountCycleId;
             const reservationId = `${requestId}:${index + 1}`;
             const state = JSON.parse(reserved[cycleId] || '{"leases":{}}');
-            state.leases[reservationId] = { costMicroUsd: runCost, itemCostMicroUsd: itemCost, plannedReviews: 20, actorId, pricingVersion, expiresAtMs: nowMs + leaseMs };
+            state.leases[reservationId] = { costMicroUsd: runCost, startupFeeMicroUsd: startupFee, itemCostMicroUsd: itemCost, plannedReviews: 20, actorId, pricingVersion, expiresAtMs: nowMs + leaseMs };
             reserved[cycleId] = JSON.stringify(state);
             spent[cycleId] = String(cycle.observedSpentMicroUsd);
             return {
@@ -201,7 +243,7 @@ function createRedisFake() {
               billingCycleEndAt: cycle.cycleEndAt,
               usageCount: Number(counters[credential.id] || 0),
               reservedUsageCount: 1,
-              remainingLifetimeUses: 9,
+              remainingLifetimeUses: maxUses - Number(counters[credential.id] || 0) - 1,
               plannedReviews: 20,
               plannedCostMicroUsd: runCost,
               spentMicroUsd: cycle.observedSpentMicroUsd,
@@ -250,7 +292,7 @@ function createRedisFake() {
         const maxReviews = Number(command[10]);
         const nowMs = Number(command[12]);
         const freeUsage = Number(command[13]);
-        const shopeeCostPerReview = Number(command[14]);
+        const shopeeRunCost = Number(command[14]);
         const tiktokCostPerReview = Number(command[15]);
         const shopeeMaxUses = Number(command[16]);
         const shopeeReviewsPerRun = Number(command[17]);
@@ -262,7 +304,7 @@ function createRedisFake() {
             const completed = Number(reviews[credential.id] || 0);
             const held = reservedTotal(state);
             const shopeeUses = Math.min(shopeeMaxUses, Number(shopeeCounters[credential.id] || 0));
-            const shopeeBudget = shopeeMaxUses * shopeeReviewsPerRun * shopeeCostPerReview;
+            const shopeeBudget = shopeeMaxUses * shopeeRunCost;
             const usageCapacity = Math.floor((freeUsage - shopeeBudget - (completed + held) * tiktokCostPerReview) / tiktokCostPerReview);
             return completed + held < maxReviews && usageCapacity > 0;
           })
@@ -277,6 +319,8 @@ function createRedisFake() {
             const currentReviews = Number(reviews[credential.id] || 0);
             const state = reservationState(reserved[credential.id], nowMs);
             const held = reservedTotal(state);
+            const shopeeUses = Math.min(shopeeMaxUses, Number(shopeeCounters[credential.id] || 0));
+            const shopeeReservedUsageMicroUsd = Math.max(0, shopeeMaxUses - shopeeUses) * shopeeRunCost;
             const plannedReviews = Math.min(requestedPerKey, maxReviews - currentReviews - held);
             runs[credential.id] = String(Number(runs[credential.id] || 0) + 1);
             const reservationId = `${credential.id}:${runs[credential.id]}:${nowMs}`;
@@ -290,6 +334,8 @@ function createRedisFake() {
               reviewCount: currentReviews,
               plannedReviews,
               reservedReviews: held + plannedReviews,
+              shopeeUses,
+              shopeeReservedUsageMicroUsd,
               reservationId,
               reservationExpiresAtMs: nowMs + leaseMs
             };
@@ -300,7 +346,7 @@ function createRedisFake() {
         let selected;
         let credential;
         for (const group of config.groups) {
-          credential = group.credentials.find((item) => Number(counters[item.id] || 0) < config.maxUsesPerKey);
+          credential = group.credentials.find((item) => Number(counters[item.id] || 0) < maxUsesPerKey);
           if (credential) {
             selected = group;
             break;
@@ -310,7 +356,7 @@ function createRedisFake() {
         const usageCount = Number(counters[credential.id] || 0) + 1;
         counters[credential.id] = String(usageCount);
         const allocated = { ...credential, usageCount };
-        const retiresAfterReservation = usageCount >= config.maxUsesPerKey;
+        const retiresAfterReservation = usageCount >= maxUsesPerKey;
         if (retiresAfterReservation) {
           used[credential.id] = JSON.stringify({
             id: credential.id,
@@ -327,7 +373,7 @@ function createRedisFake() {
           source: 'redis-vault',
           groupId: selected.id,
           groupLabel: selected.label,
-          maxUsesPerKey: config.maxUsesPerKey,
+          maxUsesPerKey,
           credential: allocated,
           retiresAfterReservation,
           reservedAt: command.at(-1)
@@ -335,16 +381,16 @@ function createRedisFake() {
       }
       const desired = Number(command[7]) || 5;
       const stars = JSON.parse(command[8] || '[5,4,3,2,1]');
-      const activeGroupIndex = config.groups.findIndex((group) => group.credentials.some((credential) => Number(counters[credential.id] || 0) < config.maxUsesPerKey));
+      const activeGroupIndex = config.groups.findIndex((group) => group.credentials.some((credential) => Number(counters[credential.id] || 0) < maxUsesPerKey));
       if (activeGroupIndex < 0) return JSON.stringify({ ok: false, code: 'POOL_EXHAUSTED' });
       const activeGroup = config.groups[activeGroupIndex];
       const selected = activeGroup.credentials
-        .filter((credential) => Number(counters[credential.id] || 0) < config.maxUsesPerKey)
+        .filter((credential) => Number(counters[credential.id] || 0) < maxUsesPerKey)
         .map((credential, index) => ({ credential, group: activeGroup, count: Number(counters[credential.id] || 0), order: index }))
         .sort((left, right) => left.count - right.count || left.order - right.order)
         .slice(0, desired);
       const reserveCandidates = config.groups.slice(activeGroupIndex + 1).flatMap((group, groupOffset) => group.credentials
-        .filter((credential) => Number(counters[credential.id] || 0) < config.maxUsesPerKey)
+        .filter((credential) => Number(counters[credential.id] || 0) < maxUsesPerKey)
         .map((credential, credentialIndex) => ({
           credential,
           group,
@@ -366,10 +412,10 @@ function createRedisFake() {
           usageCount
         };
       });
-      const retiresAfterReservation = credentials.some((credential) => credential.usageCount >= config.maxUsesPerKey);
+      const retiresAfterReservation = credentials.some((credential) => credential.usageCount >= maxUsesPerKey);
       if (retiresAfterReservation) {
         for (const credential of credentials) {
-          if (credential.usageCount < config.maxUsesPerKey) continue;
+          if (credential.usageCount < maxUsesPerKey) continue;
           used[credential.id] = JSON.stringify({
             id: credential.id,
             label: credential.label,
@@ -388,7 +434,7 @@ function createRedisFake() {
         source: 'redis-vault',
         groupId: mixedGroups ? 'mixed-available-keys' : activeGroup.id,
         groupLabel: mixedGroups ? 'mixed-available-keys' : activeGroup.label,
-        maxUsesPerKey: config.maxUsesPerKey,
+        maxUsesPerKey,
         credentials,
         retiresAfterReservation,
         reservedAt: command[6]
@@ -421,7 +467,7 @@ function group(label, prefix) {
   };
 }
 
-test('pool mã hóa token, đếm nguyên tử và tự chuyển nhóm sau lượt thứ 10', async () => {
+test('pool mã hóa token, đếm nguyên tử và tự chuyển nhóm sau lượt thứ 20', async () => {
   const previous = {
     url: process.env.UPSTASH_REDIS_REST_URL,
     token: process.env.UPSTASH_REDIS_REST_TOKEN,
@@ -433,7 +479,7 @@ test('pool mã hóa token, đếm nguyên tử và tự chuyển nhóm sau lư�
   const redis = createRedisFake();
   try {
     const initial = await saveApifyCredentialPool({
-      maxUsesPerKey: 10,
+      maxUsesPerKey: 20,
       groups: [group('primary', 'primary'), group('backup', 'backup')],
       pendingCredentials: [
         { label: 'pending-one', token: 'apify_api_pending_1_super_secret_token' },
@@ -449,7 +495,7 @@ test('pool mã hóa token, đếm nguyên tử và tự chuyển nhóm sau lư�
     assert.equal(stored.includes('super_secret_token'), false);
 
     const completedPending = await saveApifyCredentialPool({
-      maxUsesPerKey: 10,
+      maxUsesPerKey: 20,
       mode: 'append',
       groups: [],
       pendingCredentials: [
@@ -463,7 +509,7 @@ test('pool mã hóa token, đếm nguyên tử và tự chuyển nhóm sau lư�
     assert.equal(completedPending.reserve.length, 2);
 
     let allocation;
-    for (let use = 1; use <= 10; use += 1) {
+    for (let use = 1; use <= 20; use += 1) {
       allocation = await reserveApifyCredentialSet({ fetchImpl: redis.fetchImpl });
       assert.equal(allocation.groupLabel, 'primary');
       assert.ok(allocation.credentials.every((credential) => credential.usageCount === use));
@@ -474,7 +520,7 @@ test('pool mã hóa token, đếm nguyên tử và tự chuyển nhóm sau lư�
     const rotated = await reserveApifyCredentialSet({ fetchImpl: redis.fetchImpl });
     assert.equal(rotated.groupLabel, 'backup');
     assert.ok(rotated.credentials.every((credential) => credential.usageCount === 1));
-    assert.equal(redis.evalCalls, 11);
+    assert.equal(redis.evalCalls, 21);
 
     redis.values.set(SHOPEE_CACHE_HITS_KEY, '7');
     redis.values.set(SHOPEE_TOTAL_SERVED_KEY, '10');
@@ -482,13 +528,13 @@ test('pool mã hóa token, đếm nguyên tử và tự chuyển nhóm sau lư�
     assert.equal(status.active.label, 'backup');
     assert.equal(status.used[0].label, 'primary');
     assert.equal(status.usedHistory.length, 5);
-    assert.ok(status.used[0].credentials.every((credential) => credential.usageCount === 10));
+    assert.ok(status.used[0].credentials.every((credential) => credential.usageCount === 20));
     assert.deepEqual(status.platforms.shopee.cache, { hits: 7, totalServed: 10, hitRate: 0.7 });
     assert.equal(JSON.stringify(status).includes('super_secret_token'), false);
 
     await assert.rejects(
       saveApifyCredentialPool({
-        maxUsesPerKey: 10,
+        maxUsesPerKey: 20,
         mode: 'replace',
         groups: [group('primary-reloaded', 'primary')]
       }, { fetchImpl: redis.fetchImpl }),
@@ -528,7 +574,7 @@ test('TikTok dùng chung token nhưng có bộ đếm review riêng, không tr�
     assert.ok(status.active.credentials.every((credential) => credential.shopee.usageCount === 0));
     assert.ok(status.active.credentials.every((credential) => credential.tiktok.runCount === 1));
     assert.ok(status.active.credentials.every((credential) => credential.tiktok.reviewCount === 40));
-    assert.ok(status.active.credentials.every((credential) => credential.tiktok.remainingReviews === 10_465));
+    assert.ok(status.active.credentials.every((credential) => credential.tiktok.remainingReviews === 8_070));
     assert.equal(status.platforms.shopee.usedHistory.length, 0);
     assert.equal(status.platforms.tiktok.usedHistory.length, 0);
   } finally {
@@ -552,6 +598,13 @@ test('Shopee v4 lấy billing cycle từ Apify, giữ lượt trọn đời và 
   const redis = createRedisFake();
   try {
     await saveApifyCredentialPool({ maxUsesPerKey: 10, groups: [group('primary', 'primary')] }, { fetchImpl: redis.fetchImpl });
+    const legacyPool = JSON.parse(redis.values.get(APIFY_POOL_KEY));
+    redis.hashes.set(APIFY_SHOPEE_ACTOR_EXHAUSTED_KEY, Object.fromEntries(
+      legacyPool.groups[0].credentials.map((credential) => [
+        `${credential.billingAccountId}:zen-studio/shopee-product-reviews-scraper`,
+        '2026-09-01T00:00:00.000Z'
+      ])
+    ));
     const allocation = await reserveShopeeCostCredentialSet({
       fetchImpl: redis.fetchImpl,
       usageFetchImpl: async () => ({
@@ -576,9 +629,43 @@ test('Shopee v4 lấy billing cycle từ Apify, giữ lượt trọn đời và 
       reviewCount: 20, statusCode: 200, operationId: 'shopee-run-1'
     }, { fetchImpl: redis.fetchImpl });
     assert.equal(first.usageCount, 1);
-    assert.equal(first.costMicroUsd, 79_800);
+    assert.equal(first.costMicroUsd, 87_800);
     assert.equal(repeated.alreadyFinalized, true);
     assert.equal(Number(redis.hashes.get(APIFY_POOL_COUNTERS_KEY)[credential.id]), 1);
+
+    const emptyCredential = allocation.credentials[1];
+    const empty = await finalizeShopeeCostCredential(emptyCredential, {
+      reviewCount: 0,
+      statusCode: 201,
+      operationId: 'shopee-empty-run',
+      actorStarted: true,
+      actualCostMicroUsd: 8_000
+    }, { fetchImpl: redis.fetchImpl });
+    assert.equal(empty.usageCount, 0, 'dataset rỗng không được trừ lượt dữ liệu trọn đời');
+    assert.equal(empty.costMicroUsd, 8_000, 'dataset rỗng vẫn hạch toán phí Actor start');
+    assert.equal(Number(redis.hashes.get(APIFY_POOL_COUNTERS_KEY)[emptyCredential.id] || 0), 0);
+    assert.equal(Number(redis.hashes.get(APIFY_SHOPEE_ACTOR_START_COUNTERS_KEY)[emptyCredential.id]), 1);
+    assert.equal(Number(redis.hashes.get(APIFY_SHOPEE_EMPTY_RUN_COUNTERS_KEY)[emptyCredential.id]), 1);
+
+    const exhaustedCredential = allocation.credentials[2];
+    await finalizeShopeeCostCredential(exhaustedCredential, {
+      reviewCount: 0,
+      statusCode: 201,
+      operationId: 'shopee-free-tier-run',
+      actorStarted: true,
+      freeTierExhausted: true,
+      actualCostMicroUsd: 8_000
+    }, { fetchImpl: redis.fetchImpl });
+    assert.ok(redis.hashes.get(APIFY_SHOPEE_ACTOR_EXHAUSTED_KEY)[`${exhaustedCredential.billingAccountId}:zen-studio/shopee-product-reviews-scraper`]);
+
+    const status = await getApifyCredentialPoolStatus({ fetchImpl: redis.fetchImpl });
+    const emptyStatus = status.active.credentials.find((item) => item.id === emptyCredential.id);
+    assert.equal(emptyStatus.shopee.dataRunsUsed, 0);
+    assert.equal(emptyStatus.shopee.actorStartCount, 1);
+    assert.equal(emptyStatus.shopee.emptyRunCount, 1);
+    assert.equal(status.platforms.shopee.accounting.actorStarts, 3);
+    assert.equal(status.platforms.shopee.accounting.emptyRuns, 2);
+    assert.equal(status.platforms.shopee.accounting.actorExhausted, 1);
   } finally {
     for (const name of names) {
       if (previous[name] === undefined) delete process.env[name];
@@ -632,6 +719,32 @@ test('TikTok v4 dùng đúng billing cycle từng tài khoản và finalize chi 
     }, { fetchImpl: redis.fetchImpl });
     assert.equal(first.costMicroUsd, 305_000);
     assert.equal(repeated.alreadyFinalized, true);
+
+    const emptyAllocation = await reserveTikTokCostCredentials({
+      count: 1,
+      reviewsPerCredential: 100,
+      runtime: allocation.runtime,
+      fetchImpl: redis.fetchImpl,
+      usageFetchImpl: async () => ({
+        ok: true,
+        async json() {
+          return { data: {
+            usageCycle: { startAt: '2026-09-20T00:00:00.000Z', endAt: '2026-10-19T23:59:59.999Z' },
+            totalUsageCreditsUsdAfterVolumeDiscount: 0.25
+          } };
+        }
+      })
+    });
+    const emptyResult = await finalizeTikTokCostCredential(emptyAllocation.credentials[0], {
+      reviewCount: 0, statusCode: 200, operationId: 'tiktok-run-empty', actorStarted: true
+    }, { fetchImpl: redis.fetchImpl });
+    assert.equal(emptyResult.costMicroUsd, 5_000);
+    const status = await getApifyCredentialPoolStatus({ fetchImpl: redis.fetchImpl });
+    assert.deepEqual(status.platforms.tiktok.accounting, {
+      actorStarts: 2,
+      emptyRuns: 1,
+      billedItems: 100
+    });
   } finally {
     for (const name of names) {
       if (previous[name] === undefined) delete process.env[name];
@@ -640,7 +753,153 @@ test('TikTok v4 dùng đúng billing cycle từng tài khoản và finalize chi 
   }
 });
 
-test('TikTok vẫn dùng key đã hết 10 lượt Shopee và luôn chừa ngân sách Shopee', async () => {
+test('TikTok tạm dừng để chừa 10 lượt Shopee còn lại và tự dùng lại key khi Apify sang cycle mới', async () => {
+  const names = ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'APIFY_TOKEN_VAULT_KEY'];
+  const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.example.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'redis-test-token';
+  process.env.APIFY_TOKEN_VAULT_KEY = Buffer.alloc(32, 7).toString('base64');
+  const redis = createRedisFake();
+  const runtime = {
+    actorId: 'H2sSMaN2TZaXG8fye',
+    pricingVersion: 'pay-per-event-v1',
+    reviewCostMicroUsd: 3_000,
+    startupFeeMicroUsd: 5_000
+  };
+  let currentCycle = {
+    startAt: '2026-09-20T00:00:00.000Z',
+    endAt: '2026-10-19T23:59:59.999Z',
+    spentUsd: 4.122
+  };
+  const usageFetchImpl = async () => ({
+    ok: true,
+    async json() {
+      return { data: {
+        usageCycle: { startAt: currentCycle.startAt, endAt: currentCycle.endAt },
+        totalUsageCreditsUsdAfterVolumeDiscount: currentCycle.spentUsd
+      } };
+    }
+  });
+  try {
+    await saveApifyCredentialPool({ maxUsesPerKey: 10, groups: [group('primary', 'primary')] }, { fetchImpl: redis.fetchImpl });
+    assert.equal(JSON.parse(redis.values.get(APIFY_POOL_KEY)).maxUsesPerKey, DEFAULT_MAX_USES_PER_KEY);
+    const config = JSON.parse(redis.values.get(APIFY_POOL_KEY));
+    const shopeeCounters = {};
+    for (const credential of config.groups[0].credentials) shopeeCounters[credential.id] = '10';
+    redis.hashes.set(APIFY_POOL_COUNTERS_KEY, shopeeCounters);
+
+    await assert.rejects(
+      reserveTikTokCostCredentials({
+        count: 1,
+        reviewsPerCredential: 100,
+        runtime,
+        fetchImpl: redis.fetchImpl,
+        usageFetchImpl
+      }),
+      (error) => error.code === 'APIFY_USAGE_CYCLE_UNAVAILABLE'
+    );
+
+    currentCycle = {
+      startAt: '2026-10-20T00:00:00.000Z',
+      endAt: '2026-11-19T23:59:59.999Z',
+      spentUsd: 0
+    };
+    const allocation = await reserveTikTokCostCredentials({
+      count: 1,
+      reviewsPerCredential: 100,
+      runtime,
+      fetchImpl: redis.fetchImpl,
+      usageFetchImpl
+    });
+    assert.equal(allocation.credentials[0].billingCycleStartAt, currentCycle.startAt);
+    assert.equal(allocation.credentials[0].shopeeReservedMicroUsd, 878_000);
+    assert.equal(Number(redis.hashes.get(APIFY_POOL_COUNTERS_KEY)[allocation.credentials[0].id]), 10);
+  } finally {
+    for (const name of names) {
+      if (previous[name] === undefined) delete process.env[name];
+      else process.env[name] = previous[name];
+    }
+  }
+});
+
+test('key từng khóa ở 10 nhưng TikTok đã tiêu gần hết tháng phải chờ cycle mới trước khi cấp lại Shopee và TikTok', async () => {
+  const names = ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'APIFY_TOKEN_VAULT_KEY'];
+  const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.example.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'redis-test-token';
+  process.env.APIFY_TOKEN_VAULT_KEY = Buffer.alloc(32, 7).toString('base64');
+  const redis = createRedisFake();
+  const runtime = {
+    actorId: 'H2sSMaN2TZaXG8fye',
+    pricingVersion: 'pay-per-event-v1',
+    reviewCostMicroUsd: 3_000,
+    startupFeeMicroUsd: 5_000
+  };
+  let currentCycle = {
+    startAt: '2026-09-20T00:00:00.000Z',
+    endAt: '2026-10-19T23:59:59.999Z',
+    spentUsd: 4.9
+  };
+  const usageFetchImpl = async () => ({
+    ok: true,
+    async json() {
+      return { data: {
+        usageCycle: { startAt: currentCycle.startAt, endAt: currentCycle.endAt },
+        totalUsageCreditsUsdAfterVolumeDiscount: currentCycle.spentUsd
+      } };
+    }
+  });
+  try {
+    await saveApifyCredentialPool({ maxUsesPerKey: 10, groups: [group('primary', 'primary')] }, { fetchImpl: redis.fetchImpl });
+    const config = JSON.parse(redis.values.get(APIFY_POOL_KEY));
+    const shopeeCounters = Object.fromEntries(config.groups[0].credentials.map((credential) => [credential.id, '10']));
+    redis.hashes.set(APIFY_POOL_COUNTERS_KEY, shopeeCounters);
+    redis.hashes.set(APIFY_POOL_USED_KEY, Object.fromEntries(config.groups[0].credentials.map((credential) => [
+      credential.id,
+      JSON.stringify({ id: credential.id, usageCount: 10, usedAt: '2026-09-01T00:00:00.000Z' })
+    ])));
+
+    await assert.rejects(
+      reserveShopeeCostCredentialSet({ count: 1, stars: [5], fetchImpl: redis.fetchImpl, usageFetchImpl }),
+      (error) => error.code === 'APIFY_USAGE_CYCLE_UNAVAILABLE'
+    );
+    await assert.rejects(
+      reserveTikTokCostCredentials({ count: 1, reviewsPerCredential: 100, runtime, fetchImpl: redis.fetchImpl, usageFetchImpl }),
+      (error) => error.code === 'APIFY_USAGE_CYCLE_UNAVAILABLE'
+    );
+
+    currentCycle = {
+      startAt: '2026-10-20T00:00:00.000Z',
+      endAt: '2026-11-19T23:59:59.999Z',
+      spentUsd: 0
+    };
+    const shopeeAllocation = await reserveShopeeCostCredentialSet({
+      count: 1,
+      stars: [5],
+      fetchImpl: redis.fetchImpl,
+      usageFetchImpl
+    });
+    assert.equal(shopeeAllocation.credentials[0].usageCount, 10);
+    assert.equal(shopeeAllocation.credentials[0].billingCycleStartAt, currentCycle.startAt);
+
+    const tiktokAllocation = await reserveTikTokCostCredentials({
+      count: 1,
+      reviewsPerCredential: 100,
+      runtime,
+      fetchImpl: redis.fetchImpl,
+      usageFetchImpl
+    });
+    assert.equal(tiktokAllocation.credentials[0].billingCycleStartAt, currentCycle.startAt);
+    assert.equal(Number(redis.hashes.get(APIFY_POOL_COUNTERS_KEY)[tiktokAllocation.credentials[0].id]), 10);
+  } finally {
+    for (const name of names) {
+      if (previous[name] === undefined) delete process.env[name];
+      else process.env[name] = previous[name];
+    }
+  }
+});
+
+test('key đã dùng 10 lượt Shopee được mở lại và TikTok vẫn chừa đủ 10 lượt còn lại', async () => {
   const names = [
     'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'APIFY_TOKEN_VAULT_KEY',
     'APIFY_FREE_USAGE_MICRO_USD',
@@ -656,12 +915,24 @@ test('TikTok vẫn dùng key đã hết 10 lượt Shopee và luôn chừa ngân
   const redis = createRedisFake();
   try {
     await saveApifyCredentialPool({ maxUsesPerKey: 10, groups: [group('primary', 'primary')] }, { fetchImpl: redis.fetchImpl });
+    const legacyConfig = JSON.parse(redis.values.get(APIFY_POOL_KEY));
+    legacyConfig.maxUsesPerKey = 10;
+    redis.values.set(APIFY_POOL_KEY, JSON.stringify(legacyConfig));
+    const legacyCredentialId = legacyConfig.groups[0].credentials[0].id;
+    redis.hashes.set(APIFY_POOL_USED_KEY, {
+      [legacyCredentialId]: JSON.stringify({ id: legacyCredentialId, usageCount: 10, usedAt: '2026-09-01T00:00:00.000Z' })
+    });
     for (let use = 0; use < 10; use += 1) await reserveApifyCredential({ fetchImpl: redis.fetchImpl });
+
+    const migratedStatus = await getApifyCredentialPoolStatus({ fetchImpl: redis.fetchImpl });
+    assert.equal(migratedStatus.maxUsesPerKey, 20);
+    assert.equal(migratedStatus.active.credentials[0].shopee.remainingUses, 10);
+    assert.equal(migratedStatus.usedHistory.length, 0, 'dấu used cũ ở mốc 10 không còn được báo là đã hết');
 
     const allocation = await reserveTikTokCredentials({ count: 1, reviewsPerCredential: 100, fetchImpl: redis.fetchImpl });
     assert.equal(allocation.credentials[0].label, 'primary-5-star');
-    assert.equal(allocation.maxReviewsPerKey, 10_505);
-    assert.equal(allocation.credentials[0].shopeeReservedUsageMicroUsd, 0);
+    assert.equal(allocation.maxReviewsPerKey, 8_110);
+    assert.equal(allocation.credentials[0].shopeeReservedUsageMicroUsd, 878_000);
 
     const first = await finalizeTikTokCredential(allocation.credentials[0], { reviewCount: 100 }, { fetchImpl: redis.fetchImpl });
     const repeated = await finalizeTikTokCredential(allocation.credentials[0], { reviewCount: 100 }, { fetchImpl: redis.fetchImpl });
@@ -671,7 +942,8 @@ test('TikTok vẫn dùng key đã hết 10 lượt Shopee và luôn chừa ngân
 
     const status = await getApifyCredentialPoolStatus({ fetchImpl: redis.fetchImpl });
     const key = status.active.credentials[0];
-    assert.equal(key.shopee.status, 'used');
+    assert.equal(key.shopee.status, 'available');
+    assert.equal(key.shopee.remainingUses, 10);
     assert.equal(key.tiktok.status, 'available');
     assert.equal(key.tiktok.reviewCount, 100);
   } finally {
@@ -699,7 +971,7 @@ test('chế độ test chỉ tăng một key và giữ bốn key còn lại làm
     }, { fetchImpl: redis.fetchImpl });
 
     let allocation;
-    for (let use = 1; use <= 10; use += 1) {
+    for (let use = 1; use <= 20; use += 1) {
       allocation = await reserveApifyCredential({ fetchImpl: redis.fetchImpl });
       assert.equal(allocation.groupLabel, 'primary');
       assert.equal(allocation.credential.label, 'primary-5-star');
@@ -780,12 +1052,12 @@ test('chế độ 5 key tận dụng key còn lượt xuyên nhóm mà không s�
     }, { fetchImpl: redis.fetchImpl });
     const storedPoolBefore = redis.values.get(APIFY_POOL_KEY);
 
-    for (let use = 1; use <= 10; use += 1) {
+    for (let use = 1; use <= 20; use += 1) {
       await reserveApifyCredential({ fetchImpl: redis.fetchImpl });
     }
 
     let mixedAllocation;
-    for (let use = 1; use <= 10; use += 1) {
+    for (let use = 1; use <= 20; use += 1) {
       mixedAllocation = await reserveApifyCredentialSet({ fetchImpl: redis.fetchImpl });
       assert.equal(mixedAllocation.groupLabel, 'mixed-available-keys');
       assert.deepEqual(mixedAllocation.credentials.map((credential) => credential.star), [5, 4, 3, 2, 1]);
@@ -795,15 +1067,15 @@ test('chế độ 5 key tận dụng key còn lượt xuyên nhóm mà không s�
 
     const status = await getApifyCredentialPoolStatus({ fetchImpl: redis.fetchImpl });
     assert.equal(status.used[0].label, 'primary');
-    assert.ok(status.used[0].credentials.every((credential) => credential.usageCount === 10));
+    assert.ok(status.used[0].credentials.every((credential) => credential.usageCount === 20));
     assert.equal(status.active.label, 'backup');
-    assert.ok(status.active.credentials.every((credential) => credential.usageCount === 2));
+    assert.ok(status.active.credentials.every((credential) => credential.usageCount === 4));
     assert.equal(status.pendingCount, 2);
     assert.equal(redis.values.get(APIFY_POOL_KEY), storedPoolBefore, 'cấu trúc active/reserve/pending trong pool không bị ghi lại');
 
     const backupAllocation = await reserveApifyCredentialSet({ fetchImpl: redis.fetchImpl });
     assert.equal(backupAllocation.groupLabel, 'backup');
-    assert.ok(backupAllocation.credentials.every((credential) => credential.usageCount === 3));
+    assert.ok(backupAllocation.credentials.every((credential) => credential.usageCount === 5));
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       const envKey = { url: 'UPSTASH_REDIS_REST_URL', token: 'UPSTASH_REDIS_REST_TOKEN', vault: 'APIFY_TOKEN_VAULT_KEY' }[key];

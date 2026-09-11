@@ -13,13 +13,20 @@ function jsonResponse(value) {
 }
 
 test('Shopee trả review mới nhất trước trong mẫu đã thu thập', async () => {
+  const items = [
+    { reviewId: 'old', ratingStar: 4, comment: 'Review cũ có nội dung', createdAt: '2024-01-01T00:00:00.000Z' },
+    { reviewId: 'new', ratingStar: 4, comment: 'Review mới có nội dung', createdAt: '2026-08-01T00:00:00.000Z' }
+  ];
   const result = await collectShopeeReviews('https://shopee.vn/product-i.1.2', {
     mode: 'demo',
     credential: { id: 'test', label: 'test', token: 'test-token' },
-    fetchImpl: async () => jsonResponse([
-      { reviewId: 'old', ratingStar: 4, comment: 'Review cũ có nội dung', createdAt: '2024-01-01T00:00:00.000Z' },
-      { reviewId: 'new', ratingStar: 4, comment: 'Review mới có nội dung', createdAt: '2026-08-01T00:00:00.000Z' }
-    ])
+    fetchImpl: async (url) => {
+      if (url.includes('/runs?')) return jsonResponse({ data: {
+        id: 'shopee-recency-run', status: 'SUCCEEDED', defaultDatasetId: 'shopee-recency-dataset', usageTotalUsd: 0.00802
+      } });
+      if (url.includes('/datasets/')) return jsonResponse(items);
+      throw new Error(`Unexpected Apify URL: ${url}`);
+    }
   });
   assert.deepEqual(result.reviews.map((review) => review.reviewId), ['new', 'old']);
 });

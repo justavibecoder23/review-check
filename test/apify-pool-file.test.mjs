@@ -7,7 +7,7 @@ test('tự chia danh sách key thành nhiều nhóm 5★ đến 1★', () => {
   const tokens = Array.from({ length: 15 }, (_, index) => `apify-key-${index + 1}`);
   const pool = buildApifyPoolFile(tokens);
   assert.equal(pool.mode, 'replace');
-  assert.equal(pool.maxUsesPerKey, 10);
+  assert.equal(pool.maxUsesPerKey, 20);
   assert.equal(pool.groups.length, 3);
   assert.equal(pool.pendingCredentials.length, 0);
   assert.equal(pool.groups[0].label, 'group-01');

@@ -66,11 +66,42 @@ function sortReviewsMostRecent(reviews) {
   });
 }
 
+const APIFY_TERMINAL_RUN_STATUSES = new Set(['SUCCEEDED', 'FAILED', 'TIMED-OUT', 'ABORTED']);
+const APIFY_FREE_TIER_EXHAUSTED_PATTERN = /free\s+tier\s+limit\s+reached/i;
+
+function apifyRunData(body) {
+  return body?.data && typeof body.data === 'object' ? body.data : body;
+}
+
+function usageCostMicroUsd(run) {
+  const usd = Number(run?.usageTotalUsd);
+  return Number.isFinite(usd) && usd >= 0 ? Math.round(usd * 1_000_000) : null;
+}
+
+async function apifyRequest(fetchImpl, url, init, deadline, signal) {
+  const remaining = Math.max(1, deadline - Date.now());
+  const response = await fetchImpl(url, {
+    ...init,
+    signal: timeoutAbortSignal(remaining, signal)
+  });
+  if (!response.ok) {
+    const detail = compactErrorDetail(await response.text());
+    throw Object.assign(
+      new Error(`Apify trả về HTTP ${response.status}${detail ? `: ${detail}` : ''}`),
+      { statusCode: response.status, retryAfterMs: retryAfterMs(response) }
+    );
+  }
+  return response;
+}
+
 async function runUnfiltered({ url, reviewLimit, starFilter, credential, fetchImpl, actorId, timeoutMs, signal }) {
   const startedAt = performance.now();
-  const endpoint = `https://api.apify.com/v2/acts/${actorPath(actorId)}/run-sync-get-dataset-items`;
+  const deadline = Date.now() + timeoutMs;
+  const actorEndpoint = `https://api.apify.com/v2/acts/${actorPath(actorId)}`;
+  let actorRunId = null;
+  let actualCostMicroUsd = null;
   try {
-    const response = await fetchImpl(endpoint, {
+    const startResponse = await apifyRequest(fetchImpl, `${actorEndpoint}/runs?waitForFinish=${Math.min(60, Math.max(1, Math.floor(timeoutMs / 1000)))}`, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${credential.token}`,
@@ -81,30 +112,67 @@ async function runUnfiltered({ url, reviewLimit, starFilter, credential, fetchIm
         ...(starFilter ? { starFilter } : {}),
         contentFilter: 'with comments',
         maxReviewsPerProduct: reviewLimit
-      }),
-      signal: timeoutAbortSignal(timeoutMs, signal)
-    });
-    if (!response.ok) {
-      const detail = compactErrorDetail(await response.text());
-      throw Object.assign(
-        new Error(`Apify trả về HTTP ${response.status}${detail ? `: ${detail}` : ''}`),
-        { statusCode: response.status, retryAfterMs: retryAfterMs(response) }
-      );
+      })
+    }, deadline, signal);
+    let run = apifyRunData(await startResponse.json());
+    actorRunId = String(run?.id || '') || null;
+    if (!actorRunId) throw new Error('Apify không trả về mã run để đối soát usage.');
+
+    while (!APIFY_TERMINAL_RUN_STATUSES.has(String(run?.status || '').toUpperCase())) {
+      if (Date.now() >= deadline) throw Object.assign(new Error('Apify run vượt quá thời gian chờ.'), { name: 'TimeoutError' });
+      const waitSeconds = Math.min(30, Math.max(1, Math.floor((deadline - Date.now()) / 1000)));
+      const statusResponse = await apifyRequest(fetchImpl,
+        `https://api.apify.com/v2/actor-runs/${encodeURIComponent(actorRunId)}?waitForFinish=${waitSeconds}`,
+        { headers: { authorization: `Bearer ${credential.token}` } }, deadline, signal);
+      run = apifyRunData(await statusResponse.json());
     }
-    const items = await response.json();
+    actualCostMicroUsd = usageCostMicroUsd(run);
+    if (String(run.status).toUpperCase() !== 'SUCCEEDED') {
+      throw Object.assign(new Error(`Apify run kết thúc với trạng thái ${run.status}.`), {
+        statusCode: 502,
+        actorRunStatus: run.status,
+        failureClass: 'actor_run_failed'
+      });
+    }
+    const datasetId = String(run.defaultDatasetId || '');
+    if (!datasetId) throw new Error('Apify run không trả về defaultDatasetId.');
+    const datasetResponse = await apifyRequest(fetchImpl,
+      `https://api.apify.com/v2/datasets/${encodeURIComponent(datasetId)}/items?clean=true`,
+      { headers: { authorization: `Bearer ${credential.token}` } }, deadline, signal);
+    const items = await datasetResponse.json();
     if (!Array.isArray(items)) throw new Error('Apify không trả về danh sách review hợp lệ.');
+    let freeTierExhausted = false;
+    let emptyClassification = null;
+    if (items.length === 0) {
+      try {
+        const logResponse = await apifyRequest(fetchImpl,
+          `https://api.apify.com/v2/logs/${encodeURIComponent(actorRunId)}`,
+          { headers: { authorization: `Bearer ${credential.token}` } }, deadline, signal);
+        freeTierExhausted = APIFY_FREE_TIER_EXHAUSTED_PATTERN.test(await logResponse.text());
+        emptyClassification = freeTierExhausted ? 'free-tier-exhausted' : 'valid-empty';
+      } catch {
+        // Không biến lỗi đọc log phụ thành lỗi của run đã SUCCEEDED. Dataset vẫn
+        // không được trừ lượt; trạng thái exhaustion sẽ được đối soát lần sau.
+        emptyClassification = 'unconfirmed-empty';
+      }
+    }
     const written = items.filter((item) => String(item?.comment || '').trim());
     return {
-      ok: true,
+      ok: !freeTierExhausted,
       credentialId: credential.id,
       credentialLabel: credential.label,
       usageCount: credential.usageCount ?? null,
       billedReviewCount: items.length,
       reviewCount: written.length,
       latencyMs: Math.round(performance.now() - startedAt),
-      actorRunId: response.headers?.get?.('x-apify-run-id') || null,
-      statusCode: response.status || 200,
-      failureClass: null,
+      actorRunId,
+      actorStarted: true,
+      actualCostMicroUsd,
+      statusCode: startResponse.status || 201,
+      failureClass: freeTierExhausted ? 'actor_free_tier_exhausted' : null,
+      freeTierExhausted,
+      emptyClassification,
+      ...(freeTierExhausted ? { error: 'Actor Shopee đã đạt giới hạn free tier của tài khoản.' } : {}),
       items: written
     };
   } catch (error) {
@@ -116,8 +184,11 @@ async function runUnfiltered({ url, reviewLimit, starFilter, credential, fetchIm
       billedReviewCount: 0,
       reviewCount: 0,
       latencyMs: Math.round(performance.now() - startedAt),
+      actorRunId,
+      actorStarted: Boolean(actorRunId),
+      actualCostMicroUsd,
       statusCode: error?.statusCode || null,
-      failureClass: classifyApifyFailure(error?.statusCode, error),
+      failureClass: error?.failureClass || classifyApifyFailure(error?.statusCode, error),
       retryAfterMs: error?.retryAfterMs || 60_000,
       error: error?.message || 'Không lấy được reviews.',
       items: []
@@ -282,6 +353,9 @@ async function collectShopeeReviewsProduction(url, options = {}) {
         statusCode: run.statusCode || 0,
         failureClass: run.failureClass || '',
         actorRunId: run.actorRunId,
+        actorStarted: run.actorStarted,
+        freeTierExhausted: run.freeTierExhausted,
+        actualCostMicroUsd: run.actualCostMicroUsd,
         retryAfterMs: run.retryAfterMs
       },
       { fetchImpl: options.redisFetchImpl }

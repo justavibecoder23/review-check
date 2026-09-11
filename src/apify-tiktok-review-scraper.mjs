@@ -116,6 +116,7 @@ async function runActor({ productId, productUrl, reviewLimit, reviewFilter, cred
       reviewCount: matching.filter((item) => String(item?.review_text || '').trim()).length,
       latencyMs: Math.round(performance.now() - startedAt),
       actorRunId: response.headers?.get?.('x-apify-run-id') || null,
+      actorStarted: true,
       statusCode: response.status || 200,
       failureClass: null,
       items: matching
@@ -134,6 +135,7 @@ async function runActor({ productId, productUrl, reviewLimit, reviewFilter, cred
       statusCode: error?.statusCode || null,
       failureClass: classifyApifyFailure(error?.statusCode, error),
       retryAfterMs: error?.retryAfterMs || 60_000,
+      actorStarted: false,
       error: error?.message || 'Không lấy được reviews TikTok.',
       items: []
     };
@@ -222,6 +224,7 @@ export async function collectTikTokReviews(productId, options = {}) {
         statusCode: run.statusCode || 0,
         failureClass: run.failureClass || '',
         actorRunId: run.actorRunId,
+        actorStarted: run.actorStarted,
         retryAfterMs: run.retryAfterMs
       },
       { fetchImpl: options.redisFetchImpl }

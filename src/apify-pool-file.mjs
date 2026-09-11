@@ -10,10 +10,7 @@ export function buildApifyPoolFile(tokens, options = {}) {
   if (!normalized.length) throw new Error('Chưa có API key nào được nhập.');
 
   const mode = options.mode === 'append' ? 'append' : 'replace';
-  const maxUsesPerKey = Number.parseInt(String(options.maxUsesPerKey ?? 10), 10);
-  if (!Number.isInteger(maxUsesPerKey) || maxUsesPerKey < 1) {
-    throw new Error('maxUsesPerKey phải là số nguyên dương.');
-  }
+  const maxUsesPerKey = 20;
 
   const groupPrefix = String(options.groupPrefix || 'group').trim() || 'group';
   const startGroup = Number.parseInt(String(options.startGroup ?? 1), 10);
