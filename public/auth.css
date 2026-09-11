@@ -249,6 +249,7 @@ body.account-dialog-open { overflow: hidden; }
   .auth-button, .account-chip { min-height: 39px; padding-inline: 11px; font-size: 11px; }
   .auth-button--access, .account-chip { width: 44px; height: 44px; min-height: 44px; padding: 0; flex: 0 0 44px; }
   .auth-button--access span, .account-chip b { display: none; }
+  .auth-button--access svg { transform: none; }
   .account-chip b { max-width: 72px; overflow: hidden; text-overflow: ellipsis; }
   .account-dialog-shell { padding: 24px 18px 20px; border-radius: 23px; }
   .account-dialog-close { top: 14px; right: 14px; }
