@@ -12,13 +12,9 @@ function applyAccount(user) {
   if (authenticatedUser) {
     emailInput.value = authenticatedUser.email;
     emailInput.readOnly = true;
-    emailInput.setAttribute('aria-describedby', 'contact-email-help');
   } else {
     emailInput.readOnly = false;
-    emailInput.removeAttribute('aria-describedby');
   }
-  const help = form.querySelector('[data-contact-email-help]');
-  if (help) help.hidden = !authenticatedUser;
 }
 
 getCurrentUser().then(applyAccount);
