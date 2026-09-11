@@ -33,7 +33,7 @@ function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
 }
 
-function validateRegistration({ username, email, password }) {
+export function validateRegistration({ username, email, password }) {
   const normalizedUsername = normalizeUsername(username);
   const normalizedEmail = normalizeEmail(email);
   if (!USERNAME_PATTERN.test(String(username || '').trim())) {
@@ -46,6 +46,18 @@ function validateRegistration({ username, email, password }) {
     throw accountError('Mật khẩu cần từ 8–128 ký tự.', 400, 'INVALID_PASSWORD');
   }
   return { normalizedUsername, normalizedEmail, password };
+}
+
+export async function assertRegistrationAvailable(input = {}, options = {}) {
+  ensureStorage();
+  const value = validateRegistration(input);
+  const [usernameOwner, emailOwner] = await Promise.all([
+    redisCommand(['GET', usernameKey(value.normalizedUsername)], options),
+    redisCommand(['GET', emailKey(value.normalizedEmail)], options)
+  ]);
+  if (usernameOwner) throw accountError('Tên đăng nhập này đã được sử dụng.', 409, 'USERNAME_EXISTS');
+  if (emailOwner) throw accountError('Email này đã được đăng ký.', 409, 'EMAIL_EXISTS');
+  return value;
 }
 
 function ensureStorage() {

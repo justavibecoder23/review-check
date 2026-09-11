@@ -60,6 +60,11 @@
               <label for="contact-name">Họ và tên</label><input id="contact-name" name="name" type="text" autocomplete="name" required />
               <label for="contact-email">Email</label><input id="contact-email" name="email" type="email" autocomplete="email" required />
               <label for="contact-message">Nội dung</label><textarea id="contact-message" name="message" rows="5" minlength="10" maxlength="5000" required></textarea>
+              <div class="contact-verification" data-contact-verification hidden>
+                <label for="contact-code">Mã xác minh email</label>
+                <input id="contact-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="000000" />
+                <p>Mã gồm 6 số, có hiệu lực trong 10 phút. Nếu sửa thông tin phía trên, bạn cần nhận mã mới.</p>
+              </div>
               <p class="contact-form-status" data-contact-status role="status" aria-live="polite" hidden></p>
               <button type="submit">Gửi liên hệ <span aria-hidden="true">→</span></button>
             </form>

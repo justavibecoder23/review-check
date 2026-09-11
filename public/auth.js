@@ -1,6 +1,7 @@
 let currentUser = null;
 let statusPromise;
 let returnFocus;
+let pendingRegistration = null;
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>'"]/g, (character) => ({
@@ -86,8 +87,16 @@ function dialogMarkup() {
           <label><span>Mật khẩu</span><input name="password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required placeholder="Tối thiểu 8 ký tự" /></label>
           <p class="account-form-help">Email được lưu trong hồ sơ tài khoản để RealView có thể gửi thông báo trong tương lai.</p>
           <p class="account-form-error" data-auth-error role="alert" hidden></p>
-          <button class="account-submit" type="submit">Tạo tài khoản <span aria-hidden="true">→</span></button>
+          <button class="account-submit" type="submit">Gửi mã xác minh <span aria-hidden="true">→</span></button>
           <p class="account-switch">Đã có tài khoản? <button type="button" data-auth-tab="login">Đăng nhập</button></p>
+        </form>
+        <form id="auth-register-verification-panel" class="account-form" data-auth-form="verify_registration" hidden>
+          <input name="verificationId" type="hidden" />
+          <label><span>Mã xác minh email</span><input class="account-code-input" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required placeholder="000000" /></label>
+          <p class="account-form-help">Mã gồm 6 số, có hiệu lực trong 10 phút và chỉ dùng được một lần.</p>
+          <p class="account-form-error" data-auth-error role="alert" hidden></p>
+          <button class="account-submit" type="submit">Xác minh và tạo tài khoản <span aria-hidden="true">→</span></button>
+          <p class="account-switch"><button type="button" data-auth-tab="register">Đổi email hoặc gửi lại mã</button></p>
         </form>
         <form id="auth-forgot-panel" class="account-form" data-auth-form="request_password_reset" hidden>
           <label><span>Email đã đăng ký</span><input name="email" type="email" autocomplete="email" maxlength="254" required placeholder="ban@example.com" /></label>
@@ -124,7 +133,7 @@ function ensureDialog() {
 
 function setMode(mode = 'login') {
   const dialog = ensureDialog();
-  const modes = ['login', 'register', 'request_password_reset', 'reset_password'];
+  const modes = ['login', 'register', 'verify_registration', 'request_password_reset', 'reset_password'];
   const activeMode = modes.includes(mode) ? mode : 'login';
   dialog.querySelectorAll('[data-auth-tab]').forEach((tab) => {
     const active = tab.dataset.authTab === activeMode;
@@ -140,6 +149,7 @@ function setMode(mode = 'login') {
   const copy = {
     login: ['Chào mừng bạn trở lại', 'Đăng nhập để tiếp tục xem lịch sử phân tích.'],
     register: ['Tạo tài khoản RealView', 'Lưu lịch sử phân tích riêng theo tài khoản của bạn.'],
+    verify_registration: ['Xác minh email', 'Nhập mã đã gửi đến email để hoàn tất tạo tài khoản.'],
     request_password_reset: ['Khôi phục mật khẩu', 'Nhập email đã đăng ký để nhận mã xác minh.'],
     reset_password: ['Tạo mật khẩu mới', 'Nhập mã trong email và chọn mật khẩu mới cho tài khoản.']
   }[activeMode];
@@ -193,7 +203,8 @@ async function submitAccountForm(form) {
   submit.disabled = true;
   submit.dataset.label = submit.innerHTML;
   const pendingLabels = {
-    register: 'Đang tạo tài khoản…',
+    register: 'Đang gửi mã…',
+    verify_registration: 'Đang xác minh…',
     login: 'Đang đăng nhập…',
     request_password_reset: 'Đang gửi mã…',
     reset_password: 'Đang cập nhật…'
@@ -201,6 +212,34 @@ async function submitAccountForm(form) {
   submit.textContent = pendingLabels[action] || 'Đang xử lý…';
   try {
     const values = Object.fromEntries(new FormData(form));
+    if (action === 'register') {
+      pendingRegistration = values;
+      const payload = await apiRequest({ action: 'request_registration_verification', ...values });
+      const verificationForm = ensureDialog().querySelector('[data-auth-form="verify_registration"]');
+      verificationForm.elements.verificationId.value = payload.verificationId;
+      setMode('verify_registration');
+      const notice = ensureDialog().querySelector('[data-auth-notice]');
+      notice.textContent = payload.message;
+      notice.hidden = false;
+      return;
+    }
+    if (action === 'verify_registration') {
+      if (!pendingRegistration) throw new Error('Thông tin đăng ký đã hết hiệu lực. Vui lòng nhập lại.');
+      const payload = await apiRequest({
+        action: 'register',
+        ...pendingRegistration,
+        verificationId: values.verificationId,
+        code: values.code
+      });
+      currentUser = payload.user;
+      pendingRegistration = null;
+      statusPromise = Promise.resolve(currentUser);
+      renderAccountControls();
+      closeAuthDialog();
+      window.realviewTrackEvent?.('sign_up', { method: 'verified_email' });
+      window.dispatchEvent(new CustomEvent('realview:auth-changed', { detail: { user: currentUser } }));
+      return;
+    }
     if (action === 'reset_password') {
       if (values.password !== values.passwordConfirm) {
         throw new Error('Mật khẩu nhập lại chưa trùng khớp.');

@@ -1,5 +1,6 @@
 import {
   authenticateAccount,
+  assertRegistrationAvailable,
   createAccountSession,
   createPasswordReset,
   deleteAccountSession,
@@ -11,6 +12,12 @@ import { createHash } from 'node:crypto';
 import { redisCommand } from '../src/redis-rest.mjs';
 import { sendWelcomeEmail } from '../src/welcome-email.mjs';
 import { sendPasswordResetEmail } from '../src/password-reset-email.mjs';
+import {
+  createEmailVerification,
+  deleteEmailVerification,
+  verifyEmailCode
+} from '../src/email-verification.mjs';
+import { sendEmailVerificationCode } from '../src/email-verification-mail.mjs';
 
 const COOKIE_NAME = 'realview_session';
 
@@ -64,7 +71,7 @@ function assertSameOrigin(request) {
 }
 
 async function enforceRateLimit(request, action) {
-  const strict = action === 'register' || action === 'request_password_reset';
+  const strict = ['register', 'request_registration_verification', 'request_password_reset'].includes(action);
   const windowSeconds = strict ? 60 * 60 : 15 * 60;
   const limit = strict ? 5 : 20;
   const forwarded = String(request.headers?.['x-forwarded-for'] || '').split(',')[0].trim();
@@ -79,6 +86,13 @@ async function enforceRateLimit(request, action) {
     error.code = 'RATE_LIMITED';
     throw error;
   }
+}
+
+function registrationContext(value) {
+  return JSON.stringify({
+    username: String(value.normalizedUsername || ''),
+    email: String(value.normalizedEmail || '')
+  });
 }
 
 export async function currentAccount(request) {
@@ -124,6 +138,33 @@ export default async function handler(request, response) {
       });
     }
 
+    if (body.action === 'request_registration_verification') {
+      await enforceRateLimit(request, body.action);
+      const registration = await assertRegistrationAvailable(body);
+      const verification = await createEmailVerification({
+        purpose: 'registration',
+        email: registration.normalizedEmail,
+        context: registrationContext(registration)
+      });
+      const delivery = await sendEmailVerificationCode(
+        registration.normalizedEmail,
+        verification.code,
+        'registration'
+      ).catch(() => ({ delivered: false, reason: 'delivery_failed' }));
+      if (!delivery.delivered) {
+        await deleteEmailVerification(verification.requestId).catch(() => {});
+        const error = new Error('Chưa thể gửi mã xác minh đến email này. Vui lòng kiểm tra địa chỉ và thử lại.');
+        error.statusCode = 503;
+        error.code = 'EMAIL_DELIVERY_FAILED';
+        throw error;
+      }
+      return send(response, 200, {
+        verificationId: verification.requestId,
+        expiresIn: verification.expiresIn,
+        message: 'Mã xác minh 6 số đã được gửi đến email của bạn.'
+      });
+    }
+
     if (body.action === 'reset_password') {
       await enforceRateLimit(request, body.action);
       const user = await resetAccountPassword(body);
@@ -138,6 +179,16 @@ export default async function handler(request, response) {
 
     await enforceRateLimit(request, body.action);
     const isRegistration = body.action === 'register';
+    if (isRegistration) {
+      const registration = await assertRegistrationAvailable(body);
+      await verifyEmailCode({
+        requestId: body.verificationId,
+        code: body.code,
+        purpose: 'registration',
+        email: registration.normalizedEmail,
+        context: registrationContext(registration)
+      });
+    }
     const user = isRegistration
       ? await registerAccount(body)
       : await authenticateAccount(body);

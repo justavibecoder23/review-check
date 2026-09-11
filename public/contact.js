@@ -1,4 +1,6 @@
 const form = document.querySelector('[data-contact-form]');
+let verificationId = '';
+let verifiedPayloadSignature = '';
 
 function showStatus(message, type) {
   const status = form?.querySelector('[data-contact-status]');
@@ -12,19 +14,41 @@ form?.addEventListener('submit', async (event) => {
   event.preventDefault();
   if (!form.reportValidity()) return;
   const button = form.querySelector('[type="submit"]');
-  const original = button.innerHTML;
   button.disabled = true;
-  button.textContent = 'Đang gửi…';
+  button.textContent = verificationId ? 'Đang xác minh…' : 'Đang gửi mã…';
   showStatus('', 'loading');
   try {
+    const values = Object.fromEntries(new FormData(form));
+    const signature = JSON.stringify({ name: values.name, email: values.email, message: values.message });
+    const requestingCode = !verificationId || signature !== verifiedPayloadSignature;
     const response = await fetch('/api/contact', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(Object.fromEntries(new FormData(form)))
+      body: JSON.stringify({
+        ...values,
+        action: requestingCode ? 'request_verification' : 'submit_contact',
+        verificationId
+      })
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || 'Không thể gửi liên hệ lúc này.');
+    if (requestingCode) {
+      verificationId = payload.verificationId;
+      verifiedPayloadSignature = signature;
+      const verification = form.querySelector('[data-contact-verification]');
+      verification.hidden = false;
+      verification.querySelector('input').required = true;
+      verification.querySelector('input').focus();
+      button.innerHTML = 'Xác minh và gửi <span aria-hidden="true">→</span>';
+      showStatus(payload.message, 'success');
+      return;
+    }
     form.reset();
+    verificationId = '';
+    verifiedPayloadSignature = '';
+    const verification = form.querySelector('[data-contact-verification]');
+    verification.hidden = true;
+    verification.querySelector('input').required = false;
     window.realviewTrackEvent?.('generate_lead', { method: 'contact_form' });
     if (payload.delivered) {
       showStatus('Đã gửi phản hồi đến hộp thư RealView. Cảm ơn bạn đã liên hệ.', 'success');
@@ -35,7 +59,9 @@ form?.addEventListener('submit', async (event) => {
     showStatus(error.message, 'error');
   } finally {
     button.disabled = false;
-    button.innerHTML = original;
+    button.innerHTML = verificationId
+      ? 'Xác minh và gửi <span aria-hidden="true">→</span>'
+      : 'Gửi liên hệ <span aria-hidden="true">→</span>';
   }
 });
 

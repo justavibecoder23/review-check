@@ -13,7 +13,7 @@ function contactError(message, statusCode = 400, code = 'CONTACT_ERROR') {
   return error;
 }
 
-function validateContact(input = {}) {
+export function validateContact(input = {}) {
   const name = String(input.name || '').trim();
   const email = String(input.email || '').trim().toLowerCase();
   const message = String(input.message || '').trim();
