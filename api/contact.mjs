@@ -7,6 +7,7 @@ import {
   verifyEmailCode
 } from '../src/email-verification.mjs';
 import { sendEmailVerificationCode } from '../src/email-verification-mail.mjs';
+import { sendContactAcknowledgementEmail } from '../src/contact-acknowledgement-email.mjs';
 import { currentAccount } from './auth.mjs';
 
 function bodyOf(request) {
@@ -100,13 +101,21 @@ export default async function handler(request, response) {
       });
     }
     const record = await saveContactMessage(value);
-    const notification = await sendContactNotification(record)
-      .catch(() => ({ delivered: false, reason: 'delivery_failed' }));
+    const [notification, acknowledgement] = await Promise.all([
+      sendContactNotification(record)
+        .catch(() => ({ delivered: false, reason: 'delivery_failed' })),
+      sendContactAcknowledgementEmail(record)
+        .catch(() => ({ delivered: false, reason: 'delivery_failed' }))
+    ]);
     return send(response, notification.delivered ? 201 : 202, {
       stored: true,
       delivered: notification.delivered,
+      acknowledgementDelivered: acknowledgement.delivered,
       verifiedByAccount: Boolean(account),
-      ...(!notification.delivered ? { deliveryReason: notification.reason || 'delivery_failed' } : {})
+      ...(!notification.delivered ? { deliveryReason: notification.reason || 'delivery_failed' } : {}),
+      ...(!acknowledgement.delivered
+        ? { acknowledgementDeliveryReason: acknowledgement.reason || 'delivery_failed' }
+        : {})
     });
   } catch (error) {
     return send(response, error?.statusCode || 500, {
