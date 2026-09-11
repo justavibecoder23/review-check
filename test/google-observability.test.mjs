@@ -24,6 +24,14 @@ test('Google Analytics is initialized on every public page', async () => {
   assert.doesNotMatch(analytics, /\b(email|username|review_content|product_url)\b/);
 });
 
+test('Vercel Web Analytics and Speed Insights are deferred on every public page', async () => {
+  for (const page of pages) {
+    const html = await readFile(new URL(`../public/${page}`, import.meta.url), 'utf8');
+    assert.match(html, /<script defer src="\/_vercel\/insights\/script\.js"><\/script>/);
+    assert.match(html, /<script defer src="\/_vercel\/speed-insights\/script\.js"><\/script>/);
+  }
+});
+
 test('Search Console verification tag is present only on the homepage', async () => {
   const token = 'H--HdDunPPMXTSdXmH-FUJPCk7K_f1G3NUbMH-82o3I';
   const homepage = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
