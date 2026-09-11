@@ -3,8 +3,10 @@ import { isRedisConfigured, redisCommand, redisTransaction } from './redis-rest.
 import { SHOPEE_CACHE_HITS_KEY, SHOPEE_TOTAL_SERVED_KEY } from './product-cache.mjs';
 import {
   TIKTOK_DEFAULT_ACTOR_ID,
+  TIKTOK_DEFAULT_REVIEW_LIMIT,
   TIKTOK_DEFAULT_USAGE_MICRO_USD_PER_REVIEW,
   TIKTOK_TEMPORARY_ACTOR_ID,
+  TIKTOK_TEMPORARY_REVIEW_LIMIT,
   TIKTOK_TEMPORARY_STARTUP_FEE_MICRO_USD,
   TIKTOK_TEMPORARY_USAGE_MICRO_USD_PER_REVIEW
 } from './apify-tiktok-runtime.mjs';
@@ -1507,7 +1509,14 @@ export async function reserveTikTokCostCredentials({ count = 1, reviewsPerCreden
   if (!process.env.APIFY_TOKEN_VAULT_KEY) throw new Error('Chưa cấu hình APIFY_TOKEN_VAULT_KEY.');
   if (!runtime?.actorId || !runtime?.pricingVersion) throw new Error('Thiếu cấu hình runtime TikTok để đặt chỗ chi phí.');
   const desired = Math.min(5, Math.max(1, Number.parseInt(String(count), 10) || 1));
-  const requested = Math.min(100, Math.max(1, Number.parseInt(String(reviewsPerCredential), 10) || 100));
+  const runtimeReviewLimit = Math.min(
+    TIKTOK_TEMPORARY_REVIEW_LIMIT,
+    Math.max(1, Number.parseInt(String(runtime.reviewLimit), 10) || TIKTOK_DEFAULT_REVIEW_LIMIT)
+  );
+  const requested = Math.min(
+    runtimeReviewLimit,
+    Math.max(1, Number.parseInt(String(reviewsPerCredential), 10) || runtimeReviewLimit)
+  );
   const now = options.now ? new Date(options.now) : new Date();
   const period = apifyBillingPeriod(now);
   const keys = costLedgerKeys(period);

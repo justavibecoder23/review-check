@@ -14,9 +14,15 @@ import {
 
 test('runtime chỉ chuyển toàn bộ actor bằng cờ true hoặc false', () => {
   const productId = '1729384756102938475';
-  assert.equal(resolveTikTokRuntimeConfig(productId, { env: {} }).actorId, TIKTOK_DEFAULT_ACTOR_ID);
-  assert.equal(resolveTikTokRuntimeConfig(productId, { env: { TIKTOK_USE_TEMPORARY_ACTOR: 'false' } }).actorId, TIKTOK_DEFAULT_ACTOR_ID);
-  assert.equal(resolveTikTokRuntimeConfig(productId, { env: { TIKTOK_USE_TEMPORARY_ACTOR: 'true' } }).actorId, TIKTOK_TEMPORARY_ACTOR_ID);
+  const implicitDefault = resolveTikTokRuntimeConfig(productId, { env: {} });
+  const explicitDefault = resolveTikTokRuntimeConfig(productId, { env: { TIKTOK_USE_TEMPORARY_ACTOR: 'false' } });
+  const temporary = resolveTikTokRuntimeConfig(productId, { env: { TIKTOK_USE_TEMPORARY_ACTOR: 'true' } });
+  assert.equal(implicitDefault.actorId, TIKTOK_DEFAULT_ACTOR_ID);
+  assert.equal(implicitDefault.reviewLimit, 100);
+  assert.equal(explicitDefault.actorId, TIKTOK_DEFAULT_ACTOR_ID);
+  assert.equal(explicitDefault.reviewLimit, 100);
+  assert.equal(temporary.actorId, TIKTOK_TEMPORARY_ACTOR_ID);
+  assert.equal(temporary.reviewLimit, 200);
 });
 
 test('runtime tạm thời đóng băng actor, schema, biểu phí và metadata mẫu', () => {
@@ -25,7 +31,8 @@ test('runtime tạm thời đóng băng actor, schema, biểu phí và metadata 
   assert.equal(runtime.adapter, 'vistics');
   assert.equal(runtime.reviewCostMicroUsd, 3000);
   assert.equal(runtime.startupFeeMicroUsd, 5000);
-  assert.equal(runtime.samplingStrategy, 'most-recent-100');
+  assert.equal(runtime.reviewLimit, 200);
+  assert.equal(runtime.samplingStrategy, 'most-recent-200');
   assert.equal(runtime.distributionMode, 'observed-sample');
 });
 

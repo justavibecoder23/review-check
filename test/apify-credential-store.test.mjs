@@ -674,7 +674,7 @@ test('Shopee v4 lấy billing cycle từ Apify, giữ lượt trọn đời và 
   }
 });
 
-test('TikTok v4 dùng đúng billing cycle từng tài khoản và finalize chi phí idempotent', async () => {
+test('TikTok v4 đặt chỗ 200 review cho actor tạm, dùng đúng billing cycle và finalize idempotent', async () => {
   const names = ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'APIFY_TOKEN_VAULT_KEY'];
   const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
   process.env.UPSTASH_REDIS_REST_URL = 'https://redis.example.test';
@@ -685,10 +685,11 @@ test('TikTok v4 dùng đúng billing cycle từng tài khoản và finalize chi 
     await saveApifyCredentialPool({ maxUsesPerKey: 10, groups: [group('primary', 'primary')] }, { fetchImpl: redis.fetchImpl });
     const allocation = await reserveTikTokCostCredentials({
       count: 1,
-      reviewsPerCredential: 100,
+      reviewsPerCredential: 200,
       runtime: {
         actorId: 'H2sSMaN2TZaXG8fye',
         pricingVersion: 'pay-per-event-v1',
+        reviewLimit: 200,
         reviewCostMicroUsd: 3_000,
         startupFeeMicroUsd: 5_000
       },
@@ -709,20 +710,21 @@ test('TikTok v4 dùng đúng billing cycle từng tài khoản và finalize chi 
     const credential = allocation.credentials[0];
     assert.equal(credential.billingCycleStartAt, '2026-09-20T00:00:00.000Z');
     assert.equal(credential.spentMicroUsd, 250_000);
-    assert.equal(credential.plannedCostMicroUsd, 305_000);
+    assert.equal(credential.plannedReviews, 200);
+    assert.equal(credential.plannedCostMicroUsd, 605_000);
 
     const first = await finalizeTikTokCostCredential(credential, {
-      reviewCount: 100, statusCode: 200, operationId: 'tiktok-run-1'
+      reviewCount: 200, statusCode: 200, operationId: 'tiktok-run-1'
     }, { fetchImpl: redis.fetchImpl });
     const repeated = await finalizeTikTokCostCredential(credential, {
-      reviewCount: 100, statusCode: 200, operationId: 'tiktok-run-1'
+      reviewCount: 200, statusCode: 200, operationId: 'tiktok-run-1'
     }, { fetchImpl: redis.fetchImpl });
-    assert.equal(first.costMicroUsd, 305_000);
+    assert.equal(first.costMicroUsd, 605_000);
     assert.equal(repeated.alreadyFinalized, true);
 
     const emptyAllocation = await reserveTikTokCostCredentials({
       count: 1,
-      reviewsPerCredential: 100,
+      reviewsPerCredential: 200,
       runtime: allocation.runtime,
       fetchImpl: redis.fetchImpl,
       usageFetchImpl: async () => ({
@@ -743,7 +745,7 @@ test('TikTok v4 dùng đúng billing cycle từng tài khoản và finalize chi 
     assert.deepEqual(status.platforms.tiktok.accounting, {
       actorStarts: 2,
       emptyRuns: 1,
-      billedItems: 100
+      billedItems: 200
     });
   } finally {
     for (const name of names) {

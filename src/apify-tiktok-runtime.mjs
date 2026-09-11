@@ -3,6 +3,8 @@ export const TIKTOK_TEMPORARY_ACTOR_ID = 'H2sFHG9D8SOFlHlaR';
 export const TIKTOK_DEFAULT_USAGE_MICRO_USD_PER_REVIEW = 800;
 export const TIKTOK_TEMPORARY_USAGE_MICRO_USD_PER_REVIEW = 3_000;
 export const TIKTOK_TEMPORARY_STARTUP_FEE_MICRO_USD = 5_000;
+export const TIKTOK_DEFAULT_REVIEW_LIMIT = 100;
+export const TIKTOK_TEMPORARY_REVIEW_LIMIT = 200;
 
 function integer(value, fallback, minimum = 0, maximum = Number.MAX_SAFE_INTEGER) {
   const parsed = Number.parseInt(String(value ?? fallback), 10);
@@ -26,13 +28,13 @@ export function resolveTikTokRuntimeConfig(productId, options = {}) {
       actorId: String(options.actorId || env.APIFY_TIKTOK_TEMPORARY_ACTOR_ID || TIKTOK_TEMPORARY_ACTOR_ID),
       adapter: 'vistics',
       strategy: 'single-unfiltered',
-      samplingStrategy: 'most-recent-100',
+      samplingStrategy: 'most-recent-200',
       distributionMode: 'observed-sample',
       methodVersion: 'v4.2-unstratified-time-biased',
       pricingVersion: 'vistics-pay-per-event-2026-09',
       randomized: false,
       region,
-      reviewLimit: 100,
+      reviewLimit: TIKTOK_TEMPORARY_REVIEW_LIMIT,
       reviewCostMicroUsd: integer(env.TIKTOK_TEMPORARY_USAGE_MICRO_USD_PER_REVIEW, TIKTOK_TEMPORARY_USAGE_MICRO_USD_PER_REVIEW, 1),
       startupFeeMicroUsd: integer(env.TIKTOK_TEMPORARY_STARTUP_FEE_MICRO_USD, TIKTOK_TEMPORARY_STARTUP_FEE_MICRO_USD, 0),
       temporary: true
@@ -49,7 +51,7 @@ export function resolveTikTokRuntimeConfig(productId, options = {}) {
     pricingVersion: 'web-wanderer-2026-08',
     randomized: false,
     region: 'VN',
-    reviewLimit: 100,
+    reviewLimit: TIKTOK_DEFAULT_REVIEW_LIMIT,
     reviewCostMicroUsd: integer(env.TIKTOK_DEFAULT_USAGE_MICRO_USD_PER_REVIEW, TIKTOK_DEFAULT_USAGE_MICRO_USD_PER_REVIEW, 1),
     startupFeeMicroUsd: integer(env.TIKTOK_DEFAULT_STARTUP_FEE_MICRO_USD, 0, 0),
     temporary: false

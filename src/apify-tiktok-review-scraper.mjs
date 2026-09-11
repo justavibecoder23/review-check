@@ -3,12 +3,15 @@ import { finalizeTikTokCostCredential, reserveTikTokCostCredentials } from './ap
 import { createProgressReporter } from './sse.mjs';
 import { timeoutAbortSignal } from './abort.mjs';
 import { tikTokActorAdapter } from './apify-tiktok-adapters.mjs';
-import { classifyApifyFailure, resolveTikTokRuntimeConfig } from './apify-tiktok-runtime.mjs';
+import {
+  classifyApifyFailure,
+  resolveTikTokRuntimeConfig,
+  TIKTOK_DEFAULT_REVIEW_LIMIT
+} from './apify-tiktok-runtime.mjs';
 import { assertTikTokCircuitClosed, recordTikTokActorHealth } from './apify-tiktok-health.mjs';
 
-const MAX_REVIEWS = 100;
 const STAR_FILTERS = Object.freeze(['5_star', '4_star', '3_star', '2_star', '1_star']);
-const REVIEWS_PER_STAR = MAX_REVIEWS / STAR_FILTERS.length;
+const REVIEWS_PER_STAR = TIKTOK_DEFAULT_REVIEW_LIMIT / STAR_FILTERS.length;
 
 function actorPath(actorId) {
   return encodeURIComponent(String(actorId).trim().replace('/', '~'));
@@ -151,7 +154,7 @@ async function allocate(runtime, options) {
     return {
       allocation: await reserveTikTokCostCredentials({
         count: 1,
-        reviewsPerCredential: MAX_REVIEWS,
+        reviewsPerCredential: runtime.reviewLimit,
         runtime,
         fetchImpl: options.redisFetchImpl,
         usageFetchImpl: options.usageFetchImpl
@@ -175,7 +178,7 @@ async function allocate(runtime, options) {
     return {
       allocation: await reserveTikTokCostCredentials({
         count: 1,
-        reviewsPerCredential: MAX_REVIEWS,
+        reviewsPerCredential: runtime.reviewLimit,
         runtime,
         fetchImpl: options.redisFetchImpl,
         usageFetchImpl: options.usageFetchImpl,
@@ -200,11 +203,17 @@ export async function collectTikTokReviews(productId, options = {}) {
   const fetchImpl = options.fetchImpl || fetch;
   const configuredTimeout = Number(options.timeoutMs ?? process.env.APIFY_RUN_TIMEOUT_MS ?? 70_000);
   const timeoutMs = Number.isFinite(configuredTimeout) ? Math.min(110_000, Math.max(10_000, configuredTimeout)) : 70_000;
+  const targetMaximum = strategy === 'parallel-star-filters'
+    ? TIKTOK_DEFAULT_REVIEW_LIMIT
+    : runtime.reviewLimit;
   const startedAt = performance.now();
   const runs = await Promise.all(allocation.credentials.map((credential, index) => runActor({
     productId,
     productUrl: options.productUrl,
-    reviewLimit: Math.min(credential.plannedReviews || (strategy === 'parallel-star-filters' ? REVIEWS_PER_STAR : MAX_REVIEWS), MAX_REVIEWS),
+    reviewLimit: Math.min(
+      credential.plannedReviews || (strategy === 'parallel-star-filters' ? REVIEWS_PER_STAR : targetMaximum),
+      targetMaximum
+    ),
     reviewFilter: strategy === 'parallel-star-filters' ? STAR_FILTERS[index] : 'all',
     credential,
     fetchImpl,
@@ -264,7 +273,7 @@ export async function collectTikTokReviews(productId, options = {}) {
         continue;
       }
       seen.add(key);
-      if (deduplicated.length < MAX_REVIEWS) deduplicated.push(normalizeReview(rawReview, productId));
+      if (deduplicated.length < targetMaximum) deduplicated.push(normalizeReview(rawReview, productId));
     }
   }
   sortReviewsMostRecent(deduplicated);
@@ -277,7 +286,7 @@ export async function collectTikTokReviews(productId, options = {}) {
   if (duplicateCount) warnings.push(`Đã loại ${duplicateCount} review TikTok trùng trong dữ liệu trả về.`);
   if (wrongProductCount) warnings.push(`Đã loại ${wrongProductCount} review không thuộc đúng sản phẩm TikTok yêu cầu.`);
   if (strategy === 'single-unfiltered' && !runtime.temporary) warnings.push('TikTok đang dùng một key không lọc sao vì không còn đủ 5 key có hạn mức để chia mẫu an toàn.');
-  if (runtime.temporary) warnings.push('Kết quả TikTok sử dụng tối đa 100 review gần nhất; phân bố sao phản ánh mẫu quan sát và có thể thiên lệch theo thời gian.');
+  if (runtime.temporary) warnings.push(`Kết quả TikTok sử dụng tối đa ${targetMaximum} review gần nhất; phân bố sao phản ánh mẫu quan sát và có thể thiên lệch theo thời gian.`);
 
   const firstItem = successful.find((run) => run.items.length)?.items[0] || null;
   return {
@@ -319,7 +328,7 @@ export async function collectTikTokReviews(productId, options = {}) {
       filters: strategy === 'parallel-star-filters' ? STAR_FILTERS : ['all'],
       writtenCommentsOnly: true,
       perStarLimit: strategy === 'parallel-star-filters' ? REVIEWS_PER_STAR : null,
-      targetMaximum: MAX_REVIEWS,
+      targetMaximum,
       returned: deduplicated.length,
       duplicateCount,
       emptyCommentCount,
