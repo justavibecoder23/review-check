@@ -19,6 +19,8 @@ test('email xác nhận liên hệ giữ nguyên chủ đề, nội dung, icon v
     '',
     'Trong lúc chờ đợi, bạn có thể trải nghiệm các tính năng hoặc tìm hiểu thêm về dự án thông qua các kênh thông tin chính thức bên dưới.',
     '',
+    'Khám phá RealView: https://www.realview.com.vn/',
+    '',
     'Chúc bạn một ngày tốt lành!',
     '',
     'Trân trọng,',
@@ -37,10 +39,10 @@ test('email xác nhận liên hệ giữ nguyên chủ đề, nội dung, icon v
   assert.equal(content.subject, '[Tự động] Xác nhận yêu cầu liên hệ – RealView');
   assert.equal(content.text, expectedText);
   for (const expected of [
-    'Chào Nguyễn Văn A,',
     'Cảm ơn bạn đã quan tâm và gửi email cho RealView. Hệ thống của chúng tôi xin xác nhận đã nhận được yêu cầu liên hệ của bạn.',
     'Đội ngũ phát triển đang tiến hành xem xét nội dung và sẽ nỗ lực phản hồi đến bạn trong thời gian sớm nhất.',
     'Trong lúc chờ đợi, bạn có thể trải nghiệm các tính năng hoặc tìm hiểu thêm về dự án thông qua các kênh thông tin chính thức bên dưới.',
+    'Khám phá RealView',
     'Chúc bạn một ngày tốt lành!',
     'Trân trọng,',
     'ĐỘI NGŨ REALVIEW',
@@ -54,19 +56,17 @@ test('email xác nhận liên hệ giữ nguyên chủ đề, nội dung, icon v
   for (const [icon, label] of [
     ['🌐', 'Website:'],
     ['📧', 'Email:'],
-    ['📞', 'Hotline:'],
-    ['📘', 'Facebook:'],
-    ['🎵', 'TikTok:']
+    ['📞', 'Hotline:']
   ]) {
     assert.match(content.text, new RegExp(`${icon} ${label}`));
-    assert.match(content.html, new RegExp(`${icon}[^<]*<strong[^>]*>${label}</strong>`));
+    assert.match(content.html, new RegExp(`>${icon}</span>`));
   }
 
   assert.match(content.html, /href="https:\/\/realview\.com\.vn\/"/);
   assert.match(content.html, /href="mailto:realviewueh@gmail\.com"/);
   assert.match(content.html, /href="tel:\+84377120633"/);
   assert.match(content.html, /href="https:\/\/www\.facebook\.com\/profile\.php\?id=61594093477895"/);
-  assert.match(content.html, /href="https:\/\/www\.tiktok\.com\/@realviewueh\?_r=1&amp;_t=ZS-99cPQ7fU25A"/);
+  assert.match(content.html, /href="https:\/\/www\.tiktok\.com\/@realviewueh"/);
   assert.match(content.html, /max-width:600px/);
   assert.match(content.html, /overflow-wrap:anywhere/);
   assert.match(content.html, /<body bgcolor="#f4f3ef"[^>]*background:#f4f3ef/);
@@ -76,15 +76,64 @@ test('email xác nhận liên hệ giữ nguyên chủ đề, nội dung, icon v
   assert.doesNotMatch(content.html, /--------------------/);
 
   const links = content.html.match(/<a [^>]+>/g) || [];
-  assert.equal(links.length, 5);
-  for (const link of links) {
+  const contactLinks = links.filter((link) => link.includes('color:#a84400'));
+  assert.equal(links.length, 6);
+  assert.equal(contactLinks.length, 5);
+  for (const link of contactLinks) {
     assert.match(link, /color:#a84400/);
+    assert.match(link, /display:inline-block/);
     assert.match(link, /text-decoration:none/);
     assert.doesNotMatch(link, /text-decoration:underline/);
   }
 
+  const contentEnd = content.html.indexOf('các kênh thông tin chính thức bên dưới.</p>');
+  const ctaIndex = content.html.indexOf('>Khám phá RealView</a>');
+  const goodDayIndex = content.html.indexOf('>Chúc bạn một ngày tốt lành!</p>');
+  assert.ok(contentEnd >= 0 && ctaIndex > contentEnd && goodDayIndex > ctaIndex);
+  assert.match(content.html, /<td align="center">\s*<a href="https:\/\/www\.realview\.com\.vn\/" target="_blank" rel="noopener noreferrer"[^>]*>Khám phá RealView<\/a>/);
+  assert.match(content.html, /background:#ff7a1a/);
+
+  assert.match(content.text, /📘 Facebook:/);
+  assert.match(content.text, /🎵 TikTok:/);
+  const iconCells = content.html.match(/<td width="26" valign="middle"[^>]*>/g) || [];
+  const labelCells = content.html.match(/<td valign="middle" style="padding:0 0 (?:9px|0) 8px;[^>]*>/g) || [];
+  assert.equal(iconCells.length, 5);
+  assert.equal(labelCells.length, 5);
+  for (const iconCell of iconCells) {
+    assert.match(iconCell, /width:26px/);
+    assert.match(iconCell, /text-align:center/);
+    assert.match(iconCell, /vertical-align:middle/);
+  }
+
+  const emojiSpans = content.html.match(/<span style="[^"]*width:18px;height:18px;font-size:16px;line-height:18px;[^"]*">[^<]+<\/span>/g) || [];
+  assert.equal(emojiSpans.length, 3);
+  const logoImages = content.html.match(/<img [^>]+>/g) || [];
+  assert.equal(logoImages.length, 2);
+  assert.match(logoImages[0], /src="https:\/\/img\.icons8\.com\/color\/48\/facebook-new\.png"/);
+  assert.match(logoImages[1], /src="https:\/\/img\.icons8\.com\/color\/48\/tiktok--v1\.png"/);
+  for (const logo of logoImages) {
+    assert.match(logo, /alt=""/);
+    assert.match(logo, /width="18" height="18"/);
+    assert.match(logo, /vertical-align:middle/);
+  }
+
+  for (const socialUrl of [
+    'https://www.facebook.com/profile.php?id=61594093477895',
+    'https://www.tiktok.com/@realviewueh'
+  ]) {
+    const socialLink = links.find((link) => link.includes(`href="${socialUrl}"`));
+    assert.ok(socialLink);
+    assert.match(socialLink, /target="_blank"/);
+    assert.match(socialLink, /rel="noopener noreferrer"/);
+    assert.match(socialLink, /padding:4px 0/);
+  }
+
+  assert.match(
+    content.html,
+    /<p style="[^"]*font-size:16px;[^"]*font-weight:400;">Chào <strong style="color:#171717;font-weight:700;">Nguyễn Văn A<\/strong>,<\/p>/
+  );
+
   for (const paragraph of [
-    'Chào Nguyễn Văn A,',
     'Cảm ơn bạn đã quan tâm và gửi email cho RealView. Hệ thống của chúng tôi xin xác nhận đã nhận được yêu cầu liên hệ của bạn.',
     'Đội ngũ phát triển đang tiến hành xem xét nội dung và sẽ nỗ lực phản hồi đến bạn trong thời gian sớm nhất.',
     'Trong lúc chờ đợi, bạn có thể trải nghiệm các tính năng hoặc tìm hiểu thêm về dự án thông qua các kênh thông tin chính thức bên dưới.',
@@ -105,7 +154,7 @@ test('tên khách hàng được làm sạch và thoát an toàn trong lời ch�
   });
 
   assert.match(content.text, /^Chào <Khách & hàng> RealView,/);
-  assert.match(content.html, /Chào &lt;Khách &amp; hàng&gt; RealView,/);
+  assert.match(content.html, /<strong[^>]*>&lt;Khách &amp; hàng&gt; RealView<\/strong>,/);
   assert.doesNotMatch(content.html, /Chào <Khách & hàng>/);
 });
 
@@ -157,7 +206,7 @@ test('email xác nhận liên hệ được gửi đúng người nhận qua Gma
     assert.equal(message.to, 'buyer@example.com');
     assert.equal(message.subject, '[Tự động] Xác nhận yêu cầu liên hệ – RealView');
     assert.match(message.text, /^Chào Nguyễn Văn A,/);
-    assert.match(message.html, />Chào Nguyễn Văn A,<\/p>/);
+    assert.match(message.html, />Chào <strong[^>]*>Nguyễn Văn A<\/strong>,<\/p>/);
     assert.deepEqual(result, { delivered: true, messageId: 'contact-acknowledgement-id' });
   } finally {
     if (previousUser === undefined) delete process.env.GMAIL_SMTP_USER;
