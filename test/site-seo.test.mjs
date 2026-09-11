@@ -17,6 +17,11 @@ test('every indexable public page uses one canonical www URL', async () => {
     assert.match(html, new RegExp(`<link rel="canonical" href="${canonical.replaceAll('.', '\\.')}"`));
     assert.match(html, /<meta name="robots" content="index,follow,max-image-preview:large"/);
     assert.match(html, /<meta property="og:url" content="https:\/\/www\.realview\.com\.vn\//);
+    assert.match(html, /<meta property="og:image" content="https:\/\/www\.realview\.com\.vn\//);
+    assert.match(html, /<meta property="og:image:alt" content="[^"]+"/);
+    assert.match(html, /<meta name="twitter:card" content="summary_large_image"/);
+    assert.match(html, /<meta name="twitter:image" content="https:\/\/www\.realview\.com\.vn\//);
+    assert.match(html, /<meta name="twitter:image:alt" content="[^"]+"/);
   }
 });
 
