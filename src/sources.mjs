@@ -592,6 +592,7 @@ export async function getReviews(url, options = {}) {
       }
     }
     if (cached?.dataset) {
+      const cachedReviews = cached.dataset.reviews.slice(0, 200);
       const cachedProduct = cached.dataset.product || {};
       const product = {
         ...cachedProduct,
@@ -603,11 +604,11 @@ export async function getReviews(url, options = {}) {
       };
       emitProductMeta(product);
       return {
-        reviews: cached.dataset.reviews,
+        reviews: cachedReviews,
         source: {
           type: 'cached',
           label: 'TikTok Product Reviews',
-          reviewLimit: cached.dataset.reviews.length,
+          reviewLimit: cachedReviews.length,
           collection: unstratifiedTikTokCollection(
             cached.dataset.source?.collection || { strategy: 'single-unfiltered' }
           ),
@@ -761,6 +762,7 @@ export async function getReviews(url, options = {}) {
         now: options.now
       });
       if (fallback?.dataset) {
+        const fallbackReviews = fallback.dataset.reviews.slice(0, 200);
         const cachedProduct = fallback.dataset.product || {};
         warnings.push(`Nguồn trực tiếp tạm thời không khả dụng: ${error.message}`);
         warnings.push('Đã dùng dữ liệu lưu gần nhất của đúng sản phẩm TikTok.');
@@ -774,11 +776,11 @@ export async function getReviews(url, options = {}) {
         };
         emitProductMeta(product);
         return {
-          reviews: fallback.dataset.reviews,
+          reviews: fallbackReviews,
           source: {
             type: 'cached',
             label: 'Vercel Blob Storage · TikTok Exact Fallback',
-            reviewLimit: fallback.dataset.reviews.length,
+            reviewLimit: fallbackReviews.length,
             collection: unstratifiedTikTokCollection(
               fallback.dataset.source?.collection || { strategy: 'single-unfiltered' }
             ),

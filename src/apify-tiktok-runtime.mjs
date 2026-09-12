@@ -4,7 +4,7 @@ export const TIKTOK_DEFAULT_USAGE_MICRO_USD_PER_REVIEW = 800;
 export const TIKTOK_TEMPORARY_USAGE_MICRO_USD_PER_REVIEW = 3_000;
 export const TIKTOK_TEMPORARY_STARTUP_FEE_MICRO_USD = 5_000;
 export const TIKTOK_DEFAULT_REVIEW_LIMIT = 100;
-export const TIKTOK_TEMPORARY_REVIEW_LIMIT = 200;
+export const TIKTOK_TEMPORARY_REVIEW_LIMIT = 100;
 
 function integer(value, fallback, minimum = 0, maximum = Number.MAX_SAFE_INTEGER) {
   const parsed = Number.parseInt(String(value ?? fallback), 10);
@@ -28,7 +28,7 @@ export function resolveTikTokRuntimeConfig(productId, options = {}) {
       actorId: String(options.actorId || env.APIFY_TIKTOK_TEMPORARY_ACTOR_ID || TIKTOK_TEMPORARY_ACTOR_ID),
       adapter: 'vistics',
       strategy: 'single-unfiltered',
-      samplingStrategy: 'most-recent-200',
+      samplingStrategy: 'most-recent-100',
       distributionMode: 'observed-sample',
       methodVersion: 'v4.2-unstratified-time-biased',
       pricingVersion: 'vistics-pay-per-event-2026-09',

@@ -21,8 +21,15 @@ test('runtime chỉ chuyển toàn bộ actor bằng cờ true hoặc false', ()
   assert.equal(implicitDefault.reviewLimit, 100);
   assert.equal(explicitDefault.actorId, TIKTOK_DEFAULT_ACTOR_ID);
   assert.equal(explicitDefault.reviewLimit, 100);
+  assert.equal(explicitDefault.strategy, 'parallel-star-filters');
+  assert.equal(explicitDefault.samplingStrategy, 'parallel-star-filters');
+  assert.equal(explicitDefault.reviewCostMicroUsd, 800);
+  assert.equal(explicitDefault.temporary, false);
   assert.equal(temporary.actorId, TIKTOK_TEMPORARY_ACTOR_ID);
-  assert.equal(temporary.reviewLimit, 200);
+  assert.equal(temporary.reviewLimit, 100);
+  assert.equal(temporary.strategy, 'single-unfiltered');
+  assert.equal(temporary.reviewCostMicroUsd, 3000);
+  assert.equal(temporary.temporary, true);
 });
 
 test('runtime tạm thời đóng băng actor, schema, biểu phí và metadata mẫu', () => {
@@ -31,8 +38,8 @@ test('runtime tạm thời đóng băng actor, schema, biểu phí và metadata 
   assert.equal(runtime.adapter, 'vistics');
   assert.equal(runtime.reviewCostMicroUsd, 3000);
   assert.equal(runtime.startupFeeMicroUsd, 5000);
-  assert.equal(runtime.reviewLimit, 200);
-  assert.equal(runtime.samplingStrategy, 'most-recent-200');
+  assert.equal(runtime.reviewLimit, 100);
+  assert.equal(runtime.samplingStrategy, 'most-recent-100');
   assert.equal(runtime.distributionMode, 'observed-sample');
 });
 

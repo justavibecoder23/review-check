@@ -313,3 +313,37 @@ test('getReviews ưu tiên TikTok raw cache năm ngày và bỏ qua Actor', asyn
   assert.equal(result.source.collection.ratingStrataRequired, false);
   assert.equal(result.reviews.length, 20);
 });
+
+test('getReviews chấp nhận cache TikTok 100 hoặc 200 review', async (context) => {
+  const previous = process.env.TIKTOK_RECENT_RAW_CACHE;
+  process.env.TIKTOK_RECENT_RAW_CACHE = 'true';
+  context.after(() => {
+    if (previous === undefined) delete process.env.TIKTOK_RECENT_RAW_CACHE;
+    else process.env.TIKTOK_RECENT_RAW_CACHE = previous;
+  });
+  const productId = '1729736382033660305';
+  const dataset = tiktokDataset(productId, 200);
+  const pathname = `review-datasets/2026/09/08/tiktok-${productId}/run/reviews.raw.json`;
+  const result = await getReviews(`https://shop.tiktok.com/vn/pdp/product/${productId}`, {
+    blobToken: 'blob-token',
+    blobListImpl: async () => ({
+      blobs: [{ pathname, url: 'https://blob.test/raw', uploadedAt: '2026-09-08T00:00:00.000Z' }]
+    }),
+    blobGetImpl: blobGetFor(dataset),
+    now: new Date('2026-09-10T00:00:00.000Z')
+  });
+  assert.equal(result.source.type, 'cached');
+  assert.equal(result.source.reviewLimit, 200);
+  assert.equal(result.reviews.length, 200);
+
+  const hundredReviewResult = await getReviews(`https://shop.tiktok.com/vn/pdp/product/${productId}`, {
+    blobToken: 'blob-token',
+    blobListImpl: async () => ({
+      blobs: [{ pathname, url: 'https://blob.test/raw', uploadedAt: '2026-09-08T00:00:00.000Z' }]
+    }),
+    blobGetImpl: blobGetFor(tiktokDataset(productId, 100)),
+    now: new Date('2026-09-10T00:00:00.000Z')
+  });
+  assert.equal(hundredReviewResult.source.reviewLimit, 100);
+  assert.equal(hundredReviewResult.reviews.length, 100);
+});

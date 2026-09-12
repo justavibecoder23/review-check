@@ -814,7 +814,7 @@ test('Shopee chỉ báo hết sau khi đã quét toàn bộ ứng viên', async 
   }
 });
 
-test('TikTok v4 đặt chỗ 200 review cho actor tạm, dùng đúng billing cycle và finalize idempotent', async () => {
+test('TikTok v4 đặt chỗ 100 review cho actor tạm, dùng đúng billing cycle và finalize idempotent', async () => {
   const names = ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'APIFY_TOKEN_VAULT_KEY'];
   const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
   process.env.UPSTASH_REDIS_REST_URL = 'https://redis.example.test';
@@ -825,11 +825,11 @@ test('TikTok v4 đặt chỗ 200 review cho actor tạm, dùng đúng billing cy
     await saveApifyCredentialPool({ maxUsesPerKey: 10, groups: [group('primary', 'primary')] }, { fetchImpl: redis.fetchImpl });
     const allocation = await reserveTikTokCostCredentials({
       count: 1,
-      reviewsPerCredential: 200,
+      reviewsPerCredential: 100,
       runtime: {
         actorId: 'H2sSMaN2TZaXG8fye',
         pricingVersion: 'pay-per-event-v1',
-        reviewLimit: 200,
+        reviewLimit: 100,
         reviewCostMicroUsd: 3_000,
         startupFeeMicroUsd: 5_000
       },
@@ -850,21 +850,21 @@ test('TikTok v4 đặt chỗ 200 review cho actor tạm, dùng đúng billing cy
     const credential = allocation.credentials[0];
     assert.equal(credential.billingCycleStartAt, '2026-09-20T00:00:00.000Z');
     assert.equal(credential.spentMicroUsd, 250_000);
-    assert.equal(credential.plannedReviews, 200);
-    assert.equal(credential.plannedCostMicroUsd, 605_000);
+    assert.equal(credential.plannedReviews, 100);
+    assert.equal(credential.plannedCostMicroUsd, 305_000);
 
     const first = await finalizeTikTokCostCredential(credential, {
-      reviewCount: 200, statusCode: 200, operationId: 'tiktok-run-1'
+      reviewCount: 100, statusCode: 200, operationId: 'tiktok-run-1'
     }, { fetchImpl: redis.fetchImpl });
     const repeated = await finalizeTikTokCostCredential(credential, {
-      reviewCount: 200, statusCode: 200, operationId: 'tiktok-run-1'
+      reviewCount: 100, statusCode: 200, operationId: 'tiktok-run-1'
     }, { fetchImpl: redis.fetchImpl });
-    assert.equal(first.costMicroUsd, 605_000);
+    assert.equal(first.costMicroUsd, 305_000);
     assert.equal(repeated.alreadyFinalized, true);
 
     const emptyAllocation = await reserveTikTokCostCredentials({
       count: 1,
-      reviewsPerCredential: 200,
+      reviewsPerCredential: 100,
       runtime: allocation.runtime,
       fetchImpl: redis.fetchImpl,
       usageFetchImpl: async () => ({
@@ -885,7 +885,7 @@ test('TikTok v4 đặt chỗ 200 review cho actor tạm, dùng đúng billing cy
     assert.deepEqual(status.platforms.tiktok.accounting, {
       actorStarts: 2,
       emptyRuns: 1,
-      billedItems: 200
+      billedItems: 100
     });
   } finally {
     for (const name of names) {
@@ -904,7 +904,7 @@ test('TikTok tiếp tục quét pool khi batch usage đầu bị Redis loại', 
   const redis = createRedisFake();
   const cycleStartAt = '2026-09-20T00:00:00.000Z';
   const runtime = {
-    actorId: 'temporary-actor', pricingVersion: 'temporary-v1', reviewLimit: 200,
+    actorId: 'temporary-actor', pricingVersion: 'temporary-v1', reviewLimit: 100,
     reviewCostMicroUsd: 3_000, startupFeeMicroUsd: 5_000
   };
   let usageCalls = 0;
@@ -924,7 +924,7 @@ test('TikTok tiếp tục quét pool khi batch usage đầu bị Redis loại', 
 
     const allocation = await reserveTikTokCostCredentials({
       count: 1,
-      reviewsPerCredential: 200,
+      reviewsPerCredential: 100,
       runtime,
       fetchImpl: redis.fetchImpl,
       usageFetchImpl: async () => {
@@ -943,7 +943,7 @@ test('TikTok tiếp tục quét pool khi batch usage đầu bị Redis loại', 
 
     const rejectedIds = new Set(orderedCredentials.slice(0, 5).map((credential) => credential.id));
     assert.equal(allocation.credentials.length, 1);
-    assert.equal(allocation.credentials[0].plannedReviews, 200);
+    assert.equal(allocation.credentials[0].plannedReviews, 100);
     assert.equal(rejectedIds.has(allocation.credentials[0].id), false);
     assert.equal(usageCalls, 15, 'đọc 5 key đầu rồi mở rộng thêm 10 key');
     assert.equal(redis.evalCalls, 2, 'Redis từ chối batch đầu rồi cấp phát batch kế tiếp');
@@ -973,7 +973,7 @@ test('TikTok phân biệt quyền theo actor với token hỏng toàn cục', as
     }
   });
   const runtime = (actorId) => ({
-    actorId, pricingVersion: `${actorId}-v1`, reviewLimit: 200,
+    actorId, pricingVersion: `${actorId}-v1`, reviewLimit: 100,
     reviewCostMicroUsd: 3_000, startupFeeMicroUsd: 5_000
   });
   try {

@@ -119,7 +119,7 @@ test('actor tạm thời dùng URL đầy đủ, đọc schema lồng và gắn 
   const result = await collectTikTokReviews(productId, {
     productUrl: `https://shop.tiktok.com/view/product/${productId}`,
     runtimeOptions: { useTemporaryActor: true, env: {} },
-    allocation: allocation(1, 200),
+    allocation: allocation(1, 100),
     fetchImpl: async (_url, init) => {
       actorInput = JSON.parse(init.body);
       return {
@@ -136,22 +136,22 @@ test('actor tạm thời dùng URL đầy đủ, đọc schema lồng và gắn 
     }
   });
   assert.deepEqual(actorInput.startUrls, [`https://shop.tiktok.com/view/product/${productId}`]);
-  assert.equal(actorInput.maxReviews, 200);
+  assert.equal(actorInput.maxReviews, 100);
   assert.equal(actorInput.region, 'VN');
   assert.equal(result.reviews[0].text, 'Đóng gói tốt và giao đúng mô tả.');
   assert.equal(result.collection.adapter, 'vistics');
-  assert.equal(result.collection.samplingStrategy, 'most-recent-200');
-  assert.equal(result.collection.targetMaximum, 200);
+  assert.equal(result.collection.samplingStrategy, 'most-recent-100');
+  assert.equal(result.collection.targetMaximum, 100);
   assert.equal(result.collection.distributionMode, 'observed-sample');
   assert.equal(result.collection.temporaryActor, true);
 });
 
-test('actor tạm thời giữ tối đa 200 review sau khử trùng', async () => {
+test('actor tạm thời giữ tối đa 100 review sau khử trùng', async () => {
   const productId = '1729384756102938475';
   const result = await collectTikTokReviews(productId, {
     productUrl: `https://shop.tiktok.com/view/product/${productId}`,
     runtimeOptions: { useTemporaryActor: true, env: {} },
-    allocation: allocation(1, 200),
+    allocation: allocation(1, 100),
     fetchImpl: async () => ({
       ok: true,
       status: 200,
@@ -167,9 +167,9 @@ test('actor tạm thời giữ tối đa 200 review sau khử trùng', async () 
       }
     })
   });
-  assert.equal(result.reviews.length, 200);
-  assert.equal(result.collection.returned, 200);
-  assert.equal(result.collection.targetMaximum, 200);
+  assert.equal(result.reviews.length, 100);
+  assert.equal(result.collection.returned, 100);
+  assert.equal(result.collection.targetMaximum, 100);
 });
 
 test('HTTP 429 chỉ tạo cooldown, không bị phân loại hết ngân sách', async () => {
