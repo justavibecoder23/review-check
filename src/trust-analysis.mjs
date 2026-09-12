@@ -312,9 +312,6 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
   const analysisProduct = productWithResolvedDomain(options.product, reviews);
   const { pros, cons } = fallbackCopy(reviews, included, excluded, analysisProduct);
   const tone = trustTone(score);
-  const mostFrequentDefect = [...method.defects.tests].sort((left, right) => right.count - left.count)[0];
-  const controlledDefectSample = method.defects.status === 'standardized-controlled-sample';
-  const excludedRate = reviews.length ? Math.round(excluded.length / reviews.length * 100) : 0;
   const coverageLowersScore = method.guardrails.applied.includes('sample-coverage');
   const authenticityImpact = componentImpact(method.components.authenticity.score);
   const textImpact = componentImpact(method.components.text.score);
@@ -323,75 +320,32 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
   const textPercentage = percentageLabel(method.components.text.score);
   const labelingPercentage = percentageLabel(method.components.labeling.score);
   const coveragePercentage = percentageLabel(method.adequacy.coverage * 100);
-  const textGapPercentage = percentageLabel(100 - method.components.text.score);
-  const labelingGapPercentage = percentageLabel(100 - method.components.labeling.score);
   const drivers = [
     {
       impact: authenticityImpact,
-      title: authenticityImpact === 'up'
-        ? 'Phần lớn review vượt qua bước giảm nhiễu'
-        : authenticityImpact === 'down'
-          ? 'Tỷ lệ review vượt lọc nhiễu đang giới hạn điểm'
-          : 'Mức ít nhiễu đang ở ngưỡng trung lập',
-      detail: authenticityImpact === 'up'
-        ? `Mức review vượt bước lọc nhiễu đạt ${authenticityPercentage}. Hệ thống đã loại nội dung quảng cáo, trùng lặp, không liên quan hoặc quá ít thông tin trước khi tổng hợp.`
-        : authenticityImpact === 'down'
-          ? `Mức review vượt bước lọc đạt ${authenticityPercentage}, chưa vào nhóm độ tin cậy cao. Có ${excludedRate}% review không được dùng làm bằng chứng vì quảng cáo, trùng lặp, không liên quan, quá mơ hồ hoặc ít thông tin. Đây là một lý do TrustScore chưa cao hơn.`
-          : `Mức review vượt bước lọc nhiễu đạt ${authenticityPercentage}. Kết quả này hiện ở gần mốc trung lập nên không làm điểm thay đổi rõ rệt.`
-    },
-    {
-      impact: 'neutral',
-      title: controlledDefectSample
-        ? (mostFrequentDefect?.count ? `${mostFrequentDefect.label} xuất hiện trong nhóm review cần cân nhắc` : 'Chưa thấy một nhược điểm cụ thể lặp lại')
-        : mostFrequentDefect?.count
-          ? `${mostFrequentDefect.label} được nhiều người cùng nhắc`
-          : 'Chưa thấy một lỗi cụ thể bị nhắc lặp lại',
-      detail: controlledDefectSample
-        ? (mostFrequentDefect?.count
-          ? `${mostFrequentDefect.count} review đáng tham khảo cùng đề cập đến “${mostFrequentDefect.label.toLowerCase()}”. Vì mẫu được lấy gần đều theo mức sao, hệ thống cân bằng mức lỗi giữa các nhóm sao khi tổng hợp nhược điểm. Con số này không được diễn giải là tỷ lệ lỗi của toàn bộ sản phẩm và không tham gia TrustScore.`
-          : `Trong ${method.sample.afterSeedingRemoval} review sau bước lọc nhiễu, chưa có một nhược điểm cụ thể được nhắc lặp lại rõ ràng. Với mẫu chia tầng, thuật toán so sánh cân bằng giữa các mức sao thay vì giả định đây là phân bố tự nhiên.`)
-        : mostFrequentDefect?.count
-          ? `${mostFrequentDefect.count} review đáng tham khảo cùng đề cập đến “${mostFrequentDefect.label.toLowerCase()}”. Đây là thông tin để người dùng cân nhắc về sản phẩm. Bản thân việc nêu lỗi rõ ràng không làm review kém đáng tin.`
-          : `Trong ${method.sample.afterSeedingRemoval} review còn lại sau bước lọc nhiễu, chưa có một nhóm lỗi nào được người mua nhắc lại đủ rõ. Thống kê này không trực tiếp tăng hoặc giảm TrustScore.`
+      title: `Review vượt lọc nhiễu: ${authenticityPercentage}`,
+      detail: `Đây là phần review còn lại sau khi bỏ nội dung trùng, quảng cáo, lạc đề hoặc quá ngắn. ${authenticityImpact === 'up' ? 'Mức này đang củng cố TrustScore.' : 'Mức này còn thấp và đang giới hạn TrustScore.'}`
     },
     {
       impact: textImpact,
-      title: textImpact === 'up' ? 'Nội dung review đủ rõ để đối chiếu' : textImpact === 'down' ? 'Độ rõ của review còn hạn chế' : 'Độ chi tiết đang ở ngưỡng trung lập',
-      detail: textImpact === 'down'
-        ? `Mức nội dung rõ và hữu ích đạt ${textPercentage}. Phần còn thiếu tương ứng ${textGapPercentage} cho thấy một số review chưa nêu trải nghiệm đủ cụ thể để đối chiếu. Đây là một lý do TrustScore chưa cao hơn.`
-        : `Mức nội dung rõ và hữu ích đạt ${textPercentage}. Hệ thống xem review có nêu trải nghiệm cụ thể hay không và nội dung có đủ chi tiết để đối chiếu hay không. ${textImpact === 'up' ? 'Kết quả này đang củng cố TrustScore.' : 'Kết quả này hiện ở gần mốc trung lập.'}`
+      title: `Nội dung rõ, hữu ích: ${textPercentage}`,
+      detail: `Đây là tỷ lệ review mô tả trải nghiệm đủ rõ để người mua đối chiếu. ${textImpact === 'up' ? 'Mức này đang củng cố TrustScore.' : 'Mức này còn thấp và đang giới hạn TrustScore.'}`
     },
     {
       impact: labelingImpact,
-      title: labelingImpact === 'up' ? 'Phần lớn review đã có kết quả kiểm định' : labelingImpact === 'down' ? 'Nhiều review chưa kiểm định được' : 'Độ phủ kiểm định ở ngưỡng trung lập',
-      detail: labelingImpact === 'up'
-        ? `${labelingPercentage} review trong mẫu đã có kết quả từ bộ quy tắc hoặc lớp AI. Mức kiểm tra này đang nâng độ tin cậy của kết quả.`
-        : labelingImpact === 'down'
-          ? `${labelingPercentage} review trong mẫu đã có kết quả kiểm tra. Phần còn thiếu tương ứng ${labelingGapPercentage} không được dùng làm bằng chứng, vì vậy TrustScore chưa thể cao hơn.`
-          : `${labelingPercentage} review trong mẫu đã có kết quả kiểm tra. Kết quả này hiện ở gần mốc trung lập.`
-    },
-    {
-      impact: 'neutral',
-      title: method.sampling.controlledStarStrata ? 'Phân bố số sao là do thiết kế lấy mẫu' : 'Phân bố sao chỉ mang tính mô tả',
-      detail: method.sampling.controlledStarStrata
-        ? 'Hệ thống chủ động lọc theo sao để thu thập nhiều góc nhìn. Vì đây không phải phân bố tự nhiên của toàn bộ sản phẩm, tỷ lệ sao không được dùng để tăng hoặc giảm TrustScore.'
-        : 'Actor không cam kết chọn review ngẫu nhiên, vì vậy tỷ lệ sao trong mẫu chỉ được hiển thị để tham khảo và không được suy rộng ra toàn bộ sản phẩm.'
-    },
-    {
-      impact: 'neutral',
-      title: 'Thời gian đăng chỉ dùng để tham khảo',
-      detail: `Có thể đọc ngày đăng của khoảng ${Math.round(method.temporal.coverage * 100)}% review được giữ lại. Do actor có thể sắp xếp theo đề xuất, tín hiệu thời gian không tham gia TrustScore.`
+      title: `Review đã được kiểm tra: ${labelingPercentage}`,
+      detail: `Đây là tỷ lệ review đã nhận được kết quả kiểm tra nội dung. ${labelingImpact === 'up' ? 'Mức này đang củng cố TrustScore.' : 'Mức này còn thấp và đang giới hạn TrustScore.'}`
     },
     {
       impact: coverageLowersScore ? 'down' : method.adequacy.coverage >= 1 ? 'up' : 'neutral',
-      title: coverageLowersScore ? 'Độ phủ mẫu chưa đạt mục tiêu' : method.scoreStatus === 'valid' ? 'Mẫu bằng chứng đạt mức sử dụng' : 'Mẫu bằng chứng còn hạn chế',
+      title: `Độ phủ của mẫu: ${coveragePercentage}`,
       detail: method.scoreStatus === 'valid' && !coverageLowersScore
-        ? `Độ phủ mẫu đạt ${coveragePercentage} theo cách lấy review hiện tại. Mẫu đủ rộng nên không làm giảm TrustScore sau bước tổng hợp.`
+        ? 'Mẫu review đủ rộng nên không làm giảm điểm sau bước tổng hợp.'
         : method.scoreStatus === 'insufficient'
-          ? `Mẫu hiện có ${method.sample.total}/20 review. Hệ thống chỉ không công bố TrustScore khi chưa đạt 20 review.`
+          ? 'Số review có nội dung chưa đủ để công bố TrustScore.'
           : coverageLowersScore
-            ? `Độ phủ mẫu hiện là ${coveragePercentage}. Vì mẫu chưa đủ rộng, hệ thống đã giảm phần điểm cao hơn 50 để kết quả thận trọng hơn.`
-            : `Độ phủ mẫu hiện là ${coveragePercentage}. TrustScore vẫn được công bố nhưng đi kèm trạng thái ${method.scoreStatus === 'limited' ? 'hạn chế' : 'tạm thời'}.`
+            ? 'Mẫu chưa đủ rộng nên phần điểm cao được điều chỉnh xuống để tránh kết luận quá chắc chắn.'
+            : 'TrustScore vẫn được công bố, nhưng nên được xem là kết quả tạm thời.'
     },
   ];
 
@@ -422,7 +376,7 @@ const trustSchema = {
       items: { type: 'object', properties: { title: { type: 'string' }, detail: { type: 'string' }, mentions: { type: 'integer', minimum: 0 } }, required: ['title', 'detail', 'mentions'] }
     },
     drivers: {
-      type: 'array', minItems: 6, maxItems: 8,
+      type: 'array', minItems: 4, maxItems: 4,
       items: { type: 'object', properties: { impact: { type: 'string', enum: ['up', 'down', 'neutral'] }, title: { type: 'string' }, detail: { type: 'string' } }, required: ['impact', 'title', 'detail'] }
     }
   },

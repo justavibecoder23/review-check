@@ -210,6 +210,7 @@ function renderDriverGroups(drivers) {
     ...driver,
     impact: normalizeDriverImpact(driver?.impact)
   }));
+  if (!normalizedDrivers.length) return '<p class="driver-group-empty">Chưa có đủ dữ liệu để giải thích các tín hiệu TrustScore.</p>';
   const groups = [
     {
       impact: 'up',
@@ -237,6 +238,7 @@ function renderDriverGroups(drivers) {
 
   return groups.map((group) => {
     const groupDrivers = normalizedDrivers.filter((driver) => driver.impact === group.impact);
+    if (!groupDrivers.length) return '';
     const cards = groupDrivers.map((driver) => {
       driverNumber += 1;
       return `

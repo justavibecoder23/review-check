@@ -27,7 +27,7 @@ test('mẫu quá nhỏ không công bố điểm nhưng vẫn trả ưu nhược
   assert.equal('confidence' in trust, false);
   assert.equal(trust.pros.length > 0, true);
   assert.equal(trust.cons.length > 0, true);
-  assert.equal(trust.drivers.length >= 6, true);
+  assert.equal(trust.drivers.length, 4);
   assert.match(trust.summary, /chưa có đủ review/i);
   assert.doesNotMatch(trust.pros[0].detail, /Dẫn chứng:|review đáng tham khảo cùng đề cập/i);
   assert.doesNotMatch(trust.drivers.map((driver) => `${driver.title} ${driver.detail}`).join(' '), /Fisher|p\s*=|OR\*|logistic|hard cap|Bonferroni/i);
@@ -50,9 +50,9 @@ test('backend luôn chỉ ra yếu tố thực sự hạ điểm và Gemini khô
   });
   const fallback = buildRuleBasedTrust(sample);
   const fallbackImpacts = fallback.drivers.map(({ impact }) => impact);
-  const loweringTitles = fallback.drivers.filter(({ impact }) => impact === 'down').map(({ title }) => title).join(' ');
+  const loweringCopy = fallback.drivers.filter(({ impact }) => impact === 'down').map(({ title, detail }) => `${title} ${detail}`).join(' ');
 
-  assert.match(loweringTitles, /giới hạn điểm|độ rõ.*hạn chế|độ phủ mẫu/i);
+  assert.match(loweringCopy, /giới hạn TrustScore|điều chỉnh xuống|chưa đủ/i);
   assert.equal(fallbackImpacts.includes('down'), true);
 
   const previousKey = process.env.GEMINI_API_KEY;
@@ -92,7 +92,7 @@ test('thành phần đạt dải tin cậy cao được hiển thị là yếu t
 
   assert.equal(trust.drivers.some((driver) => driver.impact === 'up'), true);
   assert.match(trust.drivers.filter((driver) => driver.impact === 'up').map((driver) => driver.title).join(' '), /review|nội dung|kiểm định|mẫu/i);
-  const explanation = trust.drivers.map((driver) => driver.detail).join(' ');
+  const explanation = trust.drivers.map((driver) => `${driver.title} ${driver.detail}`).join(' ');
   assert.match(explanation, /\d+(?:,\d+)?%/);
   assert.doesNotMatch(explanation, /tín hiệu đã mua hàng.*đóng góp|xác minh mua hàng.*nâng/i);
 });
@@ -119,8 +119,8 @@ test('tỷ lệ review bị loại được phản ánh trong yếu tố ít nhi
 
   assert.ok(noiseDriver);
   assert.equal(noiseDriver.impact, 'down');
-  assert.match(noiseDriver.detail, /60%/);
-  assert.match(noiseDriver.detail, /giới hạn|chưa cao hơn/i);
+  assert.match(`${noiseDriver.title} ${noiseDriver.detail}`, /60%/);
+  assert.match(noiseDriver.detail, /giới hạn/i);
   assert.equal(trust.drivers.some((driver) => driver.impact === 'neutral' && /đã lọc review ngắn|dấu hiệu seeding/i.test(driver.title)), false);
 });
 
@@ -378,7 +378,7 @@ test('Gemini dùng khóa ở header backend và trả cấu trúc giao diện an
     assert.equal(trust.pros[0].title, statisticalFallback.pros[0].title, 'Gemini không được đổi chủ đề backend');
     assert.equal(trust.pros[0].mentions, statisticalFallback.pros[0].mentions, 'Gemini không được thay đổi bộ đếm backend');
     assert.equal(trust.cons[0].mentions, statisticalFallback.cons[0].mentions, 'Gemini không được thay đổi bộ đếm backend');
-    assert.equal(trust.drivers.length >= 6, true);
+    assert.equal(trust.drivers.length, 4);
     assert.doesNotMatch(`${trust.drivers[0].title} ${trust.drivers[0].detail}`, /Fisher|p\s*=|OR\*/i);
   } finally {
     if (previousKey) process.env.GEMINI_API_KEY = previousKey;
@@ -459,9 +459,10 @@ test('payload diễn giải giữ thống kê đủ 100 review nhưng chỉ gử
   });
   const payload = buildGeminiNarrativePayload(syntheticReviews, fallback);
 
-  assert.ok(
-    fallback.drivers.some((driver) => /cân bằng mức lỗi giữa các nhóm sao/i.test(driver.detail)),
-    'phải giải thích cách mẫu chia tầng chuẩn hóa tỷ lệ nhược điểm'
+  assert.equal(fallback.drivers.length, 4, 'chỉ hiển thị bốn tín hiệu trực tiếp của TrustScore');
+  assert.doesNotMatch(
+    fallback.drivers.map((driver) => `${driver.title} ${driver.detail}`).join(' '),
+    /actor|phân bố sao|thời gian đăng|nhược điểm sản phẩm/i
   );
   assert.equal(payload.fixedBackendDraft.score, fallback.score, 'payload không tính lại hoặc sửa TrustScore');
   assert.equal(payload.fullSampleStatistics.total, 100);

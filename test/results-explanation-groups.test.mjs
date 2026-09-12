@@ -44,15 +44,16 @@ test('lý do TrustScore luôn được chia thành ba nhóm theo đúng thứ t�
   assert.ok(markup.indexOf('>02<') < markup.indexOf('>03<'));
 });
 
-test('nhóm rỗng vẫn hiển thị trạng thái rõ ràng và dữ liệu được escape', () => {
+test('không dựng nhóm rỗng nhưng vẫn hiển thị trạng thái thiếu dữ liệu và escape nội dung', () => {
   const { context } = resultsHarness();
   const emptyMarkup = context.renderDriverGroups([]);
-  assert.equal((emptyMarkup.match(/driver-group-empty/g) || []).length, 3);
-  assert.equal((emptyMarkup.match(/driver-group-count/g) || []).length, 3);
+  assert.equal((emptyMarkup.match(/driver-group-empty/g) || []).length, 1);
+  assert.equal((emptyMarkup.match(/driver-group-count/g) || []).length, 0);
 
   const safeMarkup = context.renderDriverGroups([
     { impact: 'up', title: '<img src=x onerror=alert(1)>', detail: '<script>bad()</script>' }
   ]);
+  assert.equal((safeMarkup.match(/data-driver-group=/g) || []).length, 1);
   assert.doesNotMatch(safeMarkup, /<script>|<img src=/);
   assert.match(safeMarkup, /&lt;img/);
   assert.match(safeMarkup, /&lt;script&gt;/);
@@ -130,4 +131,12 @@ test('giao diện giải thích nhanh hiển thị bốn tỷ lệ lấy từ ba
   assert.match(script, /baseQualityScore/);
   assert.match(script, /guardrails\?\.totalPenalty/);
   assert.match(css, /\.trust-signal-grid/);
+});
+
+test('giải thích nhanh được thu gọn mặc định và nút cách tính điểm nằm giữa', () => {
+  assert.match(html, /<details class="trust-explanation-card">/);
+  assert.doesNotMatch(html, /<details class="trust-explanation-card"[^>]*open/);
+  assert.match(html, /Nhấn để xem giải thích chi tiết/);
+  assert.match(css, /\.trust-method \{[^}]*place-items: center/);
+  assert.match(css, /\.trust-method-trigger \{[\s\S]*?margin-inline: auto/);
 });

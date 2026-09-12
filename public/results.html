@@ -94,7 +94,7 @@
 
           <ol class="analysis-stepper" aria-label="Các bước phân tích">
             <li data-analysis-step="product" class="is-active" aria-current="step"><span>1</span><div><strong>Nhận diện sản phẩm</strong><small>Kiểm tra đúng link và thông tin sản phẩm</small></div></li>
-            <li data-analysis-step="reviews"><span>2</span><div><strong>Thu thập đánh giá</strong><small>Lấy mẫu và kiểm tra phân bố số sao</small></div></li>
+            <li data-analysis-step="reviews"><span>2</span><div><strong>Thu thập đánh giá</strong><small>Lấy mẫu và chuẩn hóa dữ liệu review</small></div></li>
             <li data-analysis-step="validation"><span>3</span><div><strong>Kiểm định nội dung</strong><small>Giảm nhiễu và thẩm định ngữ nghĩa</small></div></li>
             <li data-analysis-step="result"><span>4</span><div><strong>Hoàn thiện kết quả</strong><small>Tính TrustScore và tổng hợp bằng chứng</small></div></li>
           </ol>
@@ -195,20 +195,26 @@
                   </div>
                   <h2>Kết luận TrustScore</h2>
                   <p id="trust-summary">RealView đang tổng hợp chất lượng và độ tin cậy của các review.</p>
-                  <section class="trust-explanation-card" aria-labelledby="trust-explanation-title">
-                    <div class="trust-explanation-heading">
-                      <div><small>GIẢI THÍCH NHANH</small><h3 id="trust-explanation-title">Điểm số được hình thành thế nào?</h3></div>
-                      <span id="trust-explanation-score">—</span>
+                  <details class="trust-explanation-card">
+                    <summary class="trust-explanation-toggle">
+                      <span>Nhấn để xem giải thích chi tiết</span>
+                      <span class="trust-explanation-chevron" aria-hidden="true">⌄</span>
+                    </summary>
+                    <div class="trust-explanation-content" aria-labelledby="trust-explanation-title">
+                      <div class="trust-explanation-heading">
+                        <div><small>GIẢI THÍCH NHANH</small><h3 id="trust-explanation-title">Điểm số được hình thành thế nào?</h3></div>
+                        <span id="trust-explanation-score">—</span>
+                      </div>
+                      <p id="trust-explanation-copy">Các tỷ lệ dưới đây được lấy trực tiếp từ kết quả kiểm tra của hệ thống.</p>
+                      <dl class="trust-signal-grid">
+                        <div><dt>Nội dung rõ, hữu ích</dt><dd id="explanation-text-score">—</dd><span class="trust-signal-meter"><i id="explanation-text-meter"></i></span></div>
+                        <div><dt>Review vượt lọc nhiễu</dt><dd id="explanation-auth-score">—</dd><span class="trust-signal-meter"><i id="explanation-auth-meter"></i></span></div>
+                        <div><dt>Đã có kết quả kiểm tra</dt><dd id="explanation-label-score">—</dd><span class="trust-signal-meter"><i id="explanation-label-meter"></i></span></div>
+                        <div><dt>Độ phủ của mẫu</dt><dd id="explanation-coverage-score">—</dd><span class="trust-signal-meter"><i id="explanation-coverage-meter"></i></span></div>
+                      </dl>
+                      <p id="trust-explanation-adjustment" class="trust-explanation-adjustment"></p>
                     </div>
-                    <p id="trust-explanation-copy">Các tỷ lệ dưới đây được lấy trực tiếp từ kết quả kiểm tra của hệ thống.</p>
-                    <dl class="trust-signal-grid">
-                      <div><dt>Nội dung rõ, hữu ích</dt><dd id="explanation-text-score">—</dd><span class="trust-signal-meter"><i id="explanation-text-meter"></i></span></div>
-                      <div><dt>Review vượt lọc nhiễu</dt><dd id="explanation-auth-score">—</dd><span class="trust-signal-meter"><i id="explanation-auth-meter"></i></span></div>
-                      <div><dt>Đã có kết quả kiểm tra</dt><dd id="explanation-label-score">—</dd><span class="trust-signal-meter"><i id="explanation-label-meter"></i></span></div>
-                      <div><dt>Độ phủ của mẫu</dt><dd id="explanation-coverage-score">—</dd><span class="trust-signal-meter"><i id="explanation-coverage-meter"></i></span></div>
-                    </dl>
-                    <p id="trust-explanation-adjustment" class="trust-explanation-adjustment"></p>
-                  </section>
+                  </details>
                   <div class="overview-stats" aria-label="Thống kê review">
                     <span><strong id="scanned-count">0</strong> đã quét</span>
                     <span><strong id="kept-count-top">0</strong> đáng tham khảo</span>
@@ -247,7 +253,7 @@
         <section class="explanation-section" aria-labelledby="explanation-title">
           <div class="container">
             <div class="section-heading">
-              <div><p class="section-kicker">02 · Giải thích điểm số</p><h2 id="explanation-title">Đối chiếu từng tín hiệu</h2><p>Các yếu tố dưới đây giải thích rõ điều gì nâng điểm, hạ điểm hoặc chỉ cung cấp thêm bối cảnh.</p></div>
+              <div><p class="section-kicker">02 · Giải thích điểm số</p><h2 id="explanation-title">Đối chiếu từng tín hiệu</h2><p>Bốn tín hiệu dưới đây cho biết vì sao TrustScore tăng, giảm hoặc được điều chỉnh thận trọng.</p></div>
             </div>
             <div id="trust-drivers" class="driver-groups"></div>
           </div>
