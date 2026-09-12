@@ -414,14 +414,25 @@ function renderResult(data) {
   const labelingScore = Number(method.components?.labeling?.score);
   const coverageScore = Number.isFinite(Number(method.adequacy?.coverage)) ? Number(method.adequacy.coverage) * 100 : null;
   const methodBaseScore = method.baseQualityScore;
+  const methodRawScore = Number(method.rawScore);
   const explanation = trustExplanation(method, scoreAvailable ? score : null);
 
   document.querySelector('#method-text-score').textContent = methodScore(textScore);
   document.querySelector('#method-auth-score').textContent = methodScore(authenticityScore);
   document.querySelector('#method-label-score').textContent = methodScore(labelingScore);
   document.querySelector('#method-coverage-score').textContent = methodScore(coverageScore);
-  document.querySelector('#method-base-score').textContent = methodScore(methodBaseScore);
   document.querySelector('#method-final-score').textContent = scoreAvailable ? score : '—';
+  const formulaInputsAvailable = [textScore, authenticityScore, labelingScore, Number(methodBaseScore)].every(Number.isFinite);
+  document.querySelector('#method-base-formula').textContent = formulaInputsAvailable
+    ? `(${methodScore(textScore, '')} + ${methodScore(authenticityScore, '')} + ${methodScore(labelingScore, '')}) ÷ 3 = ${methodScore(methodBaseScore, '')}`
+    : 'Chưa đủ dữ liệu để tính';
+  let finalFormula = 'Chưa đủ dữ liệu để tính';
+  if (scoreAvailable && Number.isFinite(Number(methodBaseScore))) {
+    finalFormula = Number(methodBaseScore) <= 50
+      ? `TrustScore = ${methodScore(methodBaseScore, '')} ≈ ${score}`
+      : `50 + ${methodScore(coverageScore)} × (${methodScore(methodBaseScore, '')} − 50) = ${methodScore(methodRawScore, '')} ≈ ${score}`;
+  }
+  document.querySelector('#method-final-formula').textContent = finalFormula;
   document.querySelector('#explanation-text-score').textContent = methodScore(textScore);
   document.querySelector('#explanation-auth-score').textContent = methodScore(authenticityScore);
   document.querySelector('#explanation-label-score').textContent = methodScore(labelingScore);
@@ -429,9 +440,6 @@ function renderResult(data) {
   document.querySelector('#trust-explanation-score').textContent = scoreAvailable ? `${score}/100` : 'Chưa đủ dữ liệu';
   document.querySelector('#trust-explanation-copy').textContent = explanation.copy;
   document.querySelector('#trust-explanation-adjustment').textContent = explanation.adjustment;
-  setScoreMeter('#method-text-meter', textScore);
-  setScoreMeter('#method-auth-meter', authenticityScore);
-  setScoreMeter('#method-label-meter', labelingScore);
   setScoreMeter('#explanation-text-meter', textScore);
   setScoreMeter('#explanation-auth-meter', authenticityScore);
   setScoreMeter('#explanation-label-meter', labelingScore);
@@ -724,7 +732,7 @@ if (trustMethodTrigger && trustMethodPopover) {
   const positionTrustMethodPopover = () => {
     if (!trustMethodPopover.matches(':popover-open')) return;
     const triggerRect = trustMethodTrigger.getBoundingClientRect();
-    const width = Math.min(470, window.innerWidth - 24);
+    const width = Math.min(430, window.innerWidth - 24);
     const height = trustMethodPopover.offsetHeight;
     const left = Math.max(12, Math.min(window.innerWidth - width - 12, triggerRect.left + triggerRect.width / 2 - width / 2));
     const openAbove = triggerRect.bottom + height + 18 > window.innerHeight && triggerRect.top > height + 18;
@@ -732,7 +740,8 @@ if (trustMethodTrigger && trustMethodPopover) {
     const arrowLeft = Math.max(24, Math.min(width - 24, triggerRect.left + triggerRect.width / 2 - left));
     trustMethodPopover.style.width = `${width}px`;
     trustMethodPopover.style.left = `${left}px`;
-    trustMethodPopover.style.top = `${Math.max(12, top)}px`;
+    const clampedTop = Math.max(12, Math.min(window.innerHeight - height - 12, top));
+    trustMethodPopover.style.top = `${clampedTop}px`;
     trustMethodPopover.style.setProperty('--method-arrow-left', `${arrowLeft}px`);
     trustMethodPopover.dataset.placement = openAbove ? 'top' : 'bottom';
   };

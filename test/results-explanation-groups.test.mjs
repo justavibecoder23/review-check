@@ -109,9 +109,12 @@ test('popup giới thiệu chỉ có nút xác nhận và công thức mở tron
   assert.match(html, /id="trust-method-popover"[^>]*popover/);
   assert.match(html, /Xem cách tính điểm/);
   assert.doesNotMatch(html, /<b>Q<\/b>|Nếu Q|\(Q − 50\)/);
-  assert.match(html, /TrustScore được công bố/);
+  assert.match(html, /Kết quả sau khi làm tròn/);
   assert.match(html, /cách diễn giải đã được đơn giản hóa/i);
-  assert.match(html, /không nâng một điểm thấp lên/i);
+  assert.match(html, /id="method-base-formula"/);
+  assert.match(html, /id="method-final-formula"/);
+  assert.match(script, /÷ 3/);
+  assert.match(script, /50 \+.*×.*− 50/);
   assert.match(script, /showModal\(\)/);
   assert.match(css, /\.trust-intro-dialog::backdrop/);
   assert.match(css, /\.trust-method-popover:popover-open/);
