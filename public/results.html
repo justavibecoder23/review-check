@@ -165,19 +165,25 @@
                     </button>
                     <div id="trust-method-popover" class="trust-method-popover" popover role="dialog" aria-labelledby="trust-method-title">
                       <div class="trust-method-popover-head">
-                        <strong id="trust-method-title">Cách tính TrustScore</strong>
+                        <div>
+                          <small>MINH BẠCH CÁCH CHẤM</small>
+                          <strong id="trust-method-title">Cách tính TrustScore</strong>
+                        </div>
                         <button type="button" popovertarget="trust-method-popover" popovertargetaction="hide" aria-label="Đóng cách tính điểm">×</button>
                       </div>
                       <div class="trust-method-panel">
-                        <p>TrustScore đo độ đáng tin của tập review, không chấm chất lượng sản phẩm.</p>
+                        <p class="trust-method-purpose">TrustScore đo mức độ đáng tin của tập review, không chấm chất lượng của sản phẩm.</p>
                         <dl class="trust-components">
-                          <div><dt>Chất lượng nội dung</dt><dd id="method-text-score">—</dd></div>
-                          <div><dt>Mức ít nhiễu</dt><dd id="method-auth-score">—</dd></div>
-                          <div><dt>Độ phủ kiểm định</dt><dd id="method-label-score">—</dd></div>
-                          <div><dt>Độ phủ mẫu</dt><dd id="method-coverage-score">—</dd></div>
+                          <div><dt><span>01</span><b>Nội dung rõ và hữu ích</b></dt><dd id="method-text-score">—</dd><i><span id="method-text-meter"></span></i></div>
+                          <div><dt><span>02</span><b>Review vượt bước lọc nhiễu</b></dt><dd id="method-auth-score">—</dd><i><span id="method-auth-meter"></span></i></div>
+                          <div><dt><span>03</span><b>Review đã có kết quả kiểm tra</b></dt><dd id="method-label-score">—</dd><i><span id="method-label-meter"></span></i></div>
                         </dl>
-                        <p class="trust-formula"><b>Q</b> = (Nội dung + Ít nhiễu + Kiểm định) ÷ 3</p>
-                        <p class="trust-formula">Nếu Q &gt; 50: <b>TrustScore</b> = 50 + Độ phủ mẫu × (Q − 50). Nếu Q ≤ 50: TrustScore = Q.</p>
+                        <div class="trust-method-flow">
+                          <div><span>1</span><p><b>Tạo mức tin cậy ban đầu</b>Ba kết quả trên được xem ngang nhau. Mức trước khi xét độ phủ mẫu là <strong id="method-base-score">—</strong>.</p></div>
+                          <div><span>2</span><p><b>Xét độ phủ mẫu</b>Mẫu hiện đạt <strong id="method-coverage-score">—</strong>. Nếu mẫu chưa đủ rộng, hệ thống chỉ giảm phần điểm cao hơn 50 và không nâng một điểm thấp lên.</p></div>
+                        </div>
+                        <div class="trust-method-result"><span>TrustScore được công bố</span><strong><b id="method-final-score">—</b><small>/100</small></strong></div>
+                        <p class="trust-method-note"><span aria-hidden="true">i</span><span>Đây là cách diễn giải đã được đơn giản hóa để dễ hiểu. Hệ thống thực tế còn cân bằng người đánh giá, nhóm sao, nội dung trùng và trường hợp thiếu dữ liệu trước khi công bố điểm.</span></p>
                       </div>
                     </div>
                   </div>
@@ -192,6 +198,20 @@
                     <summary>Đọc giải thích chi tiết</summary>
                     <p id="trust-summary-detail"></p>
                   </details>
+                  <section class="trust-explanation-card" aria-labelledby="trust-explanation-title">
+                    <div class="trust-explanation-heading">
+                      <div><small>GIẢI THÍCH NHANH</small><h3 id="trust-explanation-title">Vì sao TrustScore ở mức này?</h3></div>
+                      <span id="trust-explanation-score">—</span>
+                    </div>
+                    <p id="trust-explanation-copy">Các tỷ lệ dưới đây được lấy trực tiếp từ kết quả kiểm tra của hệ thống.</p>
+                    <dl class="trust-signal-grid">
+                      <div><dt>Nội dung rõ, hữu ích</dt><dd id="explanation-text-score">—</dd></div>
+                      <div><dt>Review vượt lọc nhiễu</dt><dd id="explanation-auth-score">—</dd></div>
+                      <div><dt>Đã có kết quả kiểm tra</dt><dd id="explanation-label-score">—</dd></div>
+                      <div><dt>Độ phủ của mẫu</dt><dd id="explanation-coverage-score">—</dd></div>
+                    </dl>
+                    <p id="trust-explanation-adjustment" class="trust-explanation-adjustment"></p>
+                  </section>
                   <div class="overview-stats" aria-label="Thống kê review">
                     <span><strong id="scanned-count">0</strong> đã quét</span>
                     <span><strong id="kept-count-top">0</strong> đáng tham khảo</span>
@@ -230,7 +250,7 @@
         <section class="explanation-section" aria-labelledby="explanation-title">
           <div class="container">
             <div class="section-heading">
-              <div><p class="section-kicker">02 · Giải thích điểm số</p><h2 id="explanation-title">Vì sao TrustScore ở mức này?</h2><p>Ba nhóm dưới đây cho biết tín hiệu nào củng cố, hạ điểm hoặc chỉ cung cấp bối cảnh.</p></div>
+              <div><p class="section-kicker">02 · Giải thích điểm số</p><h2 id="explanation-title">Đối chiếu từng tín hiệu</h2><p>Các yếu tố dưới đây giải thích rõ điều gì nâng điểm, hạ điểm hoặc chỉ cung cấp thêm bối cảnh.</p></div>
             </div>
             <div id="trust-drivers" class="driver-groups"></div>
           </div>

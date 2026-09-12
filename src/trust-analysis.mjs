@@ -288,6 +288,13 @@ function componentImpact(score) {
   return 'neutral';
 }
 
+function percentageLabel(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 'chưa xác định';
+  const rounded = Math.round(number * 10) / 10;
+  return `${Number.isInteger(rounded) ? rounded : String(rounded).replace('.', ',')}%`;
+}
+
 export function buildRuleBasedTrust(reviews = [], options = {}) {
   const included = reviews.filter((review) => review.included !== false);
   const excluded = reviews.filter((review) => review.included === false);
@@ -303,14 +310,15 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
   const tone = trustTone(score);
   const mostFrequentDefect = [...method.defects.tests].sort((left, right) => right.count - left.count)[0];
   const controlledDefectSample = method.defects.status === 'standardized-controlled-sample';
-  const detailedCount = included.filter((review) => normalise(review.text).length >= 45).length;
-  const verifiedCount = included.filter((review) => review.verified).length;
-  const labelingUnavailableCount = reviews.filter((review) => review.labels?.layer2_unavailable).length;
   const excludedRate = reviews.length ? Math.round(excluded.length / reviews.length * 100) : 0;
   const coverageLowersScore = method.guardrails.applied.includes('sample-coverage');
   const authenticityImpact = componentImpact(method.components.authenticity.score);
   const textImpact = componentImpact(method.components.text.score);
   const labelingImpact = componentImpact(method.components.labeling.score);
+  const authenticityPercentage = percentageLabel(method.components.authenticity.score);
+  const textPercentage = percentageLabel(method.components.text.score);
+  const labelingPercentage = percentageLabel(method.components.labeling.score);
+  const coveragePercentage = percentageLabel(method.adequacy.coverage * 100);
   const drivers = [
     {
       impact: authenticityImpact,
@@ -320,10 +328,10 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
           ? 'Nhiều review không đủ tin cậy để dùng'
           : 'Mức ít nhiễu đang ở ngưỡng trung lập',
       detail: authenticityImpact === 'up'
-        ? `${included.length}/${reviews.length} review đủ điều kiện làm bằng chứng chính sau khi loại seeding, quảng cáo, trùng lặp và nội dung ít thông tin.`
+        ? `Mức review vượt bước lọc nhiễu đạt ${authenticityPercentage}. Hệ thống đã loại nội dung quảng cáo, trùng lặp, không liên quan hoặc quá ít thông tin trước khi tổng hợp.`
         : authenticityImpact === 'down'
-          ? `${excluded.length}/${reviews.length} review không được dùng làm bằng chứng chính vì có dấu hiệu seeding, quảng cáo, trùng lặp, quá mơ hồ hoặc ít thông tin. Phần thiếu hụt này trực tiếp kéo điểm xuống.`
-          : `${included.length}/${reviews.length} review vượt qua bước giảm nhiễu. Thành phần này hiện không đẩy TrustScore lên hoặc xuống.`
+          ? `Mức review vượt bước lọc nhiễu chỉ đạt ${authenticityPercentage}. Có ${excludedRate}% review không được dùng làm bằng chứng vì mang tính quảng cáo, trùng lặp, không liên quan, quá mơ hồ hoặc ít thông tin. Điều này trực tiếp kéo TrustScore xuống.`
+          : `Mức review vượt bước lọc nhiễu đạt ${authenticityPercentage}. Kết quả này hiện ở gần mốc trung lập nên không làm điểm thay đổi rõ rệt.`
     },
     {
       impact: 'neutral',
@@ -343,16 +351,16 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
     {
       impact: textImpact,
       title: textImpact === 'up' ? 'Nội dung review đủ rõ để đối chiếu' : textImpact === 'down' ? 'Nhiều review còn thiếu chi tiết' : 'Độ chi tiết đang ở ngưỡng trung lập',
-      detail: `Trong ${included.length} review được giữ lại, ${detailedCount} review mô tả trải nghiệm đủ chi tiết và ${verifiedCount} review có tín hiệu đã mua hàng. ${textImpact === 'up' ? 'Chất lượng nội dung đang đóng góp tích cực cho TrustScore.' : textImpact === 'down' ? 'Nội dung thiếu chi tiết đang trực tiếp kéo điểm xuống.' : 'Thành phần này hiện không đẩy điểm lên hoặc xuống.'}`
+      detail: `Mức nội dung rõ và hữu ích đạt ${textPercentage}. Hệ thống xem review có nêu trải nghiệm cụ thể hay không và nội dung có đủ chi tiết để đối chiếu hay không. ${textImpact === 'up' ? 'Kết quả này đang nâng TrustScore.' : textImpact === 'down' ? 'Nội dung thiếu thông tin đang trực tiếp kéo TrustScore xuống.' : 'Kết quả này hiện ở gần mốc trung lập.'}`
     },
     {
       impact: labelingImpact,
       title: labelingImpact === 'up' ? 'Phần lớn review đã có kết quả kiểm định' : labelingImpact === 'down' ? 'Nhiều review chưa kiểm định được' : 'Độ phủ kiểm định ở ngưỡng trung lập',
       detail: labelingImpact === 'up'
-        ? `${reviews.length - labelingUnavailableCount}/${reviews.length} review đã có quyết định từ bộ quy tắc hoặc lớp AI kiểm định. Độ phủ này đang củng cố TrustScore.`
+        ? `${labelingPercentage} review trong mẫu đã có kết quả từ bộ quy tắc hoặc lớp AI. Mức kiểm tra này đang nâng độ tin cậy của kết quả.`
         : labelingImpact === 'down'
-          ? `${labelingUnavailableCount} review chưa nhận được kết quả kiểm định đầy đủ nên không được dùng làm bằng chứng. Khoảng trống này trực tiếp kéo điểm xuống.`
-          : `${reviews.length - labelingUnavailableCount}/${reviews.length} review đã có kết quả kiểm định. Thành phần này hiện không đẩy điểm lên hoặc xuống.`
+          ? `Chỉ ${labelingPercentage} review trong mẫu có kết quả kiểm tra đầy đủ. Phần còn thiếu không được dùng làm bằng chứng và trực tiếp kéo TrustScore xuống.`
+          : `${labelingPercentage} review trong mẫu đã có kết quả kiểm tra. Kết quả này hiện ở gần mốc trung lập.`
     },
     {
       impact: 'neutral',
@@ -367,22 +375,15 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
       detail: `Có thể đọc ngày đăng của khoảng ${Math.round(method.temporal.coverage * 100)}% review được giữ lại. Do actor có thể sắp xếp theo đề xuất, tín hiệu thời gian không tham gia TrustScore.`
     },
     {
-      impact: 'neutral',
-      title: excluded.length ? 'Đã lọc review ngắn, trùng hoặc có dấu hiệu seeding' : 'Không phát hiện nhiều review cần loại khỏi bằng chứng chính',
-      detail: excluded.length
-        ? `Hệ thống đã giữ lại ${included.length}/${reviews.length} review và loại ${excluded.length} review (${excludedRate}%) vì thiếu thông tin, trùng lặp hoặc có dấu hiệu seeding. Việc công khai bước lọc giúp phần kết luận không bị dẫn dắt bởi những phản hồi kém giá trị.`
-        : `Toàn bộ ${reviews.length} review hiện đủ điều kiện làm bằng chứng chính. Đây là tín hiệu tốt, nhưng TrustScore vẫn chỉ nói về độ tin cậy của review chứ không thay thế việc kiểm tra sản phẩm.`
-    },
-    {
       impact: coverageLowersScore ? 'down' : method.adequacy.coverage >= 1 ? 'up' : 'neutral',
       title: coverageLowersScore ? 'Độ phủ mẫu chưa đạt mục tiêu' : method.scoreStatus === 'valid' ? 'Mẫu bằng chứng đạt mức sử dụng' : 'Mẫu bằng chứng còn hạn chế',
       detail: method.scoreStatus === 'valid' && !coverageLowersScore
-        ? `Độ phủ mẫu đạt ${Math.round(method.adequacy.coverage * 100)}% theo thiết kế lấy review hiện tại.`
+        ? `Độ phủ mẫu đạt ${coveragePercentage} theo cách lấy review hiện tại. Mẫu đủ rộng nên không làm giảm TrustScore sau bước tổng hợp.`
         : method.scoreStatus === 'insufficient'
           ? `Mẫu hiện có ${method.sample.total}/20 review. Hệ thống chỉ không công bố TrustScore khi chưa đạt 20 review.`
           : coverageLowersScore
-            ? `Độ phủ mẫu hiện là ${Math.round(method.adequacy.coverage * 100)}%. Vì chưa đạt mục tiêu, thuật toán đã kéo phần điểm trên mức trung lập về mức thận trọng hơn.`
-            : `Độ phủ mẫu hiện là ${Math.round(method.adequacy.coverage * 100)}%. TrustScore vẫn được công bố nhưng đi kèm trạng thái ${method.scoreStatus === 'limited' ? 'hạn chế' : 'tạm thời'}.`
+            ? `Độ phủ mẫu hiện là ${coveragePercentage}. Vì mẫu chưa đủ rộng, hệ thống đã giảm phần điểm cao hơn 50 để kết quả thận trọng hơn.`
+            : `Độ phủ mẫu hiện là ${coveragePercentage}. TrustScore vẫn được công bố nhưng đi kèm trạng thái ${method.scoreStatus === 'limited' ? 'hạn chế' : 'tạm thời'}.`
     },
   ];
 
