@@ -86,7 +86,7 @@ function trustExplanation(method, score) {
     adjustment = 'Không có điều chỉnh bổ sung nào làm thay đổi điểm sau bước tổng hợp.';
   }
   return {
-    copy: `${baseText} Bốn tỷ lệ dưới đây cho biết dữ liệu đã giúp hình thành điểm như thế nào.`.trim(),
+    copy: `${baseText} Ba tỷ lệ đầu tạo mức tin cậy ban đầu, độ phủ mẫu cho biết điểm có cần được điều chỉnh thận trọng hay không.`.trim(),
     adjustment
   };
 }
@@ -405,10 +405,7 @@ function renderResult(data) {
   renderScoreLegend(scoreAvailable ? score : null);
   const fullSummary = String(trust.summary || data.verdict || '');
   const shortSummary = conciseSummary(fullSummary);
-  const summaryDetail = fullSummary.slice(shortSummary.endsWith('…') ? 0 : shortSummary.length).trim();
   document.querySelector('#trust-summary').textContent = shortSummary;
-  document.querySelector('#trust-summary-detail').textContent = summaryDetail || fullSummary;
-  document.querySelector('#trust-summary-more').hidden = !fullSummary || fullSummary === shortSummary;
   document.querySelector('#analysis-source').textContent = trust.engine === 'gemini' ? 'Gemini AI + bộ lọc RealView' : 'Bộ lọc minh bạch RealView';
 
   const method = trust.method || {};
@@ -435,6 +432,10 @@ function renderResult(data) {
   setScoreMeter('#method-text-meter', textScore);
   setScoreMeter('#method-auth-meter', authenticityScore);
   setScoreMeter('#method-label-meter', labelingScore);
+  setScoreMeter('#explanation-text-meter', textScore);
+  setScoreMeter('#explanation-auth-meter', authenticityScore);
+  setScoreMeter('#explanation-label-meter', labelingScore);
+  setScoreMeter('#explanation-coverage-meter', coverageScore);
 
   const scanned = Number(stats.scanned ?? reviews.length) || 0;
   const kept = Number(stats.included ?? stats.genuine ?? keptReviews.length) || 0;
