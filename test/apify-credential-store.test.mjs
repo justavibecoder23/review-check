@@ -4,6 +4,7 @@ import {
   APIFY_POOL_COUNTERS_KEY,
   APIFY_POOL_KEY,
   APIFY_POOL_USED_KEY,
+  APIFY_COST_LEDGER_PREFIX,
   APIFY_SHOPEE_ACTOR_START_COUNTERS_KEY,
   APIFY_SHOPEE_EMPTY_RUN_COUNTERS_KEY,
   APIFY_SHOPEE_ACTOR_EXHAUSTED_KEY,
@@ -212,10 +213,18 @@ function createRedisFake() {
         const cycles = JSON.parse(command[32]);
         const reserved = hash(command[8]);
         const spent = hash(command[7]);
+        const exhausted = hash(`${APIFY_COST_LEDGER_PREFIX}:exhausted`);
         const candidates = config.groups.flatMap((group) => group.credentials.map((credential) => ({ credential, group })))
-          .filter(({ credential }) => cycles[credential.id] && Number(counters[credential.id] || 0) < maxUses)
+          .filter(({ credential }) => cycles[credential.id]
+            && !exhausted[cycles[credential.id].accountCycleId]
+            && Number(counters[credential.id] || 0) < maxUses)
           .slice(0, desired);
-        if (candidates.length < desired) return JSON.stringify({ ok: false, code: 'SHOPEE_LIFETIME_OR_BUDGET_EXHAUSTED' });
+        if (candidates.length < desired) return JSON.stringify({
+          ok: false,
+          code: 'SHOPEE_LIFETIME_OR_BUDGET_EXHAUSTED',
+          available: candidates.length,
+          requested: desired
+        });
         return JSON.stringify({
           ok: true,
           source: 'redis-vault-cost-ledger-v4',
@@ -666,6 +675,115 @@ test('Shopee v4 lấy billing cycle từ Apify, giữ lượt trọn đời và 
     assert.equal(status.platforms.shopee.accounting.actorStarts, 3);
     assert.equal(status.platforms.shopee.accounting.emptyRuns, 2);
     assert.equal(status.platforms.shopee.accounting.actorExhausted, 1);
+  } finally {
+    for (const name of names) {
+      if (previous[name] === undefined) delete process.env[name];
+      else process.env[name] = previous[name];
+    }
+  }
+});
+
+test('Shopee tiếp tục quét pool khi batch usage đầu bị Redis loại', async () => {
+  const names = ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'APIFY_TOKEN_VAULT_KEY'];
+  const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.example.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'redis-test-token';
+  process.env.APIFY_TOKEN_VAULT_KEY = Buffer.alloc(32, 7).toString('base64');
+  const redis = createRedisFake();
+  const cycleStartAt = '2026-09-14T00:00:00.000Z';
+  let usageCalls = 0;
+  try {
+    await saveApifyCredentialPool({
+      maxUsesPerKey: 20,
+      groups: [group('primary', 'primary'), group('backup-a', 'backup-a'), group('backup-b', 'backup-b')]
+    }, { fetchImpl: redis.fetchImpl });
+    const config = JSON.parse(redis.values.get(APIFY_POOL_KEY));
+    const orderedCredentials = config.groups.flatMap((item) => item.credentials);
+    redis.hashes.set(`${APIFY_COST_LEDGER_PREFIX}:exhausted`, Object.fromEntries(
+      orderedCredentials.slice(0, 6).map((credential) => [
+        `${credential.billingAccountId}:${cycleStartAt}`,
+        String(Date.parse(cycleStartAt))
+      ])
+    ));
+
+    const allocation = await reserveShopeeCostCredentialSet({
+      fetchImpl: redis.fetchImpl,
+      usageFetchImpl: async () => {
+        usageCalls += 1;
+        return {
+          ok: true,
+          async json() {
+            return { data: {
+              usageCycle: { startAt: cycleStartAt, endAt: '2026-10-13T23:59:59.999Z' },
+              totalUsageCreditsUsdAfterVolumeDiscount: 0.5
+            } };
+          }
+        };
+      }
+    });
+
+    const rejectedIds = new Set(orderedCredentials.slice(0, 6).map((credential) => credential.id));
+    assert.equal(allocation.credentials.length, 5);
+    assert.ok(allocation.credentials.every((credential) => !rejectedIds.has(credential.id)));
+    assert.equal(usageCalls, 15, 'batch đầu 10 key, fallback chỉ đọc thêm 5 key còn lại');
+    assert.equal(redis.evalCalls, 2, 'lần đầu thiếu key và lần hai giữ chỗ thành công');
+  } finally {
+    for (const name of names) {
+      if (previous[name] === undefined) delete process.env[name];
+      else process.env[name] = previous[name];
+    }
+  }
+});
+
+test('Shopee chỉ báo hết sau khi đã quét toàn bộ ứng viên', async () => {
+  const names = ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'APIFY_TOKEN_VAULT_KEY'];
+  const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.example.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'redis-test-token';
+  process.env.APIFY_TOKEN_VAULT_KEY = Buffer.alloc(32, 7).toString('base64');
+  const redis = createRedisFake();
+  const cycleStartAt = '2026-09-14T00:00:00.000Z';
+  try {
+    await saveApifyCredentialPool({
+      maxUsesPerKey: 20,
+      groups: [group('primary', 'primary'), group('backup', 'backup')]
+    }, { fetchImpl: redis.fetchImpl });
+    const config = JSON.parse(redis.values.get(APIFY_POOL_KEY));
+    const credentials = config.groups.flatMap((item) => item.credentials);
+    redis.hashes.set(`${APIFY_COST_LEDGER_PREFIX}:exhausted`, Object.fromEntries(
+      credentials.map((credential) => [
+        `${credential.billingAccountId}:${cycleStartAt}`,
+        String(Date.parse(cycleStartAt))
+      ])
+    ));
+
+    await assert.rejects(
+      reserveShopeeCostCredentialSet({
+        fetchImpl: redis.fetchImpl,
+        usageFetchImpl: async () => ({
+          ok: true,
+          async json() {
+            return { data: {
+              usageCycle: { startAt: cycleStartAt, endAt: '2026-10-13T23:59:59.999Z' },
+              totalUsageCreditsUsdAfterVolumeDiscount: 0.5
+            } };
+          }
+        })
+      }),
+      (error) => {
+        assert.equal(error.code, 'SHOPEE_LIFETIME_OR_BUDGET_EXHAUSTED');
+        assert.equal(error.available, 0);
+        assert.deepEqual(error.diagnostics, {
+          candidates: 10,
+          scanned: 10,
+          eligible: 10,
+          usageFailures: 0,
+          budgetRejected: 0
+        });
+        return true;
+      }
+    );
+    assert.equal(redis.evalCalls, 1);
   } finally {
     for (const name of names) {
       if (previous[name] === undefined) delete process.env[name];

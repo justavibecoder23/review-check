@@ -1428,43 +1428,93 @@ export function normalizeApifyUsageSnapshot(data, credentialId, billingAccountId
   };
 }
 
-async function apifyUsageCandidates({ count, platform, actorId = '', minimumCostMicroUsd = 0, ...options }) {
+async function createApifyUsageCandidateScanner({ count, platform, actorId = '', minimumCostMicroUsd = 0, ...options }) {
   const config = await readPoolConfig(options);
-  if (!config) return [];
-  const [counterReply, actorExhaustedReply] = await redisTransaction([
+  const emptyScanner = {
+    hasMore: () => false,
+    nextBatch: async () => [],
+    diagnostics: () => ({ candidates: 0, scanned: 0, eligible: 0, usageFailures: 0, budgetRejected: 0 })
+  };
+  if (!config) return emptyScanner;
+  const [counterReply, actorExhaustedReply, cooldownReply, actorDeniedReply] = await redisTransaction([
     ['HGETALL', APIFY_POOL_COUNTERS_KEY],
-    ['HGETALL', APIFY_SHOPEE_ACTOR_EXHAUSTED_KEY]
+    ['HGETALL', APIFY_SHOPEE_ACTOR_EXHAUSTED_KEY],
+    ['HGETALL', APIFY_TIKTOK_COOLDOWN_KEY],
+    ['HGETALL', APIFY_TIKTOK_ACTOR_DENIED_KEY]
   ], options);
   const counters = parseHashReply(counterReply);
   const actorExhausted = parseHashReply(actorExhaustedReply);
+  const cooldown = parseHashReply(cooldownReply);
+  const actorDenied = parseHashReply(actorDeniedReply);
+  const nowMs = (options.now ? new Date(options.now) : new Date()).getTime();
   const candidates = (config.groups || []).flatMap((group, groupIndex) => group.credentials.map((credential, order) => ({
     credential, groupIndex, order, usageCount: Number(counters[credential.id] || 0)
-  }))).filter(({ credential, usageCount }) => platform !== 'shopee' || (
-    usageCount < DEFAULT_MAX_USES_PER_KEY
-    && !currentShopeeActorExhausted(
-      actorExhausted[`${credential.billingAccountId || credential.id}:${actorId}`],
-      DEFAULT_MAX_USES_PER_KEY
-    )
-  ))
+  }))).filter(({ credential, usageCount }) => {
+    if (Number(cooldown[credential.id] || 0) > nowMs) return false;
+    if (actorId && actorDenied[`${credential.id}:${actorId}`]) return false;
+    return platform !== 'shopee' || (
+      usageCount < DEFAULT_MAX_USES_PER_KEY
+      && !currentShopeeActorExhausted(
+        actorExhausted[`${credential.billingAccountId || credential.id}:${actorId}`],
+        DEFAULT_MAX_USES_PER_KEY
+      )
+    );
+  })
     .sort((left, right) => left.groupIndex - right.groupIndex || left.usageCount - right.usageCount || left.order - right.order);
   const usage = apifyUsageConfig();
   const shopeeRunCost = usage.shopeeRunCostMicroUsd;
+  const initialBatchSize = Math.max(5, count * 2);
+  let batchSize = initialBatchSize;
+  let offset = 0;
+  let scanned = 0;
+  let eligible = 0;
+  let usageFailures = 0;
+  let budgetRejected = 0;
+
+  return {
+    hasMore: () => offset < candidates.length,
+    async nextBatch() {
+      if (offset >= candidates.length) return [];
+      const batch = candidates.slice(offset, offset + batchSize);
+      offset += batch.length;
+      scanned += batch.length;
+      // The first request keeps the existing 10-key fan-out. Only fallback
+      // rounds grow, reducing worst-case latency without flooding Apify in the
+      // healthy path.
+      batchSize = Math.min(40, Math.max(initialBatchSize, batchSize * 2));
+      const settled = await Promise.allSettled(batch.map(async (candidate) => ({
+        candidate,
+        snapshot: await readApifyUsageSnapshot(candidate.credential, options)
+      })));
+      const snapshots = [];
+      for (const result of settled) {
+        if (result.status !== 'fulfilled') {
+          usageFailures += 1;
+          continue;
+        }
+        const { candidate, snapshot } = result.value;
+        const remainingShopee = Math.max(0, DEFAULT_MAX_USES_PER_KEY - candidate.usageCount);
+        const committed = snapshot.observedSpentMicroUsd + remainingShopee * shopeeRunCost
+          + (platform === 'tiktok' ? minimumCostMicroUsd : 0);
+        if (committed <= usage.freeUsageMicroUsd) {
+          snapshots.push(snapshot);
+          eligible += 1;
+        } else {
+          budgetRejected += 1;
+        }
+      }
+      return snapshots;
+    },
+    diagnostics: () => ({ candidates: candidates.length, scanned, eligible, usageFailures, budgetRejected })
+  };
+}
+
+async function apifyUsageCandidates(options) {
+  const desired = Math.max(1, Number(options?.count) || 1);
+  const scanner = await createApifyUsageCandidateScanner(options);
   const eligible = [];
-  const batchSize = Math.max(5, count * 2);
-  for (let offset = 0; offset < Math.min(candidates.length, 50) && eligible.length < count; offset += batchSize) {
-    const batch = candidates.slice(offset, offset + batchSize);
-    const settled = await Promise.allSettled(batch.map(async (candidate) => ({
-      candidate,
-      snapshot: await readApifyUsageSnapshot(candidate.credential, options)
-    })));
-    for (const result of settled) {
-      if (result.status !== 'fulfilled') continue;
-      const { candidate, snapshot } = result.value;
-      const remainingShopee = Math.max(0, DEFAULT_MAX_USES_PER_KEY - candidate.usageCount);
-      const committed = snapshot.observedSpentMicroUsd + remainingShopee * shopeeRunCost
-        + (platform === 'tiktok' ? minimumCostMicroUsd : 0);
-      if (committed <= usage.freeUsageMicroUsd) eligible.push(snapshot);
-    }
+  while (scanner.hasMore() && eligible.length < desired) {
+    eligible.push(...await scanner.nextBatch());
   }
   return eligible;
 }
@@ -1624,38 +1674,56 @@ export async function reserveShopeeCostCredentialSet(options = {}) {
   const usage = apifyUsageConfig();
   const runCost = usage.shopeeRunCostMicroUsd;
   const now = options.now ? new Date(options.now) : new Date();
-  const usageSnapshots = await apifyUsageCandidates({ count: desired, platform: 'shopee', actorId, ...options });
-  if (usageSnapshots.length < desired) {
+  const scanner = await createApifyUsageCandidateScanner({ count: desired, platform: 'shopee', actorId, ...options });
+  const cycles = {};
+  const keys = costLedgerKeys();
+  const period = apifyBillingPeriod(now);
+  const requestId = randomUUID();
+  let allocation = null;
+
+  // Redis performs the authoritative, atomic eligibility check. If a healthy
+  // usage batch contains keys that Redis rejects because of a concurrent
+  // lease or runtime state, add the next batch and retry instead of reporting
+  // false pool exhaustion.
+  while (scanner.hasMore()) {
+    const snapshots = await scanner.nextBatch();
+    for (const snapshot of snapshots) cycles[snapshot.credentialId] = snapshot;
+    if (Object.keys(cycles).length < desired) continue;
+
+    const raw = await redisCommand([
+      'EVAL', RESERVE_SHOPEE_COST_SCRIPT, '14',
+      APIFY_POOL_KEY, APIFY_POOL_COUNTERS_KEY, APIFY_POOL_USED_KEY, APIFY_SHOPEE_LIFETIME_RESERVED_KEY,
+      keys.spent, keys.reserved, keys.ledger, APIFY_COST_MIGRATION_KEY, APIFY_TIKTOK_REVIEW_COUNTERS_KEY,
+      legacyV3CostSpentKey(period), APIFY_TIKTOK_COOLDOWN_KEY, APIFY_TIKTOK_ACTOR_DENIED_KEY, keys.exhausted,
+      APIFY_SHOPEE_ACTOR_EXHAUSTED_KEY,
+      String(desired), JSON.stringify(stars), String(now.getTime()),
+      String(Math.max(120_000, Number.parseInt(String(options.reservationLeaseMs || 180_000), 10) || 180_000)),
+      String(usage.freeUsageMicroUsd), String(runCost), String(usage.shopeeCostPerReviewMicroUsd), String(usage.shopeeStartupFeeMicroUsd),
+      actorId, pricingVersion, requestId, period, String(DEFAULT_MAX_USES_PER_KEY), '800',
+      now.toISOString(), JSON.stringify(cycles)
+    ], options);
+    allocation = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (allocation?.ok) return decryptShopeeCostAllocation(allocation);
+    if (allocation?.code !== 'SHOPEE_LIFETIME_OR_BUDGET_EXHAUSTED') break;
+  }
+
+  const diagnostics = scanner.diagnostics();
+  if (Object.keys(cycles).length < desired) {
     const error = new Error('Không đọc được chu kỳ usage hiện tại của đủ tài khoản Apify cho Shopee.');
     error.code = 'APIFY_USAGE_CYCLE_UNAVAILABLE';
+    error.available = Object.keys(cycles).length;
+    error.diagnostics = diagnostics;
     error.statusCode = 503;
     throw error;
   }
-  const cycles = Object.fromEntries(usageSnapshots.map((snapshot) => [snapshot.credentialId, snapshot]));
-  const keys = costLedgerKeys();
-  const raw = await redisCommand([
-    'EVAL', RESERVE_SHOPEE_COST_SCRIPT, '14',
-    APIFY_POOL_KEY, APIFY_POOL_COUNTERS_KEY, APIFY_POOL_USED_KEY, APIFY_SHOPEE_LIFETIME_RESERVED_KEY,
-    keys.spent, keys.reserved, keys.ledger, APIFY_COST_MIGRATION_KEY, APIFY_TIKTOK_REVIEW_COUNTERS_KEY,
-    legacyV3CostSpentKey(apifyBillingPeriod(now)), APIFY_TIKTOK_COOLDOWN_KEY, APIFY_TIKTOK_ACTOR_DENIED_KEY, keys.exhausted,
-    APIFY_SHOPEE_ACTOR_EXHAUSTED_KEY,
-    String(desired), JSON.stringify(stars), String(now.getTime()),
-    String(Math.max(120_000, Number.parseInt(String(options.reservationLeaseMs || 180_000), 10) || 180_000)),
-    String(usage.freeUsageMicroUsd), String(runCost), String(usage.shopeeCostPerReviewMicroUsd), String(usage.shopeeStartupFeeMicroUsd),
-    actorId, pricingVersion, randomUUID(), apifyBillingPeriod(now), String(DEFAULT_MAX_USES_PER_KEY), '800',
-    now.toISOString(), JSON.stringify(cycles)
-  ], options);
-  const allocation = typeof raw === 'string' ? JSON.parse(raw) : raw;
-  if (!allocation?.ok) {
-    const error = new Error(allocation?.code === 'SHOPEE_LIFETIME_OR_BUDGET_EXHAUSTED'
-      ? `Không còn đủ ${desired} tài khoản có lượt Shopee trọn đời và ngân sách khả dụng.`
-      : 'Chưa cấu hình pool Apify key trong /api/apify-config.');
-    error.code = allocation?.code || 'POOL_NOT_CONFIGURED';
-    error.available = Number(allocation?.available) || 0;
-    error.statusCode = 503;
-    throw error;
-  }
-  return decryptShopeeCostAllocation(allocation);
+  const error = new Error(allocation?.code === 'SHOPEE_LIFETIME_OR_BUDGET_EXHAUSTED'
+    ? `Không còn đủ ${desired} tài khoản có lượt Shopee trọn đời và ngân sách khả dụng sau khi đã kiểm tra toàn bộ pool.`
+    : 'Chưa cấu hình pool Apify key trong /api/apify-config.');
+  error.code = allocation?.code || 'POOL_NOT_CONFIGURED';
+  error.available = Number(allocation?.available) || 0;
+  error.diagnostics = diagnostics;
+  error.statusCode = 503;
+  throw error;
 }
 
 export async function finalizeShopeeCostCredential(credential, result = {}, options = {}) {
