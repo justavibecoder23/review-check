@@ -138,5 +138,12 @@ test('giải thích nhanh được thu gọn mặc định và nút cách tính 
   assert.doesNotMatch(html, /<details class="trust-explanation-card"[^>]*open/);
   assert.match(html, /Nhấn để xem giải thích chi tiết/);
   assert.match(css, /\.trust-method \{[^}]*place-items: center/);
+  assert.match(css, /\.trust-method-trigger \{[\s\S]*?justify-self: center/);
   assert.match(css, /\.trust-method-trigger \{[\s\S]*?margin-inline: auto/);
+});
+
+test('thống kê tổng quan nằm trong footer toàn chiều rộng của thẻ TrustScore', () => {
+  assert.match(html, /<footer class="overview-stats"[^>]*>[\s\S]*?id="scanned-count"[\s\S]*?id="kept-count-top"[\s\S]*?id="excluded-count-top"[\s\S]*?<\/footer>/);
+  assert.match(css, /\.trust-card \{[\s\S]*?"footer footer"/);
+  assert.match(css, /\.overview-stats \{[^}]*grid-area: footer/);
 });

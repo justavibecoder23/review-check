@@ -401,8 +401,12 @@
   min-width: 0;
   padding: 24px;
   display: grid;
-  grid-template-columns: 200px minmax(0, 1fr);
-  gap: 26px;
+  grid-template-columns: minmax(220px, 32%) minmax(0, 1fr);
+  grid-template-areas:
+    "score copy"
+    "footer footer";
+  column-gap: 26px;
+  row-gap: 22px;
   align-items: start;
   border: 1px solid color-mix(in srgb, var(--trust-color) 28%, transparent);
   border-radius: 25px;
@@ -413,13 +417,14 @@
 .trust-card[data-tone="orange"] { --trust-color: var(--trust-amber); --trust-soft: var(--trust-amber-soft); }
 .trust-card[data-tone="red"] { --trust-color: var(--trust-red); --trust-soft: var(--trust-red-soft); }
 
-.trust-score-panel { width: 100%; min-width: 0; padding: 18px 14px; display: grid; justify-items: center; gap: 16px; border: 1px solid color-mix(in srgb, var(--trust-color) 18%, rgba(22, 22, 22, .06)); border-radius: 20px; background: rgba(255, 255, 255, .7); }
+.trust-score-panel { width: 100%; min-width: 0; padding: 18px 14px; display: grid; grid-area: score; justify-items: center; gap: 16px; border: 1px solid color-mix(in srgb, var(--trust-color) 18%, rgba(22, 22, 22, .06)); border-radius: 20px; background: rgba(255, 255, 255, .7); }
 .trust-scale { width: 100%; max-width: 16rem; min-width: 0; display: grid; gap: 10px; text-align: center; container-type: inline-size; }
 .trust-scale-caption { margin: 0; color: #696963; font-size: .6875rem; font-weight: 800; line-height: 1.4; }
-.trust-method { position: relative; width: 100%; max-width: 16rem; display: grid; place-items: center; text-align: center; }
+.trust-method { position: relative; width: 100%; max-width: none; display: grid; place-items: center; text-align: center; }
 .trust-method-trigger {
   width: fit-content;
   max-width: 100%;
+  justify-self: center;
   min-height: 40px;
   margin-inline: auto;
   padding: 0 14px;
@@ -565,7 +570,7 @@
   line-height: 1;
 }
 
-.trust-copy { min-width: 0; padding: 3px 0 0; }
+.trust-copy { min-width: 0; padding: 3px 0 0; grid-area: copy; }
 .trust-heading-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .trust-status {
   padding: 8px 12px;
@@ -624,7 +629,7 @@
 .trustscore-note p { margin: 0; color: #c9c9c2; font-size: 10px; line-height: 1.58; }
 .trustscore-note strong { display: block; margin-bottom: 4px; color: white; font-size: 11px; }
 .trustscore-note span:last-child { display: block; }
-.overview-stats { margin-top: 19px; padding-top: 15px; display: flex; flex-wrap: wrap; gap: 8px 18px; border-top: 1px solid rgba(22, 22, 22, .1); }
+.overview-stats { width: 100%; margin: 0; padding: 18px 4px 0; display: flex; grid-area: footer; flex-wrap: wrap; gap: 10px 28px; align-items: baseline; justify-content: center; border-top: 1px solid rgba(22, 22, 22, .1); }
 .overview-stats span { color: #73736d; font-size: 8px; font-weight: 700; }
 .overview-stats strong { margin-right: 3px; color: var(--ink); font-size: 12px; }
 
@@ -918,7 +923,7 @@
   .overview-card { grid-template-columns: 1fr; }
   .product-summary { grid-template-columns: 160px minmax(0, 1fr); }
   .product-visual { width: 160px; }
-  .trust-card { grid-template-columns: 200px minmax(0, 1fr); }
+  .trust-card { grid-template-columns: minmax(220px, 32%) minmax(0, 1fr); }
   .sentiment-layout { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .insight-illustration { min-height: 0; grid-column: 1 / -1; display: flex; align-items: stretch; }
   .insight-illustration img { max-height: 160px; }
@@ -935,7 +940,7 @@
   .product-copy h1 { font-size: 25px; letter-spacing: -1.1px; -webkit-line-clamp: 2; }
   .product-meta { margin-top: 9px; font-size: 8px; }
   .product-inline-link { margin-top: 13px; font-size: 8px; }
-  .trust-card { padding: 18px; grid-template-columns: minmax(0, 1fr); gap: 18px; justify-items: stretch; text-align: center; }
+  .trust-card { padding: 18px; grid-template-columns: minmax(0, 1fr); grid-template-areas: "score" "copy" "footer"; gap: 18px; justify-items: stretch; text-align: center; }
   .trust-score-panel { max-width: none; grid-template-columns: 132px minmax(0, 1fr); grid-template-areas: "gauge scale" "method method"; gap: 12px 16px; align-items: center; }
   .trust-gauge { grid-area: gauge; }
   .trust-scale { grid-area: scale; }
@@ -953,7 +958,7 @@
   .trust-explanation-heading h3 { font-size: 16px; }
   .trust-signal-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .trustscore-note p { font-size: 10.5px; }
-  .overview-stats { gap: 6px 10px; }
+  .overview-stats { padding-top: 15px; gap: 8px 18px; }
   .overview-stats span { font-size: 7px; }
   .insight-section, .explanation-section, .evidence-section { padding: 68px 0; }
   .results-page .section-heading { margin-bottom: 30px; display: block; }
