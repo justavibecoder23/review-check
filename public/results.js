@@ -52,9 +52,43 @@ function conciseSummary(value, limit = 175) {
   return `${clipped.slice(0, boundary > 90 ? boundary : limit).trim()}…`;
 }
 
-function methodScore(value, suffix = '/100') {
+function methodScore(value, suffix = '%') {
   if (value === null || value === undefined || value === '') return '—';
-  return Number.isFinite(Number(value)) ? `${Math.round(Number(value))}${suffix}` : '—';
+  if (!Number.isFinite(Number(value))) return '—';
+  const rounded = Math.round(Number(value) * 10) / 10;
+  return `${Number.isInteger(rounded) ? rounded : String(rounded).replace('.', ',')}${suffix}`;
+}
+
+function setScoreMeter(selector, value) {
+  const meter = document.querySelector(selector);
+  if (meter) meter.style.setProperty('--meter-value', `${clamp(value, 0, 100)}%`);
+}
+
+function trustExplanation(method, score) {
+  const base = Number(method.baseQualityScore);
+  const coverage = Number(method.adequacy?.coverage) * 100;
+  const reduction = Number(method.guardrails?.totalPenalty);
+  if (!Number.isFinite(score)) {
+    return {
+      copy: 'Chưa đủ review có nội dung chữ để công bố TrustScore.',
+      adjustment: 'RealView cần ít nhất 20 review có nội dung chữ trước khi hiển thị điểm.'
+    };
+  }
+  const baseText = Number.isFinite(base)
+    ? `Mức tin cậy trước khi xét độ phủ mẫu là ${methodScore(base)}.`
+    : '';
+  let adjustment;
+  if (Number.isFinite(reduction) && reduction > 0.05) {
+    adjustment = `Độ phủ mẫu đạt ${methodScore(coverage)}, vì vậy hệ thống đã giảm ${methodScore(reduction)} từ phần điểm cao hơn 50 để kết quả thận trọng hơn.`;
+  } else if (Number.isFinite(coverage)) {
+    adjustment = `Độ phủ mẫu đạt ${methodScore(coverage)} nên không làm giảm TrustScore sau bước tổng hợp.`;
+  } else {
+    adjustment = 'Không có điều chỉnh bổ sung nào làm thay đổi điểm sau bước tổng hợp.';
+  }
+  return {
+    copy: `${baseText} Bốn tỷ lệ dưới đây cho biết dữ liệu đã giúp hình thành điểm như thế nào.`.trim(),
+    adjustment
+  };
 }
 
 function toneForScore(score) {
@@ -378,13 +412,29 @@ function renderResult(data) {
   document.querySelector('#analysis-source').textContent = trust.engine === 'gemini' ? 'Gemini AI + bộ lọc RealView' : 'Bộ lọc minh bạch RealView';
 
   const method = trust.method || {};
-  document.querySelector('#method-text-score').textContent = methodScore(method.components?.text?.score);
-  document.querySelector('#method-auth-score').textContent = methodScore(method.components?.authenticity?.score);
-  document.querySelector('#method-label-score').textContent = methodScore(method.components?.labeling?.score);
-  document.querySelector('#method-coverage-score').textContent = methodScore(
-    Number.isFinite(Number(method.adequacy?.coverage)) ? Number(method.adequacy.coverage) * 100 : null,
-    '%'
-  );
+  const textScore = Number(method.components?.text?.score);
+  const authenticityScore = Number(method.components?.authenticity?.score);
+  const labelingScore = Number(method.components?.labeling?.score);
+  const coverageScore = Number.isFinite(Number(method.adequacy?.coverage)) ? Number(method.adequacy.coverage) * 100 : null;
+  const methodBaseScore = method.baseQualityScore;
+  const explanation = trustExplanation(method, scoreAvailable ? score : null);
+
+  document.querySelector('#method-text-score').textContent = methodScore(textScore);
+  document.querySelector('#method-auth-score').textContent = methodScore(authenticityScore);
+  document.querySelector('#method-label-score').textContent = methodScore(labelingScore);
+  document.querySelector('#method-coverage-score').textContent = methodScore(coverageScore);
+  document.querySelector('#method-base-score').textContent = methodScore(methodBaseScore);
+  document.querySelector('#method-final-score').textContent = scoreAvailable ? score : '—';
+  document.querySelector('#explanation-text-score').textContent = methodScore(textScore);
+  document.querySelector('#explanation-auth-score').textContent = methodScore(authenticityScore);
+  document.querySelector('#explanation-label-score').textContent = methodScore(labelingScore);
+  document.querySelector('#explanation-coverage-score').textContent = methodScore(coverageScore);
+  document.querySelector('#trust-explanation-score').textContent = scoreAvailable ? `${score}/100` : 'Chưa đủ dữ liệu';
+  document.querySelector('#trust-explanation-copy').textContent = explanation.copy;
+  document.querySelector('#trust-explanation-adjustment').textContent = explanation.adjustment;
+  setScoreMeter('#method-text-meter', textScore);
+  setScoreMeter('#method-auth-meter', authenticityScore);
+  setScoreMeter('#method-label-meter', labelingScore);
 
   const scanned = Number(stats.scanned ?? reviews.length) || 0;
   const kept = Number(stats.included ?? stats.genuine ?? keptReviews.length) || 0;
@@ -673,7 +723,7 @@ if (trustMethodTrigger && trustMethodPopover) {
   const positionTrustMethodPopover = () => {
     if (!trustMethodPopover.matches(':popover-open')) return;
     const triggerRect = trustMethodTrigger.getBoundingClientRect();
-    const width = Math.min(360, window.innerWidth - 24);
+    const width = Math.min(470, window.innerWidth - 24);
     const height = trustMethodPopover.offsetHeight;
     const left = Math.max(12, Math.min(window.innerWidth - width - 12, triggerRect.left + triggerRect.width / 2 - width / 2));
     const openAbove = triggerRect.bottom + height + 18 > window.innerHeight && triggerRect.top > height + 18;

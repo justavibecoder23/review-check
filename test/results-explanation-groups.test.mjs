@@ -108,8 +108,22 @@ test('popup giới thiệu chỉ có nút xác nhận và công thức mở tron
   assert.match(html, /id="trust-method-trigger"[^>]*popovertarget="trust-method-popover"/);
   assert.match(html, /id="trust-method-popover"[^>]*popover/);
   assert.match(html, /Xem cách tính điểm/);
-  assert.match(html, /TrustScore<\/b> = 50 \+ Độ phủ mẫu × \(Q − 50\)/);
+  assert.doesNotMatch(html, /<b>Q<\/b>|Nếu Q|\(Q − 50\)/);
+  assert.match(html, /TrustScore được công bố/);
+  assert.match(html, /cách diễn giải đã được đơn giản hóa/i);
+  assert.match(html, /không nâng một điểm thấp lên/i);
   assert.match(script, /showModal\(\)/);
   assert.match(css, /\.trust-intro-dialog::backdrop/);
   assert.match(css, /\.trust-method-popover:popover-open/);
+});
+
+test('giao diện giải thích nhanh hiển thị bốn tỷ lệ lấy từ backend', () => {
+  for (const id of ['explanation-text-score', 'explanation-auth-score', 'explanation-label-score', 'explanation-coverage-score']) {
+    assert.match(html, new RegExp(`id="${id}"`));
+    assert.match(script, new RegExp(`#${id}`));
+  }
+  assert.match(html, /Vì sao TrustScore ở mức này\?/);
+  assert.match(script, /baseQualityScore/);
+  assert.match(script, /guardrails\?\.totalPenalty/);
+  assert.match(css, /\.trust-signal-grid/);
 });

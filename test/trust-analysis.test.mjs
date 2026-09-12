@@ -92,6 +92,35 @@ test('thành phần cao hơn mốc trung lập được hiển thị là yếu t
 
   assert.equal(trust.drivers.some((driver) => driver.impact === 'up'), true);
   assert.match(trust.drivers.filter((driver) => driver.impact === 'up').map((driver) => driver.title).join(' '), /review|nội dung|kiểm định|mẫu/i);
+  const explanation = trust.drivers.map((driver) => driver.detail).join(' ');
+  assert.match(explanation, /\d+(?:,\d+)?%/);
+  assert.doesNotMatch(explanation, /tín hiệu đã mua hàng.*đóng góp|xác minh mua hàng.*nâng/i);
+});
+
+test('tỷ lệ review bị loại được phản ánh trong yếu tố ít nhiễu thay vì nhóm trung lập', () => {
+  const sample = Array.from({ length: 20 }, (_value, index) => ({
+    rating: index % 5 + 1,
+    text: index < 12
+      ? `Review ${index + 1} mô tả trải nghiệm sản phẩm rõ ràng và đủ chi tiết để đối chiếu.`
+      : `Nội dung quảng cáo ${index + 1}`,
+    included: index < 12,
+    exclusionReason: index < 12 ? null : 'Nội dung quảng cáo',
+    labels: {
+      information_value: index < 12 ? 'high' : 'none',
+      is_seeding: false,
+      is_vague: false,
+      is_low_value: index >= 12,
+      layer2_unavailable: false,
+      defect_categories: []
+    }
+  }));
+  const trust = buildRuleBasedTrust(sample);
+  const noiseDriver = trust.drivers.find((driver) => /giảm nhiễu|lọc nhiễu|ít nhiễu/i.test(driver.title));
+
+  assert.ok(noiseDriver);
+  assert.equal(noiseDriver.impact, 'up');
+  assert.match(noiseDriver.detail, /60%/);
+  assert.equal(trust.drivers.some((driver) => driver.impact === 'neutral' && /đã lọc review ngắn|dấu hiệu seeding/i.test(driver.title)), false);
 });
 
 test('nhược điểm hiển thị dùng cùng nhãn cuối với bộ đếm TrustScore', () => {
