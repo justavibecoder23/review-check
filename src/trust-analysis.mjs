@@ -283,8 +283,12 @@ export function plainTrustSummary(score, scoreStatus = 'valid') {
 
 function componentImpact(score) {
   const value = Number(score);
-  if (value > 50.5) return 'up';
-  if (value < 49.5) return 'down';
+  if (!Number.isFinite(value)) return 'neutral';
+  // This threshold only controls the explanation shown to users. It does not
+  // participate in the TrustScore calculation. A component below the public
+  // high-trust band is presented as something currently limiting the score.
+  if (value >= 80) return 'up';
+  if (value < 80) return 'down';
   return 'neutral';
 }
 
@@ -319,18 +323,20 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
   const textPercentage = percentageLabel(method.components.text.score);
   const labelingPercentage = percentageLabel(method.components.labeling.score);
   const coveragePercentage = percentageLabel(method.adequacy.coverage * 100);
+  const textGapPercentage = percentageLabel(100 - method.components.text.score);
+  const labelingGapPercentage = percentageLabel(100 - method.components.labeling.score);
   const drivers = [
     {
       impact: authenticityImpact,
       title: authenticityImpact === 'up'
         ? 'Phần lớn review vượt qua bước giảm nhiễu'
         : authenticityImpact === 'down'
-          ? 'Nhiều review không đủ tin cậy để dùng'
+          ? 'Tỷ lệ review vượt lọc nhiễu đang giới hạn điểm'
           : 'Mức ít nhiễu đang ở ngưỡng trung lập',
       detail: authenticityImpact === 'up'
         ? `Mức review vượt bước lọc nhiễu đạt ${authenticityPercentage}. Hệ thống đã loại nội dung quảng cáo, trùng lặp, không liên quan hoặc quá ít thông tin trước khi tổng hợp.`
         : authenticityImpact === 'down'
-          ? `Mức review vượt bước lọc nhiễu chỉ đạt ${authenticityPercentage}. Có ${excludedRate}% review không được dùng làm bằng chứng vì mang tính quảng cáo, trùng lặp, không liên quan, quá mơ hồ hoặc ít thông tin. Điều này trực tiếp kéo TrustScore xuống.`
+          ? `Mức review vượt bước lọc đạt ${authenticityPercentage}, chưa vào nhóm độ tin cậy cao. Có ${excludedRate}% review không được dùng làm bằng chứng vì quảng cáo, trùng lặp, không liên quan, quá mơ hồ hoặc ít thông tin. Đây là một lý do TrustScore chưa cao hơn.`
           : `Mức review vượt bước lọc nhiễu đạt ${authenticityPercentage}. Kết quả này hiện ở gần mốc trung lập nên không làm điểm thay đổi rõ rệt.`
     },
     {
@@ -350,8 +356,10 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
     },
     {
       impact: textImpact,
-      title: textImpact === 'up' ? 'Nội dung review đủ rõ để đối chiếu' : textImpact === 'down' ? 'Nhiều review còn thiếu chi tiết' : 'Độ chi tiết đang ở ngưỡng trung lập',
-      detail: `Mức nội dung rõ và hữu ích đạt ${textPercentage}. Hệ thống xem review có nêu trải nghiệm cụ thể hay không và nội dung có đủ chi tiết để đối chiếu hay không. ${textImpact === 'up' ? 'Kết quả này đang nâng TrustScore.' : textImpact === 'down' ? 'Nội dung thiếu thông tin đang trực tiếp kéo TrustScore xuống.' : 'Kết quả này hiện ở gần mốc trung lập.'}`
+      title: textImpact === 'up' ? 'Nội dung review đủ rõ để đối chiếu' : textImpact === 'down' ? 'Độ rõ của review còn hạn chế' : 'Độ chi tiết đang ở ngưỡng trung lập',
+      detail: textImpact === 'down'
+        ? `Mức nội dung rõ và hữu ích đạt ${textPercentage}. Phần còn thiếu tương ứng ${textGapPercentage} cho thấy một số review chưa nêu trải nghiệm đủ cụ thể để đối chiếu. Đây là một lý do TrustScore chưa cao hơn.`
+        : `Mức nội dung rõ và hữu ích đạt ${textPercentage}. Hệ thống xem review có nêu trải nghiệm cụ thể hay không và nội dung có đủ chi tiết để đối chiếu hay không. ${textImpact === 'up' ? 'Kết quả này đang củng cố TrustScore.' : 'Kết quả này hiện ở gần mốc trung lập.'}`
     },
     {
       impact: labelingImpact,
@@ -359,7 +367,7 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
       detail: labelingImpact === 'up'
         ? `${labelingPercentage} review trong mẫu đã có kết quả từ bộ quy tắc hoặc lớp AI. Mức kiểm tra này đang nâng độ tin cậy của kết quả.`
         : labelingImpact === 'down'
-          ? `Chỉ ${labelingPercentage} review trong mẫu có kết quả kiểm tra đầy đủ. Phần còn thiếu không được dùng làm bằng chứng và trực tiếp kéo TrustScore xuống.`
+          ? `${labelingPercentage} review trong mẫu đã có kết quả kiểm tra. Phần còn thiếu tương ứng ${labelingGapPercentage} không được dùng làm bằng chứng, vì vậy TrustScore chưa thể cao hơn.`
           : `${labelingPercentage} review trong mẫu đã có kết quả kiểm tra. Kết quả này hiện ở gần mốc trung lập.`
     },
     {

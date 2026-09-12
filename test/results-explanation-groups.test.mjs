@@ -98,7 +98,7 @@ test('tóm tắt ưu nhược điểm hiển thị trực tiếp và số liệu
   assert.match(roots['#pros-list'].innerHTML, /data-evidence-ids="r1\|r2\|r3"/);
   assert.match(driverMarkup, /<p class="driver-detail">Giải thích đầy đủ về tín hiệu\.<\/p>/);
   assert.doesNotMatch(driverMarkup, /<details|Xem chi tiết/);
-  assert.match(html, /id="trust-summary-more"/);
+  assert.doesNotMatch(html, /id="trust-summary-more"|Đọc giải thích chi tiết/);
 });
 
 test('popup giới thiệu chỉ có nút xác nhận và công thức mở trong bong bóng riêng', () => {
@@ -122,7 +122,8 @@ test('giao diện giải thích nhanh hiển thị bốn tỷ lệ lấy từ ba
     assert.match(html, new RegExp(`id="${id}"`));
     assert.match(script, new RegExp(`#${id}`));
   }
-  assert.match(html, /Vì sao TrustScore ở mức này\?/);
+  assert.match(html, /Điểm số được hình thành thế nào\?/);
+  assert.match(html, /id="explanation-(?:text|auth|label|coverage)-meter"/);
   assert.match(script, /baseQualityScore/);
   assert.match(script, /guardrails\?\.totalPenalty/);
   assert.match(css, /\.trust-signal-grid/);

@@ -52,7 +52,7 @@ test('backend luôn chỉ ra yếu tố thực sự hạ điểm và Gemini khô
   const fallbackImpacts = fallback.drivers.map(({ impact }) => impact);
   const loweringTitles = fallback.drivers.filter(({ impact }) => impact === 'down').map(({ title }) => title).join(' ');
 
-  assert.match(loweringTitles, /không đủ tin cậy|độ phủ mẫu/i);
+  assert.match(loweringTitles, /giới hạn điểm|độ rõ.*hạn chế|độ phủ mẫu/i);
   assert.equal(fallbackImpacts.includes('down'), true);
 
   const previousKey = process.env.GEMINI_API_KEY;
@@ -80,7 +80,7 @@ test('backend luôn chỉ ra yếu tố thực sự hạ điểm và Gemini khô
   }
 });
 
-test('thành phần cao hơn mốc trung lập được hiển thị là yếu tố củng cố', () => {
+test('thành phần đạt dải tin cậy cao được hiển thị là yếu tố củng cố', () => {
   const sample = Array.from({ length: 20 }, (_value, index) => ({
     rating: index % 5 + 1,
     text: `Review ${index + 1} mô tả trải nghiệm sử dụng rõ ràng, chất liệu chắc chắn và hiệu quả có thể đối chiếu sau nhiều ngày.`,
@@ -118,8 +118,9 @@ test('tỷ lệ review bị loại được phản ánh trong yếu tố ít nhi
   const noiseDriver = trust.drivers.find((driver) => /giảm nhiễu|lọc nhiễu|ít nhiễu/i.test(driver.title));
 
   assert.ok(noiseDriver);
-  assert.equal(noiseDriver.impact, 'up');
+  assert.equal(noiseDriver.impact, 'down');
   assert.match(noiseDriver.detail, /60%/);
+  assert.match(noiseDriver.detail, /giới hạn|chưa cao hơn/i);
   assert.equal(trust.drivers.some((driver) => driver.impact === 'neutral' && /đã lọc review ngắn|dấu hiệu seeding/i.test(driver.title)), false);
 });
 
