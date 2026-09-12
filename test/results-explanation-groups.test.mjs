@@ -119,6 +119,11 @@ test('popup giới thiệu chỉ có nút xác nhận và công thức mở tron
   assert.match(script, /showModal\(\)/);
   assert.match(css, /\.trust-intro-dialog::backdrop/);
   assert.match(css, /\.trust-method-popover:popover-open/);
+  assert.match(css, /\.trust-method-popover \{[\s\S]*?top: 92px;[\s\S]*?left: 50%;[\s\S]*?max-height: calc\(100dvh - 190px\)/);
+  assert.doesNotMatch(script, /positionTrustMethodPopover/);
+  assert.match(script, /closeMethodWhenTriggerIsPassed/);
+  assert.match(script, /triggerRect\.bottom > headerBottom/);
+  assert.match(script, /trustMethodPopover\.hidePopover\(\)/);
 });
 
 test('giao diện giải thích nhanh hiển thị bốn tỷ lệ lấy từ backend', () => {

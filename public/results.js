@@ -731,29 +731,19 @@ trustIntroDialog?.addEventListener('click', (event) => {
 const trustMethodTrigger = document.querySelector('#trust-method-trigger');
 const trustMethodPopover = document.querySelector('#trust-method-popover');
 if (trustMethodTrigger && trustMethodPopover) {
-  const positionTrustMethodPopover = () => {
+  const closeMethodWhenTriggerIsPassed = () => {
     if (!trustMethodPopover.matches(':popover-open')) return;
     const triggerRect = trustMethodTrigger.getBoundingClientRect();
-    const width = Math.min(430, window.innerWidth - 24);
-    const height = trustMethodPopover.offsetHeight;
-    const left = Math.max(12, Math.min(window.innerWidth - width - 12, triggerRect.left + triggerRect.width / 2 - width / 2));
-    const openAbove = triggerRect.bottom + height + 18 > window.innerHeight && triggerRect.top > height + 18;
-    const top = openAbove ? triggerRect.top - height - 12 : triggerRect.bottom + 12;
-    const arrowLeft = Math.max(24, Math.min(width - 24, triggerRect.left + triggerRect.width / 2 - left));
-    trustMethodPopover.style.width = `${width}px`;
-    trustMethodPopover.style.left = `${left}px`;
-    const clampedTop = Math.max(12, Math.min(window.innerHeight - height - 12, top));
-    trustMethodPopover.style.top = `${clampedTop}px`;
-    trustMethodPopover.style.setProperty('--method-arrow-left', `${arrowLeft}px`);
-    trustMethodPopover.dataset.placement = openAbove ? 'top' : 'bottom';
+    const headerBottom = document.querySelector('.site-header')?.getBoundingClientRect().bottom || 0;
+    const actionBarTop = document.querySelector('#result-action-bar')?.getBoundingClientRect().top || window.innerHeight;
+    const triggerIsStillVisible = triggerRect.bottom > headerBottom && triggerRect.top < actionBarTop;
+    if (!triggerIsStillVisible) trustMethodPopover.hidePopover();
   };
 
   trustMethodPopover.addEventListener('toggle', (event) => {
     trustMethodTrigger.setAttribute('aria-expanded', String(event.newState === 'open'));
-    if (event.newState === 'open') requestAnimationFrame(positionTrustMethodPopover);
   });
-  window.addEventListener('resize', positionTrustMethodPopover, { passive: true });
-  window.addEventListener('scroll', positionTrustMethodPopover, { passive: true, capture: true });
+  window.addEventListener('scroll', closeMethodWhenTriggerIsPassed, { passive: true });
 }
 
 // Setup scroll to top button
