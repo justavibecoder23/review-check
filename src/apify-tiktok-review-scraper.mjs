@@ -162,30 +162,18 @@ async function allocate(runtime, options) {
       strategy: 'single-unfiltered'
     };
   }
-  try {
-    return {
-      allocation: await reserveTikTokCostCredentials({
-        count: 5,
-        reviewsPerCredential: REVIEWS_PER_STAR,
-        runtime,
-        fetchImpl: options.redisFetchImpl,
-        usageFetchImpl: options.usageFetchImpl,
-      }),
-      strategy: 'parallel-star-filters'
-    };
-  } catch (error) {
-    if (!['INSUFFICIENT_KEYS', 'INSUFFICIENT_BUDGET_OR_KEYS'].includes(error?.code)) throw error;
-    return {
-      allocation: await reserveTikTokCostCredentials({
-        count: 1,
-        reviewsPerCredential: runtime.reviewLimit,
-        runtime,
-        fetchImpl: options.redisFetchImpl,
-        usageFetchImpl: options.usageFetchImpl,
-      }),
-      strategy: 'single-unfiltered'
-    };
-  }
+  const allocation = await reserveTikTokCostCredentials({
+    count: 5,
+    reviewsPerCredential: REVIEWS_PER_STAR,
+    runtime,
+    allowSingleFallback: true,
+    fetchImpl: options.redisFetchImpl,
+    usageFetchImpl: options.usageFetchImpl
+  });
+  return {
+    allocation,
+    strategy: allocation.credentials.length === 5 ? 'parallel-star-filters' : 'single-unfiltered'
+  };
 }
 
 export async function collectTikTokReviews(productId, options = {}) {

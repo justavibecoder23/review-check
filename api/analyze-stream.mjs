@@ -34,7 +34,9 @@ export default async function handler(request, response) {
       message: error?.message,
       code: error?.code,
       statusCode: error?.statusCode,
-      details: error?.details
+      details: error?.details,
+      available: error?.available,
+      diagnostics: error?.diagnostics
     });
     stream.send('error', {
       error: error?.message || 'Có lỗi khi phân tích sản phẩm.',

@@ -247,6 +247,7 @@ for _, group in ipairs(pool.groups or {}) do
       local accountKey = accountId .. ':' .. usageCycle.cycleStartAt
       local cooldownUntil = tonumber(redis.call('HGET', KEYS[7], credential.id) or '0')
       local denied = redis.call('HEXISTS', KEYS[8], credential.id .. ':' .. actorId)
+      if denied == 0 then denied = redis.call('HEXISTS', KEYS[8], credential.id .. ':*') end
       local exhausted = redis.call('HEXISTS', KEYS[9], accountKey)
       if cooldownUntil <= nowMs and denied == 0 and exhausted == 0 then
         local spent = math.max(
@@ -358,9 +359,10 @@ if statusCode >= 200 and statusCode < 300 and actualReviews > 0 then
   redis.call('HINCRBY', KEYS[9], credentialId, actualReviews)
 end
 if failureClass == 'billing_exhausted' then redis.call('HSET', KEYS[4], accountId, nowMs) end
-if failureClass == 'actor_access_denied' or failureClass == 'invalid_auth' then
+if failureClass == 'actor_access_denied' then
   redis.call('HSET', KEYS[5], credentialId .. ':' .. tostring(lease.actorId), nowMs)
 end
+if failureClass == 'invalid_auth' then redis.call('HSET', KEYS[5], credentialId .. ':*', nowMs) end
 if failureClass == 'temporary_throttle' then redis.call('HSET', KEYS[6], credentialId, nowMs + retryAfterMs) end
 local entry = {
   operationId=operationId, reservationId=reservationId, credentialId=credentialId,
@@ -434,6 +436,7 @@ for groupIndex, group in ipairs(pool.groups or {}) do
     if usageCycle then costState, _, reservedCost = cleanState(KEYS[6], accountKey, 'costMicroUsd') end
     local cooldownUntil = tonumber(redis.call('HGET', KEYS[11], credential.id) or '0')
     local denied = redis.call('HEXISTS', KEYS[12], credential.id .. ':' .. actorId)
+    if denied == 0 then denied = redis.call('HEXISTS', KEYS[12], credential.id .. ':*') end
     local exhausted = usageCycle and redis.call('HEXISTS', KEYS[13], accountKey) or 1
     local actorExhausted = 0
     local actorExhaustedRaw = redis.call('HGET', KEYS[14], accountId .. ':' .. actorId)
@@ -607,9 +610,10 @@ if freeTierExhausted then
   }))
 end
 if failureClass == 'billing_exhausted' then redis.call('HSET', KEYS[7], accountId, nowMs) end
-if failureClass == 'actor_access_denied' or failureClass == 'invalid_auth' then
+if failureClass == 'actor_access_denied' then
   redis.call('HSET', KEYS[9], credentialId .. ':' .. tostring(lease.actorId), nowMs)
 end
+if failureClass == 'invalid_auth' then redis.call('HSET', KEYS[9], credentialId .. ':*', nowMs) end
 if failureClass == 'temporary_throttle' then redis.call('HSET', KEYS[8], credentialId, nowMs + retryAfterMs) end
 local entry = {
   operationId=operationId, reservationId=reservationId, platform='shopee',
@@ -1451,6 +1455,7 @@ async function createApifyUsageCandidateScanner({ count, platform, actorId = '',
     credential, groupIndex, order, usageCount: Number(counters[credential.id] || 0)
   }))).filter(({ credential, usageCount }) => {
     if (Number(cooldown[credential.id] || 0) > nowMs) return false;
+    if (actorDenied[`${credential.id}:*`]) return false;
     if (actorId && actorDenied[`${credential.id}:${actorId}`]) return false;
     return platform !== 'shopee' || (
       usageCount < DEFAULT_MAX_USES_PER_KEY
@@ -1509,16 +1514,6 @@ async function createApifyUsageCandidateScanner({ count, platform, actorId = '',
   };
 }
 
-async function apifyUsageCandidates(options) {
-  const desired = Math.max(1, Number(options?.count) || 1);
-  const scanner = await createApifyUsageCandidateScanner(options);
-  const eligible = [];
-  while (scanner.hasMore() && eligible.length < desired) {
-    eligible.push(...await scanner.nextBatch());
-  }
-  return eligible;
-}
-
 function decryptCostAllocation(allocation, runtime, period) {
   const billingCycles = allocation.credentials.map((credential) => ({
     credentialId: credential.id,
@@ -1554,7 +1549,13 @@ function decryptCostAllocation(allocation, runtime, period) {
   };
 }
 
-export async function reserveTikTokCostCredentials({ count = 1, reviewsPerCredential = 100, runtime, ...options } = {}) {
+export async function reserveTikTokCostCredentials({
+  count = 1,
+  reviewsPerCredential = 100,
+  runtime,
+  allowSingleFallback = false,
+  ...options
+} = {}) {
   if (!isRedisConfigured()) throw new Error('Cần cấu hình Upstash Redis để cấp phát Apify key cho TikTok an toàn.');
   if (!process.env.APIFY_TOKEN_VAULT_KEY) throw new Error('Chưa cấu hình APIFY_TOKEN_VAULT_KEY.');
   if (!runtime?.actorId || !runtime?.pricingVersion) throw new Error('Thiếu cấu hình runtime TikTok để đặt chỗ chi phí.');
@@ -1571,41 +1572,82 @@ export async function reserveTikTokCostCredentials({ count = 1, reviewsPerCreden
   const period = apifyBillingPeriod(now);
   const keys = costLedgerKeys(period);
   const usage = apifyUsageConfig();
-  const usageSnapshots = await apifyUsageCandidates({
+  const scanner = await createApifyUsageCandidateScanner({
     count: desired,
     platform: 'tiktok',
+    actorId: runtime.actorId,
     minimumCostMicroUsd: runtime.startupFeeMicroUsd + runtime.reviewCostMicroUsd,
     ...options
   });
-  if (usageSnapshots.length < desired) {
+  const usageCycles = {};
+  const requestId = randomUUID();
+  let allocation = null;
+
+  const reserve = async (requestedCount, requestedReviews = requested) => {
+    const raw = await redisCommand([
+      'EVAL', RESERVE_TIKTOK_COST_SCRIPT, '13',
+      APIFY_POOL_KEY, APIFY_POOL_COUNTERS_KEY, keys.spent, keys.reserved, keys.runs,
+      keys.ledger, APIFY_TIKTOK_COOLDOWN_KEY, APIFY_TIKTOK_ACTOR_DENIED_KEY, keys.exhausted, APIFY_TIKTOK_REVIEW_COUNTERS_KEY,
+      APIFY_COST_MIGRATION_KEY, APIFY_SHOPEE_LIFETIME_RESERVED_KEY, legacyV3CostSpentKey(period),
+      String(requestedCount), String(requestedReviews), String(now.getTime()),
+      String(Math.max(120_000, Number.parseInt(String(options.reservationLeaseMs || 180_000), 10) || 180_000)),
+      String(usage.freeUsageMicroUsd), String(usage.shopeeRunCostMicroUsd),
+      String(runtime.reviewCostMicroUsd), String(runtime.startupFeeMicroUsd), runtime.actorId, runtime.pricingVersion,
+      '800', requestId, period, String(DEFAULT_MAX_USES_PER_KEY), JSON.stringify(usageCycles)
+    ], options);
+    return typeof raw === 'string' ? JSON.parse(raw) : raw;
+  };
+
+  // Preserve the fast path, but continue with later batches when Redis rejects
+  // the first usage-eligible accounts because they are denied, busy or have a
+  // newer cost-ledger state than the Apify usage snapshot.
+  while (scanner.hasMore()) {
+    const snapshots = await scanner.nextBatch();
+    for (const snapshot of snapshots) usageCycles[snapshot.credentialId] = snapshot;
+    if (Object.keys(usageCycles).length < desired) continue;
+    allocation = await reserve(desired);
+    if (allocation?.ok) return decryptCostAllocation(allocation, runtime, period);
+    if (allocation?.code !== 'INSUFFICIENT_BUDGET_OR_KEYS') break;
+  }
+
+  // The primary actor keeps its one-key unfiltered fallback and reuses the
+  // snapshots already read. The temporary actor requests one account, so it
+  // never enters this branch.
+  if (
+    allowSingleFallback
+    && desired > 1
+    && Object.keys(usageCycles).length >= 1
+    && (!allocation || allocation.code === 'INSUFFICIENT_BUDGET_OR_KEYS')
+  ) {
+    allocation = await reserve(1, runtimeReviewLimit);
+    if (allocation?.ok) return decryptCostAllocation(allocation, runtime, period);
+  }
+
+  const minimumRequired = allowSingleFallback && desired > 1 ? 1 : desired;
+  const requestedCount = allowSingleFallback && desired > 1 ? 1 : desired;
+  const diagnostics = {
+    ...scanner.diagnostics(),
+    actorMode: runtime.temporary ? 'temporary' : 'primary',
+    requested: requestedCount,
+    usageCycles: Object.keys(usageCycles).length,
+    redisAvailable: Number(allocation?.available) || 0
+  };
+  if (Object.keys(usageCycles).length < minimumRequired) {
     const error = new Error('Không đọc được chu kỳ usage hiện tại của đủ tài khoản Apify cho TikTok.');
     error.code = 'APIFY_USAGE_CYCLE_UNAVAILABLE';
+    error.available = Object.keys(usageCycles).length;
+    error.diagnostics = diagnostics;
     error.statusCode = 503;
     throw error;
   }
-  const usageCycles = Object.fromEntries(usageSnapshots.map((snapshot) => [snapshot.credentialId, snapshot]));
-  const raw = await redisCommand([
-    'EVAL', RESERVE_TIKTOK_COST_SCRIPT, '13',
-    APIFY_POOL_KEY, APIFY_POOL_COUNTERS_KEY, keys.spent, keys.reserved, keys.runs,
-    keys.ledger, APIFY_TIKTOK_COOLDOWN_KEY, APIFY_TIKTOK_ACTOR_DENIED_KEY, keys.exhausted, APIFY_TIKTOK_REVIEW_COUNTERS_KEY,
-    APIFY_COST_MIGRATION_KEY, APIFY_SHOPEE_LIFETIME_RESERVED_KEY, legacyV3CostSpentKey(period),
-    String(desired), String(requested), String(now.getTime()),
-    String(Math.max(120_000, Number.parseInt(String(options.reservationLeaseMs || 180_000), 10) || 180_000)),
-    String(usage.freeUsageMicroUsd), String(usage.shopeeRunCostMicroUsd),
-    String(runtime.reviewCostMicroUsd), String(runtime.startupFeeMicroUsd), runtime.actorId, runtime.pricingVersion,
-    '800', randomUUID(), period, String(DEFAULT_MAX_USES_PER_KEY), JSON.stringify(usageCycles)
-  ], options);
-  const allocation = typeof raw === 'string' ? JSON.parse(raw) : raw;
-  if (!allocation?.ok) {
-    const error = new Error(allocation?.code === 'INSUFFICIENT_BUDGET_OR_KEYS'
-      ? `Không còn đủ ${desired} tài khoản Apify có ngân sách hoặc đang khả dụng cho actor TikTok này.`
-      : 'Chưa cấu hình pool Apify key trong /api/apify-config.');
-    error.code = allocation?.code || 'POOL_NOT_CONFIGURED';
-    error.available = Number(allocation?.available) || 0;
-    error.statusCode = 503;
-    throw error;
-  }
-  return decryptCostAllocation(allocation, runtime, period);
+  const error = new Error(allocation?.code === 'INSUFFICIENT_BUDGET_OR_KEYS'
+    ? `Không còn đủ ${requestedCount} tài khoản Apify có ngân sách hoặc đang khả dụng cho actor TikTok này sau khi đã kiểm tra toàn bộ pool.`
+    : 'Chưa cấu hình pool Apify key trong /api/apify-config.');
+  error.code = allocation?.code || 'POOL_NOT_CONFIGURED';
+  error.available = Number(allocation?.available) || 0;
+  error.diagnostics = diagnostics;
+  error.statusCode = 503;
+  throw error;
 }
 
 export async function finalizeTikTokCostCredential(credential, result = {}, options = {}) {

@@ -12,6 +12,7 @@ import {
   APIFY_TIKTOK_ACTOR_START_COUNTERS_KEY,
   APIFY_TIKTOK_EMPTY_RUN_COUNTERS_KEY,
   APIFY_TIKTOK_BILLED_ITEM_COUNTERS_KEY,
+  APIFY_TIKTOK_ACTOR_DENIED_KEY,
   APIFY_TIKTOK_RESERVED_REVIEWS_KEY,
   APIFY_TIKTOK_RUN_COUNTERS_KEY,
   APIFY_TIKTOK_FINALIZED_RESERVATIONS_KEY,
@@ -76,6 +77,8 @@ function createRedisFake() {
         const spent = hash(command[3]);
         const reserved = hash(command[4]);
         const ledger = hash(command[5]);
+        const actorDenied = hash(command[7]);
+        const cooldown = hash(command[8]);
         const actorStarts = hash(APIFY_TIKTOK_ACTOR_START_COUNTERS_KEY);
         const emptyRuns = hash(APIFY_TIKTOK_EMPTY_RUN_COUNTERS_KEY);
         const billedItems = hash(APIFY_TIKTOK_BILLED_ITEM_COUNTERS_KEY);
@@ -86,6 +89,9 @@ function createRedisFake() {
         if (ledger[operationId]) return JSON.stringify({ ok: true, alreadyFinalized: true });
         const reviews = Number(command[16]);
         const statusCode = Number(command[17]);
+        const failureClass = command[18];
+        const nowMs = Number(command[19]);
+        const retryAfterMs = Number(command[20]);
         const actorStarted = command[24] === '1';
         const state = JSON.parse(reserved[accountCycleId] || '{"leases":{}}');
         const lease = state.leases[reservationId];
@@ -102,6 +108,9 @@ function createRedisFake() {
         if (statusCode >= 200 && statusCode < 300 && reviews > 0) {
           billedItems[credentialId] = String(Number(billedItems[credentialId] || 0) + reviews);
         }
+        if (failureClass === 'actor_access_denied') actorDenied[`${credentialId}:${lease.actorId}`] = String(nowMs);
+        if (failureClass === 'invalid_auth') actorDenied[`${credentialId}:*`] = String(nowMs);
+        if (failureClass === 'temporary_throttle') cooldown[credentialId] = String(nowMs + retryAfterMs);
         ledger[operationId] = JSON.stringify({ accountCycleId, costMicroUsd });
         return JSON.stringify({ ok: true, alreadyFinalized: false, costMicroUsd });
       }
@@ -120,10 +129,23 @@ function createRedisFake() {
         const cycles = JSON.parse(command[30]);
         const spent = hash(command[5]);
         const reserved = hash(command[6]);
+        const denied = hash(command[10]);
+        const exhausted = hash(command[11]);
         const candidates = config.groups.flatMap((group) => group.credentials.map((credential) => ({ credential, group })))
-          .filter(({ credential }) => cycles[credential.id])
+          .filter(({ credential }) => {
+            const cycle = cycles[credential.id];
+            return cycle
+              && !denied[`${credential.id}:${actorId}`]
+              && !denied[`${credential.id}:*`]
+              && !exhausted[cycle.accountCycleId];
+          })
           .slice(0, desired);
-        if (candidates.length < desired) return JSON.stringify({ ok: false, code: 'INSUFFICIENT_BUDGET_OR_KEYS' });
+        if (candidates.length < desired) return JSON.stringify({
+          ok: false,
+          code: 'INSUFFICIENT_BUDGET_OR_KEYS',
+          available: candidates.length,
+          requested: desired
+        });
         return JSON.stringify({
           ok: true,
           source: 'redis-vault-cost-ledger-v4',
@@ -865,6 +887,226 @@ test('TikTok v4 đặt chỗ 200 review cho actor tạm, dùng đúng billing cy
       emptyRuns: 1,
       billedItems: 200
     });
+  } finally {
+    for (const name of names) {
+      if (previous[name] === undefined) delete process.env[name];
+      else process.env[name] = previous[name];
+    }
+  }
+});
+
+test('TikTok tiếp tục quét pool khi batch usage đầu bị Redis loại', async () => {
+  const names = ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'APIFY_TOKEN_VAULT_KEY'];
+  const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.example.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'redis-test-token';
+  process.env.APIFY_TOKEN_VAULT_KEY = Buffer.alloc(32, 7).toString('base64');
+  const redis = createRedisFake();
+  const cycleStartAt = '2026-09-20T00:00:00.000Z';
+  const runtime = {
+    actorId: 'temporary-actor', pricingVersion: 'temporary-v1', reviewLimit: 200,
+    reviewCostMicroUsd: 3_000, startupFeeMicroUsd: 5_000
+  };
+  let usageCalls = 0;
+  try {
+    await saveApifyCredentialPool({
+      maxUsesPerKey: 20,
+      groups: [group('primary', 'primary'), group('backup-a', 'backup-a'), group('backup-b', 'backup-b')]
+    }, { fetchImpl: redis.fetchImpl });
+    const config = JSON.parse(redis.values.get(APIFY_POOL_KEY));
+    const orderedCredentials = config.groups.flatMap((item) => item.credentials);
+    redis.hashes.set(`${APIFY_COST_LEDGER_PREFIX}:exhausted`, Object.fromEntries(
+      orderedCredentials.slice(0, 5).map((credential) => [
+        `${credential.billingAccountId}:${cycleStartAt}`,
+        String(Date.parse(cycleStartAt))
+      ])
+    ));
+
+    const allocation = await reserveTikTokCostCredentials({
+      count: 1,
+      reviewsPerCredential: 200,
+      runtime,
+      fetchImpl: redis.fetchImpl,
+      usageFetchImpl: async () => {
+        usageCalls += 1;
+        return {
+          ok: true,
+          async json() {
+            return { data: {
+              usageCycle: { startAt: cycleStartAt, endAt: '2026-10-19T23:59:59.999Z' },
+              totalUsageCreditsUsdAfterVolumeDiscount: 0.25
+            } };
+          }
+        };
+      }
+    });
+
+    const rejectedIds = new Set(orderedCredentials.slice(0, 5).map((credential) => credential.id));
+    assert.equal(allocation.credentials.length, 1);
+    assert.equal(allocation.credentials[0].plannedReviews, 200);
+    assert.equal(rejectedIds.has(allocation.credentials[0].id), false);
+    assert.equal(usageCalls, 15, 'đọc 5 key đầu rồi mở rộng thêm 10 key');
+    assert.equal(redis.evalCalls, 2, 'Redis từ chối batch đầu rồi cấp phát batch kế tiếp');
+  } finally {
+    for (const name of names) {
+      if (previous[name] === undefined) delete process.env[name];
+      else process.env[name] = previous[name];
+    }
+  }
+});
+
+test('TikTok phân biệt quyền theo actor với token hỏng toàn cục', async () => {
+  const names = ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'APIFY_TOKEN_VAULT_KEY'];
+  const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.example.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'redis-test-token';
+  process.env.APIFY_TOKEN_VAULT_KEY = Buffer.alloc(32, 7).toString('base64');
+  const redis = createRedisFake();
+  const cycleStartAt = '2026-09-20T00:00:00.000Z';
+  const usageFetchImpl = async () => ({
+    ok: true,
+    async json() {
+      return { data: {
+        usageCycle: { startAt: cycleStartAt, endAt: '2026-10-19T23:59:59.999Z' },
+        totalUsageCreditsUsdAfterVolumeDiscount: 0.25
+      } };
+    }
+  });
+  const runtime = (actorId) => ({
+    actorId, pricingVersion: `${actorId}-v1`, reviewLimit: 200,
+    reviewCostMicroUsd: 3_000, startupFeeMicroUsd: 5_000
+  });
+  try {
+    await saveApifyCredentialPool({ maxUsesPerKey: 20, groups: [group('primary', 'primary')] }, { fetchImpl: redis.fetchImpl });
+
+    const temporary = await reserveTikTokCostCredentials({
+      runtime: runtime('temporary-actor'), fetchImpl: redis.fetchImpl, usageFetchImpl
+    });
+    const firstId = temporary.credentials[0].id;
+    await finalizeTikTokCostCredential(temporary.credentials[0], {
+      reviewCount: 0, statusCode: 403, failureClass: 'actor_access_denied',
+      operationId: 'temporary-denied', actorStarted: false
+    }, { fetchImpl: redis.fetchImpl });
+    assert.ok(redis.hashes.get(APIFY_TIKTOK_ACTOR_DENIED_KEY)[`${firstId}:temporary-actor`]);
+    assert.equal(redis.hashes.get(APIFY_TIKTOK_ACTOR_DENIED_KEY)[`${firstId}:*`], undefined);
+
+    const primary = await reserveTikTokCostCredentials({
+      runtime: runtime('primary-actor'), fetchImpl: redis.fetchImpl, usageFetchImpl
+    });
+    assert.equal(primary.credentials[0].id, firstId, '403 của actor phụ không khóa actor chính');
+    await finalizeTikTokCostCredential(primary.credentials[0], {
+      reviewCount: 0, statusCode: 401, failureClass: 'invalid_auth',
+      operationId: 'primary-invalid-auth', actorStarted: false
+    }, { fetchImpl: redis.fetchImpl });
+    assert.ok(redis.hashes.get(APIFY_TIKTOK_ACTOR_DENIED_KEY)[`${firstId}:*`]);
+
+    const nextActor = await reserveTikTokCostCredentials({
+      runtime: runtime('another-actor'), fetchImpl: redis.fetchImpl, usageFetchImpl
+    });
+    assert.notEqual(nextActor.credentials[0].id, firstId, '401 khóa token trên mọi actor');
+  } finally {
+    for (const name of names) {
+      if (previous[name] === undefined) delete process.env[name];
+      else process.env[name] = previous[name];
+    }
+  }
+});
+
+test('TikTok actor chính giữ chiến lược năm tầng khi đủ năm key', async () => {
+  const names = ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'APIFY_TOKEN_VAULT_KEY'];
+  const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.example.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'redis-test-token';
+  process.env.APIFY_TOKEN_VAULT_KEY = Buffer.alloc(32, 7).toString('base64');
+  const redis = createRedisFake();
+  let usageCalls = 0;
+  try {
+    await saveApifyCredentialPool({ maxUsesPerKey: 20, groups: [group('primary', 'primary')] }, { fetchImpl: redis.fetchImpl });
+    const allocation = await reserveTikTokCostCredentials({
+      count: 5,
+      reviewsPerCredential: 20,
+      allowSingleFallback: true,
+      runtime: {
+        actorId: 'primary-actor', pricingVersion: 'primary-v1', reviewLimit: 100,
+        reviewCostMicroUsd: 800, startupFeeMicroUsd: 0, temporary: false
+      },
+      fetchImpl: redis.fetchImpl,
+      usageFetchImpl: async () => {
+        usageCalls += 1;
+        return {
+          ok: true,
+          async json() {
+            return { data: {
+              usageCycle: { startAt: '2026-09-20T00:00:00.000Z', endAt: '2026-10-19T23:59:59.999Z' },
+              totalUsageCreditsUsdAfterVolumeDiscount: 0.25
+            } };
+          }
+        };
+      }
+    });
+
+    assert.equal(allocation.credentials.length, 5);
+    assert.ok(allocation.credentials.every((credential) => credential.plannedReviews === 20));
+    assert.equal(usageCalls, 5);
+    assert.equal(redis.evalCalls, 1);
+  } finally {
+    for (const name of names) {
+      if (previous[name] === undefined) delete process.env[name];
+      else process.env[name] = previous[name];
+    }
+  }
+});
+
+test('TikTok actor chính fallback một key bằng usage snapshot đã đọc và vẫn yêu cầu 100 review', async () => {
+  const names = ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'APIFY_TOKEN_VAULT_KEY'];
+  const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.example.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'redis-test-token';
+  process.env.APIFY_TOKEN_VAULT_KEY = Buffer.alloc(32, 7).toString('base64');
+  const redis = createRedisFake();
+  const cycleStartAt = '2026-09-20T00:00:00.000Z';
+  let usageCalls = 0;
+  try {
+    await saveApifyCredentialPool({
+      maxUsesPerKey: 20,
+      groups: [group('primary', 'primary'), group('backup', 'backup')]
+    }, { fetchImpl: redis.fetchImpl });
+    const config = JSON.parse(redis.values.get(APIFY_POOL_KEY));
+    const orderedCredentials = config.groups.flatMap((item) => item.credentials);
+    redis.hashes.set(`${APIFY_COST_LEDGER_PREFIX}:exhausted`, Object.fromEntries(
+      orderedCredentials.slice(0, 9).map((credential) => [
+        `${credential.billingAccountId}:${cycleStartAt}`,
+        String(Date.parse(cycleStartAt))
+      ])
+    ));
+
+    const allocation = await reserveTikTokCostCredentials({
+      count: 5,
+      reviewsPerCredential: 20,
+      allowSingleFallback: true,
+      runtime: {
+        actorId: 'primary-actor', pricingVersion: 'primary-v1', reviewLimit: 100,
+        reviewCostMicroUsd: 800, startupFeeMicroUsd: 0
+      },
+      fetchImpl: redis.fetchImpl,
+      usageFetchImpl: async () => {
+        usageCalls += 1;
+        return {
+          ok: true,
+          async json() {
+            return { data: {
+              usageCycle: { startAt: cycleStartAt, endAt: '2026-10-19T23:59:59.999Z' },
+              totalUsageCreditsUsdAfterVolumeDiscount: 0.25
+            } };
+          }
+        };
+      }
+    });
+
+    assert.equal(allocation.credentials.length, 1);
+    assert.equal(allocation.credentials[0].plannedReviews, 100);
+    assert.equal(usageCalls, 10, 'fallback không gọi lại API usage Apify');
+    assert.equal(redis.evalCalls, 2, 'một lần thử năm key và một lần fallback một key');
   } finally {
     for (const name of names) {
       if (previous[name] === undefined) delete process.env[name];
