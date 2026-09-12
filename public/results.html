@@ -172,17 +172,18 @@
                         <button type="button" popovertarget="trust-method-popover" popovertargetaction="hide" aria-label="Đóng cách tính điểm">×</button>
                       </div>
                       <div class="trust-method-panel">
-                        <p class="trust-method-purpose">TrustScore đo mức độ đáng tin của tập review, không chấm chất lượng của sản phẩm.</p>
-                        <dl class="trust-components">
-                          <div><dt><span>01</span><b>Nội dung rõ và hữu ích</b></dt><dd id="method-text-score">—</dd><i><span id="method-text-meter"></span></i></div>
-                          <div><dt><span>02</span><b>Review vượt bước lọc nhiễu</b></dt><dd id="method-auth-score">—</dd><i><span id="method-auth-meter"></span></i></div>
-                          <div><dt><span>03</span><b>Review đã có kết quả kiểm tra</b></dt><dd id="method-label-score">—</dd><i><span id="method-label-meter"></span></i></div>
+                        <p class="trust-method-purpose">Công thức dùng ba tỷ lệ đầu để tạo điểm cơ sở, sau đó xét độ phủ mẫu.</p>
+                        <dl class="trust-formula-inputs" aria-label="Các tỷ lệ dùng trong công thức">
+                          <div><dt>Nội dung</dt><dd id="method-text-score">—</dd></div>
+                          <div><dt>Lọc nhiễu</dt><dd id="method-auth-score">—</dd></div>
+                          <div><dt>Kiểm tra</dt><dd id="method-label-score">—</dd></div>
+                          <div><dt>Độ phủ</dt><dd id="method-coverage-score">—</dd></div>
                         </dl>
-                        <div class="trust-method-flow">
-                          <div><span>1</span><p><b>Tạo mức tin cậy ban đầu</b>Ba kết quả trên được xem ngang nhau. Mức trước khi xét độ phủ mẫu là <strong id="method-base-score">—</strong>.</p></div>
-                          <div><span>2</span><p><b>Xét độ phủ mẫu</b>Mẫu hiện đạt <strong id="method-coverage-score">—</strong>. Nếu mẫu chưa đủ rộng, hệ thống chỉ giảm phần điểm cao hơn 50 và không nâng một điểm thấp lên.</p></div>
+                        <div class="trust-formula-box">
+                          <div><span>1</span><p><b>TrustScore cơ sở</b><strong id="method-base-formula">—</strong></p></div>
+                          <div><span>2</span><p><b>TrustScore sau độ phủ mẫu</b><strong id="method-final-formula">—</strong></p></div>
                         </div>
-                        <div class="trust-method-result"><span>TrustScore được công bố</span><strong><b id="method-final-score">—</b><small>/100</small></strong></div>
+                        <div class="trust-method-result"><span>Kết quả sau khi làm tròn</span><strong><b id="method-final-score">—</b><small>/100</small></strong></div>
                         <p class="trust-method-note"><span aria-hidden="true">i</span><span>Đây là cách diễn giải đã được đơn giản hóa để dễ hiểu. Hệ thống thực tế còn cân bằng người đánh giá, nhóm sao, nội dung trùng và trường hợp thiếu dữ liệu trước khi công bố điểm.</span></p>
                       </div>
                     </div>
