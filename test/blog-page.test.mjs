@@ -37,6 +37,18 @@ test('blog images fit their frames and the article CTA uses RealView orange', ()
   assert.match(blogStyles, /\.article-source-cta a \{[^}]*color: var\(--ink\);[^}]*text-decoration: none;/);
 });
 
+test('mobile lead image stays contained and the individual score uses MathML', () => {
+  assert.match(reviewReliabilityArticleHtml, /class="article-lead-image"/);
+  assert.match(trustScoreArticleHtml, /class="article-lead-image"/);
+  assert.doesNotMatch(reviewReliabilityArticleHtml, /article-lead-image--review-reliability/);
+  assert.match(blogStyles, /@media \(max-width: 760px\) \{[\s\S]*?\.article-lead-image \{[^}]*width: 100%;[^}]*max-width: 100%;[^}]*height: auto;[^}]*max-height: none;[^}]*object-fit: contain;/);
+  assert.match(trustScoreArticleHtml, /class="article-math"[^>]*role="img"[^>]*aria-label=/);
+  assert.match(trustScoreArticleHtml, /<math display="block"[^>]*>[\s\S]*?<mi>S<\/mi><mo>\(<\/mo><mi>r<\/mi><mo>\)<\/mo>[\s\S]*?<mfrac>/);
+  assert.doesNotMatch(trustScoreArticleHtml, /<msub>|<mtext>text<\/mtext>|<sub>text<\/sub>/);
+  assert.doesNotMatch(trustScoreArticleHtml, /<p>S_text\(r\)/);
+  assert.match(blogStyles, /\.article-math \{[^}]*max-width: 100%;[^}]*overflow-x: auto;[^}]*overflow-y: hidden;/);
+});
+
 test('both long-form articles retain complete source content and SEO metadata', () => {
   const articles = [
     {

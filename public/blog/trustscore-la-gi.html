@@ -113,7 +113,27 @@
           <p>RealView tách dữ liệu thành tập bằng chứng hợp lệ và tập bị loại trừ. Một quy tắc quan trọng là “Override Protection”: nếu Layer 2 xác nhận một khuyết tật sản phẩm kèm trích dẫn thực tế, review vẫn có thể được công nhận là bằng chứng ngay cả khi review ngắn. Cách làm này giúp tránh việc một phản ánh tiêu cực nhưng rất cụ thể bị loại chỉ vì độ dài văn bản.</p>
           <h3 id="buoc-5-danh-gia-gia-tri-thong-tin-cua-tung-review">Bước 5: Đánh giá giá trị thông tin của từng review</h3>
           <p>Mỗi review hợp lệ được gán mức giá trị thông tin. Bộ hệ số được chuẩn hóa trong bản này gồm: High = 1,00; Medium = 0,75; Low = 0,35; None = 0,00. Giá trị này kết hợp với hệ số độ dài để tạo thành điểm chất lượng văn bản của từng review.</p>
-          <aside class="article-source-callout"><p class="article-source-callout-title">Công thức điểm cá thể</p><p>S_text(r) = 100 · [0.625 · I(r) + 0.375 · min(|r| / 80, 1)]</p><p>Trong đó:</p><p>r: Bài đánh giá văn bản cụ thể cần tính điểm.</p><p>|r|: Số lượng ký tự của bài đánh giá r sau khi đã chuẩn hóa.</p><p>min(|r| / 80, 1): Hệ số độ dài chi tiết, bão hòa tại ngưỡng tối đa 80 ký tự.</p><p>I(r): Hệ số giá trị thông tin xác thực từ Lớp 2 (1.0 cho mức cao, 0.75 cho mức trung bình, 0.35 cho mức thấp, và 0 cho mức không có giá trị).</p><p>0.625 và 0.375: Trọng số tương ứng của giá trị ngữ nghĩa (chiếm 5/8) và độ dài chi tiết (chiếm 3/8).</p><p>S_text(r): Điểm chất lượng văn bản của riêng bài đánh giá r trên thang điểm từ 0 đến 100.</p></aside>
+          <aside class="article-source-callout">
+            <p class="article-source-callout-title">Công thức điểm cá thể</p>
+            <div class="article-math" role="img" aria-label="S của r bằng 100 nhân với tổng của 0 phẩy 625 nhân I của r và 0 phẩy 375 nhân giá trị nhỏ nhất giữa độ dài r chia 80 và 1">
+              <math display="block" xmlns="http://www.w3.org/1998/Math/MathML">
+                <mrow>
+                  <mi>S</mi><mo>(</mo><mi>r</mi><mo>)</mo>
+                  <mo>=</mo><mn>100</mn><mo>·</mo><mo>[</mo>
+                  <mn>0.625</mn><mo>·</mo><mi>I</mi><mo>(</mo><mi>r</mi><mo>)</mo>
+                  <mo>+</mo><mn>0.375</mn><mo>·</mo><mi mathvariant="normal">min</mi><mo>(</mo>
+                  <mfrac><mrow><mo>|</mo><mi>r</mi><mo>|</mo></mrow><mn>80</mn></mfrac><mo>,</mo><mn>1</mn><mo>)</mo><mo>]</mo>
+                </mrow>
+              </math>
+            </div>
+            <p>Trong đó:</p>
+            <p><var>r</var>: Bài đánh giá văn bản cụ thể cần tính điểm.</p>
+            <p><span class="math-inline">|<var>r</var>|</span>: Số lượng ký tự của bài đánh giá <var>r</var> sau khi đã chuẩn hóa.</p>
+            <p><span class="math-inline">min(|<var>r</var>| / 80, 1)</span>: Hệ số độ dài chi tiết, bão hòa tại ngưỡng tối đa 80 ký tự.</p>
+            <p><span class="math-inline"><var>I</var>(<var>r</var>)</span>: Hệ số giá trị thông tin xác thực từ Lớp 2 (1.0 cho mức cao, 0.75 cho mức trung bình, 0.35 cho mức thấp, và 0 cho mức không có giá trị).</p>
+            <p>0.625 và 0.375: Trọng số tương ứng của giá trị ngữ nghĩa (chiếm 5/8) và độ dài chi tiết (chiếm 3/8).</p>
+            <p><span class="math-inline"><var>S</var>(<var>r</var>)</span>: Điểm chất lượng văn bản của riêng bài đánh giá <var>r</var> trên thang điểm từ 0 đến 100.</p>
+          </aside>
           <p>Nói đơn giản, RealView không chỉ nhìn review “dài hay ngắn” mà ưu tiên giá trị thông tin. Một câu ngắn nhưng nêu rõ lỗi về kích thước hoặc chất liệu có thể hữu ích hơn một đoạn dài nhưng chỉ chứa lời khen chung chung.</p>
           <h3 id="buoc-6-tu-review-ca-nhan-den-ba-tru-cot-t-a-va-l">Bước 6: Từ review cá nhân đến ba trụ cột T, A và L</h3>
           <p>Sau khi tính điểm cho từng review, hệ thống tổng hợp theo tác giả để hạn chế việc một tài khoản có thể spam nhiều review nhằm thao túng điểm. Từ đó, TrustScore được xây dựng trên ba trụ cột:</p>

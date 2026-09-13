@@ -129,6 +129,10 @@
 .article-source-callout p { margin-bottom: 10px; }
 .article-source-callout p:last-child { margin-bottom: 0; }
 .article-source-callout-title { color: var(--ink); font-weight: 850; }
+.article-math { max-width: 100%; margin: 8px 0 20px; padding: 12px 0; overflow-x: auto; overflow-y: hidden; color: var(--ink); scrollbar-width: thin; }
+.article-math math { width: max-content; min-width: 100%; margin: 0 auto; font-size: clamp(20px, 3.2vw, 30px); text-align: center; }
+.math-inline { white-space: nowrap; font-family: "STIX Two Math", "Cambria Math", Georgia, serif; }
+.math-inline var { font-family: inherit; }
 .article-content .article-source-cta { width: fit-content; max-width: calc(100% - 32px); margin: 0 auto 19px; padding: 16px 24px; border: 1px solid rgba(22,22,22,.18); border-radius: 16px; background: var(--orange); color: var(--ink); box-shadow: 0 12px 28px rgba(223,89,0,.18); font-weight: 800; text-align: center; }
 .article-source-cta a { display: block; color: var(--ink); text-decoration: none; }
 .article-source-cta a:hover { color: var(--ink); }
@@ -200,8 +204,19 @@
   .article-main { padding-top: 20px; }
   .article-header h1 { font-size: 42px; }
   .article-deck { font-size: 17px; }
-  .article-lead-image { margin: 30px 0 35px; border-radius: 22px; }
+  .article-lead-image {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    max-height: none;
+    margin: 30px 0 35px;
+    object-fit: contain;
+    box-sizing: border-box;
+    border-radius: 22px;
+  }
   .article-content { font-size: 16px; }
+  .article-math { margin-bottom: 16px; padding: 8px 0 10px; }
+  .article-math math { font-size: clamp(18px, 4.7vw, 24px); }
   .article-content h2 { font-size: 28px; }
   .article-summary, .article-method { padding: 22px 20px; }
   .article-toc { padding: 22px 20px; }
