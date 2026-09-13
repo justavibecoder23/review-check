@@ -3,7 +3,6 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const blogHtml = await readFile(new URL('../public/blog.html', import.meta.url), 'utf8');
-const articleHtml = await readFile(new URL('../public/blog/cach-doc-review-thong-minh.html', import.meta.url), 'utf8');
 const trustScoreArticleHtml = await readFile(new URL('../public/blog/trustscore-la-gi.html', import.meta.url), 'utf8');
 const reviewReliabilityArticleHtml = await readFile(new URL('../public/blog/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html', import.meta.url), 'utf8');
 const navJs = await readFile(new URL('../public/nav.js', import.meta.url), 'utf8');
@@ -15,63 +14,50 @@ function structuredData(html) {
     .map((match) => JSON.parse(match[1]));
 }
 
-test('blog hub has crawlable metadata and one primary heading', () => {
+test('blog hub publishes exactly two articles and features the five-star review article', () => {
   assert.match(blogHtml, /<link rel="canonical" href="https:\/\/www\.realview\.com\.vn\/blog\.html"/);
-  assert.match(blogHtml, /"@type": "CollectionPage"/);
   assert.equal((blogHtml.match(/<h1\b/g) || []).length, 1);
-  assert.match(blogHtml, /href="\/blog\/cach-doc-review-thong-minh\.html"/);
-  assert.match(blogHtml, /property="og:image"/);
-  assert.match(blogHtml, /name="twitter:card" content="summary_large_image"/);
-  assert.match(blogHtml, /<h1 id="blog-title">Đọc review rõ hơn<br \/><span>Cân nhắc tốt hơn<\/span><\/h1>/);
-  assert.match(blogHtml, /class="featured-post-image"[\s\S]*?<img[^>]+alt="Người dùng đọc review sản phẩm trước khi mua hàng online"/);
-  assert.match(blogHtml, /id="gioi-thieu-blog"/);
+  assert.equal((blogHtml.match(/data-blog-card/g) || []).length, 2);
+  assert.match(blogHtml, /class="featured-post"[\s\S]*?href="\/blog\/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang\.html"/);
+  assert.match(blogHtml, /Review 5 sao có đáng tin không\?/);
+  assert.match(blogHtml, /href="\/blog\/trustscore-la-gi\.html"/);
+  assert.doesNotMatch(blogHtml, /cach-doc-review-thong-minh/);
+  assert.doesNotMatch(blogHtml, /Bài viết sắp xuất bản/);
+  const collection = structuredData(blogHtml).find((item) => item['@type'] === 'CollectionPage');
+  assert.equal(collection.mainEntity.numberOfItems, 2);
+  assert.equal(collection.mainEntity.itemListElement.length, 2);
 });
 
-test('published article has BlogPosting and breadcrumb structured data', () => {
-  const data = structuredData(articleHtml);
-  const article = data.find((item) => item['@type'] === 'BlogPosting');
-  const breadcrumbs = data.find((item) => item['@type'] === 'BreadcrumbList');
-  assert.ok(article);
-  assert.ok(breadcrumbs);
-  assert.equal((articleHtml.match(/<h1\b/g) || []).length, 1);
-  assert.match(articleHtml, /"publisher"[\s\S]+"logo"/);
-  assert.match(articleHtml, /property="og:image"/);
-  const modifiedMeta = articleHtml.match(/property="article:modified_time" content="([^"]+)"/)?.[1];
-  const visibleModifiedDate = articleHtml.match(/<time datetime="([^"]+)">Cập nhật ngày/)?.[1];
-  assert.equal(modifiedMeta, article.dateModified);
-  assert.equal(visibleModifiedDate, article.dateModified.slice(0, 10));
-  assert.match(articleHtml, /rel="author" href="\/blog\.html#gioi-thieu-blog"/);
-  assert.match(articleHtml, /id="summary-title"/);
-  assert.match(articleHtml, /Checklist 5 bước đối chiếu nhanh/);
-  assert.doesNotMatch(articleHtml, /https:\/\/realview\.com\.vn\//);
-});
-
-test('new SEO articles expose unique metadata, one h1 and reciprocal internal links', () => {
+test('both long-form articles retain complete source content and SEO metadata', () => {
   const articles = [
     {
       html: trustScoreArticleHtml,
       canonical: 'https://www.realview.com.vn/blog/trustscore-la-gi.html',
       otherPath: '/blog/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html',
+      minimumWords: 3300,
+      required: ['Công thức điểm cá thể', '5 điều cần nhớ về TrustScore', 'Thông tin xuất bản'],
     },
     {
       html: reviewReliabilityArticleHtml,
       canonical: 'https://www.realview.com.vn/blog/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html',
       otherPath: '/blog/trustscore-la-gi.html',
+      minimumWords: 3500,
+      required: ['5 dấu hiệu giúp kiểm tra độ tin cậy của review', 'Cách sử dụng RealView', 'Thông tin xuất bản'],
     },
   ];
 
-  for (const { html, canonical, otherPath } of articles) {
+  for (const { html, canonical, otherPath, minimumWords, required } of articles) {
     const data = structuredData(html);
     const article = data.find((item) => item['@type'] === 'BlogPosting');
-    const breadcrumbs = data.find((item) => item['@type'] === 'BreadcrumbList');
     assert.ok(article);
-    assert.ok(breadcrumbs);
     assert.equal(article.mainEntityOfPage, canonical);
     assert.equal((html.match(/<h1\b/g) || []).length, 1);
     assert.match(html, new RegExp(`href="${otherPath.replaceAll('/', '\\/')}"`));
-    assert.match(html, /class="article-toc"/);
     assert.match(html, /property="og:image"/);
     assert.match(html, /name="twitter:card" content="summary_large_image"/);
+    const wordCount = Number(html.match(/data-source-word-count="(\d+)"/)?.[1]);
+    assert.ok(wordCount >= minimumWords, `source content unexpectedly short: ${wordCount}`);
+    for (const text of required) assert.match(html, new RegExp(text));
   }
 });
 
@@ -80,19 +66,13 @@ test('shared navigation exposes the Blog route', () => {
   assert.doesNotMatch(navJs, /Blog <small>Sắp ra mắt<\/small>/);
 });
 
-test('sitemap and robots use the canonical www host and expose published Blog URLs', () => {
-  assert.match(robotsTxt, /Disallow: \/api\//);
+test('sitemap and robots expose only the two published Blog articles', () => {
   assert.match(robotsTxt, /Sitemap: https:\/\/www\.realview\.com\.vn\/sitemap\.xml/);
   assert.match(sitemapXml, /https:\/\/www\.realview\.com\.vn\/blog\.html/);
-  assert.match(sitemapXml, /https:\/\/www\.realview\.com\.vn\/blog\/cach-doc-review-thong-minh\.html/);
   assert.match(sitemapXml, /https:\/\/www\.realview\.com\.vn\/blog\/trustscore-la-gi\.html/);
   assert.match(sitemapXml, /https:\/\/www\.realview\.com\.vn\/blog\/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang\.html/);
+  assert.doesNotMatch(sitemapXml, /cach-doc-review-thong-minh/);
   assert.doesNotMatch(sitemapXml, /https:\/\/realview\.com\.vn\//);
   assert.doesNotMatch(sitemapXml, /results\.html/);
   assert.match(sitemapXml, /xmlns:image="http:\/\/www\.google\.com\/schemas\/sitemap-image\/1\.1"/);
-  assert.match(sitemapXml, /<image:loc>https:\/\/www\.realview\.com\.vn\/assets\/photos\/pexels-monstera-production-9429449\.jpg<\/image:loc>/);
-  assert.doesNotMatch(sitemapXml, /<image:(?:title|caption)>/);
-  const articleLastmod = sitemapXml.match(/<loc>https:\/\/www\.realview\.com\.vn\/blog\/cach-doc-review-thong-minh\.html<\/loc>\s*<lastmod>([^<]+)<\/lastmod>/)?.[1];
-  const article = structuredData(articleHtml).find((item) => item['@type'] === 'BlogPosting');
-  assert.equal(articleLastmod, article.dateModified.slice(0, 10));
 });

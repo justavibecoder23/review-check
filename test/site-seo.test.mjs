@@ -7,7 +7,8 @@ const indexablePages = new Map([
   ['criteria.html', 'https://www.realview.com.vn/criteria.html'],
   ['contact.html', 'https://www.realview.com.vn/contact.html'],
   ['blog.html', 'https://www.realview.com.vn/blog.html'],
-  ['blog/cach-doc-review-thong-minh.html', 'https://www.realview.com.vn/blog/cach-doc-review-thong-minh.html']
+  ['blog/trustscore-la-gi.html', 'https://www.realview.com.vn/blog/trustscore-la-gi.html'],
+  ['blog/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html', 'https://www.realview.com.vn/blog/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html']
 ]);
 
 test('every indexable public page uses one canonical www URL', async () => {

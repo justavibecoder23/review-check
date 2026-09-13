@@ -12,7 +12,8 @@ const publicPages = [
   '../public/results.html',
   '../public/criteria.html',
   '../public/blog.html',
-  '../public/blog/cach-doc-review-thong-minh.html'
+  '../public/blog/trustscore-la-gi.html',
+  '../public/blog/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html'
 ].map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'));
 
 test('tablet portrait uses the collapsed navigation layout', () => {

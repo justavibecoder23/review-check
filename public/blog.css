@@ -123,6 +123,14 @@
 .article-content ul, .article-content ol { margin: 0 0 24px; padding-left: 24px; }
 .article-content li { margin: 9px 0; padding-left: 5px; }
 .article-content a { color: var(--orange-dark); font-weight: 750; text-underline-offset: 4px; }
+.article-source-label { margin: 0 0 10px !important; color: var(--orange-dark); font-size: 13px; font-weight: 850; letter-spacing: .1em; text-transform: uppercase; }
+.article-source-heading { margin-top: 24px !important; font-size: 22px !important; }
+.article-caption { margin: -27px 0 34px !important; color: #686862; font-size: 13px; line-height: 1.55; text-align: center; }
+.article-source-callout { margin: 28px 0 36px; padding: 24px 26px; border: 1px solid rgba(223,89,0,.2); border-radius: 18px; background: #fff8f2; }
+.article-source-callout p { margin-bottom: 10px; }
+.article-source-callout p:last-child { margin-bottom: 0; }
+.article-source-callout-title { color: var(--ink); font-weight: 850; }
+.article-source-cta { padding: 18px 22px; border-radius: 16px; background: var(--ink); color: white; font-weight: 800; text-align: center; }
 .article-toc { margin: 34px 0; padding: 26px 28px; border: 1px solid rgba(22,22,22,.1); border-radius: 20px; background: white; }
 .article-toc h2 { margin: 0 0 13px; font-size: 23px; }
 .article-toc ol { margin-bottom: 0; }

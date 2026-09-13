@@ -8,7 +8,8 @@ const publicPages = [
   'criteria.html',
   'contact.html',
   'blog.html',
-  'blog/cach-doc-review-thong-minh.html'
+  'blog/trustscore-la-gi.html',
+  'blog/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html'
 ];
 
 test('critical images and shared branding assets are optimized', async () => {

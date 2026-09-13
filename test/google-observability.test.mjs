@@ -8,7 +8,8 @@ const pages = [
   'criteria.html',
   'contact.html',
   'blog.html',
-  'blog/cach-doc-review-thong-minh.html'
+  'blog/trustscore-la-gi.html',
+  'blog/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html'
 ];
 
 test('Google Analytics is initialized on every public page', async () => {
