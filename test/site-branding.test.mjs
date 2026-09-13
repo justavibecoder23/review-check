@@ -28,9 +28,15 @@ test('các trang dùng logo RV thay cho biểu tượng tai nghe', async () => {
 
 test('nút và avatar trợ lý dùng cùng logo RV', async () => {
   const chatbot = await readFile(new URL('../public/chatbot.js', import.meta.url), 'utf8');
+  const chatbotStyles = await readFile(new URL('../public/chatbot.css', import.meta.url), 'utf8');
   assert.match(chatbot, /class="chatbot-logo" src="\/assets\/realview-logo-v1\.webp"/);
   assert.match(chatbot, /class="chatbot-avatar"[\s\S]*?<img src="\/assets\/realview-logo-v1\.webp"/);
   assert.doesNotMatch(chatbot, /M12 3a8 8 0 0 0-8 8v5/);
+  assert.match(chatbotStyles, /\.chatbot-trigger \.chatbot-logo \{ order: 1;/);
+  assert.match(chatbotStyles, /\.chatbot-trigger i \{ order: 2; width: 5px; height: 5px; flex: 0 0 5px; border: 0;/);
+  assert.match(chatbotStyles, /\.chatbot-trigger span \{ order: 3; margin-right: 4px; \}/);
+  assert.match(chatbotStyles, /@media \(max-width: 1100px\) \{[\s\S]*?\.chatbot-trigger \{ width: 46px; padding: 0; gap: 0; \}[\s\S]*?\.chatbot-trigger i \{ position: absolute; top: 7px; right: 6px; width: 4px; height: 4px; flex-basis: 4px; box-shadow: 0 0 0 1px #ffffff; \}/);
+  assert.match(chatbotStyles, /@media \(max-width: 520px\) \{[\s\S]*?\.chatbot-trigger i \{ top: 6px; right: 6px; \}/);
 });
 
 test('các trang dùng logo RV trong suốt làm favicon và không tham chiếu icon nền vuông', async () => {

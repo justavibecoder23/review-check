@@ -40,6 +40,12 @@ test('hero illustration has no square dot decoration and keeps a responsive rati
   assert.match(styles, /\.hero-visual > \.hero-illustration \{ inset: 0; width: 100%; height: 100%; object-fit: contain;/);
 });
 
+test('about decoration stays clear of copy across responsive layouts', () => {
+  assert.match(styles, /\.about-section::before \{[^}]*top: -60px;[^}]*right: -200px;[^}]*width: 280px; height: 280px;[^}]*pointer-events: none;/);
+  assert.match(styles, /@media \(max-width: 1024px\) \{[\s\S]*?\.about-section::before \{ top: -40px; right: -160px; width: 220px; height: 220px; \}/);
+  assert.match(styles, /@media \(max-width: 700px\) \{[\s\S]*?\.about-section::before \{ top: -30px; right: -105px; width: 150px; height: 150px; \}/);
+});
+
 test('contact and every page footer expose responsive Facebook and TikTok links', () => {
   for (const page of publicPages) {
     const footer = page.match(/<footer class="site-footer[\s\S]*?<\/footer>/)?.[0] || '';

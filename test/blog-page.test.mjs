@@ -5,6 +5,7 @@ import test from 'node:test';
 const blogHtml = await readFile(new URL('../public/blog.html', import.meta.url), 'utf8');
 const trustScoreArticleHtml = await readFile(new URL('../public/blog/trustscore-la-gi.html', import.meta.url), 'utf8');
 const reviewReliabilityArticleHtml = await readFile(new URL('../public/blog/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html', import.meta.url), 'utf8');
+const blogStyles = await readFile(new URL('../public/blog.css', import.meta.url), 'utf8');
 const navJs = await readFile(new URL('../public/nav.js', import.meta.url), 'utf8');
 const robotsTxt = await readFile(new URL('../public/robots.txt', import.meta.url), 'utf8');
 const sitemapXml = await readFile(new URL('../public/sitemap.xml', import.meta.url), 'utf8');
@@ -26,6 +27,14 @@ test('blog hub publishes exactly two articles and features the five-star review 
   const collection = structuredData(blogHtml).find((item) => item['@type'] === 'CollectionPage');
   assert.equal(collection.mainEntity.numberOfItems, 2);
   assert.equal(collection.mainEntity.itemListElement.length, 2);
+});
+
+test('blog images fit their frames and the article CTA uses RealView orange', () => {
+  assert.match(blogStyles, /\.blog-hero h1 \{[^}]*line-height: 1\.08;/);
+  assert.match(blogStyles, /\.featured-post-image img \{[^}]*object-fit: contain;[^}]*object-position: center;/);
+  assert.match(blogStyles, /\.post-card > img,[^}]*object-fit: contain;[^}]*object-position: center;/);
+  assert.match(blogStyles, /\.article-content \.article-source-cta \{[^}]*width: fit-content;[^}]*max-width: calc\(100% - 32px\);[^}]*margin: 0 auto 19px;[^}]*background: var\(--orange\);[^}]*color: var\(--ink\);/);
+  assert.match(blogStyles, /\.article-source-cta a \{[^}]*color: var\(--ink\);[^}]*text-decoration: none;/);
 });
 
 test('both long-form articles retain complete source content and SEO metadata', () => {
