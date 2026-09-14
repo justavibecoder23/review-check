@@ -1,0 +1,4 @@
+.env
+.env.*
+config/*.local.json
+data/review-runs/**/*.json

@@ -9,4 +9,5 @@ data/review-runs/**/*.json
 config/apify-pool.local.json
 config/apify-pool*.local.json
 config/gemini-pool*.local.json
+config/*gemini-pool*.local.json
 .env*
