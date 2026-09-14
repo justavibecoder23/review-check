@@ -6,6 +6,7 @@ const styles = readFileSync(new URL('../public/styles.css', import.meta.url), 'u
 const nav = readFileSync(new URL('../public/nav.js', import.meta.url), 'utf8');
 const app = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
 const index = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+const chatbotStyles = readFileSync(new URL('../public/chatbot.css', import.meta.url), 'utf8');
 const publicPages = [
   '../public/index.html',
   '../public/contact.html',
@@ -35,6 +36,14 @@ test('phone refinements win over the later readability overrides', () => {
   assert.ok(refinement > readability);
   assert.match(styles.slice(refinement), /main \.hero-description \{ font-size: 15px;/);
   assert.match(styles.slice(refinement), /main \.supported \{ font-size: clamp\(10px, 2\.8vw, 11px\);/);
+});
+
+test('chatbot giữ đúng bốn hàng khi context ẩn và không kích hoạt auto zoom lúc nhập', () => {
+  assert.match(chatbotStyles, /\.chatbot-header \{ grid-row: 1;/);
+  assert.match(chatbotStyles, /\.chatbot-context \{ grid-row: 2;/);
+  assert.match(chatbotStyles, /\.chatbot-messages \{ grid-row: 3; min-height: 0;/);
+  assert.match(chatbotStyles, /\.chatbot-form \{ grid-row: 4;/);
+  assert.match(chatbotStyles, /\.chatbot-input-shell textarea \{ min-height: 42px;[^}]*font-size: 16px;/);
 });
 
 test('hero illustration has no square dot decoration and keeps a responsive ratio', () => {
