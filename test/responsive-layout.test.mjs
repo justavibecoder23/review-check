@@ -13,7 +13,11 @@ const publicPages = [
   '../public/criteria.html',
   '../public/blog.html',
   '../public/blog/trustscore-la-gi.html',
-  '../public/blog/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html'
+  '../public/blog/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html',
+  '../public/blog/shopee-hay-tiktok-shop-mua-hang-o-dau-tot-hon.html',
+  '../public/blog/shopee-mall-la-gi-co-nen-mua-khong.html',
+  '../public/blog/tiktok-shop-la-gi-mua-hang-tren-tiktok-co-an-toan-khong.html',
+  '../public/blog/cach-tim-shop-uy-tin-tren-shopee.html'
 ].map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'));
 
 test('tablet portrait uses the collapsed navigation layout', () => {

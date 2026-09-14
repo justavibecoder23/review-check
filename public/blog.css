@@ -127,6 +127,7 @@
 .article-content ul, .article-content ol { margin: 0 0 24px; padding-left: 24px; }
 .article-content li { margin: 9px 0; padding-left: 5px; }
 .article-content a { color: var(--orange-dark); font-weight: 750; text-underline-offset: 4px; }
+.article-content h2, .article-content h3, .article-content p, .article-content a { overflow-wrap: anywhere; }
 .article-source-label { margin: 0 0 10px !important; color: var(--orange-dark); font-size: 13px; font-weight: 850; letter-spacing: .1em; text-transform: uppercase; }
 .article-source-heading { margin-top: 24px !important; font-size: 22px !important; }
 .article-caption { margin: -27px 0 34px !important; color: #686862; font-size: 13px; line-height: 1.55; text-align: center; }

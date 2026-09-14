@@ -8,7 +8,11 @@ const indexablePages = new Map([
   ['contact.html', 'https://www.realview.com.vn/lien-he'],
   ['blog.html', 'https://www.realview.com.vn/bai-viet'],
   ['blog/trustscore-la-gi.html', 'https://www.realview.com.vn/bai-viet/trustscore-la-gi'],
-  ['blog/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html', 'https://www.realview.com.vn/bai-viet/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang']
+  ['blog/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html', 'https://www.realview.com.vn/bai-viet/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang'],
+  ['blog/shopee-hay-tiktok-shop-mua-hang-o-dau-tot-hon.html', 'https://www.realview.com.vn/bai-viet/shopee-hay-tiktok-shop-mua-hang-o-dau-tot-hon'],
+  ['blog/shopee-mall-la-gi-co-nen-mua-khong.html', 'https://www.realview.com.vn/bai-viet/shopee-mall-la-gi-co-nen-mua-khong'],
+  ['blog/tiktok-shop-la-gi-mua-hang-tren-tiktok-co-an-toan-khong.html', 'https://www.realview.com.vn/bai-viet/tiktok-shop-la-gi-mua-hang-tren-tiktok-co-an-toan-khong'],
+  ['blog/cach-tim-shop-uy-tin-tren-shopee.html', 'https://www.realview.com.vn/bai-viet/cach-tim-shop-uy-tin-tren-shopee']
 ]);
 
 test('every indexable public page uses one canonical www URL', async () => {
@@ -41,6 +45,10 @@ test('Vietnamese public routes keep permanent redirects from legacy English URLs
     ['/blog.html', '/bai-viet'],
     ['/blog/trustscore-la-gi.html', '/bai-viet/trustscore-la-gi'],
     ['/blog/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html', '/bai-viet/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang'],
+    ['/blog/shopee-hay-tiktok-shop-mua-hang-o-dau-tot-hon.html', '/bai-viet/shopee-hay-tiktok-shop-mua-hang-o-dau-tot-hon'],
+    ['/blog/shopee-mall-la-gi-co-nen-mua-khong.html', '/bai-viet/shopee-mall-la-gi-co-nen-mua-khong'],
+    ['/blog/tiktok-shop-la-gi-mua-hang-tren-tiktok-co-an-toan-khong.html', '/bai-viet/tiktok-shop-la-gi-mua-hang-tren-tiktok-co-an-toan-khong'],
+    ['/blog/cach-tim-shop-uy-tin-tren-shopee.html', '/bai-viet/cach-tim-shop-uy-tin-tren-shopee'],
     ['/results.html', '/ket-qua'],
   ]);
 

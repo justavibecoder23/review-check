@@ -31,6 +31,10 @@ const publicRouteFiles = new Map([
   ['/bai-viet', '/blog.html'],
   ['/bai-viet/trustscore-la-gi', '/blog/trustscore-la-gi.html'],
   ['/bai-viet/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang', '/blog/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html'],
+  ['/bai-viet/shopee-hay-tiktok-shop-mua-hang-o-dau-tot-hon', '/blog/shopee-hay-tiktok-shop-mua-hang-o-dau-tot-hon.html'],
+  ['/bai-viet/shopee-mall-la-gi-co-nen-mua-khong', '/blog/shopee-mall-la-gi-co-nen-mua-khong.html'],
+  ['/bai-viet/tiktok-shop-la-gi-mua-hang-tren-tiktok-co-an-toan-khong', '/blog/tiktok-shop-la-gi-mua-hang-tren-tiktok-co-an-toan-khong.html'],
+  ['/bai-viet/cach-tim-shop-uy-tin-tren-shopee', '/blog/cach-tim-shop-uy-tin-tren-shopee.html'],
   ['/ket-qua', '/results.html'],
 ]);
 

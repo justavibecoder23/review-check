@@ -15,18 +15,18 @@ function structuredData(html) {
     .map((match) => JSON.parse(match[1]));
 }
 
-test('blog hub publishes exactly two articles and features the five-star review article', () => {
+test('blog hub publishes six articles and features the five-star review article', () => {
   assert.match(blogHtml, /<link rel="canonical" href="https:\/\/www\.realview\.com\.vn\/bai-viet"/);
   assert.equal((blogHtml.match(/<h1\b/g) || []).length, 1);
-  assert.equal((blogHtml.match(/data-blog-card/g) || []).length, 2);
+  assert.equal((blogHtml.match(/data-blog-card/g) || []).length, 6);
   assert.match(blogHtml, /class="featured-post"[\s\S]*?href="\/bai-viet\/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang"/);
   assert.match(blogHtml, /Review 5 sao có đáng tin không\?/);
   assert.match(blogHtml, /href="\/bai-viet\/trustscore-la-gi"/);
   assert.doesNotMatch(blogHtml, /cach-doc-review-thong-minh/);
   assert.doesNotMatch(blogHtml, /Bài viết sắp xuất bản/);
   const collection = structuredData(blogHtml).find((item) => item['@type'] === 'CollectionPage');
-  assert.equal(collection.mainEntity.numberOfItems, 2);
-  assert.equal(collection.mainEntity.itemListElement.length, 2);
+  assert.equal(collection.mainEntity.numberOfItems, 6);
+  assert.equal(collection.mainEntity.itemListElement.length, 6);
 });
 
 test('blog images fit their frames and the article CTA uses RealView orange', () => {
@@ -42,10 +42,16 @@ test('review reliability figures 7 and 8 use the toolbar-free JPG assets', () =>
   assert.match(reviewReliabilityArticleHtml, /src="\/assets\/blog\/thanh-phan-trustscore-realview\.jpg"[^>]*width="2027"[^>]*height="1163"/);
 });
 
+test('five-star review article uses the dedicated thumbnail without replacing its in-article example', () => {
+  assert.match(blogHtml, /src="\/assets\/blog\/review-5-sao-co-dang-tin-thumbnail\.jpg"/);
+  assert.match(reviewReliabilityArticleHtml, /class="article-lead-image" src="\/assets\/blog\/review-5-sao-co-dang-tin-thumbnail\.jpg"/);
+  assert.match(reviewReliabilityArticleHtml, /class="article-figure"><img src="\/assets\/blog\/review-5-sao-it-thong-tin\.jpg"/);
+});
+
 test('blog library uses the streamlined aligned layout', () => {
   assert.doesNotMatch(blogHtml, /Nội dung tập trung vào cách kiểm chứng/);
   assert.doesNotMatch(blogHtml, /Chủ đề nổi bật|data-sidebar-filter/);
-  assert.equal((blogHtml.match(/class="blog-list-item" data-blog-card/g) || []).length, 2);
+  assert.equal((blogHtml.match(/class="blog-list-item" data-blog-card/g) || []).length, 6);
   assert.match(blogStyles, /\.blog-tools \{[^}]*display: grid;[^}]*grid-template-columns: minmax\(0, 1fr\) 310px;[^}]*align-items: center;[^}]*column-gap: 72px;/);
   assert.match(blogStyles, /\.blog-search \{[^}]*width: 100%;[^}]*height: 48px;[^}]*padding: 0 16px;[^}]*box-sizing: border-box;[^}]*border: 1px solid #d1d5db;[^}]*background-color: #fff;[^}]*box-shadow: 0 1px 2px rgba\(0,0,0,\.05\);/);
   assert.match(blogStyles, /\.blog-search svg \{[^}]*width: 21px;[^}]*height: 21px;/);
@@ -126,11 +132,15 @@ test('shared navigation exposes the Blog route', () => {
   assert.doesNotMatch(navJs, /Blog <small>Sắp ra mắt<\/small>/);
 });
 
-test('sitemap and robots expose only the two published Blog articles', () => {
+test('sitemap and robots expose all six published Blog articles', () => {
   assert.match(robotsTxt, /Sitemap: https:\/\/www\.realview\.com\.vn\/sitemap\.xml/);
   assert.match(sitemapXml, /https:\/\/www\.realview\.com\.vn\/bai-viet/);
   assert.match(sitemapXml, /https:\/\/www\.realview\.com\.vn\/bai-viet\/trustscore-la-gi/);
   assert.match(sitemapXml, /https:\/\/www\.realview\.com\.vn\/bai-viet\/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang/);
+  assert.match(sitemapXml, /shopee-hay-tiktok-shop-mua-hang-o-dau-tot-hon/);
+  assert.match(sitemapXml, /shopee-mall-la-gi-co-nen-mua-khong/);
+  assert.match(sitemapXml, /tiktok-shop-la-gi-mua-hang-tren-tiktok-co-an-toan-khong/);
+  assert.match(sitemapXml, /cach-tim-shop-uy-tin-tren-shopee/);
   assert.doesNotMatch(sitemapXml, /cach-doc-review-thong-minh/);
   assert.doesNotMatch(sitemapXml, /https:\/\/realview\.com\.vn\//);
   assert.doesNotMatch(sitemapXml, /results\.html/);

@@ -9,7 +9,11 @@ const publicPages = [
   'contact.html',
   'blog.html',
   'blog/trustscore-la-gi.html',
-  'blog/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html'
+  'blog/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html',
+  'blog/shopee-hay-tiktok-shop-mua-hang-o-dau-tot-hon.html',
+  'blog/shopee-mall-la-gi-co-nen-mua-khong.html',
+  'blog/tiktok-shop-la-gi-mua-hang-tren-tiktok-co-an-toan-khong.html',
+  'blog/cach-tim-shop-uy-tin-tren-shopee.html'
 ];
 
 test('critical images and shared branding assets are optimized', async () => {
