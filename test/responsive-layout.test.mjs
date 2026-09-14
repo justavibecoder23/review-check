@@ -38,9 +38,12 @@ test('phone refinements win over the later readability overrides', () => {
   assert.match(styles.slice(refinement), /main \.supported \{ font-size: clamp\(10px, 2\.8vw, 11px\);/);
 });
 
-test('chatbot giữ đúng bốn hàng khi context ẩn và không kích hoạt auto zoom lúc nhập', () => {
+test('chatbot giữ đúng khung khi context dài hoặc ẩn và không kích hoạt auto zoom lúc nhập', () => {
+  assert.match(chatbotStyles, /grid-template-columns: minmax\(0, 1fr\);/);
+  assert.match(chatbotStyles, /\.chatbot-panel > \* \{ min-width: 0; \}/);
   assert.match(chatbotStyles, /\.chatbot-header \{ grid-row: 1;/);
-  assert.match(chatbotStyles, /\.chatbot-context \{ grid-row: 2;/);
+  assert.match(chatbotStyles, /\.chatbot-context \{ grid-row: 2; max-width: calc\(100% - 28px\);/);
+  assert.match(chatbotStyles, /\.chatbot-context span \{ min-width: 0; flex: 1 1 auto;[^}]*text-overflow: ellipsis;/);
   assert.match(chatbotStyles, /\.chatbot-messages \{ grid-row: 3; min-height: 0;/);
   assert.match(chatbotStyles, /\.chatbot-form \{ grid-row: 4;/);
   assert.match(chatbotStyles, /\.chatbot-input-shell textarea \{ min-height: 42px;[^}]*font-size: 16px;/);

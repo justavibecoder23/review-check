@@ -34,6 +34,7 @@
   width: min(400px, calc(100vw - 32px));
   height: min(620px, calc(100dvh - 108px));
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   overflow: hidden;
   border: 1px solid rgba(22, 22, 22, .13);
@@ -46,6 +47,7 @@
   pointer-events: none;
   transition: opacity .18s ease, transform .22s cubic-bezier(.22, 1, .36, 1);
 }
+.chatbot-panel > * { min-width: 0; }
 .chatbot-panel.is-open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
 .chatbot-panel[hidden] { display: none; }
 
@@ -58,9 +60,9 @@
 .chatbot-close { width: 38px; height: 38px; padding: 0; display: grid; place-items: center; border: 1px solid rgba(255, 255, 255, .12); border-radius: 50%; background: rgba(255, 255, 255, .08); color: white; cursor: pointer; }
 .chatbot-close:hover { background: var(--orange); color: var(--ink); }
 .chatbot-close svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
-.chatbot-context { grid-row: 2; margin: 10px 14px 0; padding: 9px 11px; display: flex; gap: 8px; align-items: center; border: 1px solid rgba(32,134,90,.24); border-radius: 14px; background: #eaf7f0; color: #176844; font-size: 10px; font-weight: 800; }
+.chatbot-context { grid-row: 2; max-width: calc(100% - 28px); margin: 10px 14px 0; padding: 9px 11px; display: flex; gap: 8px; align-items: center; border: 1px solid rgba(32,134,90,.24); border-radius: 14px; background: #eaf7f0; color: #176844; font-size: 10px; font-weight: 800; }
 .chatbot-context[hidden] { display: none; }
-.chatbot-context span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chatbot-context span { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chatbot-context button { width: 24px; height: 24px; margin-left: auto; flex: 0 0 24px; border: 0; border-radius: 50%; background: white; color: inherit; cursor: pointer; font-size: 17px; }
 .chatbot-context[data-state="syncing"] { border-color: rgba(210,145,22,.3); background: #fff7df; color: #8a5b00; }
 .chatbot-context[data-state="syncing"]::before { width: 10px; height: 10px; flex: 0 0 10px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; content: ""; animation: chatbot-context-spin .75s linear infinite; }
