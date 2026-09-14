@@ -37,6 +37,45 @@ test('blog images fit their frames and the article CTA uses RealView orange', ()
   assert.match(blogStyles, /\.article-source-cta a \{[^}]*color: var\(--ink\);[^}]*text-decoration: none;/);
 });
 
+test('review reliability figures 7 and 8 use the toolbar-free JPG assets', () => {
+  assert.match(reviewReliabilityArticleHtml, /src="\/assets\/blog\/ket-qua-trustscore-realview\.jpg"[^>]*width="2027"[^>]*height="1166"/);
+  assert.match(reviewReliabilityArticleHtml, /src="\/assets\/blog\/thanh-phan-trustscore-realview\.jpg"[^>]*width="2027"[^>]*height="1163"/);
+});
+
+test('blog library uses the streamlined aligned layout', () => {
+  assert.doesNotMatch(blogHtml, /Nội dung tập trung vào cách kiểm chứng/);
+  assert.doesNotMatch(blogHtml, /Chủ đề nổi bật|data-sidebar-filter/);
+  assert.equal((blogHtml.match(/class="blog-list-item" data-blog-card/g) || []).length, 2);
+  assert.match(blogStyles, /\.blog-tools \{[^}]*display: grid;[^}]*grid-template-columns: minmax\(0, 1fr\) 310px;[^}]*align-items: center;[^}]*column-gap: 72px;/);
+  assert.match(blogStyles, /\.blog-search \{[^}]*width: 100%;[^}]*height: 48px;[^}]*padding: 0 16px;[^}]*box-sizing: border-box;[^}]*border: 1px solid #d1d5db;[^}]*background-color: #fff;[^}]*box-shadow: 0 1px 2px rgba\(0,0,0,\.05\);/);
+  assert.match(blogStyles, /\.blog-search svg \{[^}]*width: 21px;[^}]*height: 21px;/);
+  assert.match(blogStyles, /\.blog-search input \{[^}]*width: 100%;[^}]*font-size: 15px;/);
+  assert.match(blogStyles, /\.blog-layout \{[^}]*grid-template-columns: minmax\(0, 1fr\) 310px;[^}]*column-gap: 72px;/);
+  assert.match(blogStyles, /\.blog-list-item \{[^}]*margin-bottom: 32px;[^}]*padding-bottom: 32px;[^}]*border-bottom: 1px solid #e5e5e5;/);
+  assert.match(blogStyles, /\.featured-post h3 \{[^}]*font-size: 24px;[^}]*line-height: 1\.25;/);
+  assert.match(blogStyles, /\.post-card h3 \{[^}]*font-size: 24px;[^}]*line-height: 1\.25;/);
+  assert.match(blogStyles, /@media \(max-width: 1024px\) \{[\s\S]*?\.blog-tools \{[^}]*grid-template-columns: 1fr;[^}]*row-gap: 18px;/);
+});
+
+test('review checklist is presented as an elevated card', () => {
+  assert.match(blogStyles, /\.start-card \{[^}]*border: 0;[^}]*border-radius: 16px;[^}]*background-color: #fff;[^}]*box-shadow: 0 4px 20px rgba\(0,0,0,\.05\);/);
+});
+
+test('blog editorial card uses icons, dividers, and balanced alignment', () => {
+  assert.match(blogHtml, /<h2 id="editorial-title">Blog RealView<br>được biên tập<br>như thế nào\?<\/h2>/);
+  assert.equal((blogHtml.match(/class="editorial-icon"/g) || []).length, 3);
+  assert.match(blogHtml, /class="editorial-icon"[^>]*aria-hidden="true"[\s\S]*?<h3>Ai thực hiện<\/h3>/);
+  assert.match(blogHtml, /class="editorial-icon"[^>]*aria-hidden="true"[\s\S]*?<h3>Cách thực hiện<\/h3>/);
+  assert.match(blogHtml, /class="editorial-icon"[^>]*aria-hidden="true"[\s\S]*?<h3>Mục đích<\/h3>/);
+  assert.match(blogStyles, /\.blog-editorial-shell \{[^}]*display: grid;[^}]*grid-template-columns: max-content repeat\(3, minmax\(0, 1fr\)\);[^}]*align-items: center;[^}]*gap: 40px;/);
+  assert.match(blogStyles, /\.editorial-principles \{[^}]*display: contents;/);
+  assert.match(blogStyles, /\.editorial-principles article \{[^}]*min-width: 0;[^}]*align-self: stretch;/);
+  assert.match(blogStyles, /\.editorial-principles article:nth-child\(n \+ 2\) \{[^}]*padding-left: 24px;[^}]*border-left: 1px solid #e5e5e5;/);
+  assert.match(blogStyles, /\.editorial-icon \{[^}]*width: 28px;[^}]*height: 28px;[^}]*margin-bottom: 12px;[^}]*color: #fc781f;/);
+  assert.match(blogStyles, /\.editorial-principles p \{[^}]*color: #4b5563;[^}]*line-height: 1\.6;/);
+  assert.match(blogStyles, /@media \(max-width: 760px\) \{[\s\S]*?\.editorial-principles \{[^}]*display: grid;[^}]*grid-template-columns: 1fr;[^}]*gap: 20px;[^}]*\}[\s\S]*?\.editorial-principles article:nth-child\(n \+ 2\) \{[^}]*padding-left: 0;[^}]*border-left: 0;/);
+});
+
 test('mobile lead image stays contained and the individual score uses MathML', () => {
   assert.match(reviewReliabilityArticleHtml, /class="article-lead-image"/);
   assert.match(trustScoreArticleHtml, /class="article-lead-image"/);
