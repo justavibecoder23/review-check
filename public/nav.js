@@ -9,23 +9,41 @@
   const isMobileNav = () => mobileQuery.matches;
   const pathname = window.location.pathname.replace(/\/+$/, '') || '/';
   const isHome = pathname === '/' || pathname.endsWith('/index.html');
-  const isCriteria = document.body.classList.contains('criteria-page') || pathname.endsWith('/criteria.html');
-  const isContact = document.body.classList.contains('contact-page') || pathname.endsWith('/contact.html');
-  const isBlog = document.body.classList.contains('blog-page') || pathname.endsWith('/blog.html') || pathname.includes('/blog/');
+  const isCriteria = document.body.classList.contains('criteria-page') || pathname === '/tieu-chi-loc';
+  const isContact = document.body.classList.contains('contact-page') || pathname === '/lien-he';
+  const isBlog = document.body.classList.contains('blog-page') || pathname === '/bai-viet' || pathname.startsWith('/bai-viet/');
+  const legacyHashes = {
+    '#home': '#trang-chu',
+    '#about': '#ve-realview',
+    '#how-it-works': '#cach-su-dung',
+    '#realview-benefits': '#loi-ich-realview',
+    '#featured': '#tinh-nang-noi-bat',
+    '#result': '#ket-qua',
+    '#review-criteria': '#tieu-chi-danh-gia',
+    '#evaluation-process': '#quy-trinh-danh-gia',
+    '#criteria-library': '#bo-tieu-chi',
+    '#kept-reviews': '#danh-gia-giu-lai',
+    '#excluded-reviews': '#danh-gia-da-loai',
+  };
+  const translatedHash = legacyHashes[window.location.hash];
+  if (translatedHash) {
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${translatedHash}`);
+    window.requestAnimationFrame(() => document.querySelector(translatedHash)?.scrollIntoView());
+  }
 
   const homeItems = [
-    ['#about', 'Về RealView'],
-    ['#how-it-works', 'Cách dùng RealView'],
-    ['#realview-benefits', 'Vì sao nên chọn RealView?'],
-    ['#featured', 'Tính năng nổi bật'],
+    ['#ve-realview', 'Về RealView'],
+    ['#cach-su-dung', 'Cách dùng RealView'],
+    ['#loi-ich-realview', 'Vì sao nên chọn RealView?'],
+    ['#tinh-nang-noi-bat', 'Tính năng nổi bật'],
   ];
   const criteriaItems = [
-    ['#evaluation-process', 'Quy trình đánh giá'],
-    ['#criteria-library', 'Bộ tiêu chí đánh giá'],
+    ['#quy-trinh-danh-gia', 'Quy trình đánh giá'],
+    ['#bo-tieu-chi', 'Bộ tiêu chí đánh giá'],
   ];
   const activeGroup = isHome ? 'home' : isCriteria ? 'criteria' : isBlog ? 'blog' : '';
   const pageHref = (href, group) => {
-    if (group === 'criteria') return isCriteria ? href : `/criteria.html${href}`;
+    if (group === 'criteria') return isCriteria ? href : `/tieu-chi-loc${href}`;
     return isHome ? href : `/${href}`;
   };
   const dropdownMarkup = (items, group, id, label) => `
@@ -49,10 +67,10 @@
 
   nav.innerHTML = `
     <span class="nav-indicator" aria-hidden="true"></span>
-    ${navItem('home', 'Trang chủ', isHome ? '#home' : '/#home', homeItems)}
-    ${navItem('criteria', 'Tiêu chí lọc', '/criteria.html', criteriaItems)}
+    ${navItem('home', 'Trang chủ', isHome ? '#trang-chu' : '/#trang-chu', homeItems)}
+    ${navItem('criteria', 'Tiêu chí lọc', '/tieu-chi-loc', criteriaItems)}
     <button class="nav-history-trigger" type="button" data-history-open>Lịch sử <span data-history-count hidden>0</span></button>
-    <a class="nav-link nav-blog${isBlog ? ' is-active' : ''}" href="/blog.html"${isBlog ? ' aria-current="page"' : ''}>Blog</a>`;
+    <a class="nav-link nav-blog${isBlog ? ' is-active' : ''}" href="/bai-viet"${isBlog ? ' aria-current="page"' : ''}>Blog</a>`;
 
   const dropdownWraps = [...nav.querySelectorAll('.nav-parent-wrap')];
 

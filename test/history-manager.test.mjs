@@ -76,7 +76,7 @@ test('khôi phục báo cáo qua sessionStorage mà không gọi backend', () =>
   const item = saveToHistory(report(), { storage });
   let target = '';
   assert.equal(restoreHistoryItem(item.id, { storage, session, navigate: (url) => { target = url; } }), true);
-  assert.equal(target, '/results.html');
+  assert.equal(target, '/ket-qua');
   assert.equal(JSON.parse(session.getItem(LAST_ANALYSIS_KEY)).product.itemId, '123');
 });
 

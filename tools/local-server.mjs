@@ -24,6 +24,14 @@ const mimeTypes = {
   '.png': 'image/png',
   '.ico': 'image/x-icon'
 };
+const publicRouteFiles = new Map([
+  ['/tieu-chi-loc', '/criteria.html'],
+  ['/lien-he', '/contact.html'],
+  ['/bai-viet', '/blog.html'],
+  ['/bai-viet/trustscore-la-gi', '/blog/trustscore-la-gi.html'],
+  ['/bai-viet/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang', '/blog/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html'],
+  ['/ket-qua', '/results.html'],
+]);
 
 function sendJson(response, status, payload) {
   response.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
@@ -136,7 +144,7 @@ const server = createServer(async (request, response) => {
       return sendJson(response, 405, { error: 'Phương thức không được hỗ trợ.' });
     }
 
-    const requested = url.pathname === '/' ? '/index.html' : url.pathname;
+    const requested = url.pathname === '/' ? '/index.html' : (publicRouteFiles.get(url.pathname) || url.pathname);
     const cleanPath = normalize(requested).replace(/^([.]{2}[\\/])+/, '');
     const filePath = join(publicDir, cleanPath);
     if (!filePath.startsWith(publicDir)) return sendJson(response, 403, { error: 'Không có quyền truy cập.' });

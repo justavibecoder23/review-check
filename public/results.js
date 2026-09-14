@@ -24,7 +24,7 @@ function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 }
 
-function safeUrl(value, fallback = '/#home') {
+function safeUrl(value, fallback = '/#trang-chu') {
   try {
     const url = new URL(value);
     return ['http:', 'https:'].includes(url.protocol) ? url.href : fallback;
@@ -320,7 +320,7 @@ function setupReviewCarousel(root) {
 }
 
 function linkSentimentEvidence() {
-  const details = document.querySelector('#kept-reviews');
+  const details = document.querySelector('#danh-gia-giu-lai');
   const track = document.querySelector('#kept-list');
   if (!details || !track) return;
 
@@ -685,7 +685,7 @@ async function startProgressiveAnalysis(url) {
     } catch {
       // Local history is an enhancement and must not block a completed result.
     }
-    window.history.replaceState({}, '', '/results.html');
+    window.history.replaceState({}, '', '/ket-qua');
     renderResult(resultData);
     window.realviewTrackEvent?.('analysis_complete', { marketplace });
     window.scrollTo({ top: 0, behavior: 'auto' });

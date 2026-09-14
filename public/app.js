@@ -173,5 +173,5 @@ if (form) form.addEventListener('submit', (event) => {
   event.preventDefault();
   const validation = validateCurrentInput({ focus: true });
   if (!validation) return;
-  window.location.assign(`/results.html?url=${encodeURIComponent(validation.url)}`);
+  window.location.assign(`/ket-qua?url=${encodeURIComponent(validation.url)}`);
 });

@@ -49,7 +49,7 @@
     .join('');
 
   const sectionMarkup = `
-    <section id="review-criteria" class="criteria-section" aria-labelledby="criteria-main-title">
+    <section id="tieu-chi-danh-gia" class="criteria-section" aria-labelledby="criteria-main-title">
       <div class="criteria-hero">
         <div class="criteria-hero-art criteria-reveal" aria-hidden="true">
           <div class="criteria-art-frame">
@@ -62,7 +62,7 @@
           <h1 id="criteria-main-title">Đừng để <span>review ảo</span><br />quyết định ví tiền của bạn</h1>
           <p class="criteria-mission">RealView với một sứ mệnh duy nhất:<br />Bóc tách lớp vỏ bọc seeding để mang đến cho bạn<br />những trải nghiệm mua hàng dựa trên sự thật 100%</p>
           <p class="criteria-disclaimer">Thông điệp “100%” thể hiện định hướng minh bạch của dự án; kết quả phân tích luôn mang tính tham khảo.</p>
-          <a class="criteria-primary-cta" href="#evaluation-process">Tìm hiểu thuật toán <span aria-hidden="true">↓</span></a>
+          <a class="criteria-primary-cta" href="#quy-trinh-danh-gia">Tìm hiểu thuật toán <span aria-hidden="true">↓</span></a>
         </div>
       </div>
 
@@ -79,7 +79,7 @@
         </div>
       </div>
 
-      <div id="evaluation-process" class="criteria-process">
+      <div id="quy-trinh-danh-gia" class="criteria-process">
         <div class="criteria-section-heading criteria-reveal">
           <p>Quy trình minh bạch</p>
           <h2>Quy trình đánh giá <span>4 bước</span></h2>
@@ -94,7 +94,7 @@
         <p class="criteria-process-note">“AI độc quyền” là nội dung định hướng trong bản thiết kế; phiên bản thử nghiệm hiện dùng bộ quy tắc và mô hình phân tích đang được hoàn thiện.</p>
       </div>
 
-      <div id="criteria-library" class="criteria-library">
+      <div id="bo-tieu-chi" class="criteria-library">
         <div class="criteria-section-heading criteria-reveal">
           <p>Minh bạch tiêu chí</p>
           <h2>Bộ <span>tiêu chí</span> đánh giá</h2>
@@ -103,7 +103,7 @@
         <div class="criteria-card-grid">${criteriaCards}</div>
         <div class="criteria-closing criteria-reveal">
           <p>Kết quả chỉ hỗ trợ tham khảo; hãy kiểm tra kỹ thông tin sản phẩm trước khi mua.</p>
-          <a href="/#home">Dùng thử RealView ngay <span aria-hidden="true">→</span></a>
+          <a href="/#trang-chu">Dùng thử RealView ngay <span aria-hidden="true">→</span></a>
         </div>
       </div>
 
@@ -132,13 +132,13 @@
       revealItems.forEach((item) => observer.observe(item));
     }
 
-    document.querySelectorAll('a[href="#review-criteria"], button[data-scroll-to-criteria]').forEach((control) => {
+    document.querySelectorAll('a[href="#tieu-chi-danh-gia"], button[data-scroll-to-criteria]').forEach((control) => {
       control.addEventListener('click', (event) => {
-        const target = document.querySelector('#review-criteria');
+        const target = document.querySelector('#tieu-chi-danh-gia');
         if (!target) return;
         event.preventDefault();
         target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        history.replaceState(null, '', '#review-criteria');
+        history.replaceState(null, '', '#tieu-chi-danh-gia');
       });
     });
   };

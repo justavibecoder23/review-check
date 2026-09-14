@@ -51,6 +51,14 @@
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
     }
   ],
+  "redirects": [
+    { "source": "/criteria.html", "destination": "/tieu-chi-loc", "permanent": true },
+    { "source": "/contact.html", "destination": "/lien-he", "permanent": true },
+    { "source": "/blog.html", "destination": "/bai-viet", "permanent": true },
+    { "source": "/blog/trustscore-la-gi.html", "destination": "/bai-viet/trustscore-la-gi", "permanent": true },
+    { "source": "/blog/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html", "destination": "/bai-viet/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang", "permanent": true },
+    { "source": "/results.html", "destination": "/ket-qua", "permanent": true }
+  ],
   "rewrites": [
     { "source": "/api/analyze", "destination": "/api/analyze.mjs" },
     { "source": "/api/analyze-stream", "destination": "/api/analyze-stream.mjs" },
@@ -60,6 +68,12 @@
     { "source": "/api/contact", "destination": "/api/contact.mjs" },
     { "source": "/api/apify-config", "destination": "/api/apify-config.mjs" },
     { "source": "/api/gemini-config", "destination": "/api/gemini-config.mjs" },
+    { "source": "/tieu-chi-loc", "destination": "/public/criteria.html" },
+    { "source": "/lien-he", "destination": "/public/contact.html" },
+    { "source": "/bai-viet", "destination": "/public/blog.html" },
+    { "source": "/bai-viet/trustscore-la-gi", "destination": "/public/blog/trustscore-la-gi.html" },
+    { "source": "/bai-viet/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang", "destination": "/public/blog/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html" },
+    { "source": "/ket-qua", "destination": "/public/results.html" },
     { "source": "/(.*)", "destination": "/public/$1" }
   ]
 }

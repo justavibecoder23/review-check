@@ -43,7 +43,7 @@ test('trang chủ chuyển ngay sang kết quả và giao diện tiến trình k
   const appSource = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
   const resultsSource = await readFile(new URL('../public/results.js', import.meta.url), 'utf8');
   const resultsStyles = await readFile(new URL('../public/results-v2.css', import.meta.url), 'utf8');
-  assert.match(appSource, /results\.html\?url=/);
+  assert.match(appSource, /\/ket-qua\?url=/);
   assert.match(resultsSource, /product_meta/);
   assert.match(resultsSource, /reviews_sample/);
   assert.match(resultsSource, /layer1_stats/);

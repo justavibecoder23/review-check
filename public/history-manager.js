@@ -205,8 +205,8 @@ export function restoreHistoryItem(id, { session, navigate } = {}) {
   try {
     const sessionTarget = session || window.sessionStorage;
     sessionTarget.setItem(LAST_ANALYSIS_KEY, JSON.stringify(item.fullReport));
-    if (typeof navigate === 'function') navigate('/results.html');
-    else window.location.assign('/results.html');
+    if (typeof navigate === 'function') navigate('/ket-qua');
+    else window.location.assign('/ket-qua');
     return true;
   } catch {
     return false;

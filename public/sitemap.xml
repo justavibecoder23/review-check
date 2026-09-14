@@ -2,21 +2,21 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
         xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
   <url><loc>https://www.realview.com.vn/</loc><lastmod>2026-09-10</lastmod></url>
-  <url><loc>https://www.realview.com.vn/criteria.html</loc><lastmod>2026-09-10</lastmod></url>
-  <url><loc>https://www.realview.com.vn/contact.html</loc><lastmod>2026-09-10</lastmod></url>
+  <url><loc>https://www.realview.com.vn/tieu-chi-loc</loc><lastmod>2026-09-14</lastmod></url>
+  <url><loc>https://www.realview.com.vn/lien-he</loc><lastmod>2026-09-14</lastmod></url>
   <url>
-    <loc>https://www.realview.com.vn/blog.html</loc>
-    <lastmod>2026-09-13</lastmod>
+    <loc>https://www.realview.com.vn/bai-viet</loc>
+    <lastmod>2026-09-14</lastmod>
     <image:image><image:loc>https://www.realview.com.vn/assets/photos/pexels-pavel-danilyuk-7190922.jpg</image:loc></image:image>
   </url>
   <url>
-    <loc>https://www.realview.com.vn/blog/trustscore-la-gi.html</loc>
-    <lastmod>2026-09-13</lastmod>
+    <loc>https://www.realview.com.vn/bai-viet/trustscore-la-gi</loc>
+    <lastmod>2026-09-14</lastmod>
     <image:image><image:loc>https://www.realview.com.vn/assets/blog/trustscore-giao-dien-realview.jpg</image:loc></image:image>
   </url>
   <url>
-    <loc>https://www.realview.com.vn/blog/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html</loc>
-    <lastmod>2026-09-13</lastmod>
+    <loc>https://www.realview.com.vn/bai-viet/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang</loc>
+    <lastmod>2026-09-14</lastmod>
     <image:image><image:loc>https://www.realview.com.vn/assets/blog/review-5-sao-it-thong-tin.jpg</image:loc></image:image>
   </url>
 </urlset>

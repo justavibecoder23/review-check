@@ -20,24 +20,24 @@
     <link rel="stylesheet" href="/chatbot.css" />
   </head>
   <body class="results-page">
-    <a class="skip-link" href="#main-content">Đi đến nội dung chính</a>
+    <a class="skip-link" href="#noi-dung-chinh">Đi đến nội dung chính</a>
 
     <header class="site-header">
       <div class="container header-inner">
-        <a class="brand" href="/#home" aria-label="RealView - Trang chủ">
+        <a class="brand" href="/#trang-chu" aria-label="RealView - Trang chủ">
           <span class="brand-mark" aria-hidden="true">
             <img src="/assets/realview-logo-v1.webp" alt="" width="128" height="75" />
           </span>
           <span><b>REAL</b>VIEW</span>
         </a>
         <nav id="main-navigation" class="main-nav" aria-label="Điều hướng chính">
-          <a href="/#home">Trang chủ</a>
-          <a class="nav-about" href="/#about"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="9" cy="8" r="3" /><path d="M3.5 20c0-4 2-6 5.5-6s5.5 2 5.5 6" /><path d="M15 5.4a3 3 0 0 1 0 5.2M16.5 14.2c2.7.5 4 2.4 4 5.8" /></svg>Về RealView</a>
-          <a href="/#how-it-works">Cách dùng</a>
-          <a href="/criteria.html">Tiêu chí lọc</a>
+          <a href="/#trang-chu">Trang chủ</a>
+          <a class="nav-about" href="/#ve-realview"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="9" cy="8" r="3" /><path d="M3.5 20c0-4 2-6 5.5-6s5.5 2 5.5 6" /><path d="M15 5.4a3 3 0 0 1 0 5.2M16.5 14.2c2.7.5 4 2.4 4 5.8" /></svg>Về RealView</a>
+          <a href="/#cach-su-dung">Cách dùng</a>
+          <a href="/tieu-chi-loc">Tiêu chí lọc</a>
         </nav>
         <div class="header-utilities">
-          <a class="header-contact" href="/contact.html" aria-label="Mở trang Liên hệ RealView"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z" /><path d="M8 10h.01M12 10h.01M16 10h.01" /></svg><span>Liên hệ</span></a>
+          <a class="header-contact" href="/lien-he" aria-label="Mở trang Liên hệ RealView"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z" /><path d="M8 10h.01M12 10h.01M16 10h.01" /></svg><span>Liên hệ</span></a>
         </div>
         <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="main-navigation">
           <span class="nav-toggle-label sr-only">Mở menu</span>
@@ -46,7 +46,7 @@
       </div>
     </header>
 
-    <main id="main-content" class="results-main">
+    <main id="noi-dung-chinh" class="results-main">
       <section id="analysis-progress" class="analysis-progress hidden" aria-labelledby="analysis-progress-title" aria-live="polite">
         <div class="container analysis-progress-shell">
           <div class="analysis-progress-head">
@@ -105,7 +105,7 @@
           <div id="analysis-progress-error" class="analysis-progress-error hidden" role="alert">
             <strong>Chưa thể hoàn tất phân tích</strong>
             <p id="analysis-progress-error-message"></p>
-            <div><button id="analysis-retry" type="button">Thử lại</button><a href="/#home">Nhập link khác</a></div>
+            <div><button id="analysis-retry" type="button">Thử lại</button><a href="/#trang-chu">Nhập link khác</a></div>
           </div>
         </div>
       </section>
@@ -116,14 +116,14 @@
           <p class="results-eyebrow">Kết quả phân tích</p>
           <h1 id="empty-title">Chưa có sản phẩm để phân tích.</h1>
           <p>Hãy dán link sản phẩm trên trang chủ. RealView sẽ lọc review, tính TrustScore và giải thích kết quả.</p>
-          <a class="results-primary-action" href="/#home">Phân tích sản phẩm <span aria-hidden="true">→</span></a>
+          <a class="results-primary-action" href="/#trang-chu">Phân tích sản phẩm <span aria-hidden="true">→</span></a>
         </div>
       </section>
 
       <div id="results-content" class="hidden">
         <section class="result-overview" aria-labelledby="results-title">
           <div class="container">
-            <div class="result-breadcrumb"><a href="/#home">Trang chủ</a><span aria-hidden="true">/</span><span>Kết quả phân tích</span></div>
+            <div class="result-breadcrumb"><a href="/#trang-chu">Trang chủ</a><span aria-hidden="true">/</span><span>Kết quả phân tích</span></div>
             <div class="overview-card">
               <article class="product-summary">
                 <div class="product-visual">
@@ -135,7 +135,7 @@
                   <p class="results-eyebrow">Sản phẩm vừa phân tích</p>
                   <h1 id="results-title">Sản phẩm trên Shopee</h1>
                   <p id="product-meta" class="product-meta">Dữ liệu review công khai</p>
-                  <a id="product-inline-link" class="product-inline-link" href="/#home" target="_blank" rel="noreferrer">Xem trang sản phẩm <span aria-hidden="true">↗</span></a>
+                  <a id="product-inline-link" class="product-inline-link" href="/#trang-chu" target="_blank" rel="noreferrer">Xem trang sản phẩm <span aria-hidden="true">↗</span></a>
                 </div>
               </article>
 
@@ -266,7 +266,7 @@
             </div>
 
             <div class="review-accordions">
-              <details id="kept-reviews" class="review-accordion review-accordion--kept">
+              <details id="danh-gia-giu-lai" class="review-accordion review-accordion--kept">
                 <summary>
                   <span class="accordion-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="m5 12 4 4L19 6" /></svg></span>
                   <span class="accordion-copy"><small>Được dùng làm bằng chứng</small><strong>Đánh giá đáng tham khảo</strong></span>
@@ -289,7 +289,7 @@
                 </div>
               </details>
 
-              <details id="excluded-reviews" class="review-accordion review-accordion--excluded">
+              <details id="danh-gia-da-loai" class="review-accordion review-accordion--excluded">
                 <summary>
                   <span class="accordion-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M5 5l14 14M19 5 5 19" /></svg></span>
                   <span class="accordion-copy"><small>Không dùng để kết luận sản phẩm</small><strong>Đánh giá đã bị loại</strong></span>
@@ -320,10 +320,10 @@
 
     <footer class="site-footer results-footer">
       <div class="container footer-grid">
-        <div class="footer-brand"><a class="brand" href="/#home"><span class="brand-mark" aria-hidden="true"><img src="/assets/realview-logo-v1.webp" alt="" width="128" height="75" /></span><span><b>REAL</b>VIEW</span></a><p>“Góc nhìn thật, lựa chọn đúng.”</p></div>
+        <div class="footer-brand"><a class="brand" href="/#trang-chu"><span class="brand-mark" aria-hidden="true"><img src="/assets/realview-logo-v1.webp" alt="" width="128" height="75" /></span><span><b>REAL</b>VIEW</span></a><p>“Góc nhìn thật, lựa chọn đúng.”</p></div>
         <div class="footer-menu-group">
         <div class="footer-social"><h2>Kết nối</h2><a href="https://www.facebook.com/profile.php?id=61594093477895" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M16 8.049C16 3.603 12.418 0 8 0S0 3.603 0 8.049C0 12.067 2.925 15.397 6.75 16v-5.624H4.719V8.049H6.75V6.276c0-2.017 1.194-3.131 3.022-3.131.875 0 1.791.157 1.791.157v1.986h-1.009c-.994 0-1.304.622-1.304 1.26v1.501h2.219l-.355 2.327H9.25V16C13.075 15.397 16 12.067 16 8.049Z" /></svg><span>Facebook</span></a><a href="https://www.tiktok.com/@realviewueh" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.72-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07Z" /></svg><span>TikTok</span></a></div>
-        <div class="footer-links"><div><h3>Về RealView</h3><a href="/#home">Trang chủ</a><a href="/#about">Câu chuyện dự án</a></div><div><h3>Hỗ trợ</h3><a href="/#how-it-works">Cách dùng</a><a href="/contact.html">Liên hệ</a></div><div><h3>Minh bạch</h3><a href="#kept-reviews">Review giữ lại</a><a href="#excluded-reviews">Review đã loại</a></div></div>
+        <div class="footer-links"><div><h3>Về RealView</h3><a href="/#trang-chu">Trang chủ</a><a href="/#ve-realview">Câu chuyện dự án</a></div><div><h3>Hỗ trợ</h3><a href="/#cach-su-dung">Cách dùng</a><a href="/lien-he">Liên hệ</a></div><div><h3>Minh bạch</h3><a href="#danh-gia-giu-lai">Review giữ lại</a><a href="#danh-gia-da-loai">Review đã loại</a></div></div>
         </div>
       </div>
       <div class="container footer-bottom"><span>© 2026 RealView. Dự án học thuật của sinh viên UEH.</span><span>Illustration: unDraw · Storyset by Freepik · Icons: Lucide</span></div>
@@ -353,8 +353,8 @@
     
     <nav id="result-action-bar" class="result-action-bar hidden" aria-label="Thao tác với kết quả">
       <div class="action-bar-context"><span id="action-score">0</span><small>TrustScore</small></div>
-      <a id="open-product" class="action-button action-button--product" href="/#home" target="_blank" rel="noreferrer"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 8h12l1 13H5L6 8Z" /><path d="M9 10V6a3 3 0 0 1 6 0v4" /></svg><span>Xem sản phẩm trên Shopee</span><b aria-hidden="true">↗</b></a>
-      <a class="action-button action-button--analyze" href="/#home"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v6h6" /></svg><span>Phân tích sản phẩm khác</span><b aria-hidden="true">→</b></a>
+      <a id="open-product" class="action-button action-button--product" href="/#trang-chu" target="_blank" rel="noreferrer"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 8h12l1 13H5L6 8Z" /><path d="M9 10V6a3 3 0 0 1 6 0v4" /></svg><span>Xem sản phẩm trên Shopee</span><b aria-hidden="true">↗</b></a>
+      <a class="action-button action-button--analyze" href="/#trang-chu"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v6h6" /></svg><span>Phân tích sản phẩm khác</span><b aria-hidden="true">→</b></a>
       <button class="action-button action-button--history" type="button" data-history-open><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v6h6"/><path d="M12 7v5l3 2"/></svg><span>Xem lịch sử phân tích</span><b data-history-count hidden>0</b></button>
     </nav>
 
