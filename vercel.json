@@ -68,13 +68,12 @@
     { "source": "/api/contact", "destination": "/api/contact.mjs" },
     { "source": "/api/apify-config", "destination": "/api/apify-config.mjs" },
     { "source": "/api/gemini-config", "destination": "/api/gemini-config.mjs" },
-    { "source": "/tieu-chi-loc", "destination": "/public/criteria.html" },
-    { "source": "/lien-he", "destination": "/public/contact.html" },
-    { "source": "/bai-viet", "destination": "/public/blog.html" },
-    { "source": "/bai-viet/trustscore-la-gi", "destination": "/public/blog/trustscore-la-gi.html" },
-    { "source": "/bai-viet/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang", "destination": "/public/blog/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html" },
-    { "source": "/ket-qua", "destination": "/public/results.html" },
-    { "source": "/(.*)", "destination": "/public/$1" }
+    { "source": "/tieu-chi-loc", "destination": "/criteria.html" },
+    { "source": "/lien-he", "destination": "/contact.html" },
+    { "source": "/bai-viet", "destination": "/blog.html" },
+    { "source": "/bai-viet/trustscore-la-gi", "destination": "/blog/trustscore-la-gi.html" },
+    { "source": "/bai-viet/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang", "destination": "/blog/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html" },
+    { "source": "/ket-qua", "destination": "/results.html" }
   ]
 }
 
