@@ -1,14 +1,21 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const blogHtml = await readFile(new URL('../public/blog.html', import.meta.url), 'utf8');
 const trustScoreArticleHtml = await readFile(new URL('../public/blog/trustscore-la-gi.html', import.meta.url), 'utf8');
 const reviewReliabilityArticleHtml = await readFile(new URL('../public/blog/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html', import.meta.url), 'utf8');
 const blogStyles = await readFile(new URL('../public/blog.css', import.meta.url), 'utf8');
+const blogPostJs = await readFile(new URL('../public/blog-post.js', import.meta.url), 'utf8');
 const navJs = await readFile(new URL('../public/nav.js', import.meta.url), 'utf8');
 const robotsTxt = await readFile(new URL('../public/robots.txt', import.meta.url), 'utf8');
 const sitemapXml = await readFile(new URL('../public/sitemap.xml', import.meta.url), 'utf8');
+const articleDirectory = new URL('../public/blog/', import.meta.url);
+const articleFiles = (await readdir(articleDirectory)).filter((name) => name.endsWith('.html')).sort();
+const allArticlePages = await Promise.all(articleFiles.map(async (name) => ({
+  name,
+  html: await readFile(new URL(name, articleDirectory), 'utf8'),
+})));
 
 function structuredData(html) {
   return [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)]
@@ -29,12 +36,56 @@ test('blog hub publishes six articles and features the five-star review article'
   assert.equal(collection.mainEntity.itemListElement.length, 6);
 });
 
-test('blog images fit their frames and the article CTA uses RealView orange', () => {
+test('blog images fit their frames and article CTA is a centered orange action', () => {
   assert.match(blogStyles, /\.blog-hero h1 \{[^}]*line-height: 1\.08;/);
   assert.match(blogStyles, /\.featured-post-image img \{[^}]*object-fit: contain;[^}]*object-position: center;/);
   assert.match(blogStyles, /\.post-card > img,[^}]*object-fit: contain;[^}]*object-position: center;/);
-  assert.match(blogStyles, /\.article-content \.article-source-cta \{[^}]*width: fit-content;[^}]*max-width: calc\(100% - 32px\);[^}]*margin: 0 auto 19px;[^}]*background: var\(--orange\);[^}]*color: var\(--ink\);/);
-  assert.match(blogStyles, /\.article-source-cta a \{[^}]*color: var\(--ink\);[^}]*text-decoration: none;/);
+  assert.match(blogStyles, /\.article-sidebar-cta \{[^}]*width: min\(100%, 260px\);[^}]*margin: 28px auto 0;[^}]*display: flex;[^}]*justify-content: center;[^}]*border: 1\.5px solid #111827;[^}]*border-radius: 999px;[^}]*background: #fc781f;/);
+  for (const { html } of allArticlePages) {
+    assert.match(html, /class="article-sidebar-cta"[^>]*>Sử dụng RealView ngay/);
+  }
+});
+
+test('article pages use an asymmetric reading grid with responsive metadata and scrollspy TOC', () => {
+  assert.equal(allArticlePages.length, 6);
+  for (const { name, html } of allArticlePages) {
+    assert.match(html, /class="article-reading-grid"[\s\S]*?<h1 class="article-title">[\s\S]*?<aside class="article-sidebar"[\s\S]*?<details class="article-toc" data-article-toc>[\s\S]*?<p class="article-deck">[\s\S]*?<div class="article-body-column">/);
+    assert.match(html, /<script src="\/blog-post\.js" defer><\/script>/);
+    assert.doesNotMatch(html, /class="article-header"/);
+    assert.match(html, /class="article-category"/);
+    assert.match(html, /class="article-author"/);
+    assert.match(html, /class="article-date"/);
+    assert.match(html, /class="article-content"/, `${name} must use the shared Blog Post structure`);
+  }
+  assert.match(blogStyles, /\.article-shell \{[^}]*width: min\(1322px, calc\(100% - 48px\)\);[^}]*max-width: 1322px;[^}]*padding: 64px 80px;/);
+  assert.match(blogStyles, /\.article-reading-grid \{[^}]*grid-template-columns: 280px minmax\(0, 800px\);[^}]*column-gap: 80px;/);
+  assert.match(blogStyles, /\.article-sidebar \{[^}]*position: sticky;[^}]*top: 100px;[^}]*align-self: start;/);
+  assert.match(blogStyles, /\.article-title \{[^}]*font-size: clamp\(48px, 4\.4vw, 56px\);[^}]*font-weight: 800;[^}]*line-height: 1\.2;/);
+  assert.match(blogStyles, /\.article-content \{[^}]*max-width: 800px;[^}]*color: #374151;[^}]*font-size: 18px;[^}]*line-height: 1\.8;/);
+  assert.match(blogStyles, /@media \(max-width: 1024px\) \{[\s\S]*?\.article-reading-grid \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*grid-template-rows: auto auto auto auto;/);
+  assert.match(blogStyles, /\.article-toc-links a\.is-active \{[^}]*border-left-color: #fc781f;[^}]*color: #fc781f;[^}]*font-weight: 600;/);
+  assert.match(blogPostJs, /IntersectionObserver/);
+  assert.match(blogPostJs, /matchMedia\('\(min-width: 1025px\)'\)/);
+  assert.match(blogPostJs, /toc\.removeAttribute\('open'\)/);
+  assert.match(blogPostJs, /tocScroller\.scrollTo\(/);
+  assert.match(blogPostJs, /lockActiveHeading\(heading\.id\)/);
+  assert.match(blogPostJs, /distanceFromAnchor > 32/);
+  assert.match(blogPostJs, /heading\.getBoundingClientRect\(\)\.top <= 180/);
+});
+
+test('article category and embedded content graphics retain their original formats', () => {
+  assert.match(blogStyles, /\.article-category \{[^}]*padding: 7px 12px;[^}]*display: inline-flex;[^}]*border-radius: 999px;[^}]*background: #fff0e5;[^}]*color: var\(--orange-dark\);/);
+  assert.match(blogStyles, /\.article-source-callout \{[^}]*padding: 24px 26px;[^}]*border: 1px solid rgba\(223,89,0,\.2\);[^}]*border-radius: 18px;[^}]*background: #fff8f2;/);
+  assert.match(blogStyles, /\.article-table-wrap \{[^}]*border: 1px solid rgba\(22,22,22,\.1\);[^}]*border-radius: 18px;[^}]*background: white;/);
+  assert.match(blogStyles, /\.article-table th \{[^}]*background: #fff3e9;/);
+  assert.match(blogStyles, /\.article-formula \{[^}]*padding: 18px 20px;[^}]*border: 1px solid rgba\(223,89,0,\.22\);[^}]*border-radius: 16px;[^}]*background: #fff8f2;/);
+  assert.match(blogStyles, /\.article-figure img \{[^}]*border: 1px solid rgba\(22,22,22,\.09\);[^}]*border-radius: 20px;[^}]*background: #f7f7f3;/);
+});
+
+test('article reading area is packaged as a responsive analysis file', () => {
+  assert.match(blogStyles, /\.article-main \{[^}]*background: #f3f4f6;/);
+  assert.match(blogStyles, /\.article-shell \{[^}]*border: 1px solid #e5e5e5;[^}]*border-top: 4px solid #fc781f;[^}]*border-radius: 4px;[^}]*background-color: #fff;[^}]*box-shadow: 0 4px 20px rgba\(0,0,0,\.03\);/);
+  assert.match(blogStyles, /@media \(max-width: 1024px\) \{[\s\S]*?\.article-shell \{[^}]*width: min\(840px, calc\(100% - 32px\)\);[^}]*padding: 32px 24px;/);
 });
 
 test('review reliability figures 7 and 8 use the toolbar-free JPG assets', () => {

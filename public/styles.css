@@ -108,9 +108,9 @@ main section[id] { scroll-margin-top: 90px; }
 .hero-section { position: relative; overflow-x: hidden; overflow-x: clip; padding: 34px 0 120px; background: radial-gradient(circle at 74% 18%, rgba(252,120,31,.12), transparent 29%), var(--linen); }
 .hero-grid { position: relative; min-height: 680px; display: grid; grid-template-columns: minmax(0, .3fr) minmax(0, .7fr); align-items: center; gap: clamp(24px, 4vw, 64px); }
 .hero-visual { position: relative; order: 1; width: 150%; aspect-ratio: 4 / 3; height: auto; margin-top: 4px; margin-left: -38%; min-height: 0; isolation: isolate; }
-.orange-blob { position: absolute; top: -10px; right: -4%; bottom: -32px; left: -12%; z-index: -2; border-radius: 30% 45% 38% 26% / 38% 30% 44% 34%; background: linear-gradient(135deg, #ff9a56 0%, var(--orange) 48%, #ef5d00 100%); transform: rotate(-4deg); box-shadow: inset -30px -30px 80px rgba(157,53,0,.12); }
+.orange-blob { position: absolute; top: -10px; right: -4%; bottom: -32px; left: -12%; z-index: -2; border-radius: 30% 45% 38% 26% / 38% 30% 44% 34%; background: linear-gradient(135deg, #ff9a56 0%, var(--orange) 48%, #ef5d00 100%); transform: rotate(-4deg) scale(.94); transform-origin: center center; box-shadow: inset -30px -30px 80px rgba(157,53,0,.12); }
 .orange-blob::after { content: ""; position: absolute; top: 11%; right: -8%; width: 38%; aspect-ratio: 1; border: 2px solid rgba(22,22,22,.12); border-radius: 50%; }
-.hero-visual > .hero-illustration { position: absolute; top: 0; right: 0; z-index: 1; width: 100%; height: auto; transform: rotate(-2deg) scale(1.06); transform-origin: center center; filter: drop-shadow(0 28px 30px rgba(65,35,12,.15)); }
+.hero-visual > .hero-illustration { position: absolute; top: 0; right: 0; z-index: 1; width: 100%; height: auto; transform: rotate(-2deg) scale(1); transform-origin: center center; filter: drop-shadow(0 28px 30px rgba(65,35,12,.15)); }
 
 .hero-copy { position: relative; z-index: 3; order: 2; width: 108%; max-width: 980px; margin: 0 auto; padding: 36px 0; display: flex; flex-direction: column; align-items: center; text-align: center; transform: scale(1.04); transform-origin: center; }
 .section-pill { width: fit-content; display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 999px; background: var(--orange); color: var(--ink); font-size: 12px; font-weight: 820; text-transform: uppercase; letter-spacing: .45px; }
@@ -118,7 +118,7 @@ main section[id] { scroll-margin-top: 90px; }
 .hero-copy h1 { max-width: 900px; margin: 28px 0 21px; font-size: clamp(52px, 5.6vw, 82px); line-height: 1.05; letter-spacing: -4.2px; font-weight: 900; text-wrap: balance; }
 .hero-copy h1 span { color: var(--orange); }
 .hero-copy h1 .hero-heading-line { display: block; white-space: nowrap; }
-.hero-copy h1 .hero-heading-line + .hero-heading-line { margin-top: 8px; font-size: .84em; }
+.hero-copy h1 .hero-heading-line + .hero-heading-line { margin-top: 10px; font-size: 1.06em; }
 .hero-copy h1 .hero-heading-line-primary { color: inherit; font-size: 1.06em; }
 .hero-description { max-width: 760px; margin: 0; color: #4e4e49; font-size: 17px; line-height: 1.68; }
 .url-form { width: min(100%, 820px); max-width: none; margin-top: 30px; padding: 7px; display: flex; align-items: center; border: 1.5px solid var(--ink); border-radius: 999px; background: white; box-shadow: 7px 8px 0 rgba(22,22,22,.14), 0 16px 45px rgba(33,22,14,.1); transition: border-color .18s ease, box-shadow .18s ease; }
@@ -874,7 +874,7 @@ blockquote footer { margin-top: 7px; color: #9a4507; font-size: 10px; }
   .hero-copy { max-width: none; margin: 0; padding: 20px 0 0; display: block; text-align: center; }
   .hero-copy .section-pill { margin-inline: auto; }
   .hero-copy h1 { max-width: 100%; margin-top: 22px; font-size: clamp(38px, 11.2vw, 48px); line-height: 1.08; letter-spacing: -2.35px; overflow-wrap: anywhere; }
-  .hero-copy h1 .hero-heading-line + .hero-heading-line { margin-top: 4px; }
+  .hero-copy h1 .hero-heading-line + .hero-heading-line { margin-top: 6px; }
   .hero-copy h1 .hero-heading-line { white-space: normal; }
   .hero-description { font-size: 15px; }
   .url-form { padding: 8px; display: grid; grid-template-columns: 40px 1fr; border-radius: 22px; }

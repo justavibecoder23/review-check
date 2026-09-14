@@ -73,6 +73,17 @@ test('slogan và nội dung tổng hợp không dùng thông điệp tài chính
   assert.doesNotMatch(trustAnalysis, /Giá trị so với chi phí|số tiền đã bỏ ra/);
 });
 
+test('hai dòng tiêu đề hero đồng bộ cỡ chữ và icon liên hệ dùng path hoàn chỉnh', async () => {
+  const [styles, contact] = await Promise.all([
+    readFile(new URL('../public/styles.css', import.meta.url), 'utf8'),
+    readFile(new URL('../public/contact.html', import.meta.url), 'utf8')
+  ]);
+  assert.match(styles, /\.hero-copy h1 \.hero-heading-line \+ \.hero-heading-line \{ margin-top: 10px; font-size: 1\.06em; \}/);
+  assert.match(styles, /@media \(max-width: 700px\)[\s\S]*\.hero-copy h1 \.hero-heading-line \+ \.hero-heading-line \{ margin-top: 6px; \}/);
+  assert.match(contact, /class="header-contact"[\s\S]*?<path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z"/);
+  assert.doesNotMatch(contact, /class="header-contact"[\s\S]{0,400}a4 4 4 0 0 1/);
+});
+
 test('biểu mẫu liên hệ gửi trực tiếp và dùng email RealView mới', async () => {
   const page = await readFile(new URL('../public/contact.html', import.meta.url), 'utf8');
   const script = await readFile(new URL('../public/contact.js', import.meta.url), 'utf8');

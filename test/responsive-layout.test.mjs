@@ -44,6 +44,11 @@ test('hero illustration has no square dot decoration and keeps a responsive rati
   assert.match(styles, /\.hero-visual > \.hero-illustration \{ inset: 0; width: 100%; height: 100%; object-fit: contain;/);
 });
 
+test('desktop hero artwork is reduced around its existing center', () => {
+  assert.match(styles, /\.orange-blob \{[^}]*transform: rotate\(-4deg\) scale\(\.94\); transform-origin: center center;/);
+  assert.match(styles, /\.hero-visual > \.hero-illustration \{[^}]*transform: rotate\(-2deg\) scale\(1\); transform-origin: center center;/);
+});
+
 test('about decoration stays clear of copy across responsive layouts', () => {
   assert.match(styles, /\.about-section::before \{[^}]*top: -60px;[^}]*right: -200px;[^}]*width: 280px; height: 280px;[^}]*pointer-events: none;/);
   assert.match(styles, /@media \(max-width: 1024px\) \{[\s\S]*?\.about-section::before \{ top: -40px; right: -160px; width: 220px; height: 220px; \}/);
