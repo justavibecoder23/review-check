@@ -2,7 +2,6 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { analyzeProductUrl } from '../src/analyze.mjs';
-import { answerWebsiteQuestion } from '../src/site-chatbot.mjs';
 import { assertApifyAdmin, readApifyAdminStatus, updateApifyAdminPool } from '../src/apify-admin.mjs';
 import { assertGeminiAdmin, readGeminiAdminStatus, updateGeminiAdminPool } from '../src/gemini-admin.mjs';
 import { clientDisconnectSignal, openSse } from '../src/sse.mjs';
@@ -10,6 +9,8 @@ import { normalizeApiPath } from '../src/server-route.mjs';
 import authHandler from '../api/auth.mjs';
 import historyHandler from '../api/history.mjs';
 import contactHandler from '../api/contact.mjs';
+import chatHandler from '../api/chat.mjs';
+import chatbotGeminiConfigHandler from '../api/chatbot-gemini-config.mjs';
 
 const port = Number(process.env.PORT || 3000);
 const host = process.env.HOST || '127.0.0.1';
@@ -97,9 +98,8 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === 'POST' && apiPath === '/api/chat') {
-      const body = await getBody(request);
-      const result = await answerWebsiteQuestion(body.messages);
-      return sendJson(response, 200, result);
+      request.body = await getBody(request);
+      return chatHandler(request, vercelResponse(response));
     }
 
     if (['GET', 'POST'].includes(request.method) && apiPath === '/api/auth') {
@@ -133,8 +133,13 @@ const server = createServer(async (request, response) => {
       return sendJson(response, 200, { updated: true, pool });
     }
 
+    if (['GET', 'PUT'].includes(request.method) && apiPath === '/api/chatbot-gemini-config') {
+      if (request.method === 'PUT') request.body = await getBody(request);
+      return chatbotGeminiConfigHandler(request, vercelResponse(response));
+    }
+
     if (apiPath.startsWith('/api/')) {
-      const knownPath = ['/api/analyze', '/api/analyze-stream', '/api/chat', '/api/auth', '/api/history', '/api/contact', '/api/apify-config', '/api/gemini-config'].includes(apiPath);
+      const knownPath = ['/api/analyze', '/api/analyze-stream', '/api/chat', '/api/auth', '/api/history', '/api/contact', '/api/apify-config', '/api/gemini-config', '/api/chatbot-gemini-config'].includes(apiPath);
       return sendJson(response, knownPath ? 405 : 404, {
         error: knownPath ? 'Phương thức không được hỗ trợ.' : 'API không tồn tại.'
       });

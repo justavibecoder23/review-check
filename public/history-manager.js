@@ -100,7 +100,14 @@ export function pruneAnalysisReport(resultData = {}) {
       type: text(resultData.source?.type),
       label: text(resultData.source?.label)
     },
-    warnings: jsonCopy(Array.isArray(resultData.warnings) ? resultData.warnings : [], [])
+    warnings: jsonCopy(Array.isArray(resultData.warnings) ? resultData.warnings : [], []),
+    chatContext: resultData.chatContext?.available ? {
+      available: true,
+      resultId: text(resultData.chatContext.resultId),
+      accessToken: text(resultData.chatContext.accessToken),
+      expiresAt: text(resultData.chatContext.expiresAt),
+      schemaVersion: text(resultData.chatContext.schemaVersion)
+    } : { available: false }
   };
 }
 
@@ -241,4 +248,3 @@ export function formatRelativeTime(isoString, now = new Date()) {
   if (days < 7) return `${days} ngày trước`;
   return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
 }
-

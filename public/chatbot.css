@@ -68,6 +68,7 @@
 .chatbot-message p { margin: 0; padding: 11px 13px; border: 1px solid rgba(22, 22, 22, .09); border-radius: 17px 17px 17px 5px; background: white; color: #343431; font-size: 11px; line-height: 1.55; white-space: pre-wrap; box-shadow: 0 7px 20px rgba(22, 22, 22, .045); }
 .chatbot-message--user p { border-color: rgba(252, 120, 31, .3); border-radius: 17px 17px 5px 17px; background: #ffe5d2; color: var(--ink); }
 .chatbot-message time { margin: 5px 3px 0; display: block; color: #85857f; font-size: 7px; font-weight: 750; }
+.chatbot-message .chatbot-citations { display: block; margin: 6px 4px 0; color: #277a59; font-size: 8px; font-weight: 800; }
 .chatbot-message.is-loading p { min-width: 62px; display: flex; gap: 4px; align-items: center; justify-content: center; }
 .chatbot-message.is-loading p i { width: 5px; height: 5px; border-radius: 50%; background: #8b8b85; animation: chatbot-dot 1s infinite ease-in-out; }
 .chatbot-message.is-loading p i:nth-child(2) { animation-delay: .14s; }
@@ -142,6 +143,7 @@
 .chatbot-message-avatar { width: 34px; height: 34px; flex-basis: 34px; font-size: 12px; }
 .chatbot-message p { padding: 13px 15px; font-size: 14px; }
 .chatbot-message time { font-size: 9px; }
+.chatbot-message .chatbot-citations { font-size: 10px; }
 .chatbot-suggestions { margin: 21px 0 0 45px; gap: 9px; }
 .chatbot-suggestions button { padding: 10px 14px; font-size: 12px; }
 .chatbot-form { padding: 16px 16px 14px; }

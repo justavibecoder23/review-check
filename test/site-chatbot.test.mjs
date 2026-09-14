@@ -30,8 +30,8 @@ test('bộ tìm kiếm chọn đúng dữ liệu liên quan và ưu tiên thông
 });
 
 test('chatbot dùng Gemini ở backend và chấp nhận câu hỏi thuộc phạm vi', async () => {
-  const previousKey = process.env.GEMINI_API_KEY;
-  process.env.GEMINI_API_KEY = 'test-only-key';
+  const previousKey = process.env.CHATBOT_GEMINI_API_KEY;
+  process.env.CHATBOT_GEMINI_API_KEY = 'test-only-key';
   let receivedKey;
   let requestPayload;
   let receivedUrl;
@@ -60,14 +60,14 @@ test('chatbot dùng Gemini ở backend và chấp nhận câu hỏi thuộc ph�
     assert.equal(result.engine, 'gemini');
     assert.equal(result.answer, 'TrustScore là điểm trên thang 100.');
   } finally {
-    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
-    else delete process.env.GEMINI_API_KEY;
+    if (previousKey) process.env.CHATBOT_GEMINI_API_KEY = previousKey;
+    else delete process.env.CHATBOT_GEMINI_API_KEY;
   }
 });
 
 test('chatbot log lỗi Gemini an toàn rồi fallback khi response bị cắt', async () => {
-  const previousKey = process.env.GEMINI_API_KEY;
-  process.env.GEMINI_API_KEY = 'test-only-key';
+  const previousKey = process.env.CHATBOT_GEMINI_API_KEY;
+  process.env.CHATBOT_GEMINI_API_KEY = 'test-only-key';
   const logged = [];
   try {
     const result = await answerWebsiteQuestion([{ role: 'user', content: 'Giải thích giúp tôi ý nghĩa TrustScore thật dễ hiểu nhé' }], {
@@ -86,14 +86,14 @@ test('chatbot log lỗi Gemini an toàn rồi fallback khi response bị cắt',
     assert.equal(result.fallbackReason, 'invalid_response');
     assert.doesNotMatch(JSON.stringify(logged), /test-only-key/);
   } finally {
-    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
-    else delete process.env.GEMINI_API_KEY;
+    if (previousKey) process.env.CHATBOT_GEMINI_API_KEY = previousKey;
+    else delete process.env.CHATBOT_GEMINI_API_KEY;
   }
 });
 
 test('chatbot từ chối câu hỏi ngoài kho kiến thức', async () => {
-  const previousKey = process.env.GEMINI_API_KEY;
-  process.env.GEMINI_API_KEY = 'test-only-key';
+  const previousKey = process.env.CHATBOT_GEMINI_API_KEY;
+  process.env.CHATBOT_GEMINI_API_KEY = 'test-only-key';
   try {
     const result = await answerWebsiteQuestion([{ role: 'user', content: 'Nên mua điện thoại nào?' }], {
       fetchImpl: async () => ({
@@ -105,26 +105,26 @@ test('chatbot từ chối câu hỏi ngoài kho kiến thức', async () => {
     });
     assert.equal(result.answer, OUT_OF_SCOPE_REPLY);
   } finally {
-    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
-    else delete process.env.GEMINI_API_KEY;
+    if (previousKey) process.env.CHATBOT_GEMINI_API_KEY = previousKey;
+    else delete process.env.CHATBOT_GEMINI_API_KEY;
   }
 });
 
 test('chatbot quy tắc không tư vấn sản phẩm khi Gemini chưa được cấu hình', async () => {
-  const previousKey = process.env.GEMINI_API_KEY;
-  delete process.env.GEMINI_API_KEY;
+  const previousKey = process.env.CHATBOT_GEMINI_API_KEY;
+  delete process.env.CHATBOT_GEMINI_API_KEY;
   try {
     const result = await answerWebsiteQuestion([{ role: 'user', content: 'Nên mua điện thoại nào?' }]);
     assert.equal(result.engine, 'rules');
     assert.equal(result.answer, OUT_OF_SCOPE_REPLY);
   } finally {
-    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    if (previousKey) process.env.CHATBOT_GEMINI_API_KEY = previousKey;
   }
 });
 
 test('FAQ trả lời trực tiếp ngay cả khi Gemini chưa được cấu hình', async () => {
-  const previousKey = process.env.GEMINI_API_KEY;
-  delete process.env.GEMINI_API_KEY;
+  const previousKey = process.env.CHATBOT_GEMINI_API_KEY;
+  delete process.env.CHATBOT_GEMINI_API_KEY;
   try {
     const result = await answerWebsiteQuestion([{ role: 'user', content: 'Cách dùng RealView?' }]);
     assert.equal(result.engine, 'knowledge-base');
@@ -132,6 +132,6 @@ test('FAQ trả lời trực tiếp ngay cả khi Gemini chưa được cấu h�
     assert.match(result.answer, /TikTok Shop/);
     assert.equal(result.sourceId, 'usage_001');
   } finally {
-    if (previousKey) process.env.GEMINI_API_KEY = previousKey;
+    if (previousKey) process.env.CHATBOT_GEMINI_API_KEY = previousKey;
   }
 });

@@ -7,6 +7,11 @@ import { stdin, stdout } from 'node:process';
 import { buildGeminiPoolFile, normalizeGeminiApiKeys } from '../src/gemini-pool-file.mjs';
 import { DEFAULT_GEMINI_CONFIG_URL, uploadGeminiPool } from '../src/gemini-pool-upload.mjs';
 
+const chatbotMode = process.argv.includes('--chatbot');
+const defaultConfigUrl = chatbotMode
+  ? 'https://www.realview.com.vn/api/chatbot-gemini-config'
+  : DEFAULT_GEMINI_CONFIG_URL;
+
 function promptSession() {
   return createInterface({ input: stdin, output: stdout });
 }
@@ -99,8 +104,8 @@ async function main() {
     const mode = normalizeMode(await ask('Chọn chế độ [1/2] (mặc định 1 - Bổ sung): ', '1'));
     const timestamp = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
     const defaultFilename = mode === 'append'
-      ? `config/gemini-pool-append-${timestamp}.local.json`
-      : 'config/gemini-pool.local.json';
+      ? `config/${chatbotMode ? 'chatbot-' : ''}gemini-pool-append-${timestamp}.local.json`
+      : `config/${chatbotMode ? 'chatbot-' : ''}gemini-pool.local.json`;
     const outputPath = resolve(await ask(`Đường dẫn file đầu ra (mặc định ${resolve(defaultFilename)}): `, resolve(defaultFilename)));
     const cleaned = normalizeGeminiApiKeys(apiKeys);
     const duplicateCount = cleaned.length - new Set(cleaned).size;
@@ -124,7 +129,7 @@ async function main() {
       stdout.write('Đã tạo file nhưng chưa thay đổi Redis.\n');
       return;
     }
-    const endpoint = await ask(`URL API cấu hình (mặc định ${DEFAULT_GEMINI_CONFIG_URL}): `, DEFAULT_GEMINI_CONFIG_URL);
+    const endpoint = await ask(`URL API cấu hình (mặc định ${defaultConfigUrl}): `, defaultConfigUrl);
     const adminKey = await askSecret('Nhập GEMINI_ADMIN_KEY hoặc APIFY_ADMIN_KEY (được ẩn): ');
     try {
       const pool = await uploadGeminiPool(payload, { endpoint, adminKey });

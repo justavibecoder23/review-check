@@ -75,8 +75,12 @@ redis.call('HSET', KEYS[2], credentialId, cjson.encode(state))
 return cjson.encode({ok=true, exhaustedCount=exhaustedCount, used=state.used, resetAt=resetAt})
 `;
 
-function vaultKey() {
-  const encoded = String(process.env.GEMINI_API_KEY_VAULT_KEY || '');
+function vaultKey(options = {}) {
+  const encoded = String(
+    (options.vaultKeyEnv ? process.env[options.vaultKeyEnv] : '')
+    || process.env.GEMINI_API_KEY_VAULT_KEY
+    || ''
+  );
   if (!encoded) throw new Error('Chưa cấu hình GEMINI_API_KEY_VAULT_KEY.');
   const key = Buffer.from(encoded, 'base64');
   if (key.length !== 32) throw new Error('GEMINI_API_KEY_VAULT_KEY phải là khóa base64 32 byte.');
@@ -87,9 +91,9 @@ export function geminiCredentialId(apiKey) {
   return createHash('sha256').update(String(apiKey)).digest('hex').slice(0, 16);
 }
 
-function encryptApiKey(apiKey) {
+function encryptApiKey(apiKey, options = {}) {
   const iv = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', vaultKey(), iv);
+  const cipher = createCipheriv('aes-256-gcm', vaultKey(options), iv);
   const ciphertext = Buffer.concat([cipher.update(apiKey, 'utf8'), cipher.final()]);
   return {
     iv: iv.toString('base64'),
@@ -98,8 +102,8 @@ function encryptApiKey(apiKey) {
   };
 }
 
-function decryptApiKey(record) {
-  const decipher = createDecipheriv('aes-256-gcm', vaultKey(), Buffer.from(record.iv, 'base64'));
+function decryptApiKey(record, options = {}) {
+  const decipher = createDecipheriv('aes-256-gcm', vaultKey(options), Buffer.from(record.iv, 'base64'));
   decipher.setAuthTag(Buffer.from(record.tag, 'base64'));
   return Buffer.concat([
     decipher.update(Buffer.from(record.ciphertext, 'base64')),
@@ -173,7 +177,7 @@ export function nextPacificResetAt(value = new Date()) {
 }
 
 async function readConfig(options = {}) {
-  const raw = await redisCommand(['GET', GEMINI_POOL_KEY], options);
+  const raw = await redisCommand(['GET', String(options.poolKey || GEMINI_POOL_KEY)], options);
   return raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : null;
 }
 
@@ -188,7 +192,7 @@ export async function saveGeminiCredentialPool({ credentials = [], mode = 'repla
   if (incoming.some((credential) => existingIds.has(credential.id))) {
     throw new Error('Có Gemini API key đã tồn tại trong pool.');
   }
-  const encryptedIncoming = incoming.map(({ apiKey, ...credential }) => ({ ...credential, ...encryptApiKey(apiKey) }));
+  const encryptedIncoming = incoming.map(({ apiKey, ...credential }) => ({ ...credential, ...encryptApiKey(apiKey, options) }));
   const combined = [...(existing?.credentials || []), ...encryptedIncoming];
   if (combined.length > 200) throw new Error('Pool Gemini không được vượt quá 200 API key.');
   const config = {
@@ -198,7 +202,7 @@ export async function saveGeminiCredentialPool({ credentials = [], mode = 'repla
     models: [...DEFAULT_GEMINI_MODELS],
     credentials: combined
   };
-  await redisCommand(['SET', GEMINI_POOL_KEY, JSON.stringify(config)], options);
+  await redisCommand(['SET', String(options.poolKey || GEMINI_POOL_KEY), JSON.stringify(config)], options);
   return getGeminiCredentialPoolStatus(options);
 }
 
@@ -208,11 +212,13 @@ export async function reserveGeminiCredential(options = {}) {
     error.code = 'POOL_NOT_CONFIGURED';
     throw error;
   }
+  const poolKey = String(options.poolKey || GEMINI_POOL_KEY);
+  const statesKey = String(options.statesKey || GEMINI_POOL_STATES_KEY);
   const now = options.now ? new Date(options.now) : new Date();
   const resetAt = nextPacificResetAt(now);
   const excludedIds = [...new Set((options.excludeCredentialIds || []).map(String).filter(Boolean))];
   const raw = await redisCommand([
-    'EVAL', RESERVE_GEMINI_CREDENTIAL_SCRIPT, '2', GEMINI_POOL_KEY, GEMINI_POOL_STATES_KEY,
+    'EVAL', RESERVE_GEMINI_CREDENTIAL_SCRIPT, '2', poolKey, statesKey,
     String(now.getTime()), resetAt, JSON.stringify(excludedIds), DEFAULT_GEMINI_MODELS[0]
   ], options);
   const allocation = typeof raw === 'string' ? JSON.parse(raw) : raw;
@@ -231,7 +237,7 @@ export async function reserveGeminiCredential(options = {}) {
     source: allocation.source,
     id: allocation.credential.id,
     label: allocation.credential.label,
-    apiKey: decryptApiKey(allocation.credential),
+    apiKey: decryptApiKey(allocation.credential, options),
     models: [...DEFAULT_GEMINI_MODELS],
     exhaustedModels: Object.keys(allocation.exhaustedModels || {}).filter((model) => DEFAULT_GEMINI_MODELS.includes(model)),
     resetAt: allocation.resetAt || resetAt
@@ -244,9 +250,11 @@ export async function listAvailableGeminiCredentials(options = {}) {
     error.code = 'POOL_NOT_CONFIGURED';
     throw error;
   }
+  const poolKey = String(options.poolKey || GEMINI_POOL_KEY);
+  const statesKey = String(options.statesKey || GEMINI_POOL_STATES_KEY);
   const [configRaw, statesRaw] = await redisTransaction([
-    ['GET', GEMINI_POOL_KEY],
-    ['HGETALL', GEMINI_POOL_STATES_KEY]
+    ['GET', poolKey],
+    ['HGETALL', statesKey]
   ], options);
   if (!configRaw) {
     const error = new Error('Chưa cấu hình Gemini API key pool.');
@@ -264,7 +272,7 @@ export async function listAvailableGeminiCredentials(options = {}) {
       source: 'redis-vault',
       id: credential.id,
       label: credential.label,
-      apiKey: decryptApiKey(credential),
+      apiKey: decryptApiKey(credential, options),
       models: [...DEFAULT_GEMINI_MODELS],
       exhaustedModels: Object.keys(validState?.models || {}).filter((model) => DEFAULT_GEMINI_MODELS.includes(model)),
       resetAt: validState?.resetAt || resetAt
@@ -283,10 +291,12 @@ export async function listAvailableGeminiCredentials(options = {}) {
 export async function markGeminiModelExhausted(credential, model, options = {}) {
   if (!credential?.id) throw new Error('Thiếu mã Gemini API key cần cập nhật.');
   if (!DEFAULT_GEMINI_MODELS.includes(model)) throw new Error('Model Gemini không thuộc chuỗi quota được quản lý.');
+  const poolKey = String(options.poolKey || GEMINI_POOL_KEY);
+  const statesKey = String(options.statesKey || GEMINI_POOL_STATES_KEY);
   const now = options.now ? new Date(options.now) : new Date();
   const resetAt = nextPacificResetAt(now);
   const raw = await redisCommand([
-    'EVAL', MARK_GEMINI_MODEL_EXHAUSTED_SCRIPT, '2', GEMINI_POOL_KEY, GEMINI_POOL_STATES_KEY,
+    'EVAL', MARK_GEMINI_MODEL_EXHAUSTED_SCRIPT, '2', poolKey, statesKey,
     credential.id, model, now.toISOString(), String(now.getTime()), resetAt, String(new Date(resetAt).getTime())
   ], options);
   const result = typeof raw === 'string' ? JSON.parse(raw) : raw;
@@ -302,9 +312,11 @@ export async function getGeminiCredentialPoolStatus(options = {}) {
   if (!isRedisConfigured()) {
     return { version: 1, provider: 'none', models: [...DEFAULT_GEMINI_MODELS], active: null, backup: [], used: [], totals: { credentials: 0, active: 0, backup: 0, used: 0 } };
   }
+  const poolKey = String(options.poolKey || GEMINI_POOL_KEY);
+  const statesKey = String(options.statesKey || GEMINI_POOL_STATES_KEY);
   const [configRaw, statesRaw] = await redisTransaction([
-    ['GET', GEMINI_POOL_KEY],
-    ['HGETALL', GEMINI_POOL_STATES_KEY]
+    ['GET', poolKey],
+    ['HGETALL', statesKey]
   ], options);
   if (!configRaw) {
     return { version: 1, provider: 'upstash-redis', models: [...DEFAULT_GEMINI_MODELS], active: null, backup: [], used: [], totals: { credentials: 0, active: 0, backup: 0, used: 0 } };

@@ -84,7 +84,7 @@ test('provider chậm bị hủy trong ngân sách chung và không retry kéo d
   let calls = 0;
   const started = Date.now();
   try {
-    assert.equal(CHATBOT_RESPONSE_BUDGET_MS, 5500);
+    assert.equal(CHATBOT_RESPONSE_BUDGET_MS, 10000);
     const result = await answerWebsiteQuestion(question('Giải thích thêm cho tôi ý nghĩa TrustScore nhé'), {
       timeoutMs: 40,
       fetchImpl: async (_url, init) => {
@@ -115,5 +115,5 @@ test('metadata hiện tại không hướng người dùng đi tìm Confidence �
 test('giao diện phân biệt câu trả lời trực tiếp và có giới hạn chờ mạng', () => {
   const source = readFileSync(new URL('../public/chatbot.js', import.meta.url), 'utf8');
   assert.match(source, /Kho dữ liệu RealView/);
-  assert.match(source, /AbortSignal.timeout\(12_000\)/);
+  assert.match(source, /AbortSignal.timeout\(15_000\)/);
 });

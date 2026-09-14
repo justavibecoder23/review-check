@@ -27,6 +27,9 @@
     },
     "api/gemini-config.mjs": {
       "maxDuration": 10
+    },
+    "api/chatbot-gemini-config.mjs": {
+      "maxDuration": 10
     }
   },
   "headers": [
@@ -68,6 +71,7 @@
     { "source": "/api/contact", "destination": "/api/contact.mjs" },
     { "source": "/api/apify-config", "destination": "/api/apify-config.mjs" },
     { "source": "/api/gemini-config", "destination": "/api/gemini-config.mjs" },
+    { "source": "/api/chatbot-gemini-config", "destination": "/api/chatbot-gemini-config.mjs" },
     { "source": "/tieu-chi-loc", "destination": "/criteria.html" },
     { "source": "/lien-he", "destination": "/contact.html" },
     { "source": "/bai-viet", "destination": "/blog.html" },

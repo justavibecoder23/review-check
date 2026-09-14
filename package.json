@@ -8,13 +8,14 @@
     "dev": "node --watch tools/local-server.mjs",
     "generate:apify-pool": "node tools/generate-apify-pool.mjs",
     "generate:gemini-pool": "node tools/generate-gemini-pool.mjs",
+    "generate:chatbot-gemini-pool": "node tools/generate-gemini-pool.mjs --chatbot",
     "sync:shopee-cache": "node tools/sync-blob-to-redis.mjs --platform=shopee",
     "sync:product-cache": "node tools/sync-blob-to-redis.mjs",
     "test": "node --test"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",
+    "ai": "^7.0.99",
     "nodemailer": "^10.0.1"
   }
 }
-

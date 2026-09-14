@@ -21,5 +21,8 @@ test('Vercel dùng các serverless handler riêng thay vì root custom server', 
   assert.equal(packageJson.scripts.start, undefined);
   assert.equal(config.functions['api/analyze-stream.mjs'].maxDuration, 180);
   assert.equal(config.functions['api/chat.mjs'].maxDuration, 30);
+  assert.equal(config.functions['api/chatbot-gemini-config.mjs'].maxDuration, 10);
+  assert.ok(config.rewrites.some((route) => route.source === '/api/chatbot-gemini-config' && route.destination === '/api/chatbot-gemini-config.mjs'));
   assert.equal(typeof (await import('../api/chat.mjs')).default, 'function');
+  assert.equal(typeof (await import('../api/chatbot-gemini-config.mjs')).default, 'function');
 });

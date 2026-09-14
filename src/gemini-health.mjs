@@ -308,12 +308,13 @@ export function geminiRouteScore(state, model, nowMs = Date.now()) {
 
 export async function getGeminiHealthSnapshot(options = {}) {
   if (!isRedisConfigured()) return {};
+  const healthKey = String(options.healthKey || GEMINI_HEALTH_KEY);
   const routeIds = [...new Set((options.routeIds || []).map(String).filter(Boolean))];
   if (routeIds.length) {
-    const values = await redisCommand(['HMGET', GEMINI_HEALTH_KEY, ...routeIds], options);
+    const values = await redisCommand(['HMGET', healthKey, ...routeIds], options);
     return Object.fromEntries(routeIds.map((routeId, index) => [routeId, parseJson(values?.[index], {})]));
   }
-  const raw = await redisCommand(['HGETALL', GEMINI_HEALTH_KEY], options);
+  const raw = await redisCommand(['HGETALL', healthKey], options);
   const pairs = Array.isArray(raw) ? raw : Object.entries(raw || {}).flat();
   const result = {};
   for (let index = 0; index < pairs.length; index += 2) result[pairs[index]] = parseJson(pairs[index + 1], {});
@@ -322,10 +323,11 @@ export async function getGeminiHealthSnapshot(options = {}) {
 
 export async function beginGeminiRoute(routeId, options = {}) {
   if (!isRedisConfigured()) return null;
+  const healthKey = String(options.healthKey || GEMINI_HEALTH_KEY);
   const nowMs = number(options.nowMs, Date.now());
   const limits = configuredGeminiLimit(options.model);
   const raw = await redisCommand([
-    'EVAL', BEGIN_ROUTE_SCRIPT, '1', GEMINI_HEALTH_KEY,
+    'EVAL', BEGIN_ROUTE_SCRIPT, '1', healthKey,
     routeId, String(nowMs), new Date(nowMs).toISOString(), pacificDay(nowMs),
     String(limits.rpm), String(limits.tpm), String(limits.rpd), String(Math.max(0, number(options.reservedTokens)))
   ], options);
@@ -335,12 +337,13 @@ export async function beginGeminiRoute(routeId, options = {}) {
 export async function finishGeminiRoute(routeId, result, options = {}) {
   if (!isRedisConfigured()) return null;
   try {
+    const healthKey = String(options.healthKey || GEMINI_HEALTH_KEY);
     const nowMs = number(options.nowMs, Date.now());
     const ok = Boolean(result?.ok);
     const statusCode = number(result?.statusCode);
     const latencyMs = Math.max(0, number(result?.latencyMs));
     const raw = await redisCommand([
-      'EVAL', FINISH_ROUTE_SCRIPT, '1', GEMINI_HEALTH_KEY,
+      'EVAL', FINISH_ROUTE_SCRIPT, '1', healthKey,
       routeId, String(nowMs), new Date(nowMs).toISOString(), pacificDay(nowMs), ok ? '1' : '0',
       String(statusCode || 0), String(latencyMs), String(result?.errorType || 'unknown').slice(0, 80),
       String(Math.max(0, number(result?.tokens))), String(Math.max(0, number(result?.reservedTokens)))

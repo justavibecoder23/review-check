@@ -46,6 +46,19 @@ test('key riêng chatbot được ưu tiên và không thay key/model của back
   assert.doesNotMatch(JSON.stringify(result), /chatbot-test-key|analysis-test-key/);
 }));
 
+test('chatbot tuyệt đối không mượn GEMINI_API_KEY của pipeline phân tích', () => withEnv({ GEMINI_API_KEY: 'analysis-only-key' }, async () => {
+  let providerCalls = 0;
+  const result = await answerWebsiteQuestion(question('Hãy giải thích RealView theo cách khác'), {
+    fetchImpl: async () => {
+      providerCalls += 1;
+      throw new Error('Không được gọi Gemini phân tích từ chatbot');
+    }
+  });
+  assert.equal(providerCalls, 0);
+  assert.equal(result.engine, 'rules');
+  assert.equal(result.fallbackReason, 'not_configured');
+}));
+
 test('key chatbot lỗi thì chuyển đúng một lần sang key dự phòng trong pool', () => withEnv({
   CHATBOT_GEMINI_API_KEY: 'chatbot-primary-key',
   UPSTASH_REDIS_REST_URL: 'https://redis.test', UPSTASH_REDIS_REST_TOKEN: 'redis-test-token',
@@ -80,7 +93,7 @@ test('key chatbot lỗi thì chuyển đúng một lần sang key dự phòng tr
   assert.doesNotMatch(JSON.stringify(result), /chatbot-(?:primary|backup)-key/);
 }));
 
-test('câu hỏi chủ đề mới không bị lịch sử rating lấn át', () => withEnv({ GEMINI_API_KEY: 'test-key' }, async () => {
+test('câu hỏi chủ đề mới không bị lịch sử rating lấn át', () => withEnv({ CHATBOT_GEMINI_API_KEY: 'test-key' }, async () => {
   const messages = [...question('Rating cao có đồng nghĩa TrustScore cao không?'), { role: 'assistant', content: 'Hai chỉ số khác nhau.' }, ...question('Giải thích giúp tôi quy trình RealView thật dễ hiểu nhé')];
   const result = await answerWebsiteQuestion(messages, {
     fetchImpl: async (_url, init) => {
@@ -95,7 +108,7 @@ test('câu hỏi chủ đề mới không bị lịch sử rating lấn át', ()
   assert.equal(result.engine, 'gemini');
 }));
 
-test('Gemini vẫn được đọc kho dữ liệu khi câu hỏi không khớp từ khóa', () => withEnv({ GEMINI_API_KEY: 'test-key' }, async () => {
+test('Gemini vẫn được đọc kho dữ liệu khi câu hỏi không khớp từ khóa', () => withEnv({ CHATBOT_GEMINI_API_KEY: 'test-key' }, async () => {
   let calls = 0;
   const result = await answerWebsiteQuestion(question('Chào bạn!'), {
     fetchImpl: async (_url, init) => {
@@ -108,7 +121,7 @@ test('Gemini vẫn được đọc kho dữ liệu khi câu hỏi không khớp 
   assert.equal(result.engine, 'gemini');
 }));
 
-test('Gemini có thể từ chối câu hỏi ngoài dữ liệu', () => withEnv({ GEMINI_API_KEY: 'test-key' }, async () => {
+test('Gemini có thể từ chối câu hỏi ngoài dữ liệu', () => withEnv({ CHATBOT_GEMINI_API_KEY: 'test-key' }, async () => {
   const result = await answerWebsiteQuestion(question('Thời tiết hôm nay thế nào?'), {
     fetchImpl: async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '{"supported":false,"answer":""}' }] } }] }))
   });
@@ -116,7 +129,7 @@ test('Gemini có thể từ chối câu hỏi ngoài dữ liệu', () => withEnv
   assert.equal(result.answer, OUT_OF_SCOPE_REPLY);
 }));
 
-test('phân loại lỗi kết nối mà không trả khóa hoặc lỗi thô cho người dùng', () => withEnv({ GEMINI_API_KEY: 'private-test-key' }, async () => {
+test('phân loại lỗi kết nối mà không trả khóa hoặc lỗi thô cho người dùng', () => withEnv({ CHATBOT_GEMINI_API_KEY: 'private-test-key' }, async () => {
   for (const [status, expected] of [[403, 'authentication_failed'], [429, 'quota_exhausted'], [503, 'connection_failed']]) {
     const logs = [];
     const result = await answerWebsiteQuestion(question('Giải thích giúp tôi ý nghĩa TrustScore thật dễ hiểu nhé'), {
