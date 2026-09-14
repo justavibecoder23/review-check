@@ -143,6 +143,42 @@
   });
 })();
 
+// Keep the social destinations consistent across every shared footer and the contact card.
+(() => {
+  const socialChannels = [
+    {
+      label: 'Instagram',
+      href: 'https://www.instagram.com/real.viewueh?stkn=em9tdjNmcTJ5OW91',
+      icon: '<rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1"/>',
+    },
+    {
+      label: 'Threads',
+      href: 'https://www.threads.com/@real.viewueh',
+      asset: '/assets/threads-logo.svg',
+    },
+  ];
+
+  const appendChannels = (container, showLabels) => {
+    if (!container) return;
+    socialChannels.forEach(({ label, href, icon, asset }) => {
+      if ([...container.querySelectorAll('a')].some((link) => link.href === href)) return;
+      const link = document.createElement('a');
+      link.href = href;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.setAttribute('aria-label', `${label} RealView`);
+      const iconMarkup = asset
+        ? `<span class="social-icon-threads" aria-hidden="true" style="--social-icon: url('${asset}')"></span>`
+        : `<svg class="social-icon-outline" viewBox="0 0 24 24" fill="none" aria-hidden="true">${icon}</svg>`;
+      link.innerHTML = `${iconMarkup}${showLabels ? `<span>${label}</span>` : ''}`;
+      container.append(link);
+    });
+  };
+
+  document.querySelectorAll('.footer-social').forEach((container) => appendChannels(container, true));
+  appendChannels(document.querySelector('.contact-social-links'), false);
+})();
+
 // Setup scroll to top button for all subpages
 (() => {
   const backToTop = document.querySelector('.back-to-top');

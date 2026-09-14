@@ -67,7 +67,7 @@ test('about decoration stays clear of copy across responsive layouts', () => {
   assert.match(styles, /@media \(max-width: 700px\) \{[\s\S]*?\.about-section::before \{ top: -30px; right: -105px; width: 150px; height: 150px; \}/);
 });
 
-test('contact and every page footer expose responsive Facebook and TikTok links', () => {
+test('contact and every page footer expose responsive social links', () => {
   for (const page of publicPages) {
     const footer = page.match(/<footer class="site-footer[\s\S]*?<\/footer>/)?.[0] || '';
     assert.match(footer, /class="[^"]*footer-grid[^"]*"[\s\S]*class="footer-brand"[\s\S]*class="footer-menu-group"/);
@@ -81,8 +81,19 @@ test('contact and every page footer expose responsive Facebook and TikTok links'
 
   const contact = publicPages[1];
   assert.match(contact, /Phạm vi[\s\S]*Kết nối[\s\S]*contact-social-links/);
+  assert.match(contact, /M10 13a5 5 0 0 0 7\.1\.1l2-2/);
+  assert.match(nav, /https:\/\/www\.instagram\.com\/real\.viewueh\?stkn=em9tdjNmcTJ5OW91/);
+  assert.match(nav, /https:\/\/www\.threads\.com\/@real\.viewueh/);
+  assert.match(nav, /asset: '\/assets\/threads-logo\.svg'/);
+  assert.match(nav, /document\.querySelectorAll\('\.footer-social'\)/);
+  assert.match(nav, /document\.querySelector\('\.contact-social-links'\)/);
+  assert.match(nav, /target = '_blank'/);
+  assert.match(nav, /rel = 'noopener noreferrer'/);
   assert.match(styles, /\.contact-social-links \{[^}]*gap: 12px;/);
   assert.match(styles, /\.contact-social-links svg \{[^}]*width: 20px; height: 20px;/);
+  assert.match(styles, /\.footer-social \.social-icon-outline \{ fill: none; stroke: currentColor;/);
+  assert.match(styles, /\.footer-social \.social-icon-threads \{ display: inline-block; background-color: currentColor;/);
+  assert.match(styles, /\.contact-social-links \.social-icon-threads \{ width: 20px; height: 20px; \}/);
   assert.match(styles, /\.footer-social a \{[^}]*color: #666666;[^}]*font-size: 11px;[^}]*text-decoration: none;[^}]*transition:/);
   assert.match(styles, /\.footer-social a:hover, \.footer-social a:focus-visible \{ color: #FC781F; \}/);
   assert.match(styles, /\.footer-grid \{[^}]*grid-template-columns: minmax\(210px, \.7fr\) minmax\(0, 1\.8fr\);[^}]*align-items: flex-start;/);
