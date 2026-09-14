@@ -40,6 +40,7 @@ function historyCard(item, compact = false) {
         </span>
         <span class="history-score history-score--${escapeHtml(item.tone)}"><b>${score}</b><small>TrustScore</small></span>
       </button>
+      <button class="history-card-chat" type="button" data-history-chat="${escapeHtml(item.id)}" data-history-title="${escapeHtml(item.title)}" aria-label="Hỏi Trợ lý về ${escapeHtml(item.title)}">Hỏi Trợ lý</button>
       <button class="history-card-delete" type="button" data-history-delete="${escapeHtml(item.id)}" aria-label="Xóa ${escapeHtml(item.title)} khỏi lịch sử">×</button>
     </article>`;
 }
@@ -150,6 +151,15 @@ function initialize() {
       restoreHistoryItem(itemTrigger.dataset.historyOpenItem);
       return;
     }
+    const chatTrigger = event.target.closest('[data-history-chat]');
+    if (chatTrigger) {
+      event.preventDefault();
+      closeDrawer();
+      window.dispatchEvent(new CustomEvent('realview:chat-history-select', {
+        detail: { historyItemId: chatTrigger.dataset.historyChat, title: chatTrigger.dataset.historyTitle }
+      }));
+      return;
+    }
     const deleteTrigger = event.target.closest('[data-history-delete]');
     if (deleteTrigger) {
       deleteHistoryItem(deleteTrigger.dataset.historyDelete).then(() => renderHistory());
@@ -173,4 +183,3 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
 else initialize();
 
 export { renderHistory };
-

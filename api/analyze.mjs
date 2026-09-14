@@ -1,5 +1,6 @@
 import { analyzeProductUrl } from '../src/analyze.mjs';
 import { clientDisconnectSignal } from '../src/sse.mjs';
+import { attachResultChatContext, scheduleResultChatContext } from '../src/result-chat-background.mjs';
 
 export default async function handler(request, response) {
   if (request.method !== 'POST') {
@@ -10,7 +11,11 @@ export default async function handler(request, response) {
   try {
     const body = typeof request.body === 'string' ? JSON.parse(request.body || '{}') : (request.body || {});
     const result = await analyzeProductUrl(body.url, { signal: clientDisconnectSignal(request, response) });
-    return response.status(200).json(result);
+    const preparedContext = attachResultChatContext(result);
+    const sent = response.status(200).json(result);
+    console.log(JSON.stringify({ level: 'info', event: 'analysis_result_sent', resultId: result.chatContext?.resultId || null }));
+    scheduleResultChatContext(preparedContext);
+    return sent;
   } catch (error) {
     return response.status(error?.statusCode || 500).json({
       error: error?.message || 'Có lỗi khi phân tích sản phẩm.',

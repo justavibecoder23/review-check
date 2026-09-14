@@ -1,5 +1,6 @@
 import { analyzeProductUrl } from '../src/analyze.mjs';
 import { clientDisconnectSignal, openSse } from '../src/sse.mjs';
+import { attachResultChatContext, scheduleResultChatContext } from '../src/result-chat-background.mjs';
 
 export default async function handler(request, response) {
   if (request.method !== 'POST') {
@@ -28,7 +29,10 @@ export default async function handler(request, response) {
       onLayer2Progress: (state) => stream.send('layer2_progress', state),
       signal
     });
+    const preparedContext = attachResultChatContext(result);
     stream.send('result', result);
+    console.log(JSON.stringify({ level: 'info', event: 'analysis_result_sent', resultId: result.chatContext?.resultId || null }));
+    scheduleResultChatContext(preparedContext);
   } catch (error) {
     console.error('[analyze-stream] Analysis error:', {
       message: error?.message,

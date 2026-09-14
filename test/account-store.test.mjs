@@ -5,6 +5,7 @@ import {
   createPasswordReset,
   createAccountSession,
   getAccountFromSession,
+  getAccountHistoryItem,
   listAccountHistory,
   registerAccount,
   resetAccountPassword,
@@ -191,6 +192,8 @@ test('lịch sử được lưu theo tài khoản và sắp xếp mới nhất t
 
     assert.deepEqual((await listAccountHistory('user-a', { fetchImpl: mock.fetchImpl })).map((item) => item.id), ['new', 'old']);
     assert.deepEqual((await listAccountHistory('user-b', { fetchImpl: mock.fetchImpl })).map((item) => item.id), ['other']);
+    assert.equal((await getAccountHistoryItem('user-a', 'new', { fetchImpl: mock.fetchImpl })).id, 'new');
+    assert.equal(await getAccountHistoryItem('user-b', 'new', { fetchImpl: mock.fetchImpl }), null);
   } finally {
     if (previousUrl === undefined) delete process.env.UPSTASH_REDIS_REST_URL;
     else process.env.UPSTASH_REDIS_REST_URL = previousUrl;

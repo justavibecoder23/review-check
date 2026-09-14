@@ -3,7 +3,12 @@ import assert from 'node:assert/strict';
 import {
   buildResultChatContext,
   createResultAccessToken,
+  getResultChatContextStatus,
   loadResultChatContext,
+  MAX_RESULT_CHAT_CONTEXT_BYTES,
+  MAX_RESULT_CHAT_REVIEWS,
+  persistPreparedResultChatContext,
+  prepareResultChatContext,
   saveResultChatContext,
   verifyResultAccessToken
 } from '../src/result-chat-context.mjs';
@@ -63,9 +68,30 @@ test('result context chỉ giữ dữ liệu cần thiết và gắn mã review 
   const context = buildResultChatContext(sampleResult, { resultId: 'result-1', now: new Date('2026-09-14T00:00:00Z') });
   assert.equal(context.resultId, 'result-1');
   assert.equal(context.product.category, 'Thực phẩm');
-  assert.deepEqual(context.reviews.map((review) => review.ref), ['R001', 'R002', 'R003']);
-  assert.equal(context.reviews[2].included, false);
+  assert.deepEqual(new Set(context.reviews.map((review) => review.ref)), new Set(['R001', 'R002', 'R003']));
+  assert.equal(context.reviews.some((review) => review.included === false), true);
   assert.equal(context.stats.included, 92);
+});
+
+test('compact context tối đa 20 review, dưới 20 KB và phủ review giữ lẫn bị loại', () => {
+  const result = structuredClone(sampleResult);
+  result.reviews = Array.from({ length: 200 }, (_, index) => ({
+    labelId: `review-${index + 1}`,
+    rating: (index % 5) + 1,
+    text: `Review ${index + 1}: ${'nội dung trải nghiệm thực tế '.repeat(35)}`,
+    included: index % 7 !== 0,
+    exclusionReason: index % 7 === 0 ? 'Nội dung trùng hoặc có dấu hiệu seeding' : null
+  }));
+  result.trust.cons = [{ label: 'Có phản hồi tiêu cực', evidenceIds: ['review-199'] }];
+  const context = buildResultChatContext(result, { resultId: 'compact-200' });
+  assert.ok(context.reviews.length <= MAX_RESULT_CHAT_REVIEWS);
+  assert.ok(Buffer.byteLength(JSON.stringify(context), 'utf8') <= MAX_RESULT_CHAT_CONTEXT_BYTES);
+  assert.equal(context.reviews.some((review) => review.included !== false), true);
+  assert.equal(context.reviews.some((review) => review.included === false), true);
+  assert.deepEqual(new Set(context.reviews.map((review) => review.rating)), new Set([1, 2, 3, 4, 5]));
+  assert.equal(context.reviews.some((review) => review.labelId === 'review-199'), true);
+  assert.equal(context.trust.cons[0].evidenceIds.length, 1);
+  assert.match(context.trust.cons[0].evidenceIds[0], /^R\d{3}$/);
 });
 
 test('token result bị khóa theo ID và thời hạn', () => withContextEnv(async () => {
@@ -100,6 +126,58 @@ test('context được lưu Redis có TTL rồi đọc lại bằng token', () =
   });
   assert.equal(loaded.product.title, 'Kẹo me cay');
   assert.equal(loaded.trust.score, 83);
+}));
+
+test('descriptor được tạo đồng bộ còn Redis được lưu riêng trong background', () => withContextEnv(async () => {
+  let release;
+  const pending = new Promise((resolve) => { release = resolve; });
+  const prepared = prepareResultChatContext(sampleResult, {
+    resultId: 'result-background',
+    now: new Date('2026-09-14T00:00:00Z'),
+    redisFetchImpl: async () => {
+      await pending;
+      return new Response(JSON.stringify({ result: 'OK' }));
+    }
+  });
+  assert.equal(prepared.descriptor.status, 'preparing');
+  const persistence = persistPreparedResultChatContext(prepared, { redisFetchImpl: prepared.context && (async () => {
+    await pending;
+    return new Response(JSON.stringify({ result: 'OK' }));
+  }), redisTimeoutMs: 500 });
+  let settled = false;
+  persistence.finally(() => { settled = true; });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(settled, false);
+  release();
+  assert.equal((await persistence).status, 'ready');
+}));
+
+test('context mới chưa kịp lưu trả trạng thái preparing thay vì lỗi AI', () => withContextEnv(async () => {
+  const nowMs = Date.parse('2026-09-14T00:00:05Z');
+  const prepared = prepareResultChatContext(sampleResult, {
+    resultId: 'result-preparing', now: new Date('2026-09-14T00:00:00Z'),
+    redisFetchImpl: async () => new Response(JSON.stringify({ result: null }))
+  });
+  await assert.rejects(
+    loadResultChatContext(prepared.descriptor.resultId, prepared.descriptor.accessToken, {
+      nowMs,
+      redisFetchImpl: async () => new Response(JSON.stringify({ result: null }))
+    }),
+    (error) => error.code === 'RESULT_CONTEXT_PREPARING' && error.statusCode === 409
+  );
+}));
+
+test('readiness chỉ trả trạng thái và không làm lộ nội dung context', () => withContextEnv(async () => {
+  const nowMs = Date.parse('2026-09-14T00:00:05Z');
+  const prepared = prepareResultChatContext(sampleResult, {
+    resultId: 'result-ready', now: new Date('2026-09-14T00:00:00Z')
+  });
+  const state = await getResultChatContextStatus(prepared.descriptor.resultId, prepared.descriptor.accessToken, {
+    nowMs,
+    redisFetchImpl: async () => new Response(JSON.stringify({ result: prepared.serialized }))
+  });
+  assert.deepEqual(state, { status: 'ready', resultId: 'result-ready', productTitle: 'Kẹo me cay' });
+  assert.equal('reviews' in state, false);
 }));
 
 test('chatbot diễn giải result nhưng không cho citation ngoài context', () => withContextEnv(async () => {

@@ -7,7 +7,6 @@ import { createProgressReporter } from './sse.mjs';
 import { assertEnoughReviews, checkSamplingCoverage } from './analysis-eligibility.mjs';
 import { throwIfAborted } from './abort.mjs';
 import { setCachedShopeeDataset, setCachedTikTokDataset } from './product-cache.mjs';
-import { saveResultChatContext } from './result-chat-context.mjs';
 
 const issueDefinitions = ISSUE_DEFINITIONS.map(({ id, label, words }) => ({ id, label, words }));
 const lowValuePatterns = [/^ok+([.! ]*)$/i, /tốt([.! ]*)$/i, /^đẹp([.! ]*)$/i, /^5\s*sao/i, /chưa.{0,12}(dùng|thử)/i];
@@ -272,15 +271,6 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
     trust,
     reviews: processedReviews
   };
-  const chatContext = await saveResultChatContext(result, {
-    redisFetchImpl: options.redisFetchImpl,
-    blobPutImpl: options.blobPutImpl,
-    blobToken: options.blobToken,
-    now: options.now
-  });
-  result.chatContext = chatContext.available
-    ? chatContext
-    : { available: false, reason: chatContext.reason || 'CONTEXT_UNAVAILABLE' };
   progress('complete', 100, 'Phân tích hoàn tất.');
   return result;
 }

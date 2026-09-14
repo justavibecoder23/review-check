@@ -126,6 +126,8 @@
   cursor: pointer;
 }
 .history-card-delete:hover { background: #f7d9ce; color: #8a3e24; }
+.history-card-chat { position: absolute; right: 38px; bottom: 8px; padding: 6px 10px; border: 1px solid rgba(252,120,31,.35); border-radius: 999px; background: #fff7f1; color: #8a3e08; cursor: pointer; font-size: 9px; font-weight: 850; }
+.history-card-chat:hover { border-color: var(--orange); background: white; }
 
 .history-drawer-shell { position: fixed; inset: 0; z-index: 120; visibility: hidden; pointer-events: none; }
 .history-drawer-shell.is-open { visibility: visible; pointer-events: auto; }

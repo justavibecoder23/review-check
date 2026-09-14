@@ -4,8 +4,9 @@ import { isRedisConfigured, redisCommand } from './redis-rest.mjs';
 
 export const RESULT_CHAT_CONTEXT_TTL_SECONDS = 5 * 24 * 60 * 60;
 const RESULT_CONTEXT_SCHEMA_VERSION = '1.0.0';
-const MAX_CONTEXT_BYTES = 300_000;
-const MAX_REVIEW_TEXT = 900;
+export const MAX_RESULT_CHAT_CONTEXT_BYTES = 20_000;
+export const MAX_RESULT_CHAT_REVIEWS = 20;
+const MAX_REVIEW_TEXT = 500;
 
 function contextKey(resultId) {
   return `realview:chatbot:result-context:v1:${resultId}`;
@@ -33,9 +34,9 @@ function numberOrNull(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function pruneReview(review, index) {
+function pruneReview(review, index, refPrefix = 'R') {
   return {
-    ref: `R${String(index + 1).padStart(3, '0')}`,
+    ref: `${refPrefix}${String(index + 1).padStart(3, '0')}`,
     rating: numberOrNull(review?.rating),
     text: cleanText(review?.text),
     date: cleanText(review?.date, 80) || null,
@@ -46,11 +47,122 @@ function pruneReview(review, index) {
   };
 }
 
-export function buildResultChatContext(result = {}, options = {}) {
-  const reviews = (Array.isArray(result.reviews) ? result.reviews : [])
-    .map(pruneReview)
-    .filter((review) => review.text);
+function finalLabels(review) {
+  return review?.labeling?.final || review?.labels || {};
+}
+
+function reviewLabelId(review) {
+  return cleanText(review?.labelId || finalLabels(review)?.labelId, 80);
+}
+
+function ratingLevel(review) {
+  const rating = Math.round(Number(review?.rating));
+  return rating >= 1 && rating <= 5 ? rating : 0;
+}
+
+function evidenceIds(items) {
+  return new Set((Array.isArray(items) ? items : [])
+    .flatMap((item) => Array.isArray(item?.evidenceIds) ? item.evidenceIds : [])
+    .map((id) => cleanText(id, 80))
+    .filter(Boolean));
+}
+
+function compactSummaryItem(item = {}, evidenceRefs = new Map()) {
+  if (typeof item === 'string') return cleanText(item, 500);
   return {
+    label: cleanText(item.label || item.title, 180) || null,
+    detail: cleanText(item.detail || item.text, 500) || null,
+    count: numberOrNull(item.count ?? item.mentions),
+    impact: cleanText(item.impact, 120) || null,
+    evidenceIds: Array.isArray(item.evidenceIds)
+      ? item.evidenceIds.map((id) => evidenceRefs.get(cleanText(id, 80))).filter(Boolean).slice(0, 6)
+      : []
+  };
+}
+
+function compactIssue(item = {}) {
+  return {
+    id: cleanText(item.id, 100) || null,
+    label: cleanText(item.label || item.title, 180) || null,
+    count: numberOrNull(item.count),
+    level: cleanText(item.level, 120) || null,
+    examples: (Array.isArray(item.examples) ? item.examples : []).slice(0, 2).map((example) => ({
+      rating: numberOrNull(example?.rating),
+      text: cleanText(example?.text, 300),
+      date: cleanText(example?.date, 80) || null
+    }))
+  };
+}
+
+function compactMethod(method = {}) {
+  if (!method || typeof method !== 'object') return null;
+  return {
+    version: cleanText(method.version, 100) || null,
+    sample: method.sample || null,
+    components: method.components || null,
+    adequacy: method.adequacy || null,
+    guardrails: method.guardrails || null
+  };
+}
+
+function representativePriority(left, right, requiredEvidence) {
+  const leftEvidence = requiredEvidence.has(reviewLabelId(left.review));
+  const rightEvidence = requiredEvidence.has(reviewLabelId(right.review));
+  if (leftEvidence !== rightEvidence) return Number(rightEvidence) - Number(leftEvidence);
+  const leftExcluded = left.review?.included === false;
+  const rightExcluded = right.review?.included === false;
+  if (leftExcluded !== rightExcluded) return Number(rightExcluded) - Number(leftExcluded);
+  const leftRating = ratingLevel(left.review) || 6;
+  const rightRating = ratingLevel(right.review) || 6;
+  if (leftRating !== rightRating) return leftRating - rightRating;
+  const lengthDifference = String(right.review?.text || '').length - String(left.review?.text || '').length;
+  return lengthDifference || left.index - right.index;
+}
+
+function selectCompactReviews(result, limit = MAX_RESULT_CHAT_REVIEWS) {
+  const candidates = (Array.isArray(result?.reviews) ? result.reviews : [])
+    .map((review, index) => ({ review, index }))
+    .filter(({ review }) => cleanText(review?.text));
+  const requiredEvidence = new Set([
+    ...evidenceIds(result?.trust?.pros),
+    ...evidenceIds(result?.trust?.cons),
+    ...evidenceIds(result?.trust?.drivers)
+  ]);
+  const ranked = [...candidates].sort((left, right) => representativePriority(left, right, requiredEvidence));
+  const selected = [];
+  const selectedIndexes = new Set();
+  const addBest = (predicate) => {
+    if (selected.length >= limit) return;
+    const candidate = ranked.find((item) => !selectedIndexes.has(item.index) && predicate(item.review));
+    if (!candidate) return;
+    selected.push(candidate);
+    selectedIndexes.add(candidate.index);
+  };
+
+  // Giữ các lát cắt tối thiểu trước để danh sách evidence dài của một chủ đề
+  // không lấp kín context và làm mất review bị loại hoặc các mức sao khác.
+  for (let rating = 1; rating <= 5; rating += 1) addBest((review) => ratingLevel(review) === rating && review.included !== false);
+  addBest((review) => review.included !== false);
+  addBest((review) => review.included === false);
+  const exclusionReasons = [...new Set(candidates
+    .filter(({ review }) => review.included === false && review.exclusionReason)
+    .map(({ review }) => cleanText(review.exclusionReason, 300)))];
+  for (const reason of exclusionReasons) addBest((review) => review.included === false && cleanText(review.exclusionReason, 300) === reason);
+  for (const evidenceId of requiredEvidence) addBest((review) => reviewLabelId(review) === evidenceId);
+  for (const candidate of ranked) {
+    if (selected.length >= limit) break;
+    if (!selectedIndexes.has(candidate.index)) {
+      selected.push(candidate);
+      selectedIndexes.add(candidate.index);
+    }
+  }
+  return selected.map(({ review, index }) => pruneReview(review, index, result?.refPrefix || 'R'));
+}
+
+export function buildResultChatContext(result = {}, options = {}) {
+  const reviews = selectCompactReviews({ ...result, refPrefix: options.refPrefix || 'R' });
+  const evidenceRefs = new Map(reviews.map((review) => [review.labelId, review.ref]).filter(([labelId]) => labelId));
+  const context = {
     schemaVersion: RESULT_CONTEXT_SCHEMA_VERSION,
     resultId: String(options.resultId || generateId()),
     resultVersion: cleanText(result?.labeling?.pipelineVersion || result?.trust?.method?.version || 'current', 100),
@@ -62,7 +174,10 @@ export function buildResultChatContext(result = {}, options = {}) {
       categoryPath: Array.isArray(result?.product?.categoryPath)
         ? result.product.categoryPath.map((item) => cleanText(item, 160)).filter(Boolean).slice(0, 8)
         : [],
-      itemId: cleanText(result?.product?.itemId || result?.product?.productId, 80) || null
+      itemId: cleanText(result?.product?.itemId || result?.product?.productId, 80) || null,
+      price: cleanText(result?.product?.price, 100) || null,
+      rating: numberOrNull(result?.product?.rating),
+      reviewCount: numberOrNull(result?.product?.reviewCount ?? result?.stats?.scanned)
     },
     stats: {
       scanned: numberOrNull(result?.stats?.scanned),
@@ -76,16 +191,20 @@ export function buildResultChatContext(result = {}, options = {}) {
       scoreStatus: cleanText(result?.trust?.scoreStatus, 80) || null,
       label: cleanText(result?.trust?.label, 160) || null,
       summary: cleanText(result?.trust?.summary, 1600) || null,
-      pros: Array.isArray(result?.trust?.pros) ? result.trust.pros.slice(0, 12) : [],
-      cons: Array.isArray(result?.trust?.cons) ? result.trust.cons.slice(0, 12) : [],
-      drivers: Array.isArray(result?.trust?.drivers) ? result.trust.drivers.slice(0, 12) : [],
-      method: result?.trust?.method || null
+      pros: Array.isArray(result?.trust?.pros) ? result.trust.pros.slice(0, 5).map((item) => compactSummaryItem(item, evidenceRefs)) : [],
+      cons: Array.isArray(result?.trust?.cons) ? result.trust.cons.slice(0, 5).map((item) => compactSummaryItem(item, evidenceRefs)) : [],
+      drivers: Array.isArray(result?.trust?.drivers) ? result.trust.drivers.slice(0, 5).map((item) => compactSummaryItem(item, evidenceRefs)) : [],
+      method: compactMethod(result?.trust?.method)
     },
     verdict: cleanText(result?.verdict, 1200) || null,
-    issues: Array.isArray(result?.issues) ? result.issues.slice(0, 12) : [],
-    warnings: Array.isArray(result?.warnings) ? result.warnings.map((item) => cleanText(item, 500)).filter(Boolean).slice(0, 12) : [],
+    issues: Array.isArray(result?.issues) ? result.issues.slice(0, 5).map(compactIssue) : [],
+    warnings: Array.isArray(result?.warnings) ? result.warnings.map((item) => cleanText(item, 400)).filter(Boolean).slice(0, 5) : [],
     reviews
   };
+  while (context.reviews.length > 8 && Buffer.byteLength(JSON.stringify(context), 'utf8') > MAX_RESULT_CHAT_CONTEXT_BYTES) {
+    context.reviews.pop();
+  }
+  return context;
 }
 
 function sign(resultId, expiresAt) {
@@ -111,71 +230,69 @@ export function verifyResultAccessToken(resultId, token, options = {}) {
   return expected.length === supplied.length && timingSafeEqual(expected, supplied);
 }
 
-function contextBlobPath(context) {
-  const datePath = context.createdAt.slice(0, 10).replaceAll('-', '/');
-  return `result-contexts/${datePath}/${context.resultId}.json`;
+function unavailable(reason, detail) {
+  return { available: false, reason, ...(detail ? { detail } : {}) };
 }
 
-async function saveContextBlob(context, options = {}) {
-  const token = options.blobToken || process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) return null;
-  const putBlob = options.blobPutImpl || (await import('@vercel/blob')).put;
-  return putBlob(contextBlobPath(context), JSON.stringify(context), {
-    access: 'private',
-    addRandomSuffix: false,
-    contentType: 'application/json; charset=utf-8',
-    abortSignal: AbortSignal.timeout(options.blobTimeoutMs || 1_200),
-    token
-  });
+export function prepareResultChatContext(result, options = {}) {
+  if ((!isRedisConfigured() && !options.redisFetchImpl) || !signingSecret()) {
+    return { descriptor: unavailable('CONTEXT_STORAGE_NOT_CONFIGURED'), context: null };
+  }
+  const context = buildResultChatContext(result, options);
+  const serialized = JSON.stringify(context);
+  if (Buffer.byteLength(serialized, 'utf8') > MAX_RESULT_CHAT_CONTEXT_BYTES) {
+    return { descriptor: unavailable('CONTEXT_TOO_LARGE'), context: null };
+  }
+  const accessToken = createResultAccessToken(context.resultId, { nowMs: Date.parse(context.createdAt) });
+  return {
+    context,
+    serialized,
+    descriptor: {
+      available: true,
+      status: 'preparing',
+      resultId: context.resultId,
+      accessToken,
+      expiresAt: new Date(Date.parse(context.createdAt) + RESULT_CHAT_CONTEXT_TTL_SECONDS * 1000).toISOString(),
+      schemaVersion: RESULT_CONTEXT_SCHEMA_VERSION
+    }
+  };
+}
+
+function deadline(promise, timeoutMs) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new DOMException('Result context save timed out', 'TimeoutError')), timeoutMs);
+      timer.unref?.();
+    })
+  ]).finally(() => clearTimeout(timer));
+}
+
+export async function persistPreparedResultChatContext(prepared, options = {}) {
+  if (!prepared?.context || !prepared?.serialized || !prepared?.descriptor?.available) {
+    return prepared?.descriptor || unavailable('CONTEXT_UNAVAILABLE');
+  }
+  const startedAt = Date.now();
+  const timeoutMs = Math.max(100, Number(options.redisTimeoutMs) || 1_500);
+  if (process.env.VERCEL) console.log(JSON.stringify({ level: 'info', event: 'result_context_background_started', resultId: prepared.context.resultId, bytes: Buffer.byteLength(prepared.serialized, 'utf8') }));
+  try {
+    await deadline(redisCommand([
+      'SET', contextKey(prepared.context.resultId), prepared.serialized,
+      'EX', String(RESULT_CHAT_CONTEXT_TTL_SECONDS)
+    ], { fetchImpl: options.redisFetchImpl, timeoutMs }), timeoutMs + 100);
+    const ready = { ...prepared.descriptor, status: 'ready' };
+    if (process.env.VERCEL) console.log(JSON.stringify({ level: 'info', event: 'result_context_background_complete', resultId: prepared.context.resultId, durationMs: Date.now() - startedAt }));
+    return ready;
+  } catch (error) {
+    if (process.env.VERCEL) console.error(JSON.stringify({ level: 'error', event: 'result_context_background_failed', resultId: prepared.context.resultId, durationMs: Date.now() - startedAt, reason: cleanText(error?.message, 120) }));
+    return unavailable('CONTEXT_SAVE_FAILED', cleanText(error?.message, 160));
+  }
 }
 
 export async function saveResultChatContext(result, options = {}) {
-  const context = buildResultChatContext(result, options);
-  const serialized = JSON.stringify(context);
-  if (Buffer.byteLength(serialized, 'utf8') > MAX_CONTEXT_BYTES) {
-    return { available: false, reason: 'CONTEXT_TOO_LARGE' };
-  }
-  if ((!isRedisConfigured() && !options.redisFetchImpl) || !signingSecret()) {
-    return { available: false, reason: 'CONTEXT_STORAGE_NOT_CONFIGURED' };
-  }
-  try {
-    const hasBlob = Boolean(options.blobToken || process.env.BLOB_READ_WRITE_TOKEN);
-    const record = {
-      context,
-      blobPath: hasBlob ? contextBlobPath(context) : null
-    };
-    // Redis unlocks result Q&A; the private Blob is a durable mirror. Run both
-    // writes concurrently so persistence adds at most the slower bounded write,
-    // rather than serial network latency after Layer 2 and TrustScore finish.
-    await Promise.all([
-      redisCommand(['SET', contextKey(context.resultId), JSON.stringify(record), 'EX', String(RESULT_CHAT_CONTEXT_TTL_SECONDS)], {
-        fetchImpl: options.redisFetchImpl,
-        timeoutMs: options.redisTimeoutMs || 1_500
-      }),
-      saveContextBlob(context, options).catch(() => null)
-    ]);
-    return {
-      available: true,
-      resultId: context.resultId,
-      accessToken: createResultAccessToken(context.resultId, { nowMs: Date.parse(context.createdAt) }),
-      expiresAt: new Date(Date.parse(context.createdAt) + RESULT_CHAT_CONTEXT_TTL_SECONDS * 1000).toISOString(),
-      schemaVersion: RESULT_CONTEXT_SCHEMA_VERSION
-    };
-  } catch (error) {
-    return { available: false, reason: 'CONTEXT_SAVE_FAILED', detail: cleanText(error?.message, 160) };
-  }
-}
-
-async function readContextBlob(record, options = {}) {
-  const locator = record?.blobPath || record?.blobUrl;
-  if (!locator) return null;
-  const getBlob = options.blobGetImpl || (await import('@vercel/blob')).get;
-  const result = await getBlob(locator, {
-    access: 'private',
-    token: options.blobToken || process.env.BLOB_READ_WRITE_TOKEN
-  });
-  if (result?.statusCode !== 200 || !result.stream || Number(result?.blob?.size) > MAX_CONTEXT_BYTES) return null;
-  return JSON.parse(await new Response(result.stream).text());
+  const prepared = prepareResultChatContext(result, options);
+  return persistPreparedResultChatContext(prepared, options);
 }
 
 export async function loadResultChatContext(resultId, accessToken, options = {}) {
@@ -191,13 +308,16 @@ export async function loadResultChatContext(resultId, accessToken, options = {})
     timeoutMs: options.redisTimeoutMs || 900
   });
   if (!serialized) {
-    const error = new Error('Kết quả này đã hết thời gian hỗ trợ hỏi đáp.');
-    error.statusCode = 404;
-    error.code = 'RESULT_CONTEXT_NOT_FOUND';
+    const expiresAt = Number(String(accessToken || '').split('.')[0]);
+    const createdAt = expiresAt - RESULT_CHAT_CONTEXT_TTL_SECONDS;
+    const isPreparing = createdAt > 0 && Math.floor((options.nowMs || Date.now()) / 1000) - createdAt < 15;
+    const error = new Error(isPreparing ? 'Dữ liệu giải thích đang được chuẩn bị.' : 'Kết quả này đã hết thời gian hỗ trợ hỏi đáp.');
+    error.statusCode = isPreparing ? 409 : 404;
+    error.code = isPreparing ? 'RESULT_CONTEXT_PREPARING' : 'RESULT_CONTEXT_NOT_FOUND';
     throw error;
   }
   const record = typeof serialized === 'string' ? JSON.parse(serialized) : serialized;
-  const context = record?.context || await readContextBlob(record, options);
+  const context = record?.context || record;
   if (!context || context.resultId !== normalizedId) {
     const error = new Error('Không đọc được dữ liệu kết quả.');
     error.statusCode = 503;
@@ -205,6 +325,15 @@ export async function loadResultChatContext(resultId, accessToken, options = {})
     throw error;
   }
   return context;
+}
+
+export async function getResultChatContextStatus(resultId, accessToken, options = {}) {
+  const context = await loadResultChatContext(resultId, accessToken, options);
+  return {
+    status: 'ready',
+    resultId: context.resultId,
+    productTitle: context.product?.title || null
+  };
 }
 
 export async function persistChatGeneration(generation, options = {}) {

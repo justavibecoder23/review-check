@@ -4,8 +4,47 @@ import { generateId } from 'ai';
 import { isRedisConfigured, redisCommand } from '../src/redis-rest.mjs';
 import {
   loadResultChatContext,
-  persistChatGeneration
+  persistChatGeneration,
+  buildResultChatContext
 } from '../src/result-chat-context.mjs';
+import { currentAccount } from './auth.mjs';
+import { getAccountHistoryItem } from '../src/account-store.mjs';
+
+function chatError(message, statusCode, code) {
+  return Object.assign(new Error(message), { statusCode, code });
+}
+
+async function resolveChatContexts(request, body) {
+  const context = body.context || null;
+  if (!context && body.resultId) {
+    return [await loadResultChatContext(body.resultId, body.resultAccessToken)];
+  }
+  if (!context) return [];
+  if (context.type === 'current_result') {
+    return [await loadResultChatContext(context.resultId, context.accessToken)];
+  }
+  if (!['history_item', 'history_comparison'].includes(context.type)) {
+    throw chatError('Phạm vi hỏi đáp không hợp lệ.', 400, 'INVALID_CHAT_CONTEXT');
+  }
+  const user = await currentAccount(request);
+  if (!user) throw chatError('Vui lòng đăng nhập để hỏi về lịch sử phân tích.', 401, 'AUTH_REQUIRED');
+  const ids = context.type === 'history_comparison'
+    ? (Array.isArray(context.historyItemIds) ? context.historyItemIds : [])
+    : [context.historyItemId];
+  const normalizedIds = [...new Set(ids.map((id) => String(id || '').slice(0, 160)).filter(Boolean))];
+  if (!normalizedIds.length || normalizedIds.length > 3) {
+    throw chatError('Chỉ có thể hỏi về tối đa 3 sản phẩm trong lịch sử.', 400, 'INVALID_HISTORY_SELECTION');
+  }
+  const items = await Promise.all(normalizedIds.map((id) => getAccountHistoryItem(user.id, id)));
+  if (items.some((item) => !item?.fullReport)) {
+    throw chatError('Không tìm thấy sản phẩm này trong lịch sử của bạn.', 404, 'HISTORY_ITEM_NOT_FOUND');
+  }
+  return items.map((item, index) => buildResultChatContext(item.fullReport, {
+    resultId: `history:${item.id}`,
+    now: item.analyzedAt,
+    refPrefix: normalizedIds.length > 1 ? `P${index + 1}-R` : 'R'
+  }));
+}
 
 async function enforceChatRateLimit(request) {
   if (!isRedisConfigured()) return;
@@ -41,9 +80,8 @@ export default async function handler(request, response) {
       if (error?.statusCode === 429) throw error;
     });
     generationId = generateId();
-    const resultContext = body.resultId
-      ? await loadResultChatContext(body.resultId, body.resultAccessToken)
-      : null;
+    const resultContexts = await resolveChatContexts(request, body);
+    const resultContext = resultContexts[0] || null;
     const latestQuestion = Array.isArray(body.messages)
       ? String(body.messages.filter((message) => message?.role === 'user').at(-1)?.content || '').slice(0, 500)
       : '';
@@ -58,7 +96,7 @@ export default async function handler(request, response) {
       question: latestQuestion,
       createdAt: startedAt
     });
-    const result = await answerWebsiteQuestion(body.messages, { resultContext });
+    const result = await answerWebsiteQuestion(body.messages, { resultContext, resultContexts });
     await persistChatGeneration({
       id: generationId,
       status: 'complete',
@@ -85,7 +123,8 @@ export default async function handler(request, response) {
       }).catch(() => false);
     }
     return response.status(error?.statusCode || 500).json({
-      error: error?.message || 'Có lỗi khi xử lý câu hỏi.'
+      error: error?.message || 'Có lỗi khi xử lý câu hỏi.',
+      ...(error?.code ? { code: error.code } : {})
     });
   }
 }

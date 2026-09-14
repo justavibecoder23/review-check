@@ -678,18 +678,20 @@ async function startProgressiveAnalysis(url) {
     });
     setProgress(100);
     try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(resultData)); } catch { /* Result remains visible without browser storage. */ }
-    try {
-      const { saveToHistory } = await import('./history-manager.js');
-      const savedHistoryItem = await saveToHistory(resultData);
-      if (savedHistoryItem) window.dispatchEvent(new CustomEvent('realview:history-changed'));
-    } catch {
-      // Local history is an enhancement and must not block a completed result.
-    }
+    window.dispatchEvent(new CustomEvent('realview:analysis-result', { detail: { result: resultData } }));
     window.history.replaceState({}, '', '/ket-qua');
     renderResult(resultData);
     window.realviewTrackEvent?.('analysis_complete', { marketplace });
     window.scrollTo({ top: 0, behavior: 'auto' });
     progressPanel?.classList.add('hidden');
+    // Đồng bộ lịch sử là tính năng bổ sung: thực hiện sau khi kết quả đã hiển
+    // thị để Redis hoặc mạng chậm không giữ người dùng ở bước hoàn thiện.
+    void import('./history-manager.js')
+      .then(({ saveToHistory }) => saveToHistory(resultData))
+      .then((savedHistoryItem) => {
+        if (savedHistoryItem) window.dispatchEvent(new CustomEvent('realview:history-changed'));
+      })
+      .catch(() => {});
   } catch (error) {
     if (error?.name === 'AbortError') return;
     window.realviewTrackEvent?.('analysis_error', {

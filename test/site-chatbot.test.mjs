@@ -16,7 +16,8 @@ test('kho kiến thức chứa các nội dung cốt lõi của website', () => 
   assert.match(siteKnowledge, /Shopee/);
   assert.match(siteKnowledge, /reviewcheckteam@gmail\.com/);
   assert.match(siteKnowledge, /không kết luận một review là giả hoặc thật/i);
-  assert.match(siteKnowledge, /không lưu trữ liên kết sản phẩm hoặc dữ liệu cá nhân/i);
+  assert.match(siteKnowledge, /context hỏi đáp.*lưu tạm tối đa 5 ngày/i);
+  assert.match(siteKnowledge, /lưu riêng theo tài khoản/i);
 });
 
 test('bộ tìm kiếm chọn đúng dữ liệu liên quan và ưu tiên thông tin website hiện tại', () => {

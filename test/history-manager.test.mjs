@@ -9,6 +9,7 @@ import {
   formatRelativeTime,
   getHistory,
   pruneAnalysisReport,
+  resetHistoryCache,
   restoreHistoryItem,
   saveToHistory
 } from '../public/history-manager.js';
@@ -18,6 +19,32 @@ class MemoryStorage {
   getItem(key) { return this.values.get(key) ?? null; }
   setItem(key, value) { this.values.set(key, String(value)); }
   removeItem(key) { this.values.delete(key); }
+}
+
+function historyBackend() {
+  let values = [];
+  return async (_url, init = {}) => {
+    const method = init.method || 'GET';
+    const body = init.body ? JSON.parse(init.body) : {};
+    if (method === 'POST') {
+      values = [body.item, ...values.filter((item) => item.id !== body.item.id)]
+        .slice(0, HISTORY_MAX_ITEMS);
+      return new Response(JSON.stringify({ item: body.item }), { status: 201 });
+    }
+    if (method === 'DELETE') {
+      values = body.clear ? [] : values.filter((item) => item.id !== body.id);
+      return new Response(JSON.stringify({ deleted: true }));
+    }
+    return new Response(JSON.stringify({ items: values }));
+  };
+}
+
+async function withHistoryBackend(run) {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = historyBackend();
+  resetHistoryCache();
+  try { return await run(); }
+  finally { globalThis.fetch = previousFetch; resetHistoryCache(); }
 }
 
 function report(itemId = '123', title = `Sản phẩm ${itemId}`) {
@@ -46,49 +73,43 @@ test('tinh gọn báo cáo chỉ giữ dữ liệu cần để dựng lại tran
   assert.equal(pruned.geminiContext, undefined);
 });
 
-test('lịch sử khử trùng sản phẩm và đưa lần phân tích mới nhất lên đầu', () => {
-  const storage = new MemoryStorage();
+test('lịch sử khử trùng sản phẩm và đưa lần phân tích mới nhất lên đầu', () => withHistoryBackend(async () => {
   const firstTime = new Date('2026-09-08T08:00:00.000Z');
   const secondTime = new Date('2026-09-08T09:00:00.000Z');
-  saveToHistory(report('123', 'Tên cũ'), { storage, now: () => firstTime });
-  saveToHistory(report('456'), { storage, now: () => firstTime });
-  saveToHistory(report('123', 'Tên mới'), { storage, now: () => secondTime });
-  const history = getHistory({ storage });
+  await saveToHistory(report('123', 'Tên cũ'), { now: () => firstTime });
+  await saveToHistory(report('456'), { now: () => firstTime });
+  await saveToHistory(report('123', 'Tên mới'), { now: () => secondTime });
+  const history = await getHistory();
   assert.equal(history.length, 2);
   assert.equal(history[0].title, 'Tên mới');
   assert.equal(history[0].analyzedAt, secondTime.toISOString());
-});
+}));
 
-test('lịch sử chỉ giữ tối đa mười báo cáo mới nhất', () => {
-  const storage = new MemoryStorage();
+test('lịch sử chỉ giữ tối đa mười báo cáo mới nhất', () => withHistoryBackend(async () => {
   for (let index = 0; index < HISTORY_MAX_ITEMS + 3; index += 1) {
-    saveToHistory(report(String(index)), { storage, now: () => new Date(2026, 8, 8, 10, index) });
+    await saveToHistory(report(String(index)), { now: () => new Date(2026, 8, 8, 10, index) });
   }
-  const history = getHistory({ storage });
+  const history = await getHistory();
   assert.equal(history.length, HISTORY_MAX_ITEMS);
   assert.equal(history[0].title, `Sản phẩm ${HISTORY_MAX_ITEMS + 2}`);
   assert.equal(history.at(-1).title, 'Sản phẩm 3');
-});
+}));
 
-test('khôi phục báo cáo qua sessionStorage mà không gọi backend', () => {
-  const storage = new MemoryStorage();
+test('khôi phục báo cáo qua sessionStorage mà không gọi backend', () => withHistoryBackend(async () => {
   const session = new MemoryStorage();
-  const item = saveToHistory(report(), { storage });
+  const item = await saveToHistory(report());
   let target = '';
-  assert.equal(restoreHistoryItem(item.id, { storage, session, navigate: (url) => { target = url; } }), true);
+  assert.equal(restoreHistoryItem(item.id, { session, navigate: (url) => { target = url; } }), true);
   assert.equal(target, '/ket-qua');
   assert.equal(JSON.parse(session.getItem(LAST_ANALYSIS_KEY)).product.itemId, '123');
-});
+}));
 
-test('bản ghi hỏng bị bỏ qua và có thể xóa riêng một mục', () => {
-  const storage = new MemoryStorage();
-  const first = saveToHistory(report('1'), { storage });
-  saveToHistory(report('2'), { storage });
-  const raw = JSON.parse(storage.getItem(HISTORY_STORAGE_KEY));
-  storage.setItem(HISTORY_STORAGE_KEY, JSON.stringify([...raw, { broken: true }]));
-  assert.equal(getHistory({ storage }).length, 2);
-  assert.equal(deleteHistoryItem(first.id, { storage }).length, 1);
-});
+test('có thể xóa riêng một mục lịch sử backend', () => withHistoryBackend(async () => {
+  const first = await saveToHistory(report('1'));
+  await saveToHistory(report('2'));
+  assert.equal((await getHistory()).length, 2);
+  assert.equal((await deleteHistoryItem(first.id)).length, 1);
+}));
 
 test('thời gian tương đối hiển thị bằng tiếng Việt', () => {
   const now = new Date('2026-09-08T10:00:00.000Z');
@@ -107,4 +128,5 @@ test('giao diện có lịch sử trang chủ, drawer, badge và nút tại tran
   assert.match(nav, /nav-history-trigger/);
   assert.match(ui, /analysis-history-drawer/);
   assert.match(ui, /restoreHistoryItem/);
+  assert.match(ui, /data-history-chat/);
 });

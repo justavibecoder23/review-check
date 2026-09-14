@@ -342,6 +342,19 @@ export async function listAccountHistory(userId, options = {}) {
   });
 }
 
+export async function getAccountHistoryItem(userId, itemId, options = {}) {
+  ensureStorage();
+  const id = String(itemId || '').slice(0, 160);
+  if (!userId || !id) return null;
+  const serialized = await redisCommand(['GET', historyItemKey(userId, id)], options);
+  if (!serialized) return null;
+  try {
+    return JSON.parse(serialized);
+  } catch {
+    return null;
+  }
+}
+
 export async function deleteAccountHistory(userId, itemId, options = {}) {
   ensureStorage();
   const id = String(itemId || '').slice(0, 160);

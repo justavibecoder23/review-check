@@ -35,6 +35,7 @@
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
       </button>
     </header>
+    <div class="chatbot-context" data-chatbot-context hidden><span></span><button type="button" aria-label="Bỏ chọn sản phẩm">×</button></div>
     <div class="chatbot-messages" role="log" aria-live="polite" aria-relevant="additions">
       <article class="chatbot-message chatbot-message--assistant">
         <span class="chatbot-message-avatar" aria-hidden="true">R</span>
@@ -64,8 +65,12 @@
   const form = panel.querySelector('.chatbot-form');
   const input = panel.querySelector('#chatbot-input');
   const submitButton = form.querySelector('button[type="submit"]');
+  const contextBar = panel.querySelector('[data-chatbot-context]');
+  const contextClearButton = contextBar.querySelector('button');
   const conversation = [];
   let isSending = false;
+  let selectedHistoryContext = null;
+  let resultReadiness = { resultId: '', state: 'idle', timer: null };
 
   function currentResultAccess() {
     if (!/(?:\/results\.html|\/ket-qua)$/i.test(window.location.pathname)) return null;
@@ -73,15 +78,27 @@
       const result = JSON.parse(sessionStorage.getItem('realview:last-analysis') || 'null');
       const context = result?.chatContext;
       return context?.available && context?.resultId && context?.accessToken
-        ? { resultId: context.resultId, resultAccessToken: context.accessToken }
+        ? { type: 'current_result', resultId: context.resultId, accessToken: context.accessToken }
         : null;
     } catch {
       return null;
     }
   }
 
+  function currentResultTitle() {
+    try {
+      return JSON.parse(sessionStorage.getItem('realview:last-analysis') || 'null')?.product?.title || 'sản phẩm này';
+    } catch {
+      return 'sản phẩm này';
+    }
+  }
+
   function syncResultMode() {
-    const hasResult = Boolean(currentResultAccess());
+    const currentContext = currentResultAccess();
+    const currentUnavailable = currentContext && resultReadiness.resultId === currentContext.resultId
+      && resultReadiness.state === 'unavailable';
+    const activeContext = selectedHistoryContext || (currentUnavailable ? null : currentContext);
+    const hasResult = Boolean(activeContext);
     const subtitle = panel.querySelector('.chatbot-header p');
     const helper = form.querySelector(':scope > p');
     if (subtitle) subtitle.innerHTML = `<i aria-hidden="true"></i> ${hasResult ? 'Có thể giải thích kết quả đang xem' : 'Hỗ trợ thông tin về website'}`;
@@ -89,10 +106,68 @@
     if (helper) helper.textContent = hasResult
       ? 'Câu trả lời chỉ dựa trên kết quả và review đã phân tích.'
       : 'Chỉ trả lời từ thông tin chính thức của RealView.';
+    contextBar.hidden = !selectedHistoryContext && !currentContext;
+    contextBar.dataset.state = 'ready';
+    contextClearButton.hidden = !selectedHistoryContext;
+    if (selectedHistoryContext) {
+      contextBar.querySelector('span').textContent = `Đang hỏi về: ${selectedHistoryContext.title}`;
+    } else if (currentContext) {
+      const state = resultReadiness.resultId === currentContext.resultId ? resultReadiness.state : 'syncing';
+      contextBar.dataset.state = state;
+      contextBar.querySelector('span').textContent = state === 'syncing'
+        ? 'Đang đồng bộ dữ liệu sản phẩm…'
+        : state === 'unavailable'
+          ? 'Chưa thể đọc dữ liệu sản phẩm này'
+          : `Đang hỏi về: ${currentResultTitle()}`;
+    }
+    const syncing = Boolean(currentContext && !selectedHistoryContext
+      && resultReadiness.resultId === currentContext.resultId && resultReadiness.state === 'syncing');
+    input.disabled = isSending || syncing;
+    submitButton.disabled = isSending || syncing;
+  }
+
+  function scheduleResultReadinessCheck(delay = 450, attempt = 0) {
+    clearTimeout(resultReadiness.timer);
+    resultReadiness.timer = window.setTimeout(async () => {
+      const context = currentResultAccess();
+      if (!context || context.resultId !== resultReadiness.resultId) return;
+      try {
+        const response = await fetch('/api/result-context-status', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ resultId: context.resultId, accessToken: context.accessToken }),
+          signal: AbortSignal.timeout(2_500)
+        });
+        const data = await response.json().catch(() => ({}));
+        if (response.ok && data.status === 'ready') resultReadiness.state = 'ready';
+        else if (response.status === 409 && data.code === 'RESULT_CONTEXT_PREPARING' && attempt < 1) {
+          scheduleResultReadinessCheck(700, attempt + 1);
+          return;
+        } else if (response.status === 409) resultReadiness.state = 'deferred';
+        else resultReadiness.state = 'unavailable';
+      } catch {
+        // Đây chỉ là phép kiểm tra UX. Nếu request này lỗi, /api/chat vẫn giữ
+        // cơ chế retry để chatbot không bị vô hiệu hóa vì một lần probe hỏng.
+        resultReadiness.state = 'deferred';
+      }
+      syncResultMode();
+    }, delay);
+  }
+
+  function beginResultReadinessCheck() {
+    const context = currentResultAccess();
+    if (!context) return;
+    if (resultReadiness.resultId === context.resultId && ['syncing', 'ready', 'deferred'].includes(resultReadiness.state)) return;
+    clearTimeout(resultReadiness.timer);
+    resultReadiness = { resultId: context.resultId, state: 'syncing', timer: null };
+    syncResultMode();
+    scheduleResultReadinessCheck();
   }
 
   function setOpen(open, restoreFocus = true) {
     if (open) {
+      beginResultReadinessCheck();
       syncResultMode();
       siteHeader?.classList.remove('is-menu-open');
       navToggle?.setAttribute('aria-expanded', 'false');
@@ -173,14 +248,23 @@
     const loading = addLoadingMessage();
 
     try {
-      const resultAccess = currentResultAccess();
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ messages: conversation.slice(-8), ...(resultAccess || {}) }),
-        signal: AbortSignal.timeout(15_000)
-      });
-      const data = await response.json();
+      const context = selectedHistoryContext
+        ? { type: 'history_item', historyItemId: selectedHistoryContext.historyItemId }
+        : resultReadiness.state === 'unavailable' ? null : currentResultAccess();
+      let response;
+      let data;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        response = await fetch('/api/chat', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ messages: conversation.slice(-8), ...(context ? { context } : {}) }),
+          signal: AbortSignal.timeout(15_000)
+        });
+        data = await response.json().catch(() => ({}));
+        if (response.status !== 409 || data.code !== 'RESULT_CONTEXT_PREPARING' || attempt === 2) break;
+        await new Promise((resolve) => setTimeout(resolve, 350 + attempt * 250));
+      }
       if (!response.ok) throw new Error(data.error || 'Không thể kết nối Trợ lý RealView.');
       const answer = String(data.answer || 'Mình chưa có thông tin này trong kho dữ liệu RealView. Bạn có thể liên hệ đội ngũ để được hỗ trợ.');
       loading.remove();
@@ -192,8 +276,7 @@
       addMessage('assistant', 'Hiện mình chưa thể kết nối. Bạn vui lòng thử lại sau hoặc liên hệ đội ngũ RealView.');
     } finally {
       isSending = false;
-      input.disabled = false;
-      submitButton.disabled = false;
+      syncResultMode();
       input.focus();
     }
   }
@@ -203,6 +286,11 @@
     if (trigger.getAttribute('aria-expanded') === 'true') setOpen(false, false);
   });
   closeButton.addEventListener('click', () => setOpen(false));
+  contextClearButton.addEventListener('click', () => {
+    selectedHistoryContext = null;
+    conversation.splice(0);
+    syncResultMode();
+  });
   form.addEventListener('submit', (event) => {
     event.preventDefault();
     sendQuestion(input.value);
@@ -222,5 +310,25 @@
   });
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && trigger.getAttribute('aria-expanded') === 'true') setOpen(false);
+  });
+  window.addEventListener('realview:chat-history-select', (event) => {
+    const historyItemId = String(event.detail?.historyItemId || '');
+    if (!historyItemId) return;
+    selectedHistoryContext = { historyItemId, title: String(event.detail?.title || 'Sản phẩm trong lịch sử') };
+    conversation.splice(0);
+    setOpen(true);
+  });
+  window.addEventListener('realview:analysis-result', () => {
+    clearTimeout(resultReadiness.timer);
+    resultReadiness = { resultId: '', state: 'idle', timer: null };
+    if (trigger.getAttribute('aria-expanded') === 'true') beginResultReadinessCheck();
+    syncResultMode();
+  });
+  window.addEventListener('realview:auth-changed', (event) => {
+    if (!event.detail?.user) {
+      selectedHistoryContext = null;
+      conversation.splice(0);
+      syncResultMode();
+    }
   });
 })();

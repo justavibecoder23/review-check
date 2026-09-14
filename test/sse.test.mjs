@@ -52,7 +52,19 @@ test('trang chủ chuyển ngay sang kết quả và giao diện tiến trình k
   assert.doesNotMatch(resultsSource, /progress\.phase/);
   assert.doesNotMatch(resultsSource, /5 tài khoản|20\/20|Apify/i);
   assert.doesNotMatch(resultsSource, /Dữ liệu đã lưu gần đây|Dữ liệu trực tiếp/);
+  assert.ok(resultsSource.indexOf('renderResult(resultData)') < resultsSource.indexOf("import('./history-manager.js')"));
+  assert.match(resultsSource, /realview:analysis-result/);
   assert.match(resultsStyles, /\.analysis-stepper li\.is-done > span::after\s*{[^}]*position:\s*absolute;[^}]*inset:\s*0;[^}]*place-items:\s*center;/s);
+});
+
+test('chatbot kiểm tra readiness hữu hạn trước khi cho hỏi theo result', async () => {
+  const chatbotSource = await readFile(new URL('../public/chatbot.js', import.meta.url), 'utf8');
+  const statusSource = await readFile(new URL('../api/result-context-status.mjs', import.meta.url), 'utf8');
+  assert.match(chatbotSource, /\/api\/result-context-status/);
+  assert.match(chatbotSource, /Đang đồng bộ dữ liệu sản phẩm/);
+  assert.match(chatbotSource, /attempt < 1/);
+  assert.match(statusSource, /getResultChatContextStatus/);
+  assert.doesNotMatch(statusSource, /context\.reviews|return response\.status\(200\)\.json\(context\)/);
 });
 
 test('SSE phát các mốc dữ liệu tiệm tiến ngoài kết quả cuối', async () => {
@@ -62,4 +74,5 @@ test('SSE phát các mốc dữ liệu tiệm tiến ngoài kết quả cuối',
   assert.match(handlerSource, /stream\.send\('layer1_stats'/);
   assert.match(handlerSource, /stream\.send\('layer2_progress'/);
   assert.match(handlerSource, /stream\.send\('result'/);
+  assert.ok(handlerSource.indexOf("stream.send('result'") < handlerSource.indexOf('scheduleResultChatContext(preparedContext)'));
 });
