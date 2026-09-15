@@ -166,6 +166,10 @@ body.history-drawer-open { overflow: hidden; }
 .action-button--history { border: 0; background: #f0efe9; color: var(--ink); cursor: pointer; }
 .action-button--history:hover { background: white; }
 .results-page .result-action-bar { width: min(1080px, calc(100% - 30px)); grid-template-columns: 86px minmax(0,1.1fr) minmax(0,1fr) minmax(0,.92fr); }
+.results-page .result-action-bar.has-counterpart {
+  width: min(1320px, calc(100% - 30px));
+  grid-template-columns: 76px minmax(0,1fr) minmax(0,1.08fr) minmax(0,.92fr) minmax(0,.86fr);
+}
 
 @media (max-width: 1024px) {
   .main-nav .nav-history-trigger { min-height: 44px; padding: 0 12px; justify-content: flex-start; font-size: 13px; }
@@ -184,6 +188,8 @@ body.history-drawer-open { overflow: hidden; }
   .history-drawer-header h2 { font-size: 30px; }
   .results-page .result-action-bar { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .results-page .action-button--history { grid-column: 1 / -1; min-height: 48px; }
+  .results-page .result-action-bar.has-counterpart { width: auto; grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .results-page .result-action-bar.has-counterpart .action-button--history { grid-column: auto; min-height: 58px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .history-drawer, .history-drawer-backdrop { transition: none; }

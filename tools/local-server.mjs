@@ -11,6 +11,7 @@ import historyHandler from '../api/history.mjs';
 import contactHandler from '../api/contact.mjs';
 import chatHandler from '../api/chat.mjs';
 import chatbotGeminiConfigHandler from '../api/chatbot-gemini-config.mjs';
+import matchCounterpartHandler from '../api/match-counterpart.mjs';
 
 const port = Number(process.env.PORT || 3000);
 const host = process.env.HOST || '127.0.0.1';
@@ -106,6 +107,11 @@ const server = createServer(async (request, response) => {
       return chatHandler(request, vercelResponse(response));
     }
 
+    if (['GET', 'POST'].includes(request.method) && apiPath === '/api/match-counterpart') {
+      if (request.method === 'POST') request.body = await getBody(request);
+      return matchCounterpartHandler(request, response);
+    }
+
     if (['GET', 'POST'].includes(request.method) && apiPath === '/api/auth') {
       if (request.method === 'POST') request.body = await getBody(request);
       return authHandler(request, vercelResponse(response));
@@ -143,7 +149,7 @@ const server = createServer(async (request, response) => {
     }
 
     if (apiPath.startsWith('/api/')) {
-      const knownPath = ['/api/analyze', '/api/analyze-stream', '/api/chat', '/api/auth', '/api/history', '/api/contact', '/api/apify-config', '/api/gemini-config', '/api/chatbot-gemini-config'].includes(apiPath);
+      const knownPath = ['/api/analyze', '/api/analyze-stream', '/api/chat', '/api/match-counterpart', '/api/auth', '/api/history', '/api/contact', '/api/apify-config', '/api/gemini-config', '/api/chatbot-gemini-config'].includes(apiPath);
       return sendJson(response, knownPath ? 405 : 404, {
         error: knownPath ? 'Phương thức không được hỗ trợ.' : 'API không tồn tại.'
       });

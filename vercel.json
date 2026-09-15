@@ -13,6 +13,9 @@
     "api/chat.mjs": {
       "maxDuration": 30
     },
+    "api/match-counterpart.mjs": {
+      "maxDuration": 120
+    },
     "api/auth.mjs": {
       "maxDuration": 10
     },
@@ -69,6 +72,7 @@
   "rewrites": [
     { "source": "/api/analyze", "destination": "/api/analyze.mjs" },
     { "source": "/api/analyze-stream", "destination": "/api/analyze-stream.mjs" },
+    { "source": "/api/match-counterpart", "destination": "/api/match-counterpart.mjs" },
     { "source": "/api/chat", "destination": "/api/chat.mjs" },
     { "source": "/api/auth", "destination": "/api/auth.mjs" },
     { "source": "/api/history", "destination": "/api/history.mjs" },

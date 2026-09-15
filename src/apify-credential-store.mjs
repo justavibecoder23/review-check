@@ -39,6 +39,7 @@ export const APIFY_SHOPEE_ACTOR_EXHAUSTED_KEY = 'realview:apify:credential-pool:
 export const APIFY_TIKTOK_ACTOR_START_COUNTERS_KEY = 'realview:apify:credential-pool:v5:tiktok:actor-starts';
 export const APIFY_TIKTOK_EMPTY_RUN_COUNTERS_KEY = 'realview:apify:credential-pool:v5:tiktok:empty-runs';
 export const APIFY_TIKTOK_BILLED_ITEM_COUNTERS_KEY = 'realview:apify:credential-pool:v5:tiktok:billed-items';
+export const APIFY_COUNTERPART_STATS_KEY = 'realview:apify:credential-pool:v6:counterpart:stats';
 export const SHOPEE_ACTOR_STARTUP_FEE_MICRO_USD = 8_000;
 
 // TikTok được tính theo số review, không dùng chung bộ đếm lượt của Shopee.
@@ -375,6 +376,191 @@ local entry = {
   emptyDataset=actorStarted and statusCode >= 200 and statusCode < 300 and actualReviews == 0,
   statusCode=statusCode, failureClass=failureClass,
   finalizedAt=nowMs
+}
+redis.call('HSET', KEYS[3], operationId, cjson.encode(entry))
+return cjson.encode({ok=true, alreadyFinalized=false, costMicroUsd=actualCost})
+`;
+
+// Counterpart search shares the same per-account money ledger as the review
+// collectors, but has its own operational counters. Its lease can only be
+// created after Redis has reserved every remaining Shopee lifetime run.
+const RESERVE_COUNTERPART_COST_SCRIPT = String.raw`
+-- COUNTERPART_COST_RESERVATION_V6
+local raw = redis.call('GET', KEYS[1])
+if not raw then return cjson.encode({ok=false, code='POOL_NOT_CONFIGURED'}) end
+local pool = cjson.decode(raw)
+local plannedCost = math.max(1, tonumber(ARGV[1]) or 1)
+local actorId = ARGV[2]
+local requestId = ARGV[3]
+local nowMs = tonumber(ARGV[4]) or 0
+local leaseMs = tonumber(ARGV[5]) or 180000
+local budget = tonumber(ARGV[6]) or 5000000
+local shopeeRunCost = tonumber(ARGV[7]) or 87800
+local maxShopeeUses = tonumber(ARGV[8]) or 20
+local usageCycles = cjson.decode(ARGV[9] or '{}')
+local minimumCycleRemainingMs = tonumber(ARGV[10]) or 120000
+local pricingVersion = ARGV[11]
+
+local function cleanCostLeases(accountKey)
+  local state = {leases={}}
+  local encoded = redis.call('HGET', KEYS[4], accountKey)
+  if encoded then
+    local ok, decoded = pcall(cjson.decode, encoded)
+    if ok and type(decoded) == 'table' and type(decoded.leases) == 'table' then state = decoded end
+  end
+  local total = 0
+  for id, lease in pairs(state.leases) do
+    if tonumber(lease.expiresAtMs or 0) <= nowMs then state.leases[id] = nil
+    else total = total + math.max(0, tonumber(lease.costMicroUsd) or 0) end
+  end
+  redis.call('HSET', KEYS[4], accountKey, cjson.encode(state))
+  return state, total
+end
+
+local function activeShopeeSlots(credentialId)
+  local state = {leases={}}
+  local encoded = redis.call('HGET', KEYS[10], credentialId)
+  if encoded then
+    local ok, decoded = pcall(cjson.decode, encoded)
+    if ok and type(decoded) == 'table' and type(decoded.leases) == 'table' then state = decoded end
+  end
+  local count = 0
+  for id, lease in pairs(state.leases) do
+    if tonumber(lease.expiresAtMs or 0) <= nowMs then state.leases[id] = nil
+    else count = count + 1 end
+  end
+  redis.call('HSET', KEYS[10], credentialId, cjson.encode(state))
+  return count
+end
+
+for _, group in ipairs(pool.groups or {}) do
+  for _, credential in ipairs(group.credentials or {}) do
+    local cycle = usageCycles[credential.id]
+    if cycle and tonumber(cycle.cycleEndAtMs or 0) - nowMs >= minimumCycleRemainingMs then
+      local billingAccountId = credential.billingAccountId or credential.id
+      local accountKey = billingAccountId .. ':' .. cycle.cycleStartAt
+      local denied = redis.call('HEXISTS', KEYS[8], credential.id .. ':' .. actorId)
+      if denied == 0 then denied = redis.call('HEXISTS', KEYS[8], credential.id .. ':*') end
+      local cooldownUntil = tonumber(redis.call('HGET', KEYS[7], credential.id) or '0')
+      local exhausted = redis.call('HEXISTS', KEYS[9], accountKey)
+      if denied == 0 and cooldownUntil <= nowMs and exhausted == 0 then
+        local spent = math.max(
+          tonumber(redis.call('HGET', KEYS[3], accountKey) or '0'),
+          tonumber(cycle.observedSpentMicroUsd) or 0
+        )
+        redis.call('HSET', KEYS[3], accountKey, spent)
+        local costState, reservedCost = cleanCostLeases(accountKey)
+        local used = math.min(maxShopeeUses, math.max(0, tonumber(redis.call('HGET', KEYS[2], credential.id) or '0')))
+        local shopeeSlots = activeShopeeSlots(credential.id)
+        local remainingShopee = math.max(0, maxShopeeUses - used - shopeeSlots)
+        local shopeeReserve = remainingShopee * shopeeRunCost
+        local available = math.max(0, budget - spent - reservedCost - shopeeReserve)
+        if available >= plannedCost then
+          local reservationId = requestId .. ':1'
+          costState.leases[reservationId] = {
+            costMicroUsd=plannedCost, actorId=actorId, pricingVersion=pricingVersion,
+            platform='counterpart', expiresAtMs=nowMs + leaseMs
+          }
+          redis.call('HSET', KEYS[4], accountKey, cjson.encode(costState))
+          local runCount = tonumber(redis.call('HINCRBY', KEYS[5], accountKey, 1))
+          redis.call('HINCRBY', KEYS[11], 'reservations', 1)
+          local allocated = {}
+          for key, value in pairs(credential) do allocated[key] = value end
+          allocated.groupId = group.id
+          allocated.groupLabel = group.label
+          allocated.billingAccountId = billingAccountId
+          allocated.accountCycleId = accountKey
+          allocated.billingCycleStartAt = cycle.cycleStartAt
+          allocated.billingCycleEndAt = cycle.cycleEndAt
+          allocated.runCount = runCount
+          allocated.plannedCostMicroUsd = plannedCost
+          allocated.spentMicroUsd = spent
+          allocated.reservedMicroUsd = reservedCost + plannedCost
+          allocated.shopeeReservedMicroUsd = shopeeReserve
+          allocated.reservationId = reservationId
+          allocated.reservationExpiresAtMs = nowMs + leaseMs
+          return cjson.encode({ok=true, source='redis-vault-cost-ledger-v6-counterpart', credential=allocated})
+        end
+      end
+    end
+  end
+end
+return cjson.encode({ok=false, code='COUNTERPART_BUDGET_PROTECTED'})
+`;
+
+const FINALIZE_COUNTERPART_COST_SCRIPT = String.raw`
+-- COUNTERPART_COST_FINALIZATION_V6
+local accountKey = ARGV[1]
+local credentialId = ARGV[2]
+local reservationId = ARGV[3]
+local operationId = ARGV[4]
+local actualCost = math.max(0, tonumber(ARGV[5]) or 0)
+local itemCount = math.max(0, tonumber(ARGV[6]) or 0)
+local statusCode = tonumber(ARGV[7]) or 0
+local failureClass = ARGV[8]
+local nowMs = tonumber(ARGV[9]) or 0
+local retryAfterMs = tonumber(ARGV[10]) or 60000
+local billingAccountId = ARGV[11]
+local cycleStartAt = ARGV[12]
+local cycleEndAt = ARGV[13]
+local actorStarted = ARGV[14] == '1'
+local actorId = ARGV[15]
+if redis.call('HEXISTS', KEYS[3], operationId) == 1 then
+  return cjson.encode({ok=true, alreadyFinalized=true})
+end
+local pendingOperationId = operationId .. ':pending'
+local pendingRecorded = redis.call('HEXISTS', KEYS[3], pendingOperationId) == 1
+local state = {leases={}}
+local encoded = redis.call('HGET', KEYS[2], accountKey)
+if encoded then
+  local ok, decoded = pcall(cjson.decode, encoded)
+  if ok and type(decoded) == 'table' and type(decoded.leases) == 'table' then state = decoded end
+end
+local lease = state.leases[reservationId]
+if not lease then return cjson.encode({ok=false, code='RESERVATION_NOT_FOUND'}) end
+if failureClass == 'timeout' or failureClass == 'upstream_service_error' or failureClass == 'unknown_error' or failureClass == 'cost_pending' then
+  lease.expiresAtMs = nowMs + math.max(60000, retryAfterMs)
+  state.leases[reservationId] = lease
+  redis.call('HSET', KEYS[2], accountKey, cjson.encode(state))
+  if failureClass == 'cost_pending' and not pendingRecorded then
+    if actorStarted then redis.call('HINCRBY', KEYS[7], 'actorStarts', 1) end
+    if statusCode >= 200 and statusCode < 300 then
+      redis.call('HINCRBY', KEYS[7], 'completedRuns', 1)
+      redis.call('HINCRBY', KEYS[7], 'itemsBilled', itemCount)
+      if itemCount == 0 then redis.call('HINCRBY', KEYS[7], 'emptyRuns', 1) end
+    end
+    redis.call('HSET', KEYS[3], pendingOperationId, cjson.encode({
+      operationId=operationId, reservationId=reservationId, pending=true,
+      actorStarted=actorStarted, itemsBilled=itemCount, recordedAt=nowMs
+    }))
+  end
+  return cjson.encode({ok=true, pending=true, reservationId=reservationId})
+end
+state.leases[reservationId] = nil
+redis.call('HSET', KEYS[2], accountKey, cjson.encode(state))
+if pendingRecorded then redis.call('HDEL', KEYS[3], pendingOperationId) end
+if actorStarted and actualCost > 0 then redis.call('HINCRBY', KEYS[1], accountKey, actualCost) end
+if failureClass == 'billing_exhausted' then redis.call('HSET', KEYS[4], accountKey, nowMs) end
+if failureClass == 'actor_access_denied' then redis.call('HSET', KEYS[5], credentialId .. ':' .. actorId, nowMs) end
+if failureClass == 'invalid_auth' then redis.call('HSET', KEYS[5], credentialId .. ':*', nowMs) end
+if failureClass == 'temporary_throttle' then redis.call('HSET', KEYS[6], credentialId, nowMs + retryAfterMs) end
+if actorStarted and not pendingRecorded then redis.call('HINCRBY', KEYS[7], 'actorStarts', 1) end
+if statusCode >= 200 and statusCode < 300 and not pendingRecorded then
+  redis.call('HINCRBY', KEYS[7], 'completedRuns', 1)
+  redis.call('HINCRBY', KEYS[7], 'itemsBilled', itemCount)
+  if itemCount == 0 then redis.call('HINCRBY', KEYS[7], 'emptyRuns', 1) end
+elseif not pendingRecorded then
+  redis.call('HINCRBY', KEYS[7], 'failedRuns', 1)
+end
+if actorStarted and actualCost > 0 then redis.call('HINCRBY', KEYS[7], 'spentMicroUsd', actualCost) end
+local entry = {
+  operationId=operationId, reservationId=reservationId, platform='counterpart',
+  credentialId=credentialId, billingAccountId=billingAccountId,
+  accountCycleId=accountKey, billingCycleStartAt=cycleStartAt,
+  billingCycleEndAt=cycleEndAt, actorId=actorId,
+  itemsBilled=itemCount, totalCostMicroUsd=actualCost,
+  actorStarted=actorStarted, statusCode=statusCode,
+  failureClass=failureClass, finalizedAt=nowMs
 }
 redis.call('HSET', KEYS[3], operationId, cjson.encode(entry))
 return cjson.encode({ok=true, alreadyFinalized=false, costMicroUsd=actualCost})
@@ -1087,6 +1273,10 @@ function emptyPoolStatus(provider = 'none') {
       tiktok: {
         usedHistory: [],
         accounting: { actorStarts: 0, emptyRuns: 0, billedItems: 0 }
+      },
+      counterpart: {
+        accounting: { reservations: 0, actorStarts: 0, completedRuns: 0, emptyRuns: 0, failedRuns: 0, itemsBilled: 0, spentMicroUsd: 0 },
+        shopeeReservationUsesPerKey: DEFAULT_MAX_USES_PER_KEY
       }
     },
     totals: { groups: 0, active: 0, reserve: 0, used: 0, credentials: 0, pending: 0 }
@@ -1428,6 +1618,7 @@ export function normalizeApifyUsageSnapshot(data, credentialId, billingAccountId
     accountCycleId: accountCycleId(billingAccountId, startAt),
     cycleStartAt: startAt,
     cycleEndAt: endAt,
+    cycleEndAtMs: Date.parse(endAt),
     observedSpentMicroUsd: Math.ceil(spentUsd * 1_000_000)
   };
 }
@@ -1500,7 +1691,7 @@ async function createApifyUsageCandidateScanner({ count, platform, actorId = '',
         const { candidate, snapshot } = result.value;
         const remainingShopee = Math.max(0, DEFAULT_MAX_USES_PER_KEY - candidate.usageCount);
         const committed = snapshot.observedSpentMicroUsd + remainingShopee * shopeeRunCost
-          + (platform === 'tiktok' ? minimumCostMicroUsd : 0);
+          + (platform === 'shopee' ? 0 : minimumCostMicroUsd);
         if (committed <= usage.freeUsageMicroUsd) {
           snapshots.push(snapshot);
           eligible += 1;
@@ -1666,6 +1857,136 @@ export async function finalizeTikTokCostCredential(credential, result = {}, opti
     String(result.failureClass || ''), String(now.getTime()), String(Math.max(1_000, Number(result.retryAfterMs) || 60_000)),
     credential.billingAccountId || credential.id, credential.billingCycleStartAt || period, credential.billingCycleEndAt || '',
     result.actorStarted === false ? '0' : '1'
+  ], options);
+  return typeof raw === 'string' ? JSON.parse(raw) : raw;
+}
+
+export function calculateCounterpartBudgetAvailability({
+  budgetMicroUsd = APIFY_FREE_USAGE_MICRO_USD,
+  observedSpentMicroUsd = 0,
+  locallyTrackedSpentMicroUsd = 0,
+  reservedMicroUsd = 0,
+  shopeeLifetimeUsed = 0,
+  shopeeLifetimeReserved = 0,
+  plannedCostMicroUsd = 0
+} = {}) {
+  const base = calculateApifyCycleBudget({
+    budgetMicroUsd,
+    observedSpentMicroUsd,
+    locallyTrackedSpentMicroUsd,
+    reservedMicroUsd,
+    shopeeLifetimeUsed,
+    shopeeLifetimeReserved
+  });
+  const planned = Math.max(0, Number(plannedCostMicroUsd) || 0);
+  return {
+    ...base,
+    plannedCostMicroUsd: planned,
+    fits: base.availableMicroUsd >= planned,
+    availableAfterMicroUsd: Math.max(0, base.availableMicroUsd - planned)
+  };
+}
+
+function decryptCounterpartAllocation(allocation) {
+  const credential = allocation.credential;
+  return {
+    source: allocation.source,
+    credential: {
+      id: credential.id,
+      label: credential.label,
+      groupId: credential.groupId,
+      groupLabel: credential.groupLabel,
+      billingAccountId: credential.billingAccountId || credential.id,
+      accountCycleId: credential.accountCycleId,
+      billingCycleStartAt: credential.billingCycleStartAt,
+      billingCycleEndAt: credential.billingCycleEndAt,
+      runCount: Number(credential.runCount) || 0,
+      plannedCostMicroUsd: Number(credential.plannedCostMicroUsd) || 0,
+      spentMicroUsd: Number(credential.spentMicroUsd) || 0,
+      reservedMicroUsd: Number(credential.reservedMicroUsd) || 0,
+      shopeeReservedMicroUsd: Number(credential.shopeeReservedMicroUsd) || 0,
+      reservationId: credential.reservationId,
+      reservationExpiresAtMs: Number(credential.reservationExpiresAtMs) || null,
+      token: decryptToken(credential)
+    }
+  };
+}
+
+export async function reserveCounterpartCostCredential({
+  actorId,
+  plannedCostMicroUsd,
+  pricingVersion = 'counterpart-search-v2',
+  ...options
+} = {}) {
+  if (!isRedisConfigured()) throw new Error('Cần cấu hình Upstash Redis để cấp phát Apify key cho tìm sản phẩm tương tự.');
+  if (!process.env.APIFY_TOKEN_VAULT_KEY) throw new Error('Chưa cấu hình APIFY_TOKEN_VAULT_KEY.');
+  const resolvedActorId = String(actorId || '').trim();
+  if (!resolvedActorId) throw new Error('Thiếu actorId cho tìm sản phẩm tương tự.');
+  const planned = Math.max(1_000, Math.min(1_000_000, Math.round(Number(plannedCostMicroUsd) || 0)));
+  const now = options.now ? new Date(options.now) : new Date();
+  const minimumCycleRemainingMs = Math.max(120_000, Number(options.minimumCycleRemainingMs) || 240_000);
+  const scanner = await createApifyUsageCandidateScanner({
+    count: 1,
+    platform: 'counterpart',
+    actorId: resolvedActorId,
+    minimumCostMicroUsd: planned,
+    ...options
+  });
+  const usageCycles = {};
+  const keys = costLedgerKeys();
+  const usage = apifyUsageConfig();
+  const requestId = randomUUID();
+  let allocation = null;
+
+  while (scanner.hasMore()) {
+    const snapshots = await scanner.nextBatch();
+    for (const snapshot of snapshots) {
+      if (Number(snapshot.cycleEndAtMs) - now.getTime() >= minimumCycleRemainingMs) {
+        usageCycles[snapshot.credentialId] = snapshot;
+      }
+    }
+    if (!Object.keys(usageCycles).length) continue;
+    const raw = await redisCommand([
+      'EVAL', RESERVE_COUNTERPART_COST_SCRIPT, '11',
+      APIFY_POOL_KEY, APIFY_POOL_COUNTERS_KEY, keys.spent, keys.reserved, keys.runs,
+      keys.ledger, APIFY_TIKTOK_COOLDOWN_KEY, APIFY_TIKTOK_ACTOR_DENIED_KEY,
+      keys.exhausted, APIFY_SHOPEE_LIFETIME_RESERVED_KEY, APIFY_COUNTERPART_STATS_KEY,
+      String(planned), resolvedActorId, requestId, String(now.getTime()),
+      String(Math.max(120_000, Number(options.reservationLeaseMs) || 180_000)),
+      String(usage.freeUsageMicroUsd), String(usage.shopeeRunCostMicroUsd),
+      String(DEFAULT_MAX_USES_PER_KEY), JSON.stringify(usageCycles),
+      String(minimumCycleRemainingMs), String(pricingVersion)
+    ], options);
+    allocation = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (allocation?.ok) return decryptCounterpartAllocation(allocation);
+    if (allocation?.code !== 'COUNTERPART_BUDGET_PROTECTED') break;
+  }
+  const error = new Error('Không còn Apify key an toàn cho tìm sản phẩm tương tự sau khi chừa đủ 20 lượt Shopee.');
+  error.code = allocation?.code || 'COUNTERPART_BUDGET_PROTECTED';
+  error.statusCode = 503;
+  error.diagnostics = { ...scanner.diagnostics(), usageCycles: Object.keys(usageCycles).length };
+  throw error;
+}
+
+export async function finalizeCounterpartCostCredential(credential, result = {}, options = {}) {
+  if (!credential?.id || !credential?.reservationId || !credential?.accountCycleId) {
+    throw new Error('Thiếu reservation để chốt sổ tìm sản phẩm tương tự.');
+  }
+  const keys = costLedgerKeys();
+  const now = options.now ? new Date(options.now) : new Date();
+  const operationId = String(result.operationId || result.actorRunId || credential.reservationId);
+  const raw = await redisCommand([
+    'EVAL', FINALIZE_COUNTERPART_COST_SCRIPT, '7',
+    keys.spent, keys.reserved, keys.ledger, keys.exhausted,
+    APIFY_TIKTOK_ACTOR_DENIED_KEY, APIFY_TIKTOK_COOLDOWN_KEY, APIFY_COUNTERPART_STATS_KEY,
+    credential.accountCycleId, credential.id, credential.reservationId, operationId,
+    String(Math.max(0, Math.round(Number(result.actualCostMicroUsd) || 0))),
+    String(Math.max(0, Number(result.itemCount) || 0)), String(Number(result.statusCode) || 0),
+    String(result.failureClass || ''), String(now.getTime()),
+    String(Math.max(1_000, Number(result.retryAfterMs) || 60_000)),
+    credential.billingAccountId || credential.id, credential.billingCycleStartAt || '',
+    credential.billingCycleEndAt || '', result.actorStarted === false ? '0' : '1',
+    String(result.actorId || '')
   ], options);
   return typeof raw === 'string' ? JSON.parse(raw) : raw;
 }
@@ -1850,7 +2171,7 @@ export async function getApifyCredentialPoolStatus(options = {}) {
   if (!isRedisConfigured()) return emptyPoolStatus();
   const [configValue, counters, used, tiktokRuns, tiktokReviews, tiktokReserved, tiktokUsed,
     shopeeCacheHits, shopeeTotalServed, shopeeActorStarts, shopeeEmptyRuns, shopeeActorExhausted,
-    tiktokActorStarts, tiktokEmptyRuns, tiktokBilledItems] = await redisTransaction([
+    tiktokActorStarts, tiktokEmptyRuns, tiktokBilledItems, counterpartStatsReply] = await redisTransaction([
     ['GET', APIFY_POOL_KEY],
     ['HGETALL', APIFY_POOL_COUNTERS_KEY],
     ['HGETALL', APIFY_POOL_USED_KEY],
@@ -1865,11 +2186,12 @@ export async function getApifyCredentialPoolStatus(options = {}) {
     ['HGETALL', APIFY_SHOPEE_ACTOR_EXHAUSTED_KEY],
     ['HGETALL', APIFY_TIKTOK_ACTOR_START_COUNTERS_KEY],
     ['HGETALL', APIFY_TIKTOK_EMPTY_RUN_COUNTERS_KEY],
-    ['HGETALL', APIFY_TIKTOK_BILLED_ITEM_COUNTERS_KEY]
+    ['HGETALL', APIFY_TIKTOK_BILLED_ITEM_COUNTERS_KEY],
+    ['HGETALL', APIFY_COUNTERPART_STATS_KEY]
   ], options);
   if (!configValue) return emptyPoolStatus('upstash-redis');
   const config = typeof configValue === 'string' ? JSON.parse(configValue) : configValue;
-  return buildPoolStatus(config, counters, used, {
+  const status = buildPoolStatus(config, counters, used, {
     runs: tiktokRuns,
     reviews: tiktokReviews,
     reserved: tiktokReserved,
@@ -1886,6 +2208,20 @@ export async function getApifyCredentialPoolStatus(options = {}) {
     actorExhausted: parseHashReply(shopeeActorExhausted),
     actorId: process.env.APIFY_ACTOR_ID || 'zen-studio/shopee-product-reviews-scraper'
   });
+  const counterpartStats = parseHashReply(counterpartStatsReply);
+  status.platforms.counterpart = {
+    accounting: {
+      reservations: Number(counterpartStats.reservations) || 0,
+      actorStarts: Number(counterpartStats.actorStarts) || 0,
+      completedRuns: Number(counterpartStats.completedRuns) || 0,
+      emptyRuns: Number(counterpartStats.emptyRuns) || 0,
+      failedRuns: Number(counterpartStats.failedRuns) || 0,
+      itemsBilled: Number(counterpartStats.itemsBilled) || 0,
+      spentMicroUsd: Number(counterpartStats.spentMicroUsd) || 0
+    },
+    shopeeReservationUsesPerKey: DEFAULT_MAX_USES_PER_KEY
+  };
+  return status;
 }
 
 async function mapWithConcurrency(items, concurrency, mapper) {

@@ -17,6 +17,7 @@
     "@vercel/blob": "^2.8.0",
     "@vercel/functions": "^3.9.7",
     "ai": "^7.0.99",
-    "nodemailer": "^10.0.1"
+    "nodemailer": "^10.0.1",
+    "sharp": "^0.35.4"
   }
 }

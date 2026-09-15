@@ -4,6 +4,7 @@ import {
   APIFY_POOL_COUNTERS_KEY,
   APIFY_POOL_KEY,
   APIFY_POOL_USED_KEY,
+  APIFY_COUNTERPART_STATS_KEY,
   APIFY_COST_LEDGER_PREFIX,
   APIFY_SHOPEE_ACTOR_START_COUNTERS_KEY,
   APIFY_SHOPEE_EMPTY_RUN_COUNTERS_KEY,
@@ -19,11 +20,13 @@ import {
   APIFY_TIKTOK_USED_KEY,
   DEFAULT_MAX_USES_PER_KEY,
   finalizeShopeeCostCredential,
+  finalizeCounterpartCostCredential,
   finalizeTikTokCredential,
   getApifyCredentialPoolStatus,
   reserveApifyCredential,
   reserveApifyCredentialSet,
   reserveShopeeCostCredentialSet,
+  reserveCounterpartCostCredential,
   reserveTikTokCostCredentials,
   reserveTikTokCredentials,
   finalizeTikTokCostCredential,
@@ -73,6 +76,108 @@ function createRedisFake() {
       const maxUsesPerKey = DEFAULT_MAX_USES_PER_KEY;
       const counters = hash(APIFY_POOL_COUNTERS_KEY);
       const used = hash(APIFY_POOL_USED_KEY);
+      if (String(command[1]).includes('COUNTERPART_COST_FINALIZATION_V6')) {
+        const spent = hash(command[3]);
+        const reserved = hash(command[4]);
+        const ledger = hash(command[5]);
+        const stats = hash(command[9]);
+        const accountCycleId = command[10];
+        const credentialId = command[11];
+        const reservationId = command[12];
+        const operationId = command[13];
+        if (ledger[operationId]) return JSON.stringify({ ok: true, alreadyFinalized: true });
+        const actualCost = Number(command[14]);
+        const itemCount = Number(command[15]);
+        const statusCode = Number(command[16]);
+        const failureClass = command[17];
+        const nowMs = Number(command[18]);
+        const retryAfterMs = Number(command[19]);
+        const actorStarted = command[23] === '1';
+        const state = JSON.parse(reserved[accountCycleId] || '{"leases":{}}');
+        const pendingOperationId = `${operationId}:pending`;
+        const pendingRecorded = Boolean(ledger[pendingOperationId]);
+        if (['timeout', 'upstream_service_error', 'unknown_error', 'cost_pending'].includes(failureClass)) {
+          state.leases[reservationId].expiresAtMs = nowMs + Math.max(60_000, retryAfterMs);
+          reserved[accountCycleId] = JSON.stringify(state);
+          if (failureClass === 'cost_pending' && !ledger[pendingOperationId]) {
+            if (actorStarted) stats.actorStarts = String(Number(stats.actorStarts || 0) + 1);
+            if (statusCode >= 200 && statusCode < 300) {
+              stats.completedRuns = String(Number(stats.completedRuns || 0) + 1);
+              stats.itemsBilled = String(Number(stats.itemsBilled || 0) + itemCount);
+              if (!itemCount) stats.emptyRuns = String(Number(stats.emptyRuns || 0) + 1);
+            }
+            ledger[pendingOperationId] = JSON.stringify({ pending: true, operationId });
+          }
+          return JSON.stringify({ ok: true, pending: true, reservationId });
+        }
+        delete state.leases[reservationId];
+        reserved[accountCycleId] = JSON.stringify(state);
+        delete ledger[pendingOperationId];
+        if (actorStarted) {
+          spent[accountCycleId] = String(Number(spent[accountCycleId] || 0) + actualCost);
+          if (!pendingRecorded) stats.actorStarts = String(Number(stats.actorStarts || 0) + 1);
+          stats.spentMicroUsd = String(Number(stats.spentMicroUsd || 0) + actualCost);
+        }
+        if (statusCode >= 200 && statusCode < 300 && !pendingRecorded) {
+          stats.completedRuns = String(Number(stats.completedRuns || 0) + 1);
+          stats.itemsBilled = String(Number(stats.itemsBilled || 0) + itemCount);
+          if (!itemCount) stats.emptyRuns = String(Number(stats.emptyRuns || 0) + 1);
+        } else if (!pendingRecorded) {
+          stats.failedRuns = String(Number(stats.failedRuns || 0) + 1);
+        }
+        ledger[operationId] = JSON.stringify({ accountCycleId, actualCost });
+        return JSON.stringify({ ok: true, alreadyFinalized: false, costMicroUsd: actualCost });
+      }
+      if (String(command[1]).includes('COUNTERPART_COST_RESERVATION_V6')) {
+        const plannedCost = Number(command[14]);
+        const actorId = command[15];
+        const requestId = command[16];
+        const nowMs = Number(command[17]);
+        const leaseMs = Number(command[18]);
+        const budget = Number(command[19]);
+        const shopeeRunCost = Number(command[20]);
+        const maxShopeeUses = Number(command[21]);
+        const cycles = JSON.parse(command[22]);
+        const spent = hash(command[5]);
+        const reserved = hash(command[6]);
+        const stats = hash(command[13]);
+        const candidate = config.groups.flatMap((group) => group.credentials.map((credential) => ({ credential, group })))
+          .find(({ credential }) => {
+            const cycle = cycles[credential.id];
+            if (!cycle) return false;
+            const state = JSON.parse(reserved[cycle.accountCycleId] || '{"leases":{}}');
+            const held = Object.values(state.leases).reduce((sum, lease) => sum + Number(lease.costMicroUsd || 0), 0);
+            const shopeeReserve = Math.max(0, maxShopeeUses - Number(counters[credential.id] || 0)) * shopeeRunCost;
+            return Math.max(Number(spent[cycle.accountCycleId] || 0), Number(cycle.observedSpentMicroUsd || 0)) + held + shopeeReserve + plannedCost <= budget;
+          });
+        if (!candidate) return JSON.stringify({ ok: false, code: 'COUNTERPART_BUDGET_PROTECTED' });
+        const cycle = cycles[candidate.credential.id];
+        const reservationId = `${requestId}:1`;
+        const state = JSON.parse(reserved[cycle.accountCycleId] || '{"leases":{}}');
+        state.leases[reservationId] = { costMicroUsd: plannedCost, actorId, expiresAtMs: nowMs + leaseMs };
+        reserved[cycle.accountCycleId] = JSON.stringify(state);
+        spent[cycle.accountCycleId] = String(cycle.observedSpentMicroUsd);
+        stats.reservations = String(Number(stats.reservations || 0) + 1);
+        return JSON.stringify({
+          ok: true,
+          source: 'redis-vault-cost-ledger-v6-counterpart',
+          credential: {
+            ...candidate.credential,
+            groupId: candidate.group.id,
+            groupLabel: candidate.group.label,
+            billingAccountId: cycle.billingAccountId,
+            accountCycleId: cycle.accountCycleId,
+            billingCycleStartAt: cycle.cycleStartAt,
+            billingCycleEndAt: cycle.cycleEndAt,
+            plannedCostMicroUsd: plannedCost,
+            spentMicroUsd: cycle.observedSpentMicroUsd,
+            reservedMicroUsd: plannedCost,
+            shopeeReservedMicroUsd: Math.max(0, maxShopeeUses - Number(counters[candidate.credential.id] || 0)) * shopeeRunCost,
+            reservationId,
+            reservationExpiresAtMs: nowMs + leaseMs
+          }
+        });
+      }
       if (String(command[1]).includes('TIKTOK_COST_FINALIZATION_V4')) {
         const spent = hash(command[3]);
         const reserved = hash(command[4]);
@@ -616,6 +721,115 @@ test('TikTok dùng chung token nhưng có bộ đếm review riêng, không tr�
       }[key];
       if (value === undefined) delete process.env[envKey];
       else process.env[envKey] = value;
+    }
+  }
+});
+
+test('counterpart dùng pool chung nhưng giữ riêng bộ đếm và luôn chừa 20 lượt Shopee', async () => {
+  const names = ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'APIFY_TOKEN_VAULT_KEY'];
+  const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.example.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'redis-test-token';
+  process.env.APIFY_TOKEN_VAULT_KEY = Buffer.alloc(32, 7).toString('base64');
+  const redis = createRedisFake();
+  try {
+    await saveApifyCredentialPool({ groups: [group('primary', 'counterpart')] }, { fetchImpl: redis.fetchImpl });
+    const usageFetchImpl = async () => ({
+      ok: true,
+      async json() {
+        return { data: {
+          usageCycle: { startAt: '2026-09-01T00:00:00.000Z', endAt: '2026-10-01T00:00:00.000Z' },
+          totalUsageCreditsUsdAfterVolumeDiscount: 1
+        } };
+      }
+    });
+    const allocation = await reserveCounterpartCostCredential({
+      actorId: 'search/example',
+      plannedCostMicroUsd: 200_000,
+      now: '2026-09-15T00:00:00.000Z',
+      fetchImpl: redis.fetchImpl,
+      usageFetchImpl
+    });
+    assert.equal(allocation.source, 'redis-vault-cost-ledger-v6-counterpart');
+    assert.equal(allocation.credential.shopeeReservedMicroUsd, 20 * 87_800);
+    assert.equal(Number(redis.hashes.get(APIFY_POOL_COUNTERS_KEY)?.[allocation.credential.id] || 0), 0);
+    assert.equal(Number(redis.hashes.get(APIFY_TIKTOK_REVIEW_COUNTERS_KEY)?.[allocation.credential.id] || 0), 0);
+
+    const finalized = await finalizeCounterpartCostCredential(allocation.credential, {
+      actorId: 'search/example', actorRunId: 'counterpart-run-1', actualCostMicroUsd: 123_456,
+      itemCount: 12, statusCode: 200, actorStarted: true
+    }, { fetchImpl: redis.fetchImpl, now: '2026-09-15T00:01:00.000Z' });
+    const repeated = await finalizeCounterpartCostCredential(allocation.credential, {
+      actorId: 'search/example', actorRunId: 'counterpart-run-1', actualCostMicroUsd: 123_456,
+      itemCount: 12, statusCode: 200, actorStarted: true
+    }, { fetchImpl: redis.fetchImpl, now: '2026-09-15T00:01:01.000Z' });
+    assert.equal(finalized.costMicroUsd, 123_456);
+    assert.equal(repeated.alreadyFinalized, true);
+    const status = await getApifyCredentialPoolStatus({ fetchImpl: redis.fetchImpl });
+    assert.deepEqual(status.platforms.counterpart.accounting, {
+      reservations: 1,
+      actorStarts: 1,
+      completedRuns: 1,
+      emptyRuns: 0,
+      failedRuns: 0,
+      itemsBilled: 12,
+      spentMicroUsd: 123_456
+    });
+  } finally {
+    for (const name of names) {
+      if (previous[name] === undefined) delete process.env[name];
+      else process.env[name] = previous[name];
+    }
+  }
+});
+
+test('counterpart chưa có actual cost giữ reservation ngắn hạn và không ghi planned cost thành spent', async () => {
+  const names = ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'APIFY_TOKEN_VAULT_KEY'];
+  const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.example.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'redis-test-token';
+  process.env.APIFY_TOKEN_VAULT_KEY = Buffer.alloc(32, 7).toString('base64');
+  const redis = createRedisFake();
+  try {
+    await saveApifyCredentialPool({ groups: [group('primary', 'counterpart-pending')] }, { fetchImpl: redis.fetchImpl });
+    const usageFetchImpl = async () => ({
+      ok: true,
+      async json() {
+        return { data: {
+          usageCycle: { startAt: '2026-09-01T00:00:00.000Z', endAt: '2026-10-01T00:00:00.000Z' },
+          totalUsageCreditsUsdAfterVolumeDiscount: 1
+        } };
+      }
+    });
+    const allocation = await reserveCounterpartCostCredential({
+      actorId: 'search/example', plannedCostMicroUsd: 200_000,
+      now: '2026-09-15T00:00:00.000Z', fetchImpl: redis.fetchImpl, usageFetchImpl
+    });
+    const finalized = await finalizeCounterpartCostCredential(allocation.credential, {
+      actorId: 'search/example', actorRunId: 'counterpart-pending-run', actualCostMicroUsd: 0,
+      itemCount: 12, statusCode: 200, actorStarted: true, failureClass: 'cost_pending', retryAfterMs: 30 * 60 * 1_000
+    }, { fetchImpl: redis.fetchImpl, now: '2026-09-15T00:01:00.000Z' });
+    assert.equal(finalized.pending, true);
+    const status = await getApifyCredentialPoolStatus({ fetchImpl: redis.fetchImpl });
+    assert.equal(status.platforms.counterpart.accounting.spentMicroUsd, 0);
+    assert.equal(status.platforms.counterpart.accounting.actorStarts, 1);
+    assert.equal(status.platforms.counterpart.accounting.completedRuns, 1);
+    assert.equal(status.platforms.counterpart.accounting.itemsBilled, 12);
+
+    const reconciled = await finalizeCounterpartCostCredential(allocation.credential, {
+      actorId: 'search/example', actorRunId: 'counterpart-pending-run', actualCostMicroUsd: 123_456,
+      itemCount: 12, statusCode: 200, actorStarted: true
+    }, { fetchImpl: redis.fetchImpl, now: '2026-09-15T00:02:00.000Z' });
+    assert.equal(reconciled.costMicroUsd, 123_456);
+    const reconciledStatus = await getApifyCredentialPoolStatus({ fetchImpl: redis.fetchImpl });
+    assert.equal(reconciledStatus.platforms.counterpart.accounting.spentMicroUsd, 123_456);
+    assert.equal(reconciledStatus.platforms.counterpart.accounting.actorStarts, 1);
+    assert.equal(reconciledStatus.platforms.counterpart.accounting.completedRuns, 1);
+    assert.equal(reconciledStatus.platforms.counterpart.accounting.itemsBilled, 12);
+  } finally {
+    for (const name of names) {
+      if (previous[name] === undefined) delete process.env[name];
+      else process.env[name] = previous[name];
     }
   }
 });

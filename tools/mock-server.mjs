@@ -160,6 +160,37 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    // Counterpart search stays outside the analysis stream. The mock mirrors
+    // production's create-once + GET polling contract without starting Actor.
+    if (pathname === '/api/match-counterpart' && req.method === 'POST') {
+      res.writeHead(202, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+      res.end(JSON.stringify({ jobId: '0123456789abcdef0123456789abcdef', status: 'queued', stage: 'queued', retryAfterMs: 350 }));
+      return;
+    }
+    if (pathname === '/api/match-counterpart' && req.method === 'GET') {
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+      res.end(JSON.stringify({
+        jobId: '0123456789abcdef0123456789abcdef',
+        status: 'ready',
+        generatedAt: new Date().toISOString(),
+        targetPlatform: 'TikTok Shop',
+        candidate: {
+          platform: 'TikTok Shop',
+          title: 'Tai nghe Bluetooth ANC SoundPro Max — lựa chọn đối ứng',
+          url: 'https://shop.tiktok.com/view/product/1729384756102938475',
+          image: 'https://images.unsplash.com/photo-1606220945770-b5b6c2c55bf1',
+          reviewCount: 84,
+          rating: 4.7,
+          shopName: 'SoundPro Official',
+          similarityPercent: 91,
+          matchClass: 'exact',
+          hasEnoughReviews: true,
+          minimumReviewCount: 20
+        }
+      }));
+      return;
+    }
+
     // Static file serving
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       res.writeHead(405, { 'content-type': 'application/json; charset=utf-8' });
