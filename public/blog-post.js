@@ -10,8 +10,12 @@
     ? configuredHeadings
     : [...content.querySelectorAll(':scope > h2[id]')];
   const links = new Map();
+  const HEADING_SCROLL_OFFSET = 112;
+  const ACTIVE_HEADING_THRESHOLD = 180;
+  const SCROLL_SETTLE_DELAY = 160;
   let lockedId = '';
   let lockUntil = 0;
+  let releaseLockTimer;
 
   const lockActiveHeading = (id) => {
     lockedId = id;
@@ -19,13 +23,32 @@
     setActive(id);
   };
 
+  const scheduleLockRelease = () => {
+    window.clearTimeout(releaseLockTimer);
+    releaseLockTimer = window.setTimeout(() => {
+      lockedId = '';
+      lockUntil = 0;
+      updateFromPosition();
+    }, SCROLL_SETTLE_DELAY);
+  };
+
+  const scrollToHeading = (heading) => {
+    const top = window.scrollY + heading.getBoundingClientRect().top - HEADING_SCROLL_OFFSET;
+    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  };
+
   headings.forEach((heading) => {
     const item = document.createElement('li');
     const link = document.createElement('a');
     link.href = `#${heading.id}`;
     link.textContent = heading.textContent.trim();
-    link.addEventListener('click', () => {
+    link.addEventListener('click', (event) => {
+      event.preventDefault();
       lockActiveHeading(heading.id);
+      const hash = `#${heading.id}`;
+      if (location.hash !== hash) history.pushState(null, '', hash);
+      scrollToHeading(heading);
+      scheduleLockRelease();
     });
     item.append(link);
     list.append(item);
@@ -68,17 +91,13 @@
   if (!headings.length) return;
   const updateFromPosition = () => {
     if (lockedId && performance.now() < lockUntil) {
-      const lockedHeading = document.getElementById(lockedId);
-      const distanceFromAnchor = Math.abs((lockedHeading?.getBoundingClientRect().top ?? 0) - 112);
-      if (distanceFromAnchor > 32) {
-        setActive(lockedId);
-        return;
-      }
+      setActive(lockedId);
+      return;
     }
     lockedId = '';
     const atPageEnd = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
     const current = atPageEnd ? headings.at(-1) : headings.reduce((active, heading) => (
-      heading.getBoundingClientRect().top <= 180 ? heading : active
+      heading.getBoundingClientRect().top <= ACTIVE_HEADING_THRESHOLD ? heading : active
     ), headings[0]);
     setActive(current.id);
   };
@@ -97,12 +116,16 @@
     const observer = new IntersectionObserver(queuePositionUpdate, { rootMargin: '-100px 0px -72% 0px', threshold: [0, 1] });
     headings.forEach((heading) => observer.observe(heading));
   }
-  window.addEventListener('scroll', queuePositionUpdate, { passive: true });
+  window.addEventListener('scroll', () => {
+    if (lockedId) scheduleLockRelease();
+    queuePositionUpdate();
+  }, { passive: true });
 
   window.addEventListener('hashchange', () => {
     const id = location.hash.slice(1);
     if (links.has(id)) {
       lockActiveHeading(id);
+      scheduleLockRelease();
     }
   });
 })();

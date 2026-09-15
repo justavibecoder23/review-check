@@ -73,13 +73,19 @@ test('article pages use an asymmetric reading grid with responsive metadata and 
   assert.match(blogStyles, /\.article-content \{[^}]*max-width: 800px;[^}]*color: #374151;[^}]*font-size: 18px;[^}]*line-height: 1\.8;/);
   assert.match(blogStyles, /@media \(max-width: 1024px\) \{[\s\S]*?\.article-reading-grid \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*grid-template-rows: auto auto auto auto;/);
   assert.match(blogStyles, /\.article-toc-links a\.is-active \{[^}]*border-left-color: #fc781f;[^}]*color: #fc781f;[^}]*font-weight: 600;/);
+  assert.match(blogStyles, /\.article-toc-links \{[^}]*max-height: min\(52vh, 480px\);[^}]*overflow-y: auto;[^}]*scrollbar-width: none;[^}]*-webkit-mask-image: linear-gradient\(to bottom, transparent 0%, black 5%, black 95%, transparent 100%\);[^}]*mask-image: linear-gradient\(to bottom, transparent 0%, black 5%, black 95%, transparent 100%\);/);
+  assert.match(blogStyles, /\.article-toc-links::\-webkit-scrollbar \{[^}]*display: none;/);
+  assert.match(blogStyles, /@media \(max-width: 1024px\) \{[\s\S]*?\.article-toc-links \{[^}]*max-height: 360px;/);
   assert.match(blogPostJs, /IntersectionObserver/);
   assert.match(blogPostJs, /matchMedia\('\(min-width: 1025px\)'\)/);
   assert.match(blogPostJs, /toc\.removeAttribute\('open'\)/);
   assert.match(blogPostJs, /tocScroller\.scrollTo\(/);
   assert.match(blogPostJs, /lockActiveHeading\(heading\.id\)/);
-  assert.match(blogPostJs, /distanceFromAnchor > 32/);
-  assert.match(blogPostJs, /heading\.getBoundingClientRect\(\)\.top <= 180/);
+  assert.match(blogPostJs, /event\.preventDefault\(\)/);
+  assert.match(blogPostJs, /history\.pushState\(null, '', hash\)/);
+  assert.match(blogPostJs, /scrollToHeading\(heading\)/);
+  assert.match(blogPostJs, /if \(lockedId\) scheduleLockRelease\(\)/);
+  assert.match(blogPostJs, /heading\.getBoundingClientRect\(\)\.top <= ACTIVE_HEADING_THRESHOLD/);
 });
 
 test('article tables of contents follow the supplied editorial outlines', () => {
@@ -273,6 +279,15 @@ test('five-star review article uses the dedicated thumbnail without replacing it
   assert.match(blogHtml, /src="\/assets\/blog\/review-5-sao-co-dang-tin-thumbnail\.jpg"/);
   assert.match(reviewReliabilityArticleHtml, /class="article-lead-image" src="\/assets\/blog\/review-5-sao-co-dang-tin-thumbnail\.jpg"/);
   assert.match(reviewReliabilityArticleHtml, /class="article-figure[^"]*"><img src="\/assets\/blog\/review-5-sao-it-thong-tin\.jpg"/);
+});
+
+test('TrustScore article uses the dedicated thumbnail while preserving its first content figure', () => {
+  assert.match(blogHtml, /href="\/bai-viet\/trustscore-la-gi"[^>]*><img src="\/assets\/blog\/trustscore-thumbnail\.jpg"[^>]*width="2752"[^>]*height="1536"/);
+  assert.match(trustScoreArticleHtml, /property="og:image" content="https:\/\/www\.realview\.com\.vn\/assets\/blog\/trustscore-thumbnail\.jpg"/);
+  assert.match(trustScoreArticleHtml, /name="twitter:image" content="https:\/\/www\.realview\.com\.vn\/assets\/blog\/trustscore-thumbnail\.jpg"/);
+  assert.match(trustScoreArticleHtml, /"image": \{ "@type": "ImageObject", "url": "https:\/\/www\.realview\.com\.vn\/assets\/blog\/trustscore-thumbnail\.jpg", "width": 2752, "height": 1536 \}/);
+  assert.match(trustScoreArticleHtml, /class="article-lead-image" src="\/assets\/blog\/trustscore-thumbnail\.jpg"[^>]*width="2752"[^>]*height="1536"/);
+  assert.match(trustScoreArticleHtml, /class="article-figure"><img src="\/assets\/blog\/trustscore-giao-dien-realview\.jpg"/);
 });
 
 test('blog library uses the streamlined aligned layout', () => {

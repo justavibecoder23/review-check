@@ -126,7 +126,8 @@
 .article-toc { margin: 0; padding: 0; border: 0; background: transparent; }
 .article-toc summary { color: #111827; font-size: 14px; font-weight: 750; line-height: 1.5; cursor: pointer; }
 .article-toc[open] summary { margin-bottom: 14px; }
-.article-toc-links { max-height: min(52vh, 480px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.article-toc-links { max-height: min(52vh, 480px); padding-block: 8px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 5%, black 95%, transparent 100%); mask-image: linear-gradient(to bottom, transparent 0%, black 5%, black 95%, transparent 100%); }
+.article-toc-links::-webkit-scrollbar { display: none; }
 .article-toc-links ol { margin: 0; padding: 0; list-style: none; }
 .article-toc-links li { margin: 0; padding: 0; }
 .article-toc-links a { display: block; padding: 7px 0 7px 12px; border-left: 2px solid transparent; color: #6b7280; font-size: 14px; font-weight: 450; line-height: 1.45; text-decoration: none; transition: border-color .18s ease, color .18s ease; }
