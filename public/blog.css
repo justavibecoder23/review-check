@@ -158,11 +158,14 @@
 .article-math math { width: max-content; min-width: 100%; margin: 0 auto; font-size: clamp(20px, 3.2vw, 30px); text-align: center; }
 .math-inline { white-space: nowrap; font-family: "STIX Two Math", "Cambria Math", Georgia, serif; }
 .math-inline var { font-family: inherit; }
-.article-content .article-source-cta { width: fit-content; max-width: 100%; margin: 0 0 24px; padding: 0; border: 0; border-radius: 0; background: transparent; color: #111827; box-shadow: none; font-weight: 800; text-align: left; }
-.article-source-cta a { color: #111827; text-decoration: none; }
-.article-source-cta a:hover { color: #fc781f; }
+.article-content .article-source-cta { width: 100%; max-width: 100%; margin: 32px auto; padding: 0; display: flex; justify-content: center; border: 0; border-radius: 0; background: transparent; color: #374151; box-shadow: none; font-size: clamp(18px, 2.1vw, 24px); font-weight: 800; line-height: 1.45; text-align: center; }
+.article-source-cta a { color: #fc781f; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 5px; }
+.article-source-cta a:hover { color: var(--orange-dark); }
 .article-figure { margin: 38px 0 46px; }
 .article-figure img { width: 100%; height: auto; display: block; border: 1px solid rgba(22,22,22,.09); border-radius: 20px; background: #f7f7f3; }
+.article-figure--compact img { width: auto; max-width: 100%; max-height: 720px; margin: 0 auto; object-fit: contain; }
+.article-figure--reduced img { width: 88%; max-width: 680px; margin-right: auto; margin-left: auto; object-fit: contain; }
+.article-figure--smaller img { width: 80%; max-width: 620px; }
 .article-figure figcaption { margin-top: 12px; color: #6b7280; font-size: 13px; line-height: 1.6; text-align: center; }
 .article-table-wrap { margin: 28px 0 36px; overflow-x: auto; border: 1px solid rgba(22,22,22,.1); border-radius: 18px; background: white; }
 .article-table { width: 100%; border-collapse: collapse; font-size: 15px; line-height: 1.55; }
@@ -251,6 +254,9 @@
   .article-summary, .article-method { padding: 22px 20px; }
   .article-figure { margin: 28px 0 34px; }
   .article-figure img { border-radius: 15px; }
+  .article-figure--compact img { max-height: 68vh; }
+  .article-figure--reduced img { width: 92%; }
+  .article-figure--smaller img { width: 86%; }
   .article-table th, .article-table td { min-width: 135px; padding: 13px 14px; }
 }
 

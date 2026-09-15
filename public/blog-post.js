@@ -5,7 +5,10 @@
   const list = toc?.querySelector('.article-toc-links ol');
   if (!toc || !content || !tocScroller || !list) return;
 
-  const headings = [...content.querySelectorAll(':scope > h2[id]')];
+  const configuredHeadings = [...content.querySelectorAll(':scope > [data-toc-entry][id]')];
+  const headings = configuredHeadings.length
+    ? configuredHeadings
+    : [...content.querySelectorAll(':scope > h2[id]')];
   const links = new Map();
   let lockedId = '';
   let lockUntil = 0;

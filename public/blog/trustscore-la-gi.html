@@ -99,17 +99,17 @@
             <img class="article-lead-image" src="/assets/blog/trustscore-giao-dien-realview.jpg" alt="Giao diện RealView với công cụ phân tích đánh giá sản phẩm" width="2560" height="1472" fetchpriority="high" loading="eager" decoding="async" />
             <div class="article-content" data-source-word-count="3381" data-source-block-count="144">
           <p>TrustScore là thang điểm 0 - 100 giúp bạn đánh giá độ tin cậy của một tập review, thay vì chỉ nhìn vào số sao. Trên RealView, hệ thống phân tích nhiều tín hiệu như mức độ cụ thể, nội dung lặp lại, ngôn từ bất thường và dữ liệu review để đưa ra kết quả dễ hiểu. TrustScore cao không có nghĩa sản phẩm chắc chắn tốt; điểm số chỉ cho biết mức độ đáng tin của phần đánh giá được phân tích. Xem cách TrustScore được tính và cách đọc điểm đúng trước khi mua hàng.</p>
-          <h2 id="trustscore-la-gi">TrustScore là gì?</h2>
+          <h2 id="trustscore-la-gi" data-toc-entry>TrustScore là gì?</h2>
           <p>Khi mua hàng online, người dùng thường nhìn vào số sao và số lượng review để hình dung sản phẩm có đáng mua hay không. Đây là những dữ liệu hữu ích, nhưng chúng chưa trả lời một câu hỏi quan trọng: những review đứng phía sau các con số đó đáng tin đến đâu?</p>
           <p>TrustScore là thang điểm từ 0 đến 100 do RealView sử dụng để đánh giá mức độ đáng tin cậy của tập review được hệ thống phân tích. Điểm số này không nhằm chấm chất lượng sản phẩm. Một sản phẩm có TrustScore 90/100 không có nghĩa sản phẩm “tốt 90/100”; nó chỉ có nghĩa tập review được phân tích có nhiều tín hiệu tích cực về độ tin cậy theo phương pháp của RealView.</p>
           <aside class="article-source-callout"><p class="article-source-callout-title">Hiểu nhanh</p><p>Số sao cho biết người mua đánh giá sản phẩm thế nào. Số lượng review cho biết có bao nhiêu lượt đánh giá. TrustScore tập trung vào câu hỏi: phần review đó đáng tin đến đâu?</p></aside>
           <figure class="article-figure"><img src="/assets/blog/trustscore-giao-dien-realview.jpg" alt="Giao diện Website realview.com.vn" width="2560" height="1472" loading="lazy" decoding="async" /></figure>
           <p class="article-caption">Hình 1. Giao diện Website realview.com.vn</p>
-          <h2 id="trustscore-khac-gi-so-sao-cua-san-pham">TrustScore khác gì số sao của sản phẩm?</h2>
+          <h2 id="trustscore-khac-gi-so-sao-cua-san-pham" data-toc-entry>TrustScore khác gì số sao của sản phẩm?</h2>
           <p>Số sao ma một sản phẩm được đánh giá chỉ phản ánh mức độ hài lòng mà người mua thể hiện trên sàn thương mại điện tử. Trong khi đó, TrustScore của RealView tập trung vào chất lượng và mức độ đáng tin của chính tập review được phân tích. Hai chỉ số này vì vậy không thay thế cho nhau.</p>
           <div class="article-table-wrap" data-source-table="2"><table class="article-table"><thead><tr><th scope="col">Ví dụ</th><th scope="col">Số sao</th><th scope="col">Số review</th><th scope="col">TrustScore</th></tr></thead><tbody><tr><td>Sản phẩm A</td><td>4.9/5</td><td>10.000+</td><td>42/100</td></tr><tr><td>Sản phẩm B</td><td>4.7/5</td><td>2.000+</td><td>86/100</td></tr></tbody></table></div>
           <p>Trong ví dụ này, nếu chỉ nhìn số sao thì sản phẩm A có vẻ sẽ hấp dẫn hơn khi một người dùng nhìn vào lượt đánh gái. Tuy nhiên, TrustScore bổ sung cho người dùng một góc nhìn khác: liệu tập review phía sau con số 4.9 sao có đủ đa dạng, cụ thể và ít tín hiệu bất thường hay không?</p>
-          <h2 id="trustscore-duoc-tinh-nhu-the-nao">TrustScore được tính như thế nào?</h2>
+          <h2 id="trustscore-duoc-tinh-nhu-the-nao" data-toc-entry>TrustScore được tính như thế nào?</h2>
           <p>TrustScore của RealView không được quyết định từ một yếu tố duy nhất. Quy trình trong methodology nội bộ đi từ dữ liệu review thô qua các lớp tiền xử lý, lọc, thẩm định ngữ cảnh và cổng bằng chứng trước khi tính điểm cuối cùng.</p>
           <figure class="article-figure"><img src="/assets/blog/quy-trinh-phan-tich-trustscore.png" alt="Quy trình Review, Layer 1, Layer 2, Evidence và TrustScore" width="2048" height="768" loading="lazy" decoding="async" /></figure>
           <p class="article-caption">Hình 2. Quy trình: Review → Layer 1 → Layer 2 → Evidence → TrustScore</p>
@@ -156,16 +156,16 @@
           <p>Một điểm mạnh trong thiết kế thuật toán là hệ thống không muốn “quá tự tin” khi bằng chứng còn ít. Hệ số độ phủ C đo độ đầy đủ của dữ liệu mẫu. Khi C tiến gần 0, điểm kết quả được kéo về mốc trung tính 50; khi C tiến gần 1, điểm phản ánh đầy đủ hơn chất lượng cơ sở Q.</p>
           <aside class="article-source-callout"><p class="article-source-callout-title">Công thức đầu ra</p><p>S = 50 + C × (Q − 50)</p><p>TrustScore = round(S)</p></aside>
           <p>Điều này có nghĩa một tập review nhỏ hoặc thiếu bằng chứng không thể dễ dàng tạo ra một điểm quá cao chỉ vì những review được nhìn thấy ban đầu có vẻ tích cực. Ngược lại, TrustScore cũng không cố tình “phạt” một sản phẩm chỉ vì có ít dữ liệu; hệ thống đơn giản là thể hiện sự thận trọng bằng cách co điểm về mức trung tính.</p>
-          <h2 id="trustscore-bao-nhieu-la-dang-tin">TrustScore bao nhiêu là đáng tin?</h2>
+          <h2 id="trustscore-bao-nhieu-la-dang-tin" data-toc-entry>TrustScore bao nhiêu là đáng tin?</h2>
           <p>Theo cách diễn giải hiện tại của RealView, điểm TrustScore được đọc theo bốn nhóm dưới đây. Đây là ngưỡng diễn giải của RealView.</p>
           <div class="article-table-wrap" data-source-table="6"><table class="article-table"><thead><tr><th scope="col">TrustScore</th><th scope="col">Mức độ</th><th scope="col">Cách hiểu</th></tr></thead><tbody><tr><td>0 - 49</td><td>Độ tin cậy thấp</td><td>Nên thận trọng khi dùng review làm căn cứ quyết định.</td></tr><tr><td>50 - 59</td><td>Cần thận trọng</td><td>Nên kiểm tra thêm nội dung review và thông tin người bán.</td></tr><tr><td>60 - 79</td><td>Khá đáng tin</td><td>Có thể tham khảo nhưng vẫn nên đọc review cụ thể.</td></tr><tr><td>80 - 100</td><td>Độ tin cậy cao</td><td>Có nhiều tín hiệu tích cực về độ tin cậy theo phương pháp của RealView.</td></tr></tbody></table></div>
-          <h2 id="trustscore-cao-co-nghia-san-pham-tot-khong">TrustScore cao có nghĩa sản phẩm tốt không?</h2>
+          <h2 id="trustscore-cao-co-nghia-san-pham-tot-khong" data-toc-entry>TrustScore cao có nghĩa sản phẩm tốt không?</h2>
           <p>Không. TrustScore chỉ đánh giá độ tin cậy của tập review được phân tích, không đánh giá chất lượng sản phẩm. Một sản phẩm có TrustScore cao vẫn có thể không phù hợp với nhu cầu, ngân sách hoặc tiêu chuẩn cá nhân của bạn.</p>
           <p>Khi quyết định mua hàng, nên xem đồng thời giá, thông số, mô tả, người bán, chính sách đổi trả, TrustScore và các review cụ thể. TrustScore là một lớp thông tin bổ sung để giúp bạn đọc review hiệu quả hơn, không phải một nút “mua/không mua” tự động.</p>
-          <h2 id="trustscore-co-phat-hien-review-gia-khong">TrustScore có phát hiện review giả không?</h2>
+          <h2 id="trustscore-co-phat-hien-review-gia-khong" data-toc-entry>TrustScore có phát hiện review giả không?</h2>
           <p>TrustScore được thiết kế để nhận diện và đánh giá các tín hiệu bất thường trong tập review, chẳng hạn nội dung tương đồng, ý nghĩa lặp lại, review quá chung chung, dấu hiệu seeding hoặc những mẫu ngôn từ bất thường. Tuy nhiên, hệ thống không nên được hiểu là công cụ có thể khẳng định tuyệt đối một review là “thật” hay “giả”.</p>
           <p>Cách tiếp cận phù hợp hơn là đặt câu hỏi: “Tập review này có đủ đáng tin để tôi sử dụng khi quyết định mua hàng không?” Điều này cũng giúp RealView tránh việc gắn nhãn sai cho những review chỉ đơn giản là có cách diễn đạt ngắn hoặc khác thường.</p>
-          <h2 id="realview-phan-tich-tap-review-nhu-the-nao">RealView phân tích tập review như thế nào?</h2>
+          <h2 id="realview-phan-tich-tap-review-nhu-the-nao" data-toc-entry>RealView phân tích tập review như thế nào?</h2>
           <ul><li>Dán link sản phẩm Shopee hoặc TikTok Shop vào RealView.</li><li>Hệ thống tiếp nhận dữ liệu review trong phạm vi có thể xử lý của phiên phân tích.</li><li>Review được khử trùng lặp, lọc qua Layer 1 và thẩm định ngữ cảnh bằng Layer 2 khi cần.</li><li>Hệ thống tổng hợp TrustScore, trạng thái dữ liệu, các vấn đề nổi bật và những review dùng làm bằng chứng.</li></ul>
           <p>Trong phiên phân tích hiện tại, RealView có thể xử lý tối đa 100 review đầu vào. Sau bước lọc, chỉ những review đáp ứng điều kiện bằng chứng mới được sử dụng trong các phép tính TrustScore. Mức độ đầy đủ của tập bằng chứng tiếp tục được phản ánh qua hệ số độ phủ C và trạng thái kết quả.</p>
           <h3 id="case-study-minh-hoa">Case study minh họa</h3>
@@ -183,13 +183,13 @@
           <p class="article-caption">Hình 6. Các điểm cộng và điểm trừ được hệ thống tổng hợp từ 33 review đáng tham khảo.</p>
           <p>Ở lớp tổng hợp review, RealView ghi nhận các chủ đề nổi bật. Ở phía tích cực, “Chất lượng sản phẩm” xuất hiện ở 10/33 review đáng tham khảo; “Trải nghiệm sử dụng tốt” 2/33; “Chất lượng sạc”, “Thiết kế ngoại hình” và “Tốc độ sạc” mỗi chủ đề 1/33. Ở phía cần lưu ý, “Khác mô tả / hình ảnh” xuất hiện ở 2/33 review; “Độ chắc chắn cổng sạc”, “Kích thước / độ phù hợp” và “Trải nghiệm sử dụng” mỗi chủ đề 1/33.</p>
           <p>Với độ phủ mẫu 53%, người dùng nên xem TrustScore như một tín hiệu định hướng và đối chiếu thêm với review gốc thay vì xem đây là kết luận tuyệt đối.</p>
-          <h2 id="cach-doc-trustscore-khi-mua-hang-online">Cách đọc TrustScore khi mua hàng online</h2>
+          <h2 id="cach-doc-trustscore-khi-mua-hang-online" data-toc-entry>Cách đọc TrustScore khi mua hàng online</h2>
           <ul><li>Xem số sao để biết người mua nhìn chung hài lòng hay không.</li><li>Xem TrustScore để đánh giá độ đáng tin của tập review được phân tích.</li><li>Đọc phần tổng hợp để biết ưu điểm, nhược điểm hoặc vấn đề nào được nhắc lại nhiều.</li><li>Kiểm tra một số review cụ thể để đối chiếu giữa kết luận và bằng chứng.</li><li>Xem thêm thông tin người bán, mô tả, thông số, giá và chính sách đổi trả trước khi quyết định.</li></ul>
           <aside class="article-source-callout"><p class="article-source-callout-title">Nguyên tắc quan trọng</p><p>Đừng chỉ nhìn 5 sao. Hãy nhìn cả độ tin cậy của những review phía sau nó.</p></aside>
-          <h2 id="trustscore-co-thay-the-viec-doc-review-khong">TrustScore có thay thế việc đọc review không?</h2>
+          <h2 id="trustscore-co-thay-the-viec-doc-review-khong" data-toc-entry>TrustScore có thay thế việc đọc review không?</h2>
           <p>Không. TrustScore giúp bạn lọc và định hướng việc đọc review, còn review cụ thể vẫn là nguồn thông tin quan trọng để hiểu trải nghiệm thực tế của người mua. Sau khi xem TrustScore, bạn có thể tập trung vào những review đáng chú ý thay vì đọc hàng nghìn comment một cách thủ công.</p>
           <p>Có thể hiểu đơn giản: TrustScore giúp bạn biết nên chú ý điều gì; review giúp bạn hiểu trải nghiệm thực tế.</p>
-          <h2 id="faq-ve-trustscore">FAQ về TrustScore</h2>
+          <h2 id="faq-ve-trustscore" data-toc-entry>FAQ về TrustScore</h2>
           <h3 id="trustscore-la-gi">TrustScore là gì?</h3>
           <p>TrustScore là thang điểm từ 0 đến 100 dùng để đánh giá độ tin cậy của tập review được RealView phân tích.</p>
           <h3 id="trustscore-cao-co-nghia-san-pham-tot-khong">TrustScore cao có nghĩa sản phẩm tốt không?</h3>
@@ -208,10 +208,10 @@
           <p>Có. Review TikTok Shop được phân tích theo dữ liệu của nền tảng và không gộp chung với dữ liệu Shopee thành một tập duy nhất.</p>
           <h3 id="tai-sao-trustscore-co-the-keo-ve-50">Tại sao TrustScore có thể kéo về 50?</h3>
           <p>Khi độ phủ bằng chứng thấp, hệ số C làm điểm co về mốc trung tính 50 để phản ánh sự thiếu chắc chắn của dữ liệu.</p>
-          <h2 id="5-dieu-can-nho-ve-trustscore">5 điều cần nhớ về TrustScore</h2>
+          <h2 id="5-dieu-can-nho-ve-trustscore" data-toc-entry>5 điều cần nhớ về TrustScore</h2>
           <ul><li>TrustScore là thang điểm từ 0–100.</li><li>TrustScore đánh giá độ tin cậy của review, không đánh giá chất lượng sản phẩm.</li><li>TrustScore được tính từ nhiều tín hiệu thay vì chỉ nhìn số sao.</li><li>TrustScore cao không có nghĩa sản phẩm chắc chắn tốt hoặc phù hợp với bạn.</li><li>Nên kết hợp TrustScore với review cụ thể và thông tin người bán trước khi mua.</li></ul>
           <p><a href="/tieu-chi-loc">Xem phương pháp tính TrustScore đầy đủ</a></p>
-          <h2 id="bai-viet-lien-quan">Bài viết liên quan</h2>
+          <h2 id="bai-viet-lien-quan" data-toc-entry>Bài viết liên quan</h2>
           <p><a href="/bai-viet/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang">Review 5 sao có đáng tin không?</a></p>
           <p><a href="/bai-viet/shopee-hay-tiktok-shop-mua-hang-o-dau-tot-hon">Shopee hay TikTok Shop: Mua hàng ở đâu tốt hơn?</a></p>
           <p><a href="/bai-viet/shopee-mall-la-gi-co-nen-mua-khong">Shopee Mall là gì? Có nên mua hàng Shopee Mall không?</a></p>

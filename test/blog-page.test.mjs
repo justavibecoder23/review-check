@@ -5,6 +5,10 @@ import test from 'node:test';
 const blogHtml = await readFile(new URL('../public/blog.html', import.meta.url), 'utf8');
 const trustScoreArticleHtml = await readFile(new URL('../public/blog/trustscore-la-gi.html', import.meta.url), 'utf8');
 const reviewReliabilityArticleHtml = await readFile(new URL('../public/blog/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html', import.meta.url), 'utf8');
+const tiktokShopArticleHtml = await readFile(new URL('../public/blog/tiktok-shop-la-gi-mua-hang-tren-tiktok-co-an-toan-khong.html', import.meta.url), 'utf8');
+const shopeeComparisonArticleHtml = await readFile(new URL('../public/blog/shopee-hay-tiktok-shop-mua-hang-o-dau-tot-hon.html', import.meta.url), 'utf8');
+const shopeeMallArticleHtml = await readFile(new URL('../public/blog/shopee-mall-la-gi-co-nen-mua-khong.html', import.meta.url), 'utf8');
+const trustedShopeeShopArticleHtml = await readFile(new URL('../public/blog/cach-tim-shop-uy-tin-tren-shopee.html', import.meta.url), 'utf8');
 const blogStyles = await readFile(new URL('../public/blog.css', import.meta.url), 'utf8');
 const blogPostJs = await readFile(new URL('../public/blog-post.js', import.meta.url), 'utf8');
 const navJs = await readFile(new URL('../public/nav.js', import.meta.url), 'utf8');
@@ -20,6 +24,11 @@ const allArticlePages = await Promise.all(articleFiles.map(async (name) => ({
 function structuredData(html) {
   return [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)]
     .map((match) => JSON.parse(match[1]));
+}
+
+function tocEntryIds(html) {
+  return [...html.matchAll(/<h[23][^>]*id="([^"]+)"[^>]*data-toc-entry[^>]*>/g)]
+    .map((match) => match[1]);
 }
 
 test('blog hub publishes six articles and features the five-star review article', () => {
@@ -73,6 +82,131 @@ test('article pages use an asymmetric reading grid with responsive metadata and 
   assert.match(blogPostJs, /heading\.getBoundingClientRect\(\)\.top <= 180/);
 });
 
+test('article tables of contents follow the supplied editorial outlines', () => {
+  const expectedEntries = new Map([
+    ['cach-tim-shop-uy-tin-tren-shopee.html', [
+      'tai-sao-phai-biet-cach-tim-shop-uy-tin-tren-shopee',
+      'checklist-6-buoc-tim-shop-uy-tin-tren-shopee',
+      '4-dau-hieu-bat-thuong-cua-cac-shop-kem-uy-tin',
+      'faq-cau-hoi-thuong-gap',
+      'bai-viet-lien-quan',
+    ]],
+    ['kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html', [
+      'review-5-sao-co-dang-tin-khong',
+      '5-dau-hieu-giup-kiem-tra-do-tin-cay-cua-review',
+      'cach-kiem-tra-do-tin-cay-cua-review-truoc-khi-mua',
+      'cong-cu-kiem-tra-do-tin-cay-cua-review',
+      'trustscore-chi-so-tong-hop-ve-do-tin-cay-cua-tap-review',
+      'faq',
+      'bai-viet-lien-quan',
+    ]],
+    ['shopee-hay-tiktok-shop-mua-hang-o-dau-tot-hon.html', [
+      'shopee-hay-tiktok-shop-tot-hon',
+      'shopee-hay-tiktok-shop-re-hon',
+      'voucher-va-livestream-co-anh-huong-den-quyet-dinh-mua',
+      'review-tren-shopee-va-tiktok-shop-co-dang-tin-khong',
+      'review-nhieu-co-dong-nghia-san-pham-tot',
+      'chon-shop-quan-trong-hon-chon-san',
+      'nen-mua-hang-tren-shopee-hay-tiktok-shop',
+      'bang-so-sanh-shopee-va-tiktok-shop',
+      'vay-shopee-hay-tiktok-shop-tot-hon',
+      'kiem-tra-review-truoc-khi-chot-don-cung-realview',
+      'faq-cau-hoi-thuong-gap',
+      'bai-viet-lien-quan',
+    ]],
+    ['shopee-mall-la-gi-co-nen-mua-khong.html', [
+      'shopee-mall-la-gi-ban-chat-cua-nhan-mall',
+      'vi-sao-nhieu-nguoi-uu-tien-mua-hang-shopee-mall',
+      'nhung-han-che-khi-mua-hang-shopee-mall',
+      'co-nen-mua-hang-shopee-mall-khong',
+      '5-buoc-kiem-tra-shop-chinh-hang-va-uy-tin-truoc-khi-chot-don',
+      'faq-cau-hoi-thuong-gap',
+      'bai-viet-lien-quan',
+    ]],
+    ['tiktok-shop-la-gi-mua-hang-tren-tiktok-co-an-toan-khong.html', [
+      'tiktok-shop-la-gi',
+      'tiktok-shop-hoat-dong-nhu-the-nao',
+      'tiktok-shop-co-an-toan-va-uy-tin-khong',
+      '6-cach-kiem-tra-truoc-khi-mua-hang-tiktok-shop',
+      'checklist-mua-hang-tren-tiktok-shop',
+      'review-tiktok-shop-co-dang-tin-khong',
+      'co-nen-mua-hang-tiktok-shop-chi-vi-livestream-giam-gia',
+      'realview-ho-tro-kiem-tra-review-tiktok-shop-nhu-the-nao',
+      'bai-viet-lien-quan',
+      'kiem-tra-review-truoc-khi-chot-don',
+    ]],
+    ['trustscore-la-gi.html', [
+      'trustscore-la-gi',
+      'trustscore-khac-gi-so-sao-cua-san-pham',
+      'trustscore-duoc-tinh-nhu-the-nao',
+      'trustscore-bao-nhieu-la-dang-tin',
+      'trustscore-cao-co-nghia-san-pham-tot-khong',
+      'trustscore-co-phat-hien-review-gia-khong',
+      'realview-phan-tich-tap-review-nhu-the-nao',
+      'cach-doc-trustscore-khi-mua-hang-online',
+      'trustscore-co-thay-the-viec-doc-review-khong',
+      'faq-ve-trustscore',
+      '5-dieu-can-nho-ve-trustscore',
+      'bai-viet-lien-quan',
+    ]],
+  ]);
+
+  for (const { name, html } of allArticlePages) {
+    assert.deepEqual(tocEntryIds(html), expectedEntries.get(name), `${name} must follow its supplied outline`);
+  }
+  assert.match(blogPostJs, /configuredHeadings = \[\.\.\.content\.querySelectorAll\(':scope > \[data-toc-entry\]\[id\]'\)\]/);
+});
+
+test('TikTok Shop article preserves source headings, lists, emphasis, and internal links', () => {
+  assert.match(tiktokShopArticleHtml, /<h3 id="3-so-sanh-gia-cuoi-cung">3\. So sánh giá cuối cùng<\/h3>/);
+  assert.match(tiktokShopArticleHtml, /<h2 id="review-tiktok-shop-co-dang-tin-khong" data-toc-entry>Review TikTok Shop có đáng tin không\?<\/h2>/);
+  assert.match(tiktokShopArticleHtml, /<h2 id="kiem-tra-review-truoc-khi-chot-don" data-toc-entry>Kiểm tra review trước khi chốt đơn<\/h2>/);
+  assert.equal((tiktokShopArticleHtml.match(/<ul>/g) || []).length >= 6, true);
+  assert.match(tiktokShopArticleHtml, /<ol>[\s\S]*?<li>Shop: [\s\S]*?<li>Đổi trả:/);
+  assert.match(tiktokShopArticleHtml, /href="\/bai-viet\/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang"/);
+  assert.match(tiktokShopArticleHtml, /href="\/bai-viet\/trustscore-la-gi"/);
+  assert.match(tiktokShopArticleHtml, /id="faq-tiktok-shop-la-gi"/);
+  assert.match(tiktokShopArticleHtml, /id="faq-review-tiktok-shop-co-dang-tin-khong"/);
+});
+
+test('four supplied SEO articles preserve source lists, emphasis, dates, and standalone links', () => {
+  const suppliedArticles = [
+    reviewReliabilityArticleHtml,
+    shopeeComparisonArticleHtml,
+    shopeeMallArticleHtml,
+    trustedShopeeShopArticleHtml,
+  ];
+
+  for (const html of suppliedArticles) {
+    const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]);
+    assert.equal(new Set(ids).size, ids.length, 'supplied article must not contain duplicate IDs');
+    assert.match(html, /class="article-source-cta"/);
+  }
+
+  assert.equal((reviewReliabilityArticleHtml.match(/<ul>/g) || []).length >= 3, true);
+  assert.match(reviewReliabilityArticleHtml, /<strong>Bước 1:<\/strong>/);
+  assert.match(reviewReliabilityArticleHtml, /class="article-source-cta" id="tim-hieu-chi-tiet/);
+
+  assert.equal((shopeeComparisonArticleHtml.match(/<ul>/g) || []).length >= 4, true);
+  assert.match(shopeeComparisonArticleHtml, /<strong>Tổng thanh toán<\/strong>/);
+  assert.match(shopeeComparisonArticleHtml, /class="article-source-cta"[\s\S]*?href="\/tieu-chi-loc"/);
+  assert.match(shopeeComparisonArticleHtml, /<h2 id="bai-viet-lien-quan"[^>]*>[\s\S]*?<p><a href="\/bai-viet\//);
+
+  assert.equal((shopeeMallArticleHtml.match(/<ul>/g) || []).length >= 4, true);
+  assert.match(shopeeMallArticleHtml, /<h2 id="nguon-tham-khao">[\s\S]*?<ol>/);
+  assert.match(shopeeMallArticleHtml, /datePublished": "2026-09-14T08:00:00\+07:00"/);
+  assert.match(shopeeMallArticleHtml, /<time datetime="2026-09-14">14 tháng 9, 2026<\/time>/);
+
+  assert.equal((trustedShopeeShopArticleHtml.match(/<ul>/g) || []).length >= 4, true);
+  assert.doesNotMatch(trustedShopeeShopArticleHtml, /<p>nó<\/p>/);
+  assert.match(trustedShopeeShopArticleHtml, /<p>RealView – Real Reviews – Real Value<\/p>\s*<p>Góc nhìn thật – Lựa chọn đúng\.<\/p>/);
+  assert.match(trustedShopeeShopArticleHtml, /datePublished": "2026-09-14T08:00:00\+07:00"/);
+  assert.match(trustedShopeeShopArticleHtml, /<time datetime="2026-09-14">14 tháng 9, 2026<\/time>/);
+
+  assert.match(blogStyles, /\.article-content \.article-source-cta \{[^}]*width: 100%;[^}]*display: flex;[^}]*justify-content: center;[^}]*text-align: center;/);
+  assert.match(blogStyles, /\.article-source-cta a \{[^}]*color: #fc781f;[^}]*text-decoration: underline;/);
+});
+
 test('article category and embedded content graphics retain their original formats', () => {
   assert.match(blogStyles, /\.article-category \{[^}]*padding: 7px 12px;[^}]*display: inline-flex;[^}]*border-radius: 999px;[^}]*background: #fff0e5;[^}]*color: var\(--orange-dark\);/);
   assert.match(blogStyles, /\.article-source-callout \{[^}]*padding: 24px 26px;[^}]*border: 1px solid rgba\(223,89,0,\.2\);[^}]*border-radius: 18px;[^}]*background: #fff8f2;/);
@@ -93,10 +227,52 @@ test('review reliability figures 7 and 8 use the toolbar-free JPG assets', () =>
   assert.match(reviewReliabilityArticleHtml, /src="\/assets\/blog\/thanh-phan-trustscore-realview\.jpg"[^>]*width="2027"[^>]*height="1163"/);
 });
 
+test('selected tall article figures are compact and toolbar screenshots use the clean TrustScore image', () => {
+  assert.match(blogStyles, /\.article-figure--compact img \{[^}]*width: auto;[^}]*max-width: 100%;[^}]*max-height: 720px;[^}]*margin: 0 auto;[^}]*object-fit: contain;/);
+  assert.match(blogStyles, /@media \(max-width: 760px\) \{[\s\S]*?\.article-figure--compact img \{[^}]*max-height: 68vh;/);
+
+  for (const [html, sources] of [
+    [shopeeMallArticleHtml, ['seo04-6-1.jpg', 'seo04-51-1.jpg']],
+    [tiktokShopArticleHtml, ['seo05-10-1.jpg', 'seo05-75-1.jpg']],
+    [trustedShopeeShopArticleHtml, ['seo06-39-1.jpg', 'seo06-55-1.jpg']],
+  ]) {
+    for (const source of sources) {
+      assert.match(html, new RegExp(`class="article-figure[^"]*article-figure--compact[^"]*"><img src="/assets/blog/${source.replace('.', '\\.')}`));
+    }
+  }
+
+  assert.match(shopeeMallArticleHtml, /src="\/assets\/blog\/case-study-trustscore-64\.jpg"[^>]*width="2560"[^>]*height="1451"[\s\S]*?<p class="article-caption">Hình 3\. RealView phân tích tập review để bổ sung góc nhìn về độ tin cậy\.<\/p>/);
+  assert.match(trustedShopeeShopArticleHtml, /src="\/assets\/blog\/case-study-trustscore-64\.jpg"[^>]*width="2560"[^>]*height="1451"[\s\S]*?<p class="article-caption">Hình 3\. RealView phân tích tập review để bổ sung góc nhìn về độ tin cậy\.<\/p>/);
+  assert.doesNotMatch(shopeeMallArticleHtml, /seo04-61-1\.jpg/);
+  assert.doesNotMatch(trustedShopeeShopArticleHtml, /seo06-45-1\.jpg/);
+});
+
+test('selected review examples and the Shopee seeding example use the reduced figure treatment', () => {
+  assert.match(blogStyles, /\.article-figure--reduced img \{[^}]*width: 88%;[^}]*max-width: 680px;[^}]*margin-right: auto;[^}]*margin-left: auto;[^}]*object-fit: contain;/);
+  assert.match(blogStyles, /@media \(max-width: 760px\) \{[\s\S]*?\.article-figure--reduced img \{[^}]*width: 92%;/);
+
+  for (const source of [
+    'review-5-sao-it-thong-tin.jpg',
+    'review-ngan-co-thong-tin.jpg',
+    'review-chi-noi-giao-hang.jpg',
+  ]) {
+    assert.match(reviewReliabilityArticleHtml, new RegExp(`class="article-figure article-figure--reduced"><img src="/assets/blog/${source.replace('.', '\\.')}`));
+  }
+
+  assert.match(trustedShopeeShopArticleHtml, /class="article-figure article-figure--compact article-figure--reduced article-figure--smaller"><img src="\/assets\/blog\/seo06-55-1\.jpg"/);
+  assert.match(blogStyles, /\.article-figure--smaller img \{[^}]*width: 80%;[^}]*max-width: 620px;/);
+  assert.match(blogStyles, /@media \(max-width: 760px\) \{[\s\S]*?\.article-figure--smaller img \{[^}]*width: 86%;/);
+});
+
+test('TikTok review reliability CTA is centered and has no square brackets', () => {
+  assert.match(tiktokShopArticleHtml, /<p class="article-source-cta"><a href="\/bai-viet\/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang">Cách kiểm tra độ tin cậy của review trước khi mua hàng<\/a><\/p>/);
+  assert.doesNotMatch(tiktokShopArticleHtml, />\[Cách kiểm tra độ tin cậy của review trước khi mua hàng\]<\/a>/);
+});
+
 test('five-star review article uses the dedicated thumbnail without replacing its in-article example', () => {
   assert.match(blogHtml, /src="\/assets\/blog\/review-5-sao-co-dang-tin-thumbnail\.jpg"/);
   assert.match(reviewReliabilityArticleHtml, /class="article-lead-image" src="\/assets\/blog\/review-5-sao-co-dang-tin-thumbnail\.jpg"/);
-  assert.match(reviewReliabilityArticleHtml, /class="article-figure"><img src="\/assets\/blog\/review-5-sao-it-thong-tin\.jpg"/);
+  assert.match(reviewReliabilityArticleHtml, /class="article-figure[^"]*"><img src="\/assets\/blog\/review-5-sao-it-thong-tin\.jpg"/);
 });
 
 test('blog library uses the streamlined aligned layout', () => {
