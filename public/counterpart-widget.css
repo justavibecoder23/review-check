@@ -94,20 +94,6 @@
   font-size: 15px;
   line-height: 1.65;
 }
-.counterpart-section-close {
-  width: 46px;
-  height: 46px;
-  flex: 0 0 46px;
-  display: grid;
-  place-items: center;
-  border: 1px solid rgba(22, 22, 22, .12);
-  border-radius: 50%;
-  background: rgba(255, 255, 255, .74);
-  color: #393936;
-  cursor: pointer;
-}
-.counterpart-section-close:hover { background: white; }
-.counterpart-section-close svg { width: 20px; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 .counterpart-comparison {
   padding: 28px;
   display: grid;
@@ -293,7 +279,6 @@
   .counterpart-heading { margin-bottom: 24px; gap: 16px; }
   .counterpart-heading h2 { font-size: 39px; letter-spacing: -2px; }
   .counterpart-heading > div > p:last-child { font-size: 12px; }
-  .counterpart-section-close { width: 40px; height: 40px; flex-basis: 40px; }
   .counterpart-comparison { padding: 13px; gap: 12px; border-radius: 25px; }
   .counterpart-product-card { padding: 13px; grid-template-columns: 104px minmax(0, 1fr); gap: 14px; border-radius: 19px; }
   .counterpart-product-image { width: 104px; border-radius: 15px; }

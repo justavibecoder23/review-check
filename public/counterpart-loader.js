@@ -1,7 +1,7 @@
 let loading;
 
 function loadCounterpartWidget() {
-  if (!loading) loading = import('./counterpart-widget.js?v=6').catch(() => null);
+  if (!loading) loading = import('./counterpart-widget.js?v=7').catch(() => null);
   return loading;
 }
 

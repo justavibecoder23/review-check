@@ -9,7 +9,6 @@ const toast = document.querySelector('#counterpart-toast');
 const toastMark = toast?.querySelector('.counterpart-toast-mark');
 const toastTitle = document.querySelector('#counterpart-toast-title');
 const toastCopy = document.querySelector('#counterpart-toast-copy');
-const closeButton = document.querySelector('#counterpart-section-close');
 const progressButton = document.querySelector('#counterpart-progress');
 const progressTitle = document.querySelector('#counterpart-progress-title');
 const progressCopy = document.querySelector('#counterpart-progress-copy');
@@ -33,7 +32,7 @@ function ensureStylesheet() {
   stylesheetPromise = new Promise((resolve) => {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = '/counterpart-widget.css?v=6';
+    link.href = '/counterpart-widget.css?v=7';
     link.dataset.counterpartStyles = 'true';
     link.addEventListener('load', resolve, { once: true });
     link.addEventListener('error', resolve, { once: true });
@@ -304,7 +303,7 @@ function renderSection() {
     </div>`;
 }
 
-function showSection() {
+function revealSection() {
   if (!currentMatch) return;
   clearTimeout(toastTimer);
   toast?.classList.add('hidden');
@@ -313,6 +312,11 @@ function showSection() {
   section.hidden = false;
   section.setAttribute('aria-hidden', 'false');
   section.classList.remove('hidden');
+}
+
+function showSection() {
+  revealSection();
+  if (!currentMatch) return;
   requestAnimationFrame(() => {
     section.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
     window.setTimeout(() => section.focus({ preventScroll: true }), 500);
@@ -388,6 +392,7 @@ async function announceReady(result) {
   if (currentMatch !== result) return;
   const platform = platformName(result.targetPlatform || result.candidate?.platform);
   completeProgress(platform);
+  revealSection();
   dockButton.querySelector('span').textContent = `Xem sản phẩm này trên ${platform}`;
   dockButton.setAttribute('aria-label', `Xem sản phẩm này trên ${platform}`);
   dockButton.hidden = false;
@@ -498,13 +503,6 @@ function beginForResult(result) {
 
 progressButton?.addEventListener('click', showSection);
 dockButton?.addEventListener('click', showSection);
-closeButton?.addEventListener('click', () => {
-  if (!section) return;
-  section.hidden = true;
-  section.setAttribute('aria-hidden', 'true');
-  section.classList.add('hidden');
-  dockButton?.focus({ preventScroll: true });
-});
 toast?.addEventListener('click', showSection);
 toast?.addEventListener('keydown', (event) => {
   if (event.key === 'Enter' || event.key === ' ') {

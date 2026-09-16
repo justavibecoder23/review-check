@@ -524,6 +524,7 @@ function renderProgressProduct(product = {}) {
   document.querySelector('#analysis-platform').textContent = platform || 'Đã nhận diện sản phẩm';
   const titleElement = document.querySelector('#analysis-product-title');
   titleElement.textContent = title || `Sản phẩm trên ${platform || 'sàn thương mại điện tử'}`;
+  titleElement.title = title || '';
   titleElement.classList.remove('skeleton-line', 'skeleton-line--title');
   const meta = [product.price, product.rating ? `${product.rating} sao trên sàn` : ''].filter(Boolean).join(' · ');
   document.querySelector('#analysis-product-meta').textContent = meta || 'Đã xác nhận đúng sản phẩm. Đang thu thập các đánh giá công khai.';
