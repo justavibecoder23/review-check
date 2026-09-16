@@ -68,6 +68,7 @@
     { "source": "/blog/tiktok-shop-la-gi-mua-hang-tren-tiktok-co-an-toan-khong.html", "destination": "/bai-viet/tiktok-shop-la-gi-mua-hang-tren-tiktok-co-an-toan-khong", "permanent": true },
     { "source": "/blog/cach-tim-shop-uy-tin-tren-shopee.html", "destination": "/bai-viet/cach-tim-shop-uy-tin-tren-shopee", "permanent": true },
     { "source": "/blog/review-san-pham-la-gi.html", "destination": "/bai-viet/review-san-pham-la-gi", "permanent": true },
+    { "source": "/blog/review-san-pham-co-dang-tin-khong.html", "destination": "/bai-viet/review-san-pham-co-dang-tin-khong", "permanent": true },
     { "source": "/results.html", "destination": "/ket-qua", "permanent": true }
   ],
   "rewrites": [
@@ -91,6 +92,7 @@
     { "source": "/bai-viet/tiktok-shop-la-gi-mua-hang-tren-tiktok-co-an-toan-khong", "destination": "/blog/tiktok-shop-la-gi-mua-hang-tren-tiktok-co-an-toan-khong.html" },
     { "source": "/bai-viet/cach-tim-shop-uy-tin-tren-shopee", "destination": "/blog/cach-tim-shop-uy-tin-tren-shopee.html" },
     { "source": "/bai-viet/review-san-pham-la-gi", "destination": "/blog/review-san-pham-la-gi.html" },
+    { "source": "/bai-viet/review-san-pham-co-dang-tin-khong", "destination": "/blog/review-san-pham-co-dang-tin-khong.html" },
     { "source": "/ket-qua", "destination": "/results.html" }
   ]
 }

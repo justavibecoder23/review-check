@@ -10,6 +10,7 @@ const shopeeComparisonArticleHtml = await readFile(new URL('../public/blog/shope
 const shopeeMallArticleHtml = await readFile(new URL('../public/blog/shopee-mall-la-gi-co-nen-mua-khong.html', import.meta.url), 'utf8');
 const trustedShopeeShopArticleHtml = await readFile(new URL('../public/blog/cach-tim-shop-uy-tin-tren-shopee.html', import.meta.url), 'utf8');
 const productReviewArticleHtml = await readFile(new URL('../public/blog/review-san-pham-la-gi.html', import.meta.url), 'utf8');
+const reliableReviewArticleHtml = await readFile(new URL('../public/blog/review-san-pham-co-dang-tin-khong.html', import.meta.url), 'utf8');
 const blogStyles = await readFile(new URL('../public/blog.css', import.meta.url), 'utf8');
 const blogPostJs = await readFile(new URL('../public/blog-post.js', import.meta.url), 'utf8');
 const navJs = await readFile(new URL('../public/nav.js', import.meta.url), 'utf8');
@@ -32,19 +33,30 @@ function tocEntryIds(html) {
     .map((match) => match[1]);
 }
 
-test('blog hub publishes seven articles and features the five-star review article', () => {
+test('blog hub publishes eight articles and features the five-star review article', () => {
   assert.match(blogHtml, /<link rel="canonical" href="https:\/\/www\.realview\.com\.vn\/bai-viet"/);
   assert.equal((blogHtml.match(/<h1\b/g) || []).length, 1);
-  assert.equal((blogHtml.match(/data-blog-card/g) || []).length, 7);
+  assert.equal((blogHtml.match(/data-blog-card/g) || []).length, 8);
   assert.match(blogHtml, /class="featured-post"[\s\S]*?href="\/bai-viet\/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang"/);
   assert.match(blogHtml, /Review 5 sao có đáng tin không\?/);
   assert.match(blogHtml, /href="\/bai-viet\/trustscore-la-gi"/);
   assert.doesNotMatch(blogHtml, /cach-doc-review-thong-minh/);
   assert.doesNotMatch(blogHtml, /Bài viết sắp xuất bản/);
   const collection = structuredData(blogHtml).find((item) => item['@type'] === 'CollectionPage');
-  assert.equal(collection.mainEntity.numberOfItems, 7);
-  assert.equal(collection.mainEntity.itemListElement.length, 7);
+  assert.equal(collection.mainEntity.numberOfItems, 8);
+  assert.equal(collection.mainEntity.itemListElement.length, 8);
   assert.match(blogHtml, /href="\/bai-viet\/review-san-pham-la-gi"/);
+  assert.match(blogHtml, /href="\/bai-viet\/review-san-pham-co-dang-tin-khong"/);
+});
+
+test('reliable-review article uses the second source image as both thumbnail and lead image', () => {
+  assert.match(reliableReviewArticleHtml, /<h1 class="article-title">Review sản phẩm có đáng tin không\? 7 yếu tố kiểm tra độ tin cậy trước khi đặt hàng<\/h1>/);
+  assert.match(reliableReviewArticleHtml, /<img class="article-lead-image article-lead-image--seo07" src="\/assets\/blog\/review-san-pham-co-dang-tin-khong\.jpg"/);
+  assert.match(reliableReviewArticleHtml, /<link rel="canonical" href="https:\/\/www\.realview\.com\.vn\/bai-viet\/review-san-pham-co-dang-tin-khong"/);
+  assert.match(reliableReviewArticleHtml, /Đánh giá thực bằng hình ảnh và video/);
+  assert.match(reliableReviewArticleHtml, /Nguyễn Bạch Vy, Nguyễn Trần Khánh Linh - Team SEO Content tại RealView/);
+  assert.doesNotMatch(reliableReviewArticleHtml, /Bài SEO 08|Cụm chủ đề: Kỹ năng phân tích|>Sapo</);
+  assert.match(sitemapXml, /<loc>https:\/\/www\.realview\.com\.vn\/bai-viet\/review-san-pham-co-dang-tin-khong<\/loc>/);
 });
 
 test('product-review article keeps authored content and is discoverable', () => {
@@ -53,7 +65,9 @@ test('product-review article keeps authored content and is discoverable', () => 
   assert.match(productReviewArticleHtml, /Một bài review sản phẩm thường có những phần nào\?/);
   assert.match(productReviewArticleHtml, /Review 5 sao có phải lúc nào cũng đáng tin không\?/);
   assert.match(productReviewArticleHtml, /Nguyễn Bạch Vy, Nguyễn Trần Khánh Linh - Team SEO Content tại RealView/);
-  assert.match(productReviewArticleHtml, /<img class="article-lead-image" src="\/assets\/blog\/review-san-pham-la-gi\.jpg"/);
+  assert.match(productReviewArticleHtml, /<img class="article-lead-image article-lead-image--seo07" src="\/assets\/blog\/review-san-pham-la-gi\.jpg"/);
+  assert.match(productReviewArticleHtml, /<h3 id="3-hinh-anh-video-va-bang-chung-di-kem">[\s\S]*?<p>Hình ảnh và video giúp kiểm chứng/);
+  assert.doesNotMatch(productReviewArticleHtml, /<p class="article-caption">Hình ảnh và video giúp/);
   assert.match(sitemapXml, /<loc>https:\/\/www\.realview\.com\.vn\/bai-viet\/review-san-pham-la-gi<\/loc>/);
 });
 
@@ -68,9 +82,10 @@ test('blog images fit their frames and article CTA is a centered orange action',
 });
 
 test('article pages use an asymmetric reading grid with responsive metadata and scrollspy TOC', () => {
-  assert.equal(allArticlePages.length, 7);
+  assert.equal(allArticlePages.length, 8);
   for (const { name, html } of allArticlePages) {
-    assert.match(html, /class="article-reading-grid"[\s\S]*?<h1 class="article-title">[\s\S]*?<aside class="article-sidebar"[\s\S]*?<details class="article-toc" data-article-toc>[\s\S]*?<p class="article-deck">[\s\S]*?<div class="article-body-column">/);
+    assert.match(html, /class="article-reading-grid"[\s\S]*?<h1 class="article-title">[\s\S]*?<aside class="article-sidebar"[\s\S]*?<details class="article-toc" data-article-toc>[\s\S]*?<div class="article-body-column">/);
+    assert.doesNotMatch(html, /class="article-deck"/, `${name} must not repeat SEO metadata in visible article content`);
     assert.match(html, /<script src="\/blog-post\.js" defer><\/script>/);
     assert.doesNotMatch(html, /class="article-header"/);
     assert.match(html, /class="article-category"/);
@@ -83,7 +98,7 @@ test('article pages use an asymmetric reading grid with responsive metadata and 
   assert.match(blogStyles, /\.article-sidebar \{[^}]*position: sticky;[^}]*top: 100px;[^}]*align-self: start;/);
   assert.match(blogStyles, /\.article-title \{[^}]*font-size: clamp\(48px, 4\.4vw, 56px\);[^}]*font-weight: 800;[^}]*line-height: 1\.2;/);
   assert.match(blogStyles, /\.article-content \{[^}]*max-width: 800px;[^}]*color: #374151;[^}]*font-size: 18px;[^}]*line-height: 1\.8;/);
-  assert.match(blogStyles, /@media \(max-width: 1024px\) \{[\s\S]*?\.article-reading-grid \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*grid-template-rows: auto auto auto auto;/);
+  assert.match(blogStyles, /@media \(max-width: 1024px\) \{[\s\S]*?\.article-reading-grid \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*grid-template-rows: auto auto auto;/);
   assert.match(blogStyles, /\.article-toc-links a\.is-active \{[^}]*border-left-color: #fc781f;[^}]*color: #fc781f;[^}]*font-weight: 600;/);
   assert.match(blogStyles, /\.article-toc-links \{[^}]*max-height: min\(52vh, 480px\);[^}]*overflow-y: auto;[^}]*scrollbar-width: none;[^}]*-webkit-mask-image: linear-gradient\(to bottom, transparent 0%, black 5%, black 95%, transparent 100%\);[^}]*mask-image: linear-gradient\(to bottom, transparent 0%, black 5%, black 95%, transparent 100%\);/);
   assert.match(blogStyles, /\.article-toc-links::\-webkit-scrollbar \{[^}]*display: none;/);
@@ -102,6 +117,17 @@ test('article pages use an asymmetric reading grid with responsive metadata and 
 
 test('article tables of contents follow the supplied editorial outlines', () => {
   const expectedEntries = new Map([
+    ['review-san-pham-co-dang-tin-khong.html', [
+      'review-san-pham-co-the-dang-tin-den-muc-nao',
+      '7-yeu-to-can-kiem-tra-de-xac-dinh-do-tin-cay-review',
+      'dau-hieu-nen-canh-giac-voi-tep-danh-gia',
+      'cach-doi-chieu-nhieu-nguon-de-tim-ra-danh-gia-that',
+      'vai-tro-cua-cong-cu-check-review-trong-ky-nguyen-so',
+      'faq-cau-hoi-thuong-gap',
+      'bai-viet-lien-quan',
+      'ket-luan',
+      'thong-tin-xuat-ban',
+    ]],
     ['review-san-pham-la-gi.html', [
       'review-san-pham-la-gi-hieu-dung-ban-chat-cua-mot-bai-review',
       'mot-bai-review-san-pham-thuong-co-nhung-phan-nao',
@@ -315,7 +341,7 @@ test('TrustScore article uses the dedicated thumbnail while preserving its first
 test('blog library uses the streamlined aligned layout', () => {
   assert.doesNotMatch(blogHtml, /Nội dung tập trung vào cách kiểm chứng/);
   assert.doesNotMatch(blogHtml, /Chủ đề nổi bật|data-sidebar-filter/);
-  assert.equal((blogHtml.match(/class="blog-list-item" data-blog-card/g) || []).length, 7);
+  assert.equal((blogHtml.match(/class="blog-list-item" data-blog-card/g) || []).length, 8);
   assert.match(blogStyles, /\.blog-tools \{[^}]*display: grid;[^}]*grid-template-columns: minmax\(0, 1fr\) 310px;[^}]*align-items: center;[^}]*column-gap: 72px;/);
   assert.match(blogStyles, /\.blog-search \{[^}]*width: 100%;[^}]*height: 48px;[^}]*padding: 0 16px;[^}]*box-sizing: border-box;[^}]*border: 1px solid #d1d5db;[^}]*background-color: #fff;[^}]*box-shadow: 0 1px 2px rgba\(0,0,0,\.05\);/);
   assert.match(blogStyles, /\.blog-search svg \{[^}]*width: 21px;[^}]*height: 21px;/);
@@ -396,7 +422,7 @@ test('shared navigation exposes the Blog route', () => {
   assert.doesNotMatch(navJs, /Blog <small>Sắp ra mắt<\/small>/);
 });
 
-test('sitemap and robots expose all seven published Blog articles', () => {
+test('sitemap and robots expose all eight published Blog articles', () => {
   assert.match(robotsTxt, /Sitemap: https:\/\/www\.realview\.com\.vn\/sitemap\.xml/);
   assert.match(sitemapXml, /https:\/\/www\.realview\.com\.vn\/bai-viet/);
   assert.match(sitemapXml, /https:\/\/www\.realview\.com\.vn\/bai-viet\/trustscore-la-gi/);
