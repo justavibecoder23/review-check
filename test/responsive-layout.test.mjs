@@ -100,6 +100,7 @@ test('contact and every page footer expose responsive social links', () => {
   assert.match(styles, /\.footer-brand \{ height: 100%; \}/);
   assert.match(styles, /\.footer-menu-group \{[^}]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);[^}]*gap: 28px;[^}]*padding-left: 60px;[^}]*border-left: 2px solid var\(--orange\);[^}]*align-items: flex-start;/);
   assert.match(styles, /\.footer-links \{ display: contents; \}/);
+  assert.match(styles, /\.footer-links a, \.footer-links span \{[^}]*min-height: 24px;[^}]*margin: 8px 0;[^}]*display: flex;[^}]*align-items: center;[^}]*line-height: 1\.4;/);
   assert.match(styles, /@media \(max-width: 1024px\) \{[\s\S]*?\.footer-grid \{ grid-template-columns: 1fr;/);
   assert.match(styles, /@media \(max-width: 1024px\) \{[\s\S]*?\.footer-menu-group \{[^}]*border-top: 2px solid var\(--orange\);[^}]*border-left: 0;/);
   assert.match(styles, /@media \(max-width: 768px\) \{[\s\S]*?\.site-footer \{ padding: 32px 16px; \}/);

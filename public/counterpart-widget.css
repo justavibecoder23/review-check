@@ -80,12 +80,14 @@
   justify-content: space-between;
   gap: 30px;
 }
+.counterpart-heading > div { width: 100%; min-width: 0; }
 .counterpart-heading h2 {
-  max-width: 900px;
+  max-width: none;
   margin: 8px 0 12px;
-  font-size: clamp(38px, 5vw, 68px);
-  line-height: .98;
-  letter-spacing: -3px;
+  font-size: clamp(38px, 4.6vw, 60px);
+  line-height: 1.02;
+  letter-spacing: -.045em;
+  white-space: nowrap;
 }
 .counterpart-heading > div > p:last-child {
   max-width: 690px;
@@ -96,9 +98,9 @@
 }
 .counterpart-comparison {
   padding: 28px;
-  display: grid;
-  grid-template-columns: minmax(0, .92fr) 112px minmax(0, 1.08fr);
-  gap: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 22px;
   align-items: stretch;
   border: 1px solid rgba(22, 22, 22, .1);
   border-radius: 34px;
@@ -106,19 +108,36 @@
   box-shadow: 0 30px 70px rgba(41, 35, 28, .1);
 }
 .counterpart-product-card {
+  position: relative;
+  flex: 1 1 0;
+  align-self: stretch;
   min-width: 0;
   padding: 22px;
   display: grid;
   grid-template-columns: 164px minmax(0, 1fr);
   gap: 22px;
   align-items: center;
+  overflow: hidden;
   border: 1px solid rgba(22, 22, 22, .09);
   border-radius: 25px;
-  background: #f8f7f3;
+  background: #fff;
 }
-.counterpart-product-card--match {
-  border-color: rgba(22, 143, 94, .28);
-  background: linear-gradient(145deg, #f2faf6, #fffaf4);
+.counterpart-product-card--shopee {
+  border-top: 4px solid #EE4D2D;
+  background-color: #FFF9F8;
+}
+.counterpart-product-card--tiktok {
+  padding-top: 26px;
+  background-color: #F8FAFC;
+}
+.counterpart-product-card--tiktok::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #25F4EE, #000000, #FE2C55);
+  content: '';
 }
 .counterpart-product-image {
   position: relative;
@@ -131,31 +150,41 @@
 .counterpart-product-image img { width: 100%; height: 100%; display: block; object-fit: cover; }
 .counterpart-platform-tag {
   position: absolute;
-  right: 9px;
-  bottom: 9px;
-  padding: 6px 9px;
+  top: 8px;
+  left: 8px;
+  min-height: 28px;
+  padding: 5px 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   border-radius: 999px;
-  background: rgba(22, 22, 22, .92);
   color: white;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 900;
-  letter-spacing: .7px;
+  letter-spacing: .55px;
+  line-height: 1;
   text-transform: uppercase;
+  box-shadow: 0 5px 12px rgba(15, 23, 42, .16);
 }
+.counterpart-product-card--shopee .counterpart-platform-tag { background: #EE4D2D; }
+.counterpart-product-card--tiktok .counterpart-platform-tag { background: #000; }
+.counterpart-platform-icon { width: 16px; height: 16px; flex: 0 0 16px; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.counterpart-product-copy { min-width: 0; }
 .counterpart-card-kicker { margin: 0 0 8px; color: #d6520d; font-size: 11px; font-weight: 950; letter-spacing: 1.15px; text-transform: uppercase; }
-.counterpart-product-card--match .counterpart-card-kicker { color: #168d5d; }
+.counterpart-product-card--shopee .counterpart-card-kicker { color: #EE4D2D; }
+.counterpart-product-card--tiktok .counterpart-card-kicker { color: #111827; }
 .counterpart-product-card h3 {
   margin: 0;
   display: -webkit-box;
   overflow: hidden;
   color: #161616;
-  font-size: clamp(20px, 2vw, 28px);
-  line-height: 1.08;
-  letter-spacing: -1px;
+  font-size: clamp(16px, 1.35vw, 18px);
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -.02em;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
 }
-.counterpart-shop { margin: 10px 0 0; color: #6b6b65; font-size: 12px; }
 .counterpart-facts { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px; }
 .counterpart-facts--match { align-items: center; gap: 10px; }
 .counterpart-facts--match .counterpart-fact { justify-content: center; }
@@ -172,12 +201,13 @@
   font-weight: 800;
 }
 .counterpart-fact strong { color: #161616; }
-.counterpart-link { margin-top: 15px; display: inline-flex; align-items: center; gap: 8px; color: #161616; font-size: 12px; font-weight: 900; text-decoration: underline; text-underline-offset: 5px; }
+.counterpart-link { margin-top: 15px; display: inline-flex; align-items: center; gap: 4px; color: #161616; font-size: 12px; font-weight: 900; text-decoration: underline; text-underline-offset: 5px; }
 .counterpart-link svg { width: 15px; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
-.counterpart-bridge { display: grid; place-content: center; gap: 8px; color: #777770; text-align: center; }
+.counterpart-bridge { flex: 0 0 150px; padding: 16px 8px; display: grid; place-content: center; gap: 12px; color: #777770; text-align: center; }
 .counterpart-bridge-icon {
   width: 58px;
   height: 58px;
+  justify-self: center;
   display: grid;
   place-items: center;
   border: 1px solid rgba(22, 22, 22, .09);
@@ -185,28 +215,43 @@
   background: white;
 }
 .counterpart-bridge-icon svg { width: 25px; stroke: #168d5d; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.counterpart-bridge > span:last-child { max-width: 112px; font-size: 11px; font-weight: 850; line-height: 1.4; }
-.counterpart-actions { grid-column: 1 / -1; padding-top: 5px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; align-items: center; }
+.counterpart-bridge > span:last-child { max-width: 138px; font-size: 11px; font-weight: 850; line-height: 1.5; }
+.counterpart-actions {
+  flex: 1 0 100%;
+  min-width: 0;
+  padding: 12px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  border-radius: 8px;
+  background-color: #FEF3C7;
+}
 .counterpart-notice { min-width: 0; display: flex; align-items: center; gap: 12px; color: #5f5f59; font-size: 12px; line-height: 1.5; }
-.counterpart-notice-mark { width: 38px; height: 38px; flex: 0 0 38px; display: grid; place-items: center; border-radius: 13px; background: #e5f5ed; color: #168d5d; }
+.counterpart-notice-mark { width: 38px; height: 38px; flex: 0 0 38px; display: grid; place-items: center; border-radius: 13px; background: rgba(255, 255, 255, .65); color: #9c6700; }
 .counterpart-notice-mark svg { width: 19px; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.counterpart-notice--warning .counterpart-notice-mark { background: #fff0c8; color: #9c6700; }
+.counterpart-notice--warning .counterpart-notice-mark { background: rgba(255, 255, 255, .65); color: #9c6700; }
 .counterpart-analyze-button {
   min-height: 52px;
-  padding: 0 20px;
+  width: min(100%, 260px);
+  padding: 13px 18px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  border-radius: 16px;
-  background: #ff7018;
-  color: #161616;
-  font-size: 12px;
-  font-weight: 950;
+  gap: 9px;
+  border: 1.5px solid #111827;
+  border-radius: 999px;
+  background: #fc781f;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.35;
+  text-align: center;
   text-decoration: none;
-  box-shadow: 0 12px 24px rgba(255, 112, 24, .2);
+  box-shadow: 0 8px 18px rgba(223, 89, 0, .14);
+  transition: background-color .18s ease, box-shadow .18s ease, transform .18s ease;
 }
-.counterpart-analyze-button:hover { background: #ff8943; transform: translateY(-1px); }
+.counterpart-analyze-button:hover { background: #ff8b3d; color: #111827; box-shadow: 0 10px 22px rgba(223, 89, 0, .2); transform: translateY(-2px); }
 .counterpart-analyze-button svg { width: 18px; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 
 .action-button--counterpart { border: 1px solid rgba(255, 255, 255, .12); background: #fff; color: #161616; cursor: pointer; }
@@ -254,8 +299,10 @@
 }
 
 @media (max-width: 1100px) {
-  .counterpart-comparison { grid-template-columns: 1fr; }
-  .counterpart-bridge { min-height: 42px; grid-template-columns: auto auto; align-items: center; }
+  .counterpart-heading h2 { font-size: clamp(24px, 4vw, 44px); }
+  .counterpart-comparison { flex-direction: column; }
+  .counterpart-product-card { width: 100%; flex: 0 0 auto; }
+  .counterpart-bridge { min-height: 64px; flex: 0 0 auto; grid-template-columns: auto auto; align-items: center; }
   .counterpart-bridge-icon { width: 42px; height: 42px; }
   .counterpart-bridge-icon svg { transform: rotate(90deg); }
   .counterpart-bridge > span:last-child { max-width: none; }
@@ -279,19 +326,20 @@
   .counterpart-progress-track { right: 14px; bottom: 7px; left: 14px; height: 4px; }
   .counterpart-section { padding: 62px 0 174px; }
   .counterpart-heading { margin-bottom: 24px; gap: 16px; }
-  .counterpart-heading h2 { font-size: 39px; letter-spacing: -2px; }
+  .counterpart-heading h2 { font-size: clamp(15px, 4vw, 30px); }
   .counterpart-heading > div > p:last-child { font-size: 12px; }
   .counterpart-comparison { padding: 13px; gap: 12px; border-radius: 25px; }
   .counterpart-product-card { padding: 13px; grid-template-columns: 104px minmax(0, 1fr); gap: 14px; border-radius: 19px; }
+  .counterpart-product-card--shopee { padding-top: 13px; }
+  .counterpart-product-card--tiktok { padding-top: 17px; }
   .counterpart-product-image { width: 104px; border-radius: 15px; }
-  .counterpart-product-card h3 { font-size: 17px; letter-spacing: -.5px; -webkit-line-clamp: 3; }
+  .counterpart-product-card h3 { font-size: 16px; letter-spacing: -.02em; -webkit-line-clamp: 2; }
   .counterpart-card-kicker { font-size: 11px; }
-  .counterpart-shop { margin-top: 7px; font-size: 11px; }
   .counterpart-facts { margin-top: 10px; gap: 5px; }
   .counterpart-facts--match { gap: 6px; }
   .counterpart-fact { min-height: 27px; padding: 0 8px; font-size: 11px; }
   .counterpart-link { margin-top: 10px; font-size: 11px; }
-  .counterpart-actions { grid-template-columns: 1fr; gap: 12px; }
+  .counterpart-actions { padding: 14px; flex-direction: column; align-items: stretch; gap: 12px; }
   .counterpart-notice { font-size: 11px; }
   .counterpart-analyze-button { width: 100%; }
   .counterpart-toast { right: 0; left: 0; max-width: none; }
@@ -301,10 +349,9 @@
   .counterpart-progress { grid-template-columns: 35px minmax(0, 1fr) auto; }
   .counterpart-progress-mark { width: 35px; height: 35px; }
   .counterpart-progress-copy small { white-space: normal; }
-  .counterpart-heading h2 { font-size: 34px; }
   .counterpart-product-card { grid-template-columns: 88px minmax(0, 1fr); }
   .counterpart-product-image { width: 88px; }
-  .counterpart-product-card h3 { font-size: 15px; }
+  .counterpart-product-card h3 { font-size: 16px; }
   .counterpart-product-card .counterpart-fact:nth-child(n+3) { display: none; }
   .results-page .result-action-bar.has-counterpart .action-button { font-size: 11px; }
 }

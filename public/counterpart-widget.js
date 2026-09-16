@@ -32,7 +32,7 @@ function ensureStylesheet() {
   stylesheetPromise = new Promise((resolve) => {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = '/counterpart-widget.css?v=7';
+    link.href = '/counterpart-widget.css?v=9';
     link.dataset.counterpartStyles = 'true';
     link.addEventListener('load', resolve, { once: true });
     link.addEventListener('error', resolve, { once: true });
@@ -243,6 +243,10 @@ function renderProductCard(product, options = {}) {
   const image = safeUrl(product.image);
   const url = safeUrl(product.url, '/#trang-chu');
   const platform = platformName(product.platform);
+  const platformKey = platform === 'Shopee' ? 'shopee' : 'tiktok';
+  const platformIcon = platformKey === 'shopee'
+    ? '<svg class="counterpart-platform-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6.5 8.5h11l1 11h-13l1-11Z" /><path d="M9 9V6.5a3 3 0 0 1 6 0V9" /><path d="M14.8 12.2c-.7-.5-1.5-.7-2.4-.7-1.3 0-2.2.6-2.2 1.5 0 2.1 4.8 1 4.8 3.5 0 1-.9 1.8-2.5 1.8-1 0-1.9-.3-2.7-.9" /></svg>'
+    : '<svg class="counterpart-platform-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M14 4v10.2a4.2 4.2 0 1 1-3.4-4.1" /><path d="M14 4c.7 2.4 2.4 3.8 5 4" /></svg>';
   const reviewCount = Number(product.reviewCount);
   const facts = [
     Number.isFinite(reviewCount) ? fact('Review', new Intl.NumberFormat('vi-VN').format(reviewCount)) : '',
@@ -250,15 +254,14 @@ function renderProductCard(product, options = {}) {
     priceLabel(product.price) ? fact('Giá', priceLabel(product.price)) : ''
   ].filter(Boolean).join('');
   return `
-    <article class="counterpart-product-card${options.match ? ' counterpart-product-card--match' : ''}">
+    <article class="counterpart-product-card counterpart-product-card--${platformKey}${options.match ? ' counterpart-product-card--match' : ''}">
       <div class="counterpart-product-image">
         ${image ? `<img src="${escapeHtml(image)}" alt="Ảnh ${escapeHtml(product.title)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" />` : ''}
-        <span class="counterpart-platform-tag">${escapeHtml(platform)}</span>
+        <span class="counterpart-platform-tag">${platformIcon}<span>${escapeHtml(platform)}</span></span>
       </div>
-      <div>
+      <div class="counterpart-product-copy">
         <p class="counterpart-card-kicker">${options.match ? 'Kết quả gần giống nhất' : 'Sản phẩm vừa phân tích'}</p>
         <h3>${escapeHtml(product.title || `Sản phẩm trên ${platform}`)}</h3>
-        ${product.shopName ? `<p class="counterpart-shop">Gian hàng: ${escapeHtml(product.shopName)}</p>` : ''}
         ${facts ? `<div class="counterpart-facts${options.match ? ' counterpart-facts--match' : ''}">${facts}</div>` : ''}
         <a class="counterpart-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">
           Xem trang sản phẩm
@@ -288,7 +291,7 @@ function renderSection() {
   comparison.innerHTML = `
     ${renderProductCard(currentSource)}
     <div class="counterpart-bridge" aria-label="Đối chiếu hai sản phẩm">
-      <span class="counterpart-bridge-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M5 8h14" /><path d="m15 4 4 4-4 4" /><path d="M19 16H5" /><path d="m9 12-4 4 4 4" /></svg></span>
+      <span class="counterpart-bridge-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16" /><path d="m16 2 4 4-4 4" /><path d="M20 18H4" /><path d="M8 14 4 18l4 4" /></svg></span>
       <span>${escapeHtml(bridgeLabel)}</span>
     </div>
     ${renderProductCard(candidate, { match: true })}
