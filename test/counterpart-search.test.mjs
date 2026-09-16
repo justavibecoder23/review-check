@@ -240,9 +240,9 @@ test('section đối ứng ẩn mặc định và chỉ có module nền riêng'
   assert.match(script, /removeEventListener\('abort'/);
   assert.match(script, /trustIntroIsOpen/);
   assert.match(loader, /realview:analysis-result/);
-  assert.match(loader, /import\('\.\/counterpart-widget\.js\?v=12'\)/);
-  assert.match(html, /counterpart-loader\.js\?v=12/);
-  assert.match(script, /counterpart-widget\.css\?v=12/);
+  assert.match(loader, /import\('\.\/counterpart-widget\.js\?v=13'\)/);
+  assert.match(html, /counterpart-loader\.js\?v=13/);
+  assert.match(script, /counterpart-widget\.css\?v=13/);
   assert.match(html, /results-v2\.css\?v=2/);
   assert.match(html, /results\.js\?v=2/);
   assert.match(script, /showSearchProgress/);
@@ -278,7 +278,7 @@ test('section đối ứng ẩn mặc định và chỉ có module nền riêng'
   assert.doesNotMatch(platformTagRule, /position:\s*absolute|top:|left:/);
   assert.match(styles, /\.counterpart-product-card h3 \{[^}]*font-weight: 600;[^}]*-webkit-line-clamp: 2;/);
   assert.match(styles, /\.counterpart-product-card \{[^}]*align-items: stretch;/);
-  assert.match(styles, /\.counterpart-product-copy \{[^}]*display: flex;[^}]*flex-direction: column;[^}]*justify-content: flex-start;/);
+  assert.match(styles, /\.counterpart-product-copy \{[^}]*padding-top: 40px;[^}]*display: flex;[^}]*flex-direction: column;[^}]*justify-content: flex-start;/);
   assert.match(styles, /\.counterpart-link \{[^}]*margin-top: auto;[^}]*padding-top: 15px;[^}]*gap: 4px;/);
   assert.match(styles, /\.counterpart-facts--match \{ align-items: center; gap: 10px; \}/);
   assert.match(styles, /\.counterpart-bridge-icon \{[^}]*justify-self: center;/);
