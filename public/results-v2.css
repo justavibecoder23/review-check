@@ -542,28 +542,38 @@
 }
 
 .trust-gauge-inner {
-  position: relative;
+  position: absolute;
+  top: 50%;
+  left: 50%;
   width: 122px;
   height: 122px;
-  align-self: center;
   border-radius: 50%;
   background: white;
-  text-align: center;
   box-shadow: inset 0 0 0 1px rgba(22, 22, 22, .06);
+  transform: translate(-50%, -50%);
 }
 
-.trust-gauge-label { position: absolute; top: 28%; right: 0; left: 0; color: #6a6a64; font-size: 8px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; }
-.trust-gauge-value {
+.trust-gauge-content {
   position: absolute;
-  top: 56%;
+  top: 50%;
   left: 50%;
+  width: max-content;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
   display: flex;
-  align-items: baseline;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
+  gap: 6px;
   transform: translate(-50%, -50%);
+  text-align: center;
   white-space: nowrap;
 }
-.trust-gauge-inner strong {
+
+.trust-gauge-label { position: static; margin: 0; padding: 0; color: #6a6a64; font-size: 8px; font-weight: 900; letter-spacing: 1px; line-height: 1; text-transform: uppercase; }
+.trust-gauge-value { position: static; width: max-content; max-width: 100%; margin: 0; padding: 0; display: flex; align-items: baseline; justify-content: center; transform: none; white-space: nowrap; }
+.trust-gauge-content strong {
   position: static;
   display: inline-block;
   color: var(--trust-color);
@@ -573,7 +583,7 @@
   letter-spacing: -4px;
   transform: none;
 }
-.trust-gauge-inner small {
+.trust-gauge-content small {
   position: static;
   margin-left: 4px;
   color: #73736d;
@@ -963,8 +973,9 @@
   .trust-gauge { width: 132px; height: 132px; flex-basis: 132px; }
   .trust-gauge-inner { width: 103px; height: 103px; }
   .trust-gauge-label { font-size: 7px; }
-  .trust-gauge-inner strong { font-size: 41px; letter-spacing: -3px; }
-  .trust-gauge-inner small { bottom: 3px; margin-left: 3px; font-size: 8px; }
+  .trust-gauge-content { gap: 5px; }
+  .trust-gauge-content strong { font-size: 41px; letter-spacing: -3px; }
+  .trust-gauge-content small { margin-left: 3px; font-size: 8px; }
   .trust-copy h2 { margin-top: 13px; font-size: 19px; }
   .trust-copy > p { margin-inline: auto; font-size: 10.5px; }
   .trust-explanation-heading h3 { font-size: 16px; }
@@ -1004,7 +1015,7 @@
   .trust-score-panel { max-width: none; padding: 14px 12px; grid-template-columns: 116px minmax(0, 1fr); gap: 10px 12px; }
   .trust-gauge { width: 116px; height: 116px; flex-basis: 116px; }
   .trust-gauge-inner { width: 91px; height: 91px; }
-  .trust-gauge-inner strong { font-size: 36px; }
+  .trust-gauge-content strong { font-size: 36px; }
   .trust-scale-caption { text-align: left; }
   .score-legend { border-radius: 14px; }
   .score-legend li { padding-block: 5px; font-size: 9px; }

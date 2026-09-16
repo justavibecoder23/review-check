@@ -47,6 +47,14 @@ test('thang điểm nằm cùng vòng tròn TrustScore, không còn ở phần g
   assert.ok(!html.slice(html.indexOf('<section class="explanation-section"')).includes('class="score-legend"'));
 });
 
+test('nội dung TrustScore dùng một wrapper được căn tuyệt đối giữa vòng tròn', () => {
+  assert.match(html, /class="trust-gauge-inner" aria-hidden="true"><\/div>\s*<div class="trust-gauge-content">\s*<span class="trust-gauge-label">TrustScore<\/span>\s*<div class="trust-gauge-value">/);
+  assert.match(css, /\.trust-gauge \{[^}]*position: relative;/);
+  assert.match(css, /\.trust-gauge-content \{[^}]*position: absolute;[^}]*top: 50%;[^}]*left: 50%;[^}]*width: max-content;[^}]*max-width: 100%;[^}]*margin: 0;[^}]*padding: 0;[^}]*display: flex;[^}]*flex-direction: column;[^}]*align-items: center;[^}]*justify-content: center;[^}]*transform: translate\(-50%, -50%\);[^}]*text-align: center;/);
+  assert.match(css, /\.trust-gauge-value \{[^}]*width: max-content;[^}]*max-width: 100%;[^}]*margin: 0;[^}]*padding: 0;[^}]*justify-content: center;/);
+  assert.doesNotMatch(css, /\.trust-gauge-label \{[^}]*top:/);
+});
+
 test('thang điểm được trình bày theo thứ tự từ thấp đến cao', () => {
   const order = [...html.matchAll(/<li class="legend-(red|orange|yellow|green)"/g)].map((match) => match[1]);
   assert.deepEqual(order, ['red', 'orange', 'yellow', 'green']);

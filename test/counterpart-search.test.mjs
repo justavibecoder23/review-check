@@ -255,6 +255,12 @@ test('section đối ứng ẩn mặc định và chỉ có module nền riêng'
   assert.match(resultsScript, /titleElement\.title = title \|\| ''/);
   assert.match(resultsStyles, /\.analysis-product-copy h2:not\(\.skeleton-line\)[\s\S]*-webkit-line-clamp: 3/);
   assert.match(resultsStyles, /@media \(max-width: 620px\)[\s\S]*\.analysis-product-copy h2:not\(\.skeleton-line\)[^}]*-webkit-line-clamp: 2/);
+  assert.match(script, /`Đối chiếu từ \$\{sourcePlatform\} sang \$\{targetPlatform\}`/);
+  assert.match(script, /d="m15 4 4 4-4 4"/);
+  assert.match(script, /counterpart-facts--match/);
+  assert.doesNotMatch(script, /fact\('Mức khớp'/);
+  assert.match(styles, /grid-template-columns: minmax\(0, \.92fr\) 112px minmax\(0, 1\.08fr\)/);
+  assert.match(styles, /\.counterpart-facts--match \{ align-items: center; gap: 10px; \}/);
   assert.match(styles, /@media \(max-width: 900px\)[\s\S]*\.action-bar-context \{ display: none !important; \}/);
   assert.doesNotMatch(html, /rel="stylesheet" href="\/counterpart-widget\.css"/);
   assert.match(script, /section\.scrollIntoView/);

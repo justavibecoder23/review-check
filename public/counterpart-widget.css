@@ -97,8 +97,8 @@
 .counterpart-comparison {
   padding: 28px;
   display: grid;
-  grid-template-columns: minmax(0, .92fr) 74px minmax(0, 1.08fr);
-  gap: 22px;
+  grid-template-columns: minmax(0, .92fr) 112px minmax(0, 1.08fr);
+  gap: 18px;
   align-items: stretch;
   border: 1px solid rgba(22, 22, 22, .1);
   border-radius: 34px;
@@ -157,6 +157,8 @@
 }
 .counterpart-shop { margin: 10px 0 0; color: #6b6b65; font-size: 12px; }
 .counterpart-facts { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px; }
+.counterpart-facts--match { align-items: center; gap: 10px; }
+.counterpart-facts--match .counterpart-fact { justify-content: center; }
 .counterpart-fact {
   min-height: 30px;
   padding: 0 10px;
@@ -183,7 +185,7 @@
   background: white;
 }
 .counterpart-bridge-icon svg { width: 25px; stroke: #168d5d; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.counterpart-bridge > span:last-child { max-width: 72px; font-size: 11px; font-weight: 850; line-height: 1.35; }
+.counterpart-bridge > span:last-child { max-width: 112px; font-size: 11px; font-weight: 850; line-height: 1.4; }
 .counterpart-actions { grid-column: 1 / -1; padding-top: 5px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; align-items: center; }
 .counterpart-notice { min-width: 0; display: flex; align-items: center; gap: 12px; color: #5f5f59; font-size: 12px; line-height: 1.5; }
 .counterpart-notice-mark { width: 38px; height: 38px; flex: 0 0 38px; display: grid; place-items: center; border-radius: 13px; background: #e5f5ed; color: #168d5d; }
@@ -256,7 +258,7 @@
   .counterpart-bridge { min-height: 42px; grid-template-columns: auto auto; align-items: center; }
   .counterpart-bridge-icon { width: 42px; height: 42px; }
   .counterpart-bridge-icon svg { transform: rotate(90deg); }
-  .counterpart-bridge span { max-width: none; }
+  .counterpart-bridge > span:last-child { max-width: none; }
 }
 
 @media (max-width: 900px) {
@@ -286,6 +288,7 @@
   .counterpart-card-kicker { font-size: 11px; }
   .counterpart-shop { margin-top: 7px; font-size: 11px; }
   .counterpart-facts { margin-top: 10px; gap: 5px; }
+  .counterpart-facts--match { gap: 6px; }
   .counterpart-fact { min-height: 27px; padding: 0 8px; font-size: 11px; }
   .counterpart-link { margin-top: 10px; font-size: 11px; }
   .counterpart-actions { grid-template-columns: 1fr; gap: 12px; }

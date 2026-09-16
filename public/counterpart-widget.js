@@ -247,8 +247,7 @@ function renderProductCard(product, options = {}) {
   const facts = [
     Number.isFinite(reviewCount) ? fact('Review', new Intl.NumberFormat('vi-VN').format(reviewCount)) : '',
     Number(product.rating) > 0 ? fact('Đánh giá', `${Number(product.rating).toFixed(1).replace('.', ',')} ★`) : '',
-    priceLabel(product.price) ? fact('Giá', priceLabel(product.price)) : '',
-    options.match ? fact('Mức khớp', `${Number(product.similarityPercent) || 0}%`) : ''
+    priceLabel(product.price) ? fact('Giá', priceLabel(product.price)) : ''
   ].filter(Boolean).join('');
   return `
     <article class="counterpart-product-card${options.match ? ' counterpart-product-card--match' : ''}">
@@ -260,7 +259,7 @@ function renderProductCard(product, options = {}) {
         <p class="counterpart-card-kicker">${options.match ? 'Kết quả gần giống nhất' : 'Sản phẩm vừa phân tích'}</p>
         <h3>${escapeHtml(product.title || `Sản phẩm trên ${platform}`)}</h3>
         ${product.shopName ? `<p class="counterpart-shop">Gian hàng: ${escapeHtml(product.shopName)}</p>` : ''}
-        ${facts ? `<div class="counterpart-facts">${facts}</div>` : ''}
+        ${facts ? `<div class="counterpart-facts${options.match ? ' counterpart-facts--match' : ''}">${facts}</div>` : ''}
         <a class="counterpart-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">
           Xem trang sản phẩm
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M14 5h5v5M10 14 19 5M19 14v5H5V5h5" /></svg>
@@ -272,7 +271,11 @@ function renderProductCard(product, options = {}) {
 function renderSection() {
   if (!comparison || !currentSource || !currentMatch?.candidate) return;
   const candidate = currentMatch.candidate;
+  const sourcePlatform = platformName(currentSource.platform);
   const targetPlatform = platformName(currentMatch.targetPlatform || candidate.platform);
+  const bridgeLabel = sourcePlatform && targetPlatform
+    ? `Đối chiếu từ ${sourcePlatform} sang ${targetPlatform}`
+    : 'Đối chiếu từ nền tảng gốc sang nền tảng còn lại';
   const hasEnoughReviews = candidate.hasEnoughReviews !== false && Number(candidate.reviewCount) >= Number(candidate.minimumReviewCount || 20);
   const analysisAvailable = currentMatch.analysisAvailability?.enabled !== false;
   const notice = !analysisAvailable
@@ -285,8 +288,8 @@ function renderSection() {
   comparison.innerHTML = `
     ${renderProductCard(currentSource)}
     <div class="counterpart-bridge" aria-label="Đối chiếu hai sản phẩm">
-      <span class="counterpart-bridge-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M8 7h11l-3-3M16 17H5l3 3" /><path d="M19 7v4M5 17v-4" /></svg></span>
-      <span>Khớp ảnh trước, tên và model sau</span>
+      <span class="counterpart-bridge-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M5 8h14" /><path d="m15 4 4 4-4 4" /><path d="M19 16H5" /><path d="m9 12-4 4 4 4" /></svg></span>
+      <span>${escapeHtml(bridgeLabel)}</span>
     </div>
     ${renderProductCard(candidate, { match: true })}
     <div class="counterpart-actions">
