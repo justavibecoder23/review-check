@@ -137,6 +137,17 @@
                   <p id="product-meta" class="product-meta">Dữ liệu review công khai</p>
                   <a id="product-inline-link" class="product-inline-link" href="/#trang-chu" target="_blank" rel="noreferrer">Xem trang sản phẩm <span aria-hidden="true">↗</span></a>
                 </div>
+                <button id="counterpart-progress" class="counterpart-progress hidden" type="button" aria-controls="counterpart-section" aria-live="polite" disabled hidden>
+                  <span class="counterpart-progress-mark" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M8 7h11l-3-3M16 17H5l3 3" /><path d="M19 7v4M5 17v-4" /></svg>
+                  </span>
+                  <span class="counterpart-progress-copy">
+                    <strong id="counterpart-progress-title">Đang tìm sản phẩm tương tự trên nền tảng khác</strong>
+                    <small id="counterpart-progress-copy">RealView đang đối chiếu hình ảnh và thông tin sản phẩm</small>
+                  </span>
+                  <span class="counterpart-progress-action" aria-hidden="true">↓</span>
+                  <span class="counterpart-progress-track" aria-hidden="true"><i id="counterpart-progress-bar"></i></span>
+                </button>
               </article>
 
               <article id="trust-card" class="trust-card" data-tone="yellow">
@@ -380,7 +391,7 @@
     </nav>
 
     <script type="module" src="/results.js"></script>
-    <script type="module" src="/counterpart-loader.js?v=5"></script>
+    <script type="module" src="/counterpart-loader.js?v=6"></script>
     <script src="/nav.js" defer></script>
     <script type="module" src="/auth.js"></script>
     <script type="module" src="/history-ui.js"></script>

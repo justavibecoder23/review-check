@@ -226,6 +226,8 @@ test('section đối ứng ẩn mặc định và chỉ có module nền riêng'
   const styles = await readFile(new URL('public/counterpart-widget.css', root), 'utf8');
   assert.match(html, /id="counterpart-section" class="counterpart-section hidden"/);
   assert.match(html, /id="counterpart-dock-button"[^>]+hidden/);
+  assert.match(html, /id="counterpart-progress"[^>]+aria-controls="counterpart-section"[^>]+disabled hidden/);
+  assert.match(html, /Đang tìm sản phẩm tương tự trên nền tảng khác/);
   assert.match(script, /requestIdleCallback/);
   assert.match(script, /showStatusToast/);
   assert.match(script, /analysisAvailability/);
@@ -235,9 +237,12 @@ test('section đối ứng ẩn mặc định và chỉ có module nền riêng'
   assert.match(script, /removeEventListener\('abort'/);
   assert.match(script, /trustIntroIsOpen/);
   assert.match(loader, /realview:analysis-result/);
-  assert.match(loader, /import\('\.\/counterpart-widget\.js\?v=5'\)/);
-  assert.match(html, /counterpart-loader\.js\?v=5/);
-  assert.match(script, /counterpart-widget\.css\?v=5/);
+  assert.match(loader, /import\('\.\/counterpart-widget\.js\?v=6'\)/);
+  assert.match(html, /counterpart-loader\.js\?v=6/);
+  assert.match(script, /counterpart-widget\.css\?v=6/);
+  assert.match(script, /showSearchProgress/);
+  assert.match(script, /completeProgress/);
+  assert.match(script, /progressButton\?\.addEventListener\('click', showSection\)/);
   assert.match(styles, /@media \(max-width: 900px\)[\s\S]*\.action-bar-context \{ display: none !important; \}/);
   assert.doesNotMatch(html, /rel="stylesheet" href="\/counterpart-widget\.css"/);
   assert.match(script, /section\.scrollIntoView/);

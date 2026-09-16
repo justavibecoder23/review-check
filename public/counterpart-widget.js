@@ -10,6 +10,10 @@ const toastMark = toast?.querySelector('.counterpart-toast-mark');
 const toastTitle = document.querySelector('#counterpart-toast-title');
 const toastCopy = document.querySelector('#counterpart-toast-copy');
 const closeButton = document.querySelector('#counterpart-section-close');
+const progressButton = document.querySelector('#counterpart-progress');
+const progressTitle = document.querySelector('#counterpart-progress-title');
+const progressCopy = document.querySelector('#counterpart-progress-copy');
+const progressBar = document.querySelector('#counterpart-progress-bar');
 
 let currentSource = null;
 let currentMatch = null;
@@ -18,6 +22,9 @@ let toastTimer;
 let stylesheetPromise;
 let requestController;
 let pendingToastPlatform = '';
+let progressTimer;
+let progressReadyTimer;
+let progressValue = 0;
 
 function ensureStylesheet() {
   if (stylesheetPromise) return stylesheetPromise;
@@ -26,7 +33,7 @@ function ensureStylesheet() {
   stylesheetPromise = new Promise((resolve) => {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = '/counterpart-widget.css?v=5';
+    link.href = '/counterpart-widget.css?v=6';
     link.dataset.counterpartStyles = 'true';
     link.addEventListener('load', resolve, { once: true });
     link.addEventListener('error', resolve, { once: true });
@@ -53,6 +60,10 @@ function platformName(value) {
   if (normalized.includes('tiktok')) return 'TikTok Shop';
   if (normalized.includes('shopee')) return 'Shopee';
   return '';
+}
+
+function targetPlatformName(sourcePlatform) {
+  return platformName(sourcePlatform) === 'Shopee' ? 'TikTok Shop' : 'Shopee';
 }
 
 function sourceFromResult(result = {}) {
@@ -112,6 +123,16 @@ function resetWidget() {
   requestController = null;
   clearTimeout(toastTimer);
   pendingToastPlatform = '';
+  window.clearInterval(progressTimer);
+  window.clearTimeout(progressReadyTimer);
+  progressValue = 0;
+  if (progressButton) {
+    progressButton.hidden = true;
+    progressButton.disabled = true;
+    progressButton.classList.add('hidden');
+    progressButton.classList.remove('is-searching', 'is-ready', 'is-unavailable');
+  }
+  if (progressBar) progressBar.style.width = '0%';
   toast?.classList.add('hidden');
   if (toast) toast.hidden = true;
   section?.classList.add('hidden');
@@ -125,6 +146,83 @@ function resetWidget() {
   actionBar?.classList.remove('has-counterpart');
   document.body.classList.remove('counterpart-ready');
   if (comparison) comparison.innerHTML = '';
+}
+
+function setProgress(value) {
+  progressValue = Math.max(0, Math.min(100, Number(value) || 0));
+  if (progressBar) progressBar.style.width = `${progressValue}%`;
+  progressButton?.setAttribute('aria-valuenow', String(Math.round(progressValue)));
+}
+
+async function showSearchProgress(platform) {
+  if (!progressButton) return;
+  await ensureStylesheet();
+  if (currentMatch) return;
+  window.clearInterval(progressTimer);
+  window.clearTimeout(progressReadyTimer);
+  progressButton.hidden = false;
+  progressButton.disabled = true;
+  progressButton.classList.remove('hidden', 'is-ready', 'is-unavailable');
+  progressButton.classList.add('is-searching');
+  progressButton.setAttribute('role', 'progressbar');
+  progressButton.setAttribute('aria-valuemin', '0');
+  progressButton.setAttribute('aria-valuemax', '100');
+  progressButton.setAttribute('aria-label', `Đang tìm sản phẩm tương tự trên ${platform}`);
+  if (progressTitle) progressTitle.textContent = 'Đang tìm sản phẩm tương tự trên nền tảng khác';
+  if (progressCopy) progressCopy.textContent = `Đang đối chiếu hình ảnh và thông tin trên ${platform}`;
+  setProgress(7);
+  progressTimer = window.setInterval(() => {
+    const remaining = 88 - progressValue;
+    if (remaining <= 0) return;
+    setProgress(progressValue + Math.max(.6, remaining / 15));
+  }, 650);
+}
+
+function completeProgress(platform) {
+  if (!progressButton) return;
+  window.clearInterval(progressTimer);
+  window.clearTimeout(progressReadyTimer);
+  progressButton.hidden = false;
+  progressButton.disabled = true;
+  progressButton.classList.remove('hidden', 'is-unavailable');
+  progressButton.classList.add('is-searching');
+  setProgress(100);
+  const revealReadyState = () => {
+    if (!currentMatch) return;
+    progressButton.disabled = false;
+    progressButton.classList.remove('is-searching');
+    progressButton.classList.add('is-ready');
+    progressButton.removeAttribute('role');
+    progressButton.removeAttribute('aria-valuemin');
+    progressButton.removeAttribute('aria-valuemax');
+    progressButton.removeAttribute('aria-valuenow');
+    progressButton.setAttribute('aria-label', `Đã tìm thấy sản phẩm tương tự trên ${platform}. Nhấn để xem`);
+    if (progressTitle) progressTitle.textContent = `Đã tìm thấy sản phẩm tương tự trên ${platform}`;
+    if (progressCopy) progressCopy.textContent = 'Nhấn để xem và đối chiếu hai sản phẩm';
+  };
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) revealReadyState();
+  else progressReadyTimer = window.setTimeout(revealReadyState, 520);
+}
+
+async function showProgressUnavailable(result) {
+  if (!progressButton) return;
+  await ensureStylesheet();
+  window.clearInterval(progressTimer);
+  window.clearTimeout(progressReadyTimer);
+  setProgress(100);
+  progressButton.hidden = false;
+  progressButton.disabled = true;
+  progressButton.classList.remove('hidden', 'is-searching', 'is-ready');
+  progressButton.classList.add('is-unavailable');
+  progressButton.removeAttribute('role');
+  progressButton.removeAttribute('aria-valuemin');
+  progressButton.removeAttribute('aria-valuemax');
+  progressButton.removeAttribute('aria-valuenow');
+  progressButton.setAttribute('aria-label', 'Chưa tìm thấy sản phẩm tương tự phù hợp');
+  if (progressTitle) progressTitle.textContent = 'Chưa tìm thấy sản phẩm tương tự phù hợp';
+  if (progressCopy) progressCopy.textContent = result?.reason === 'rate_limited'
+    ? 'Tìm kiếm đang tạm dừng, bạn có thể thử lại sau'
+    : 'Bạn vẫn có thể tiếp tục xem kết quả phân tích hiện tại';
 }
 
 function fact(label, value) {
@@ -289,6 +387,7 @@ async function announceReady(result) {
   await ensureStylesheet();
   if (currentMatch !== result) return;
   const platform = platformName(result.targetPlatform || result.candidate?.platform);
+  completeProgress(platform);
   dockButton.querySelector('span').textContent = `Xem sản phẩm này trên ${platform}`;
   dockButton.setAttribute('aria-label', `Xem sản phẩm này trên ${platform}`);
   dockButton.hidden = false;
@@ -367,6 +466,7 @@ function beginForResult(result) {
   resetWidget();
   const stored = readStoredMatch(key);
   if (stored) announceReady(stored);
+  else void showSearchProgress(targetPlatformName(source.platform));
   deferWork(() => {
     if (activeSourceKey !== key) return;
     requestController = new AbortController();
@@ -374,7 +474,10 @@ function beginForResult(result) {
       .then((match) => {
         if (!match || activeSourceKey !== key) return;
         if (match.status !== 'ready') {
-          if (!stored) showStatusToast(match);
+          if (!stored) {
+            void showProgressUnavailable(match);
+            showStatusToast(match);
+          }
           return;
         }
         storeMatch(key, match);
@@ -385,10 +488,15 @@ function beginForResult(result) {
         }
         announceReady(match);
       })
-      .catch(() => { /* Matching is optional and must never disturb the result page. */ });
+      .catch((error) => {
+        if (error?.name !== 'AbortError' && activeSourceKey === key && !stored) {
+          void showProgressUnavailable({ reason: 'search_failed' });
+        }
+      });
   });
 }
 
+progressButton?.addEventListener('click', showSection);
 dockButton?.addEventListener('click', showSection);
 closeButton?.addEventListener('click', () => {
   if (!section) return;
