@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { findCounterpart, normalizePlatform } from './counterpart-search.mjs';
+import { findCounterpart, normalizePlatform, targetPlatformFor } from './counterpart-search.mjs';
 import { isRedisConfigured, redisCommand } from './redis-rest.mjs';
+import { isPlatformReviewEnabled } from './platform-availability.mjs';
 
 const JOB_PREFIX = 'realview:counterpart:v2:job:';
 const JOB_TTL_SECONDS = 7 * 24 * 60 * 60;
@@ -101,6 +102,18 @@ async function processJob(job, lockId, options = {}) {
 }
 
 async function schedule(job, options = {}) {
+  const targetPlatform = targetPlatformFor(job?.source?.platform);
+  if (targetPlatform && !isPlatformReviewEnabled(targetPlatform, options.env || process.env)) {
+    return {
+      job: {
+        ...job,
+        status: 'disabled',
+        stage: 'complete',
+        result: { status: 'disabled', targetPlatform, reason: 'target_platform_maintenance' }
+      },
+      background: null
+    };
+  }
   if (TERMINAL.has(job.status)) return { job, background: null };
   const lockId = randomUUID();
   const locked = await redisCommand(['SET', lockKey(job.id), lockId, 'NX', 'EX', String(LOCK_TTL_SECONDS)], {

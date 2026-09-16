@@ -479,6 +479,7 @@ const progressMessage = document.querySelector('#analysis-progress-message');
 const elapsedTime = document.querySelector('#analysis-elapsed-time');
 const slowNote = document.querySelector('#analysis-slow-note');
 const progressError = document.querySelector('#analysis-progress-error');
+const progressErrorTitle = document.querySelector('#analysis-progress-error-title');
 const progressErrorMessage = document.querySelector('#analysis-progress-error-message');
 const retryButton = document.querySelector('#analysis-retry');
 const analysisSteps = Array.from(document.querySelectorAll('[data-analysis-step]'));
@@ -628,7 +629,13 @@ async function readAnalysisStream(url) {
         : 'Đã hoàn tất bước kiểm định nội dung.';
     }
     if (eventName === 'result') finalResult = payload;
-    if (eventName === 'error') throw new Error(payload.error || 'Không thể hoàn tất phân tích.');
+    if (eventName === 'error') {
+      const error = new Error(payload.error || 'Không thể hoàn tất phân tích.');
+      error.code = payload.code || '';
+      error.statusCode = Number(payload.statusCode) || 500;
+      error.details = payload.details || null;
+      throw error;
+    }
   };
 
   while (true) {
@@ -654,6 +661,7 @@ async function startProgressiveAnalysis(url) {
   emptyState.classList.add('hidden');
   progressPanel?.classList.remove('hidden');
   progressError?.classList.add('hidden');
+  if (progressErrorTitle) progressErrorTitle.textContent = 'Chưa thể hoàn tất phân tích';
   slowNote?.classList.add('hidden');
   analysisSteps.forEach((step, index) => {
     step.classList.toggle('is-active', index === 0);
@@ -696,9 +704,14 @@ async function startProgressiveAnalysis(url) {
     if (error?.name === 'AbortError') return;
     window.realviewTrackEvent?.('analysis_error', {
       marketplace,
-      error_type: error?.name || 'analysis_error'
+      error_type: error?.code || error?.name || 'analysis_error'
     });
-    if (progressMessage) progressMessage.textContent = 'Tiến trình đã dừng trước khi có kết quả.';
+    if (progressMessage) progressMessage.textContent = error?.code === 'PLATFORM_MAINTENANCE'
+      ? 'Nguồn review của sàn đang được bảo trì.'
+      : 'Tiến trình đã dừng trước khi có kết quả.';
+    if (progressErrorTitle) progressErrorTitle.textContent = error?.code === 'PLATFORM_MAINTENANCE'
+      ? `Hệ thống ${error?.details?.platform || 'lấy review'} đang bảo trì`
+      : 'Chưa thể hoàn tất phân tích';
     if (progressErrorMessage) progressErrorMessage.textContent = error?.message || 'Có lỗi khi phân tích sản phẩm.';
     progressError?.classList.remove('hidden');
   } finally {

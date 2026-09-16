@@ -12,6 +12,7 @@ import {
   recordShopeeServed,
   setCachedTikTokDataset
 } from './product-cache.mjs';
+import { assertPlatformReviewEnabled } from './platform-availability.mjs';
 
 const DEMO_REVIEWS = [
   { rating: 5, text: 'Nhận xu nên đánh giá cho shop 5 sao nha mọi người.', date: '12/08/2026', verified: false },
@@ -539,6 +540,16 @@ export async function getReviews(url, options = {}) {
     throw Object.assign(new Error(error?.message || 'Link không hợp lệ.'), { statusCode: error?.statusCode || 400 });
   }
   const platform = platformFrom(parsed.href);
+  try {
+    assertPlatformReviewEnabled(platform, options.env || process.env);
+  } catch (error) {
+    console.log(JSON.stringify({
+      level: 'info',
+      event: 'platform_review_maintenance_block',
+      platform
+    }));
+    throw error;
+  }
   progress('resolving', 8, 'Đang kiểm tra liên kết...');
   const warnings = [];
   const shopeeProduct = platform === 'Shopee'

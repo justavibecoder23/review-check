@@ -115,6 +115,32 @@ test('tính năng tắt độc lập bằng feature flag', async () => {
   assert.equal(result.status, 'disabled');
 });
 
+test('không tìm sản phẩm đối ứng khi sàn đích đang bảo trì', async () => {
+  let lensCalls = 0;
+  let actorCalls = 0;
+  const result = await findCounterpart({
+    platform: 'TikTok Shop',
+    title: 'Sản phẩm',
+    url: 'https://shop.tiktok.com/view/product/123',
+    image: 'https://p16-oec-sg.ibyteimg.com/product.webp'
+  }, {
+    env: {
+      COUNTERPART_SEARCH_ENABLED: 'true',
+      SHOPEE_REVIEW_ENABLED: 'false',
+      GOOGLE_LENS_SERPAPI_KEY: 'test'
+    },
+    searchGoogleLensImpl: async () => { lensCalls += 1; return []; },
+    runSearchActorImpl: async () => { actorCalls += 1; return []; }
+  });
+  assert.deepEqual(result, {
+    status: 'disabled',
+    targetPlatform: 'Shopee',
+    reason: 'target_platform_maintenance'
+  });
+  assert.equal(lensCalls, 0);
+  assert.equal(actorCalls, 0);
+});
+
 test('Lens dưới 20 review bắt buộc chạy actor rồi chấm lại toàn bộ ứng viên', async () => {
   let actorCalls = 0;
   let rankingCalls = 0;
