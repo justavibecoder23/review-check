@@ -7,6 +7,8 @@ const nav = readFileSync(new URL('../public/nav.js', import.meta.url), 'utf8');
 const app = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
 const index = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
 const chatbotStyles = readFileSync(new URL('../public/chatbot.css', import.meta.url), 'utf8');
+const criteriaStyles = readFileSync(new URL('../public/criteria.css', import.meta.url), 'utf8');
+const criteriaSection = readFileSync(new URL('../public/criteria-section.js', import.meta.url), 'utf8');
 const publicPages = [
   '../public/index.html',
   '../public/contact.html',
@@ -58,13 +60,23 @@ test('hero illustration has no square dot decoration and keeps a responsive rati
 
 test('desktop hero artwork is reduced around its existing center', () => {
   assert.match(styles, /\.orange-blob \{[^}]*transform: rotate\(-4deg\) scale\(\.94\); transform-origin: center center;/);
-  assert.match(styles, /\.hero-visual > \.hero-illustration \{[^}]*transform: rotate\(-2deg\) scale\(1\); transform-origin: center center;/);
+  assert.match(styles, /\.orange-blob::after \{[^}]*top: 9%; right: -5%; width: 34%;[^}]*aspect-ratio: 1;/);
+  assert.match(styles, /\.hero-visual > \.hero-illustration \{[^}]*transform: translateX\(-12px\) rotate\(-2deg\) scale\(\.97\); transform-origin: center center;/);
+  assert.match(styles, /@media \(max-width: 700px\) \{[\s\S]*?\.hero-visual > \.hero-illustration \{[^}]*transform: rotate\(-1\.2deg\) scale\(1\.02\);/);
 });
 
 test('about decoration stays clear of copy across responsive layouts', () => {
   assert.match(styles, /\.about-section::before \{[^}]*top: -60px;[^}]*right: -200px;[^}]*width: 280px; height: 280px;[^}]*pointer-events: none;/);
   assert.match(styles, /@media \(max-width: 1024px\) \{[\s\S]*?\.about-section::before \{ top: -40px; right: -160px; width: 220px; height: 220px; \}/);
   assert.match(styles, /@media \(max-width: 700px\) \{[\s\S]*?\.about-section::before \{ top: -30px; right: -105px; width: 150px; height: 150px; \}/);
+});
+
+test('criteria closing note stays on one desktop row without the artwork badge', () => {
+  assert.doesNotMatch(criteriaSection, /criteria-art-tag|Cách chúng tôi đánh giá/i);
+  assert.doesNotMatch(criteriaStyles, /\.criteria-art-tag/);
+  assert.match(criteriaStyles, /\.criteria-closing \{ max-width: 1240px;[^}]*gap: 32px;/);
+  assert.match(criteriaStyles, /\.criteria-closing p \{[^}]*flex: 1 1 auto;[^}]*white-space: nowrap;/);
+  assert.match(criteriaStyles, /@media \(max-width: 980px\)[\s\S]*?\.criteria-closing p \{ white-space: normal; \}/);
 });
 
 test('contact and every page footer expose responsive social links', () => {

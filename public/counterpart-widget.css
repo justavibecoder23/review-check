@@ -6,7 +6,7 @@
   border-top: 1px solid rgba(22, 22, 22, .08);
 }
 .counterpart-section.hidden { display: none; }
-.counterpart-section[hidden], .counterpart-toast[hidden], .action-button--counterpart[hidden], .counterpart-progress[hidden] { display: none !important; }
+.counterpart-section[hidden], .counterpart-toast[hidden], .counterpart-progress[hidden] { display: none !important; }
 .counterpart-section:focus { outline: none; }
 .counterpart-progress {
   position: relative;
@@ -116,7 +116,7 @@
   display: grid;
   grid-template-columns: 164px minmax(0, 1fr);
   gap: 22px;
-  align-items: center;
+  align-items: stretch;
   overflow: hidden;
   border: 1px solid rgba(22, 22, 22, .09);
   border-radius: 25px;
@@ -186,7 +186,14 @@
 .counterpart-product-card--shopee .counterpart-platform-tag { background: #EE4D2D; }
 .counterpart-product-card--tiktok .counterpart-platform-tag { background: #000; }
 .counterpart-platform-icon { width: 16px; height: 16px; flex: 0 0 16px; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.counterpart-product-copy { position: relative; z-index: 1; min-width: 0; }
+.counterpart-product-copy {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
 .counterpart-card-kicker { margin: 0 0 8px; color: #d6520d; font-size: 11px; font-weight: 950; letter-spacing: 1.15px; text-transform: uppercase; }
 .counterpart-product-card--shopee .counterpart-card-kicker { color: #EE4D2D; }
 .counterpart-product-card--tiktok .counterpart-card-kicker { color: #111827; }
@@ -218,7 +225,7 @@
   font-weight: 800;
 }
 .counterpart-fact strong { color: #161616; }
-.counterpart-link { margin-top: 15px; display: inline-flex; align-items: center; gap: 4px; color: #161616; font-size: 12px; font-weight: 900; text-decoration: underline; text-underline-offset: 5px; }
+.counterpart-link { width: fit-content; margin-top: auto; padding-top: 15px; display: inline-flex; align-items: center; gap: 4px; color: #161616; font-size: 12px; font-weight: 900; text-decoration: underline; text-underline-offset: 5px; }
 .counterpart-link svg { width: 15px; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .counterpart-bridge { flex: 0 0 150px; padding: 16px 8px; display: grid; place-content: center; gap: 12px; color: #777770; text-align: center; }
 .counterpart-bridge-icon {
@@ -242,7 +249,7 @@
   align-items: center;
   gap: 20px;
   border-radius: 8px;
-  background-color: #FEF3C7;
+  background-color: #FFF8DE;
 }
 .counterpart-notice { min-width: 0; display: flex; align-items: center; gap: 12px; color: #5f5f59; font-size: 12px; line-height: 1.5; }
 .counterpart-notice-mark { width: 38px; height: 38px; flex: 0 0 38px; display: grid; place-items: center; border-radius: 13px; background: rgba(255, 255, 255, .65); color: #9c6700; }
@@ -271,9 +278,6 @@
 .counterpart-analyze-button:hover { background: #ff8b3d; color: #111827; box-shadow: 0 10px 22px rgba(223, 89, 0, .2); transform: translateY(-2px); }
 .counterpart-analyze-button svg { width: 18px; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 
-.action-button--counterpart { border: 1px solid rgba(255, 255, 255, .12); background: #fff; color: #161616; cursor: pointer; }
-.action-button--counterpart:hover { background: #f1fff8; }
-.action-button--counterpart.is-ready { animation: counterpart-button-ready .72s cubic-bezier(.22, 1, .36, 1) both; }
 .counterpart-toast {
   position: absolute;
   right: 12px;
@@ -305,11 +309,6 @@
   from { opacity: 0; transform: translateY(12px) scale(.97); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
-@keyframes counterpart-button-ready {
-  0% { transform: scale(.96); box-shadow: 0 0 0 0 rgba(45, 193, 126, .42); }
-  52% { transform: scale(1.025); box-shadow: 0 0 0 9px rgba(45, 193, 126, 0); }
-  100% { transform: scale(1); }
-}
 @keyframes counterpart-progress-flow {
   from { background-position: 100% 0; }
   to { background-position: -80% 0; }
@@ -323,15 +322,6 @@
   .counterpart-bridge-icon { width: 42px; height: 42px; }
   .counterpart-bridge-icon svg { transform: rotate(90deg); }
   .counterpart-bridge > span:last-child { max-width: none; }
-}
-
-@media (max-width: 900px) {
-  .results-page .result-action-bar.has-counterpart {
-    width: min(720px, calc(100% - 30px));
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .results-page .result-action-bar.has-counterpart .action-bar-context { display: none !important; }
-  .results-page .result-action-bar.has-counterpart .action-button { min-height: 56px; font-size: 11px; }
 }
 
 @media (max-width: 760px) {
@@ -356,7 +346,7 @@
   .counterpart-facts { margin-top: 10px; gap: 5px; }
   .counterpart-facts--match { gap: 6px; }
   .counterpart-fact { min-height: 27px; padding: 0 8px; font-size: 11px; }
-  .counterpart-link { margin-top: 10px; font-size: 11px; }
+  .counterpart-link { padding-top: 10px; font-size: 11px; }
   .counterpart-actions { padding: 14px; flex-direction: column; align-items: stretch; gap: 12px; }
   .counterpart-notice { font-size: 11px; }
   .counterpart-analyze-button { width: 100%; }
@@ -370,11 +360,10 @@
   .counterpart-product-card { grid-template-columns: 104px minmax(0, 1fr); }
   .counterpart-product-card h3 { font-size: 16px; }
   .counterpart-product-card .counterpart-fact:nth-child(n+3) { display: none; }
-  .results-page .result-action-bar.has-counterpart .action-button { font-size: 11px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .counterpart-toast, .action-button--counterpart.is-ready, .counterpart-progress.is-searching .counterpart-progress-track i { animation: none; }
+  .counterpart-toast, .counterpart-progress.is-searching .counterpart-progress-track i { animation: none; }
   .counterpart-progress, .counterpart-progress-action, .counterpart-progress-track i { transition: none; }
   .counterpart-analyze-button:hover { transform: none; }
   .counterpart-progress.is-ready:hover { transform: none; }

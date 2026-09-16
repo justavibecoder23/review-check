@@ -1,7 +1,5 @@
 const STORAGE_KEY = 'realview:last-analysis';
 const SESSION_PREFIX = 'realview:counterpart:v3:';
-const actionBar = document.querySelector('#result-action-bar');
-const dockButton = document.querySelector('#counterpart-dock-button');
 const section = document.querySelector('#counterpart-section');
 const comparison = document.querySelector('#counterpart-comparison');
 const targetHeading = document.querySelector('#counterpart-target-heading');
@@ -32,7 +30,7 @@ function ensureStylesheet() {
   stylesheetPromise = new Promise((resolve) => {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = '/counterpart-widget.css?v=10';
+    link.href = '/counterpart-widget.css?v=12';
     link.dataset.counterpartStyles = 'true';
     link.addEventListener('load', resolve, { once: true });
     link.addEventListener('error', resolve, { once: true });
@@ -139,11 +137,6 @@ function resetWidget() {
     section.hidden = true;
     section.setAttribute('aria-hidden', 'true');
   }
-  dockButton?.classList.add('hidden');
-  if (dockButton) dockButton.hidden = true;
-  dockButton?.classList.remove('is-ready');
-  actionBar?.classList.remove('has-counterpart');
-  document.body.classList.remove('counterpart-ready');
   if (comparison) comparison.innerHTML = '';
 }
 
@@ -401,14 +394,6 @@ async function announceReady(result) {
   const platform = platformName(result.targetPlatform || result.candidate?.platform);
   completeProgress(platform);
   revealSection();
-  dockButton.querySelector('span').textContent = `Xem sản phẩm này trên ${platform}`;
-  dockButton.setAttribute('aria-label', `Xem sản phẩm này trên ${platform}`);
-  dockButton.hidden = false;
-  dockButton.classList.remove('hidden');
-  dockButton.classList.remove('is-ready');
-  actionBar.classList.add('has-counterpart');
-  document.body.classList.add('counterpart-ready');
-  requestAnimationFrame(() => dockButton.classList.add('is-ready'));
   announceWhenVisible(platform);
 }
 
@@ -510,7 +495,6 @@ function beginForResult(result) {
 }
 
 progressButton?.addEventListener('click', showSection);
-dockButton?.addEventListener('click', showSection);
 toast?.addEventListener('click', showSection);
 toast?.addEventListener('keydown', (event) => {
   if (event.key === 'Enter' || event.key === ' ') {
