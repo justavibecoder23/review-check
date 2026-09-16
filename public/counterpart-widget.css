@@ -178,6 +178,8 @@
 }
 .counterpart-toast:focus-visible { outline: 3px solid rgba(22, 143, 94, .34); outline-offset: 3px; }
 .counterpart-toast.hidden { display: none; }
+.counterpart-toast--status { cursor: default; }
+.counterpart-toast--status .counterpart-toast-mark { background: #6f706a; }
 .counterpart-toast-mark { width: 34px; height: 34px; flex: 0 0 34px; display: grid; place-items: center; border-radius: 11px; background: #168d5d; color: white; }
 .counterpart-toast-mark svg { width: 18px; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 .counterpart-toast > span:last-child { min-width: 0; display: grid; gap: 2px; }

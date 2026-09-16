@@ -78,3 +78,55 @@ test('job id đổi khi ảnh listing đổi nhưng không đổi chỉ vì titl
   assert.equal(counterpartJobId(source), counterpartJobId({ ...source, title: 'Tên rút gọn' }));
   assert.notEqual(counterpartJobId(source), counterpartJobId({ ...source, image: 'https://p16-oec-sg.ibyteimg.com/b.webp' }));
 });
+
+test('trạng thái bảo trì review được tính động và không làm mất kết quả tìm kiếm', () => {
+  const job = {
+    id: 'a'.repeat(32),
+    status: 'ready',
+    stage: 'ready',
+    source: { platform: 'TikTok Shop' },
+    result: {
+      status: 'ready',
+      targetPlatform: 'Shopee',
+      candidate: { url: 'https://shopee.vn/product/1/2', matchClass: 'exact' }
+    }
+  };
+  const maintenance = publicCounterpartJob(job, { env: { SHOPEE_REVIEW_ENABLED: 'false' } });
+  assert.equal(maintenance.status, 'ready');
+  assert.equal(maintenance.analysisAvailability.enabled, false);
+  assert.equal(maintenance.analysisAvailability.reason, 'platform_review_maintenance');
+
+  const restored = publicCounterpartJob(job, { env: { SHOPEE_REVIEW_ENABLED: 'true' } });
+  assert.equal(restored.analysisAvailability.enabled, true);
+});
+
+test('job tìm kiếm vẫn được lên lịch khi actor review sàn đích đang bảo trì', async () => {
+  const names = ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN'];
+  const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.example.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'token';
+  const redis = redisFake();
+  let searches = 0;
+  try {
+    const scheduled = await createCounterpartJob({
+      platform: 'TikTok Shop', title: 'Giày Oxford', productId: '9',
+      url: 'https://shop.tiktok.com/view/product/9', image: 'https://p16-oec-sg.ibyteimg.com/a.webp'
+    }, {
+      env: { SHOPEE_REVIEW_ENABLED: 'false' },
+      redisFetchImpl: redis.fetchImpl,
+      findCounterpartImpl: async () => {
+        searches += 1;
+        return { status: 'ready', targetPlatform: 'Shopee', candidate: { url: 'https://shopee.vn/product/1/2', matchClass: 'exact' } };
+      }
+    });
+    assert.equal(scheduled.job.status, 'queued');
+    assert.ok(scheduled.background);
+    await scheduled.background;
+    assert.equal(searches, 1);
+  } finally {
+    for (const name of names) {
+      if (previous[name] === undefined) delete process.env[name];
+      else process.env[name] = previous[name];
+    }
+  }
+});

@@ -115,12 +115,19 @@ test('tính năng tắt độc lập bằng feature flag', async () => {
   assert.equal(result.status, 'disabled');
 });
 
-test('không tìm sản phẩm đối ứng khi sàn đích đang bảo trì', async () => {
+test('vẫn tìm sản phẩm đối ứng khi actor review của sàn đích đang bảo trì', async () => {
   let lensCalls = 0;
   let actorCalls = 0;
+  const candidate = {
+    title: 'Giày Oxford nam',
+    url: 'https://shopee.vn/product/1/2',
+    image: 'https://down-vn.img.susercontent.com/file/match',
+    reviewCount: 25,
+    discoveryMethod: 'google-lens-exact'
+  };
   const result = await findCounterpart({
     platform: 'TikTok Shop',
-    title: 'Sản phẩm',
+    title: 'Giày Oxford nam',
     url: 'https://shop.tiktok.com/view/product/123',
     image: 'https://p16-oec-sg.ibyteimg.com/product.webp'
   }, {
@@ -129,15 +136,16 @@ test('không tìm sản phẩm đối ứng khi sàn đích đang bảo trì', a
       SHOPEE_REVIEW_ENABLED: 'false',
       GOOGLE_LENS_SERPAPI_KEY: 'test'
     },
-    searchGoogleLensImpl: async () => { lensCalls += 1; return []; },
-    runSearchActorImpl: async () => { actorCalls += 1; return []; }
+    searchGoogleLensImpl: async () => { lensCalls += 1; return [candidate]; },
+    runSearchActorImpl: async () => { actorCalls += 1; return []; },
+    rankCandidatesImpl: async (_source, candidates) => ({
+      ...candidates[0], matchClass: 'exact', matchScore: .9, imageScore: .9, hasEnoughReviews: true
+    })
   });
-  assert.deepEqual(result, {
-    status: 'disabled',
-    targetPlatform: 'Shopee',
-    reason: 'target_platform_maintenance'
-  });
-  assert.equal(lensCalls, 0);
+  assert.equal(result.status, 'ready');
+  assert.equal(result.targetPlatform, 'Shopee');
+  assert.equal(result.candidate.url, candidate.url);
+  assert.equal(lensCalls, 1);
   assert.equal(actorCalls, 0);
 });
 
@@ -219,15 +227,17 @@ test('section đối ứng ẩn mặc định và chỉ có module nền riêng'
   assert.match(html, /id="counterpart-section" class="counterpart-section hidden"/);
   assert.match(html, /id="counterpart-dock-button"[^>]+hidden/);
   assert.match(script, /requestIdleCallback/);
+  assert.match(script, /showStatusToast/);
+  assert.match(script, /analysisAvailability/);
   assert.equal((script.match(/method: 'POST'/g) || []).length, 1);
   assert.match(script, /method: 'GET'/);
   assert.match(script, /AbortController/);
   assert.match(script, /removeEventListener\('abort'/);
   assert.match(script, /trustIntroIsOpen/);
   assert.match(loader, /realview:analysis-result/);
-  assert.match(loader, /import\('\.\/counterpart-widget\.js\?v=4'\)/);
-  assert.match(html, /counterpart-loader\.js\?v=4/);
-  assert.match(script, /counterpart-widget\.css\?v=4/);
+  assert.match(loader, /import\('\.\/counterpart-widget\.js\?v=5'\)/);
+  assert.match(html, /counterpart-loader\.js\?v=5/);
+  assert.match(script, /counterpart-widget\.css\?v=5/);
   assert.match(styles, /@media \(max-width: 900px\)[\s\S]*\.action-bar-context \{ display: none !important; \}/);
   assert.doesNotMatch(html, /rel="stylesheet" href="\/counterpart-widget\.css"/);
   assert.match(script, /section\.scrollIntoView/);

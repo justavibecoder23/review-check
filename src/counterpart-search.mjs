@@ -6,7 +6,6 @@ import {
   reserveCounterpartCostCredential
 } from './apify-credential-store.mjs';
 import { classifyApifyFailure } from './apify-tiktok-runtime.mjs';
-import { isPlatformReviewEnabled } from './platform-availability.mjs';
 import { isGoogleLensConfigured, searchGoogleLens } from './counterpart/google-lens-provider.mjs';
 import {
   cosineSimilarity,
@@ -538,7 +537,7 @@ function sourceIdentity(source) {
 }
 
 function cacheKey(source) {
-  return `realview:counterpart:v2:lens-visual:${sourceIdentity(source)}`;
+  return `realview:counterpart:v3:lens-visual:${sourceIdentity(source)}`;
 }
 
 async function readCache(source, options = {}) {
@@ -648,9 +647,6 @@ export async function findCounterpart(rawSource, options = {}) {
   const targetPlatform = targetPlatformFor(source.platform);
   if (!source.platform || !targetPlatform || !source.title || !source.url || !source.image) {
     return { status: 'unavailable', reason: 'invalid_source' };
-  }
-  if (!isPlatformReviewEnabled(targetPlatform, env)) {
-    return { status: 'disabled', targetPlatform, reason: 'target_platform_maintenance' };
   }
   const cached = await readCache(source, scopedOptions);
   if (cached) return { ...cached, cached: true };

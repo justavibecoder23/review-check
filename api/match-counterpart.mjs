@@ -41,7 +41,11 @@ function sourceFromPayload(payload = {}) {
     url: String(source.url || '').trim().slice(0, 2_000),
     image: String(source.image || source.imageUrl || source.thumbnail || '').trim().slice(0, 2_000),
     itemId: String(source.itemId || '').trim().slice(0, 80),
-    productId: String(source.productId || '').trim().slice(0, 80)
+    productId: String(source.productId || '').trim().slice(0, 80),
+    resultId: String(source.resultId || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80),
+    analysisCompletedAt: Number.isFinite(Date.parse(source.analysisCompletedAt || ''))
+      ? new Date(source.analysisCompletedAt).toISOString()
+      : ''
   };
 }
 

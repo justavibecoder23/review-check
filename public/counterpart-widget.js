@@ -1,11 +1,13 @@
 const STORAGE_KEY = 'realview:last-analysis';
-const SESSION_PREFIX = 'realview:counterpart:v2:';
+const SESSION_PREFIX = 'realview:counterpart:v3:';
 const actionBar = document.querySelector('#result-action-bar');
 const dockButton = document.querySelector('#counterpart-dock-button');
 const section = document.querySelector('#counterpart-section');
 const comparison = document.querySelector('#counterpart-comparison');
 const targetHeading = document.querySelector('#counterpart-target-heading');
 const toast = document.querySelector('#counterpart-toast');
+const toastMark = toast?.querySelector('.counterpart-toast-mark');
+const toastTitle = document.querySelector('#counterpart-toast-title');
 const toastCopy = document.querySelector('#counterpart-toast-copy');
 const closeButton = document.querySelector('#counterpart-section-close');
 
@@ -24,7 +26,7 @@ function ensureStylesheet() {
   stylesheetPromise = new Promise((resolve) => {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = '/counterpart-widget.css?v=4';
+    link.href = '/counterpart-widget.css?v=5';
     link.dataset.counterpartStyles = 'true';
     link.addEventListener('load', resolve, { once: true });
     link.addEventListener('error', resolve, { once: true });
@@ -61,7 +63,9 @@ function sourceFromResult(result = {}) {
     url: safeUrl(product.url || product.originalUrl),
     image: safeUrl(product.image || product.imageUrl || product.thumbnail),
     itemId: String(product.itemId || ''),
-    productId: String(product.productId || '')
+    productId: String(product.productId || ''),
+    resultId: String(result.chatContext?.resultId || result.resultId || ''),
+    analysisCompletedAt: new Date().toISOString()
   };
 }
 
@@ -173,7 +177,10 @@ function renderSection() {
   const candidate = currentMatch.candidate;
   const targetPlatform = platformName(currentMatch.targetPlatform || candidate.platform);
   const hasEnoughReviews = candidate.hasEnoughReviews !== false && Number(candidate.reviewCount) >= Number(candidate.minimumReviewCount || 20);
-  const notice = hasEnoughReviews
+  const analysisAvailable = currentMatch.analysisAvailability?.enabled !== false;
+  const notice = !analysisAvailable
+    ? `<strong>Hệ thống lấy review ${escapeHtml(targetPlatform)} đang bảo trì.</strong> Bạn vẫn có thể đối chiếu sản phẩm; nếu chọn phân tích, RealView sẽ thông báo trạng thái bảo trì.`
+    : hasEnoughReviews
     ? `<strong>${Number(candidate.reviewCount).toLocaleString('vi-VN')} review công khai.</strong> Sản phẩm đáp ứng ngưỡng dữ liệu ban đầu để bắt đầu phân tích.`
     : `<strong>Hiện chỉ ghi nhận ${Number(candidate.reviewCount || 0).toLocaleString('vi-VN')} review.</strong> Bạn vẫn có thể phân tích; RealView sẽ dừng và thông báo nếu không đủ 20 review có nội dung như khi dán link ở trang chủ.`;
   const analyzeUrl = `/ket-qua?url=${encodeURIComponent(candidate.url)}`;
@@ -186,9 +193,9 @@ function renderSection() {
     </div>
     ${renderProductCard(candidate, { match: true })}
     <div class="counterpart-actions">
-      <div class="counterpart-notice${hasEnoughReviews ? '' : ' counterpart-notice--warning'}">
+      <div class="counterpart-notice${hasEnoughReviews && analysisAvailable ? '' : ' counterpart-notice--warning'}">
         <span class="counterpart-notice-mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none">${hasEnoughReviews ? '<path d="m5 13 4 4L19 7" />' : '<path d="M12 8v5M12 17h.01" /><path d="M10.3 4.8 3.5 17a2 2 0 0 0 1.8 3h13.4a2 2 0 0 0 1.8-3L13.7 4.8a2 2 0 0 0-3.4 0Z" />'}</svg>
+          <svg viewBox="0 0 24 24" fill="none">${hasEnoughReviews && analysisAvailable ? '<path d="m5 13 4 4L19 7" />' : '<path d="M12 8v5M12 17h.01" /><path d="M10.3 4.8 3.5 17a2 2 0 0 0 1.8 3h13.4a2 2 0 0 0 1.8-3L13.7 4.8a2 2 0 0 0-3.4 0Z" />'}</svg>
         </span>
         <span>${notice}</span>
       </div>
@@ -222,7 +229,40 @@ function trustIntroIsOpen() {
 function showReadyToast(platform) {
   if (!toast || !currentMatch) return;
   pendingToastPlatform = '';
+  toast.classList.remove('counterpart-toast--status');
+  toast.setAttribute('role', 'button');
+  toast.setAttribute('tabindex', '0');
+  toast.setAttribute('aria-label', 'Mở sản phẩm tương tự');
+  if (toastMark) toastMark.innerHTML = '<svg viewBox="0 0 24 24" fill="none"><path d="m5 13 4 4L19 7" /></svg>';
+  if (toastTitle) toastTitle.textContent = 'Đã tìm thấy sản phẩm tương tự';
   if (toastCopy) toastCopy.textContent = `Một lựa chọn trên ${platform} đã sẵn sàng để đối chiếu`;
+  toast.hidden = false;
+  toast.classList.remove('hidden');
+  clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => {
+    toast.classList.add('hidden');
+    toast.hidden = true;
+  }, 7_500);
+}
+
+function showStatusToast(result) {
+  if (!toast) return;
+  const messages = {
+    rate_limited: ['Đã tạm dừng tìm kiếm', 'Vui lòng thử lại sau ít phút.'],
+    no_verified_visual_match: ['Chưa tìm thấy sản phẩm đủ giống', 'RealView không hiển thị kết quả khi hình ảnh chưa đủ tin cậy.'],
+    missing_search_terms: ['Chưa đủ dữ liệu để tìm kiếm', 'Tên sản phẩm hiện chưa cung cấp đủ tín hiệu đối chiếu.'],
+    search_failed: ['Tìm kiếm chưa hoàn tất', 'Dịch vụ đối chiếu đang tạm thời không phản hồi.'],
+    redis_not_configured: ['Tìm kiếm đang tạm dừng', 'Hệ thống lưu trạng thái hiện chưa sẵn sàng.']
+  };
+  const [title, copy] = messages[result?.reason] || ['Chưa tìm thấy sản phẩm tương tự', 'Bạn vẫn có thể tiếp tục xem kết quả phân tích hiện tại.'];
+  currentMatch = null;
+  toast.classList.add('counterpart-toast--status');
+  toast.setAttribute('role', 'status');
+  toast.setAttribute('tabindex', '-1');
+  toast.removeAttribute('aria-label');
+  if (toastMark) toastMark.innerHTML = '<svg viewBox="0 0 24 24" fill="none"><path d="M12 8v5M12 17h.01" /><circle cx="12" cy="12" r="9" /></svg>';
+  if (toastTitle) toastTitle.textContent = title;
+  if (toastCopy) toastCopy.textContent = copy;
   toast.hidden = false;
   toast.classList.remove('hidden');
   clearTimeout(toastTimer);
@@ -296,7 +336,9 @@ async function requestMatch(source, signal) {
     signal
   });
   let result = await response.json().catch(() => null);
-  if (!response.ok && response.status !== 202) return null;
+  if (!response.ok && response.status !== 202) {
+    return result || { status: 'unavailable', reason: response.status === 429 ? 'rate_limited' : 'search_failed' };
+  }
   const jobId = result?.jobId;
   const deadline = Date.now() + 230_000;
   let pollAttempt = 0;
@@ -306,9 +348,12 @@ async function requestMatch(source, signal) {
     await abortableDelay(document.hidden ? Math.max(5_000, backoffDelay) : backoffDelay, signal);
     pollAttempt += 1;
     result = await readJob(jobId, signal);
-    if (!result) return null;
+    if (!result) return { status: 'unavailable', reason: 'search_failed' };
   }
-  if (result?.status !== 'ready' || !result.candidate?.url || !['exact', 'variant'].includes(result.candidate.matchClass)) return null;
+  if (result?.status !== 'ready') return result || { status: 'unavailable', reason: 'search_failed' };
+  if (!result.candidate?.url || !['exact', 'variant'].includes(result.candidate.matchClass)) {
+    return { ...result, status: 'unavailable', reason: 'no_verified_visual_match' };
+  }
   return result;
 }
 
@@ -321,17 +366,23 @@ function beginForResult(result) {
   currentSource = source;
   resetWidget();
   const stored = readStoredMatch(key);
-  if (stored) {
-    announceReady(stored);
-    return;
-  }
+  if (stored) announceReady(stored);
   deferWork(() => {
     if (activeSourceKey !== key) return;
     requestController = new AbortController();
     requestMatch(source, requestController.signal)
       .then((match) => {
         if (!match || activeSourceKey !== key) return;
+        if (match.status !== 'ready') {
+          if (!stored) showStatusToast(match);
+          return;
+        }
         storeMatch(key, match);
+        if (stored) {
+          currentMatch = match;
+          if (section && !section.hidden) renderSection();
+          return;
+        }
         announceReady(match);
       })
       .catch(() => { /* Matching is optional and must never disturb the result page. */ });
