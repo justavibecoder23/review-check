@@ -92,15 +92,19 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   }
 
   progress('validating', 3, 'Đang khởi tạo hệ thống...');
-  const { reviews, source, product, warnings } = await getReviews(rawUrl.trim(), {
+  const getReviewsForAnalysis = options.getReviewsImpl || getReviews;
+  const { reviews, source, product, warnings } = await getReviewsForAnalysis(rawUrl.trim(), {
     onProgress: options.onProgress,
     onProductMeta: (metadata) => emit(options.onProductMeta, metadata),
     signal: options.signal,
     redisFetchImpl: options.redisFetchImpl,
     blobGetImpl: options.blobGetImpl,
-    blobListImpl: options.blobListImpl,
     blobToken: options.blobToken,
-    now: options.now
+    now: options.now,
+    fetchImpl: options.fetchImpl,
+    collectShopeeReviewsImpl: options.collectShopeeReviewsImpl,
+    collectTikTokReviewsImpl: options.collectTikTokReviewsImpl,
+    env: options.env
   });
   const starDistribution = Object.fromEntries([1, 2, 3, 4, 5].map((rating) => [
     rating,
@@ -133,7 +137,8 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
     busyRouteIds: new Set(),
     failedRouteIds: new Set()
   };
-  const labeling = await labelReviewsTwoLayer(reviews, {
+  const labelReviews = options.labelReviewsImpl || labelReviewsTwoLayer;
+  const labeling = await labelReviews(reviews, {
     product,
     geminiContext,
     signal: options.signal,
@@ -204,8 +209,25 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
         product,
         source,
         labeling: labelingStats
-      }, options.datasetOptions);
+      }, {
+        ...options.datasetOptions,
+        redisFetchImpl: options.redisFetchImpl,
+        blobToken: options.blobToken
+      });
   if (dataset.warning) warnings.push(dataset.warning);
+  if (process.env.VERCEL) {
+    console.log(JSON.stringify({
+      level: 'info',
+      event: 'review_dataset_storage_complete',
+      platform: product.platform,
+      productId: product.productId || product.itemId || null,
+      provider: dataset.provider,
+      saved: Boolean(dataset.saved),
+      reused: Boolean(dataset.reused),
+      blobAdvancedOperations: Number(dataset.blobOperations) || 0,
+      schemaVersion: dataset.schemaVersion || null
+    }));
+  }
   if (product.platform === 'Shopee' && source?.type === 'live'
     && dataset.saved && dataset.provider === 'vercel-blob-private') {
     const cached = await setCachedShopeeDataset(product.itemId, dataset, dataset.rawDataset, {
@@ -225,7 +247,8 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   warnings.push(...labeling.warnings);
   progress('scoring', 91, 'Đang hoàn thiện kết quả...');
   const narrativeStartedAt = Date.now();
-  const trust = await buildTrustAnalysis(processedReviews, {
+  const buildAnalysis = options.buildTrustAnalysisImpl || buildTrustAnalysis;
+  const trust = await buildAnalysis(processedReviews, {
     product,
     sampling: source?.collection,
     geminiContext,

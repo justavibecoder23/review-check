@@ -4,11 +4,11 @@ export const SHOPEE_CACHE_TTL_SECONDS = 5 * 24 * 60 * 60;
 export const TIKTOK_CACHE_TTL_SECONDS = 5 * 24 * 60 * 60;
 export const SHOPEE_CACHE_HITS_KEY = 'realview:shopee:cache:hits';
 export const SHOPEE_TOTAL_SERVED_KEY = 'realview:shopee:total_served';
-const MAX_DATASET_BYTES = 5 * 1024 * 1024;
-const TIKTOK_DATASET_PREFIX = 'review-datasets/';
-const TIKTOK_RAW_DATASET_PATTERN = /\/tiktok-[^/]+\/[^/]+\/reviews\.raw\.json$/u;
+// Schema v2 contains raw + labeled data in one object; keep the same effective
+// ceiling as the two former 5 MB files without accepting unbounded payloads.
+const MAX_DATASET_BYTES = 10 * 1024 * 1024;
 const MIN_TIKTOK_FALLBACK_REVIEWS = 20;
-const DAY_MS = 24 * 60 * 60 * 1000;
+const LATEST_POINTER_PREFIX = 'realview:cache:product:latest:v2:';
 
 export function isShopeeCacheEligible(platform) {
   return String(platform || '').trim().toLowerCase() === 'shopee';
@@ -24,6 +24,18 @@ export function getTikTokCacheKey(productId) {
   const normalized = String(productId || '').trim();
   if (!/^\d{8,25}$/.test(normalized)) throw new Error('TikTok productId không hợp lệ cho cache.');
   return `realview:cache:product:tiktok:${normalized}`;
+}
+
+export function getLatestDatasetPointerKey(platform, productId) {
+  const normalizedPlatform = String(platform || '').trim().toLowerCase();
+  const normalizedId = String(productId || '').trim();
+  if (normalizedPlatform === 'shopee' && /^\d+$/.test(normalizedId)) {
+    return `${LATEST_POINTER_PREFIX}shopee:${normalizedId}`;
+  }
+  if (['tiktok', 'tiktok shop'].includes(normalizedPlatform) && /^\d{8,25}$/.test(normalizedId)) {
+    return `${LATEST_POINTER_PREFIX}tiktok:${normalizedId}`;
+  }
+  throw new Error('Platform hoặc productId không hợp lệ cho latest dataset pointer.');
 }
 
 function parseDate(value) {
@@ -107,9 +119,19 @@ async function blobResultText(result) {
   return new Response(result.stream).text();
 }
 
+export function extractRawDataset(storedPayload) {
+  if (!storedPayload || typeof storedPayload !== 'object') return null;
+  if (storedPayload.datasetKind === 'review-dataset-bundle') {
+    return storedPayload.rawDataset && typeof storedPayload.rawDataset === 'object'
+      ? storedPayload.rawDataset
+      : null;
+  }
+  return storedPayload;
+}
+
 export async function readPrivateBlobDataset(blobLocation, options = {}) {
-  const pathname = String(blobLocation?.rawPath || blobLocation?.pathname || '').trim();
-  const url = String(blobLocation?.rawUrl || blobLocation?.url || '').trim();
+  const pathname = String(blobLocation?.bundlePath || blobLocation?.rawPath || blobLocation?.pathname || '').trim();
+  const url = String(blobLocation?.bundleUrl || blobLocation?.rawUrl || blobLocation?.url || '').trim();
   const locator = pathname || url;
   if (!locator) return null;
   try {
@@ -119,92 +141,80 @@ export async function readPrivateBlobDataset(blobLocation, options = {}) {
       token: options.blobToken || process.env.BLOB_READ_WRITE_TOKEN
     });
     const text = await blobResultText(result);
-    return text ? JSON.parse(text) : null;
+    return text ? extractRawDataset(JSON.parse(text)) : null;
   } catch {
     return null;
   }
 }
 
-function recentDatasetPrefixes(now = new Date()) {
-  const prefixes = [];
-  for (let offset = 0; offset <= 5; offset += 1) {
-    prefixes.push(`${TIKTOK_DATASET_PREFIX}${new Date(now.getTime() - offset * DAY_MS).toISOString().slice(0, 10).replaceAll('-', '/')}/`);
-  }
-  return prefixes;
-}
-
-async function listAllBlobs(listBlobs, prefix, token) {
-  const blobs = [];
-  let cursor;
-  do {
-    const result = await listBlobs({ prefix, cursor, token, limit: 1000 });
-    blobs.push(...(Array.isArray(result?.blobs) ? result.blobs : []));
-    cursor = result?.hasMore ? result.cursor : undefined;
-  } while (cursor);
-  return blobs;
-}
-
 /**
- * TikTok exact-product fallback. It is intentionally independent from the
- * Shopee Redis cache and never substitutes a dataset from another product.
+ * TikTok exact-product fallback now resolves a direct Redis pointer. It never
+ * scans Blob on a user request, so cache recovery costs zero Advanced Ops.
  */
 export async function getFallbackTikTokDataset(productId, options = {}) {
   const normalizedProductId = String(productId || '').trim();
   if (!/^\d{8,25}$/.test(normalizedProductId)) return null;
-  const token = options.blobToken || process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) return null;
+  const cached = await getCachedTikTokDataset(normalizedProductId, options);
+  if (!cached) return null;
+  return {
+    dataset: cached.dataset,
+    validation: cached.validation,
+    isExactMatch: true,
+    blobPath: cached.mapping?.bundlePath || cached.mapping?.rawPath || null,
+    recoveredFromPointer: Boolean(cached.recoveredFromPointer)
+  };
+}
 
-  try {
-    const listBlobs = options.blobListImpl || (await import('@vercel/blob')).list;
-    const now = options.now instanceof Date ? options.now : new Date(options.now || Date.now());
-    const pages = await Promise.all(recentDatasetPrefixes(now).map((prefix) => listAllBlobs(listBlobs, prefix, token)));
-    const blobs = [...new Map(pages.flat()
-      .filter((blob) => TIKTOK_RAW_DATASET_PATTERN.test(String(blob?.pathname || '')))
-      .map((blob) => [blob.pathname, blob])).values()]
-      .sort((left, right) => (
-        (Date.parse(String(right?.uploadedAt || '')) || 0)
-        - (Date.parse(String(left?.uploadedAt || '')) || 0)
-      ));
-    if (!blobs.length) return null;
+async function readCacheMapping(activeKey, latestKey, options = {}) {
+  const active = parseMapping(await redisCommand(['GET', activeKey], {
+    fetchImpl: options.redisFetchImpl,
+    timeoutMs: options.redisTimeoutMs || 900
+  }));
+  if (active) return { mapping: active, recoveredFromPointer: false };
+  const latest = parseMapping(await redisCommand(['GET', latestKey], {
+    fetchImpl: options.redisFetchImpl,
+    timeoutMs: options.redisTimeoutMs || 900
+  }));
+  return latest ? { mapping: latest, recoveredFromPointer: true } : null;
+}
 
-    const productSegment = `/tiktok-${normalizedProductId}/`;
-    // Never substitute reviews from another product. A cross-product demo can
-    // look like a successful analysis while silently returning false evidence.
-    const candidates = blobs.filter((blob) => String(blob.pathname).includes(productSegment));
-    for (const blob of candidates) {
-      const dataset = await readPrivateBlobDataset({
-        rawPath: blob.pathname,
-        rawUrl: blob.url
-      }, options);
-      const validation = validateTikTokCachedDataset(dataset, {
-        productId: normalizedProductId,
-        minimumReviews: options.minimumReviews,
-        now
-      });
-      if (!validation.valid) continue;
-      return {
-        dataset,
-        validation,
-        isExactMatch: true,
-        blobPath: blob.pathname
-      };
-    }
-    return null;
-  } catch {
-    // Fallback failure must never replace the existing live collection error.
-    return null;
-  }
+async function warmActiveCache(activeKey, mapping, ttlSeconds, options = {}) {
+  await redisCommand(['SET', activeKey, JSON.stringify(mapping), 'EX', String(ttlSeconds)], {
+    fetchImpl: options.redisFetchImpl,
+    timeoutMs: options.redisTimeoutMs || 1_200
+  });
+}
+
+async function backfillLatestPointer(latestKey, mapping, options = {}) {
+  // Legacy v1 active mappings predate the persistent pointer. Backfill only
+  // when no pointer exists so an older active entry can never replace a newer
+  // dataset selected by another request.
+  await redisCommand(['SET', latestKey, JSON.stringify(mapping), 'NX'], {
+    fetchImpl: options.redisFetchImpl,
+    timeoutMs: options.redisTimeoutMs || 1_200
+  });
+}
+
+async function writeCacheAndLatestPointer(activeKey, latestKey, mapping, ttlSeconds, options = {}) {
+  await redisTransaction([
+    ['SET', activeKey, JSON.stringify(mapping), 'EX', String(ttlSeconds)],
+    ['SET', latestKey, JSON.stringify(mapping)]
+  ], {
+    fetchImpl: options.redisFetchImpl,
+    timeoutMs: options.redisTimeoutMs || 1_200
+  });
 }
 
 export async function getCachedTikTokDataset(productId, options = {}) {
   if (!isRedisConfigured() && !options.redisFetchImpl) return null;
   const key = getTikTokCacheKey(productId);
   try {
-    const value = await redisCommand(['GET', key], {
-      fetchImpl: options.redisFetchImpl,
-      timeoutMs: options.redisTimeoutMs || 900
-    });
-    const mapping = parseMapping(value);
+    const resolved = await readCacheMapping(
+      key,
+      getLatestDatasetPointerKey('tiktok', productId),
+      options
+    );
+    const mapping = resolved?.mapping;
     if (!mapping || String(mapping.productId || '') !== String(productId)) return null;
     const dataset = await readPrivateBlobDataset(mapping, options);
     const validation = validateTikTokCachedDataset(dataset, {
@@ -213,7 +223,14 @@ export async function getCachedTikTokDataset(productId, options = {}) {
       now: options.now
     });
     if (!validation.valid) return null;
-    return { dataset, mapping, validation };
+    if (resolved.recoveredFromPointer) {
+      // Warming is opportunistic. A transient Redis write error must not turn
+      // a valid Blob dataset into an Actor request.
+      await warmActiveCache(key, mapping, validation.ttlSeconds, options).catch(() => null);
+    } else if (Number(mapping.version || 1) < 2) {
+      await backfillLatestPointer(getLatestDatasetPointerKey('tiktok', productId), mapping, options).catch(() => null);
+    }
+    return { dataset, mapping, validation, recoveredFromPointer: resolved.recoveredFromPointer };
   } catch {
     return null;
   }
@@ -229,22 +246,29 @@ export async function setCachedTikTokDataset(productId, blobLocation, dataset, o
   if (!validation.valid) return { saved: false, reason: validation.reason };
   const rawPath = String(blobLocation?.rawPath || '').trim();
   const rawUrl = String(blobLocation?.rawUrl || '').trim();
-  if (!rawPath && !rawUrl) return { saved: false, reason: 'BLOB_LOCATION_MISSING' };
+  const bundlePath = String(blobLocation?.bundlePath || '').trim();
+  const bundleUrl = String(blobLocation?.bundleUrl || '').trim();
+  if (!rawPath && !rawUrl && !bundlePath && !bundleUrl) return { saved: false, reason: 'BLOB_LOCATION_MISSING' };
   const mapping = {
-    version: 1,
+    version: bundlePath || bundleUrl ? 2 : 1,
     platform: 'TikTok Shop',
     productId: String(productId),
-    rawPath: rawPath || null,
-    rawUrl: rawUrl || null,
+    bundlePath: bundlePath || null,
+    bundleUrl: bundleUrl || null,
+    rawPath: rawPath || bundlePath || null,
+    rawUrl: rawUrl || bundleUrl || null,
     createdAt: dataset.createdAt,
     expiresAt: new Date(Date.parse(dataset.createdAt) + TIKTOK_CACHE_TTL_SECONDS * 1000).toISOString(),
     rawOnly: true,
     ratingStrataRequired: false
   };
-  await redisCommand(['SET', getTikTokCacheKey(productId), JSON.stringify(mapping), 'EX', String(validation.ttlSeconds)], {
-    fetchImpl: options.redisFetchImpl,
-    timeoutMs: options.redisTimeoutMs || 1200
-  });
+  await writeCacheAndLatestPointer(
+    getTikTokCacheKey(productId),
+    getLatestDatasetPointerKey('tiktok', productId),
+    mapping,
+    validation.ttlSeconds,
+    options
+  );
   return { saved: true, key: getTikTokCacheKey(productId), ttlSeconds: validation.ttlSeconds };
 }
 
@@ -261,16 +285,22 @@ export async function getCachedShopeeDataset(itemId, options = {}) {
   if (!isRedisConfigured() && !options.redisFetchImpl) return null;
   const key = getShopeeCacheKey(itemId);
   try {
-    const value = await redisCommand(['GET', key], {
-      fetchImpl: options.redisFetchImpl,
-      timeoutMs: options.redisTimeoutMs || 900
-    });
-    const mapping = parseMapping(value);
+    const resolved = await readCacheMapping(
+      key,
+      getLatestDatasetPointerKey('shopee', itemId),
+      options
+    );
+    const mapping = resolved?.mapping;
     if (!mapping || String(mapping.itemId || '') !== String(itemId)) return null;
     const dataset = await readPrivateBlobDataset(mapping, options);
     const validation = validateShopeeCachedDataset(dataset, { itemId, now: options.now });
     if (!validation.valid) return null;
-    return { dataset, mapping, validation };
+    if (resolved.recoveredFromPointer) {
+      await warmActiveCache(key, mapping, validation.ttlSeconds, options).catch(() => null);
+    } else if (Number(mapping.version || 1) < 2) {
+      await backfillLatestPointer(getLatestDatasetPointerKey('shopee', itemId), mapping, options).catch(() => null);
+    }
+    return { dataset, mapping, validation, recoveredFromPointer: resolved.recoveredFromPointer };
   } catch {
     return null;
   }
@@ -282,20 +312,27 @@ export async function setCachedShopeeDataset(itemId, blobLocation, dataset, opti
   if (!validation.valid) return { saved: false, reason: validation.reason };
   const rawPath = String(blobLocation?.rawPath || '').trim();
   const rawUrl = String(blobLocation?.rawUrl || '').trim();
-  if (!rawPath && !rawUrl) return { saved: false, reason: 'BLOB_LOCATION_MISSING' };
+  const bundlePath = String(blobLocation?.bundlePath || '').trim();
+  const bundleUrl = String(blobLocation?.bundleUrl || '').trim();
+  if (!rawPath && !rawUrl && !bundlePath && !bundleUrl) return { saved: false, reason: 'BLOB_LOCATION_MISSING' };
   const mapping = {
-    version: 1,
+    version: bundlePath || bundleUrl ? 2 : 1,
     platform: 'Shopee',
     itemId: String(itemId),
-    rawPath: rawPath || null,
-    rawUrl: rawUrl || null,
+    bundlePath: bundlePath || null,
+    bundleUrl: bundleUrl || null,
+    rawPath: rawPath || bundlePath || null,
+    rawUrl: rawUrl || bundleUrl || null,
     createdAt: dataset.createdAt,
     expiresAt: new Date(Date.parse(dataset.createdAt) + SHOPEE_CACHE_TTL_SECONDS * 1000).toISOString()
   };
-  await redisCommand(['SET', getShopeeCacheKey(itemId), JSON.stringify(mapping), 'EX', String(validation.ttlSeconds)], {
-    fetchImpl: options.redisFetchImpl,
-    timeoutMs: options.redisTimeoutMs || 1200
-  });
+  await writeCacheAndLatestPointer(
+    getShopeeCacheKey(itemId),
+    getLatestDatasetPointerKey('shopee', itemId),
+    mapping,
+    validation.ttlSeconds,
+    options
+  );
   return { saved: true, key: getShopeeCacheKey(itemId), ttlSeconds: validation.ttlSeconds };
 }
 

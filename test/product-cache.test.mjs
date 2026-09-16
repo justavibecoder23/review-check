@@ -7,6 +7,7 @@ import {
   getCachedShopeeDataset,
   getCachedTikTokDataset,
   getFallbackTikTokDataset,
+  getLatestDatasetPointerKey,
   getShopeeCacheKey,
   getTikTokCacheKey,
   isShopeeCacheEligible,
@@ -209,6 +210,54 @@ test('ghi và đọc mapping cache với TTL còn lại của mốc năm ngày',
   assert.equal(cached.dataset.reviews.length, 5);
 });
 
+test('cache đúng năm ngày, quá một giây bị từ chối và pointer chỉ phục hồi TTL còn lại', async (context) => {
+  enableRedisEnv(context);
+  const redis = createRedisFake();
+  const dataset = shopeeDataset({ createdAt: '2026-09-10T00:00:00.000Z' });
+  const location = {
+    bundlePath: 'review-datasets/2026/09/10/shopee-123/fingerprint/reviews.dataset.json'
+  };
+  const saved = await setCachedShopeeDataset('123', location, dataset, {
+    redisFetchImpl: redis.fetchImpl,
+    now: new Date('2026-09-12T00:00:00.000Z')
+  });
+  assert.equal(saved.ttlSeconds, 3 * 24 * 60 * 60);
+  assert.ok(redis.values.has(getLatestDatasetPointerKey('shopee', '123')));
+
+  redis.values.delete(getShopeeCacheKey('123'));
+  const bundle = {
+    schemaVersion: '2.0.0',
+    datasetKind: 'review-dataset-bundle',
+    rawDataset: dataset,
+    labeledDataset: { ...dataset, datasetKind: 'labeled-reviews' }
+  };
+  const recovered = await getCachedShopeeDataset('123', {
+    redisFetchImpl: redis.fetchImpl,
+    blobGetImpl: blobGetFor(bundle),
+    now: new Date('2026-09-14T00:00:00.000Z')
+  });
+  assert.equal(recovered.recoveredFromPointer, true);
+  assert.equal(recovered.validation.ttlSeconds, 24 * 60 * 60);
+  const warmCommand = redis.commands.findLast((command) => command[0] === 'SET' && command[1] === getShopeeCacheKey('123'));
+  assert.deepEqual(warmCommand.slice(-2), ['EX', String(24 * 60 * 60)]);
+
+  redis.values.delete(getShopeeCacheKey('123'));
+  const atBoundary = await getCachedShopeeDataset('123', {
+    redisFetchImpl: redis.fetchImpl,
+    blobGetImpl: blobGetFor(bundle),
+    now: new Date('2026-09-15T00:00:00.000Z')
+  });
+  assert.equal(atBoundary.validation.ttlSeconds, 1);
+
+  redis.values.delete(getShopeeCacheKey('123'));
+  const expired = await getCachedShopeeDataset('123', {
+    redisFetchImpl: redis.fetchImpl,
+    blobGetImpl: blobGetFor(bundle),
+    now: new Date('2026-09-15T00:00:01.000Z')
+  });
+  assert.equal(expired, null);
+});
+
 test('cache hit có bộ đếm riêng và không thay đổi bộ đếm Apify Shopee', async (context) => {
   enableRedisEnv(context);
   const redis = createRedisFake({ [APIFY_POOL_COUNTERS_KEY]: 'unchanged' });
@@ -241,52 +290,84 @@ test('getReviews dùng Blob cache Shopee và bỏ qua hoàn toàn Apify', async 
   assert.equal(result.product.itemId, '123');
   assert.equal(redis.values.get(SHOPEE_CACHE_HITS_KEY), '1');
   assert.equal(redis.values.get(SHOPEE_TOTAL_SERVED_KEY), '1');
+  assert.ok(redis.values.has(getLatestDatasetPointerKey('shopee', '123')));
   assert.equal(redis.commands.some((command) => command[0] === 'HINCRBY'), false);
 });
 
-test('TikTok fallback ưu tiên dataset đúng productId và không cần Redis', async () => {
+test('TikTok fallback dùng direct pointer đúng productId và không gọi Blob list', async (context) => {
+  enableRedisEnv(context);
   const target = tiktokDataset('1729736382033660305');
-  const other = tiktokDataset('1111111111111111111');
-  const datasets = new Map([
-    ['review-datasets/2026/09/07/tiktok-1729736382033660305/run-target/reviews.raw.json', target],
-    ['review-datasets/2026/09/08/tiktok-1111111111111111111/run-newer/reviews.raw.json', other]
-  ]);
+  const pathname = 'review-datasets/2026/09/07/tiktok-1729736382033660305/run-target/reviews.raw.json';
+  const pointer = JSON.stringify({
+    version: 1,
+    platform: 'TikTok Shop',
+    productId: '1729736382033660305',
+    rawPath: pathname,
+    createdAt: target.createdAt
+  });
+  const redis = createRedisFake({
+    [getLatestDatasetPointerKey('tiktok', '1729736382033660305')]: pointer
+  });
+  let listCalls = 0;
   const fallback = await getFallbackTikTokDataset('1729736382033660305', {
+    redisFetchImpl: redis.fetchImpl,
     blobToken: 'blob-token',
-    blobListImpl: async () => ({
-      blobs: [...datasets.keys()].map((pathname, index) => ({
-        pathname,
-        url: `https://blob.test/${index}`,
-        uploadedAt: index ? '2026-09-08T00:00:00.000Z' : '2026-09-07T00:00:00.000Z'
-      }))
-    }),
-    blobGetImpl: async (pathname) => blobGetFor(datasets.get(pathname))(),
+    blobListImpl: async () => { listCalls += 1; return { blobs: [] }; },
+    blobGetImpl: blobGetFor(target),
     now: new Date('2026-09-10T00:00:00.000Z')
   });
   assert.equal(fallback.isExactMatch, true);
   assert.equal(fallback.dataset.product.productId, '1729736382033660305');
+  assert.equal(fallback.recoveredFromPointer, true);
+  assert.equal(listCalls, 0);
 });
 
-test('TikTok fallback không bao giờ dùng dataset của sản phẩm khác', async () => {
-  const older = tiktokDataset('1111111111111111111');
-  const newest = tiktokDataset('2222222222222222222');
-  const datasets = new Map([
-    ['review-datasets/2026/09/07/tiktok-1111111111111111111/run-old/reviews.raw.json', older],
-    ['review-datasets/2026/09/08/tiktok-2222222222222222222/run-new/reviews.raw.json', newest]
-  ]);
+test('TikTok fallback không bao giờ dùng direct pointer của sản phẩm khác', async (context) => {
+  enableRedisEnv(context);
+  const other = tiktokDataset('1111111111111111111');
+  const redis = createRedisFake({
+    [getLatestDatasetPointerKey('tiktok', '1729736382033660305')]: JSON.stringify({
+      version: 1,
+      platform: 'TikTok Shop',
+      productId: '1111111111111111111',
+      rawPath: 'review-datasets/other/reviews.raw.json',
+      createdAt: other.createdAt
+    })
+  });
   const fallback = await getFallbackTikTokDataset('1729736382033660305', {
+    redisFetchImpl: redis.fetchImpl,
     blobToken: 'blob-token',
-    blobListImpl: async () => ({
-      blobs: [...datasets.keys()].map((pathname, index) => ({
-        pathname,
-        url: `https://blob.test/${index}`,
-        uploadedAt: index ? '2026-09-08T00:00:00.000Z' : '2026-09-07T00:00:00.000Z'
-      }))
-    }),
-    blobGetImpl: async (pathname) => blobGetFor(datasets.get(pathname))(),
+    blobGetImpl: blobGetFor(other),
     now: new Date('2026-09-10T00:00:00.000Z')
   });
   assert.equal(fallback, null);
+});
+
+test('lỗi Redis khi backfill v1 không được biến cache hợp lệ thành Actor miss', async (context) => {
+  enableRedisEnv(context);
+  const productId = '1729736382033660305';
+  const dataset = tiktokDataset(productId);
+  const mapping = JSON.stringify({
+    version: 1,
+    platform: 'TikTok Shop',
+    productId,
+    rawPath: `review-datasets/legacy/tiktok-${productId}/reviews.raw.json`,
+    createdAt: dataset.createdAt
+  });
+  const redisFetchImpl = async (_url, init) => {
+    const command = JSON.parse(init.body);
+    if (command[0] === 'GET' && command[1] === getTikTokCacheKey(productId)) {
+      return { ok: true, async json() { return { result: mapping }; } };
+    }
+    return { ok: false, status: 503, async json() { return {}; } };
+  };
+  const cached = await getCachedTikTokDataset(productId, {
+    redisFetchImpl,
+    blobGetImpl: blobGetFor(dataset),
+    now: new Date('2026-09-10T00:00:00.000Z')
+  });
+  assert.equal(cached.dataset.product.productId, productId);
+  assert.equal(cached.recoveredFromPointer, false);
 });
 
 test('getReviews ưu tiên TikTok raw cache năm ngày và bỏ qua Actor', async (context) => {
@@ -299,11 +380,15 @@ test('getReviews ưu tiên TikTok raw cache năm ngày và bỏ qua Actor', asyn
   const productId = '1729736382033660305';
   const dataset = tiktokDataset(productId);
   const pathname = `review-datasets/2026/09/08/tiktok-${productId}/run/reviews.raw.json`;
+  enableRedisEnv(context);
+  const redis = createRedisFake({
+    [getTikTokCacheKey(productId)]: JSON.stringify({
+      version: 1, platform: 'TikTok Shop', productId, rawPath: pathname, createdAt: dataset.createdAt
+    })
+  });
   const result = await getReviews(`https://shop.tiktok.com/vn/pdp/product/${productId}`, {
+    redisFetchImpl: redis.fetchImpl,
     blobToken: 'blob-token',
-    blobListImpl: async () => ({
-      blobs: [{ pathname, url: 'https://blob.test/raw', uploadedAt: '2026-09-08T00:00:00.000Z' }]
-    }),
     blobGetImpl: blobGetFor(dataset),
     now: new Date('2026-09-10T00:00:00.000Z')
   });
@@ -324,11 +409,15 @@ test('getReviews chấp nhận cache TikTok 100 hoặc 200 review', async (conte
   const productId = '1729736382033660305';
   const dataset = tiktokDataset(productId, 200);
   const pathname = `review-datasets/2026/09/08/tiktok-${productId}/run/reviews.raw.json`;
+  enableRedisEnv(context);
+  const redis = createRedisFake({
+    [getTikTokCacheKey(productId)]: JSON.stringify({
+      version: 1, platform: 'TikTok Shop', productId, rawPath: pathname, createdAt: dataset.createdAt
+    })
+  });
   const result = await getReviews(`https://shop.tiktok.com/vn/pdp/product/${productId}`, {
+    redisFetchImpl: redis.fetchImpl,
     blobToken: 'blob-token',
-    blobListImpl: async () => ({
-      blobs: [{ pathname, url: 'https://blob.test/raw', uploadedAt: '2026-09-08T00:00:00.000Z' }]
-    }),
     blobGetImpl: blobGetFor(dataset),
     now: new Date('2026-09-10T00:00:00.000Z')
   });
@@ -337,10 +426,8 @@ test('getReviews chấp nhận cache TikTok 100 hoặc 200 review', async (conte
   assert.equal(result.reviews.length, 200);
 
   const hundredReviewResult = await getReviews(`https://shop.tiktok.com/vn/pdp/product/${productId}`, {
+    redisFetchImpl: redis.fetchImpl,
     blobToken: 'blob-token',
-    blobListImpl: async () => ({
-      blobs: [{ pathname, url: 'https://blob.test/raw', uploadedAt: '2026-09-08T00:00:00.000Z' }]
-    }),
     blobGetImpl: blobGetFor(tiktokDataset(productId, 100)),
     now: new Date('2026-09-10T00:00:00.000Z')
   });

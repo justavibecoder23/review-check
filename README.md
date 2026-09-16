@@ -178,11 +178,20 @@ lần đổi key và model đã dùng để đối chiếu với runtime log.
 
 ## Lưu dataset
 
-Mỗi lượt phân tích tạo đúng hai file có chung `runId`:
-
-- `reviews.raw.json`: dữ liệu vừa thu thập, chưa gắn nhãn;
-- `reviews.labeled.json`: dữ liệu kèm nhãn Layer 1, phản biện Layer 2, nhãn cuối, evidence, phiên bản pipeline, quyết định lọc cuối `included` và `exclusionReason`.
+Mỗi lượt lấy dữ liệu live mới tạo tối đa một file `reviews.dataset.json` schema
+v2. Bundle chứa cả `rawDataset` chưa gắn nhãn và `labeledDataset` có nhãn Layer
+1, phản biện Layer 2, nhãn cuối, evidence, phiên bản pipeline, quyết định lọc
+`included` và `exclusionReason`. Reader vẫn hỗ trợ cặp file v1
+`reviews.raw.json`/`reviews.labeled.json` đã tồn tại trước khi nâng cấp.
 
 API phân biệt rõ `stats.included` (review được giữ làm bằng chứng hiển thị) với `stats.trustSample` (mẫu bằng chứng của TrustScore sau khi loại nội dung không đủ điều kiện). Trường cũ `genuine` và `algorithmSample` vẫn được giữ để tương thích client cũ.
 
-Khi chạy local, file nằm trong `data/review-runs/YYYY/MM/DD/<product>/<runId>/`. Khi chạy trên Vercel, filesystem của Function không phải storage bền vững; ứng dụng lưu hai file vào **private Vercel Blob** tại `review-datasets/YYYY/MM/DD/<product>/<runId>/` nếu có `BLOB_READ_WRITE_TOKEN`. Kết nối một Blob Store trong Vercel Storage với project để Vercel cấp biến này, rồi redeploy. Nếu chưa nối Blob Store, lượt phân tích vẫn trả kết quả nhưng `dataset.saved=false` và có warning rõ ràng.
+Khi chạy local, file nằm trong `data/review-runs/YYYY/MM/DD/<product>/<runId>/`.
+Khi chạy trên Vercel, ứng dụng lưu một private Blob tại
+`review-datasets/YYYY/MM/DD/<product>/<fingerprint>/reviews.dataset.json`. Redis
+giữ cache active tối đa 5 ngày và một latest pointer nhỏ để phục hồi trực tiếp;
+request người dùng không quét `list()` qua Blob. Tuổi cache luôn tính từ
+`createdAt` gốc nên việc phục hồi pointer không gia hạn dữ liệu quá 5 ngày. Một
+fingerprint idempotency ngăn hai request cùng raw reviews tạo Blob trùng. Nếu
+chưa có `BLOB_READ_WRITE_TOKEN`, lượt phân tích vẫn trả kết quả nhưng
+`dataset.saved=false` và có warning rõ ràng.

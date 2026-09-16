@@ -7,11 +7,21 @@ function redisFake() {
   const values = new Map();
   return {
     values,
-    async fetchImpl(_url, init) {
-      const command = JSON.parse(init.body);
+    async fetchImpl(url, init) {
+      const body = JSON.parse(init.body);
+      const execute = (command) => {
+        if (command[0] === 'SET') {
+          values.set(command[1], command[2]);
+          return 'OK';
+        }
+        throw new Error(`Redis test không hỗ trợ ${command[0]}`);
+      };
+      if (url.endsWith('/multi-exec')) {
+        return { ok: true, async json() { return body.map((command) => ({ result: execute(command) })); } };
+      }
+      const command = body;
       if (command[0] === 'SET') {
-        values.set(command[1], command[2]);
-        return { ok: true, async json() { return { result: 'OK' }; } };
+        return { ok: true, async json() { return { result: execute(command) }; } };
       }
       throw new Error(`Redis test không hỗ trợ ${command[0]}`);
     }

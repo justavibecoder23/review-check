@@ -1,6 +1,13 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { isRedisConfigured, redisCommand } from './redis-rest.mjs';
+
+const BUNDLE_SCHEMA_VERSION = '2.0.0';
+const DATASET_DEDUPE_TTL_SECONDS = 5 * 24 * 60 * 60;
+const DATASET_WRITE_LOCK_SECONDS = 120;
+const DATASET_WRITE_WAIT_MS = 2_000;
+const DATASET_WRITE_POLL_MS = 100;
 
 function safeSegment(value, fallback = 'unknown') {
   const normalized = String(value || '')
@@ -71,37 +78,116 @@ function classifiedReview(review) {
   };
 }
 
-async function saveLocally(pathPrefix, rawJson, labeledJson, options = {}) {
+function datasetBundle({ runId, createdAt, product, rawDataset, labeledDataset }) {
+  return {
+    schemaVersion: BUNDLE_SCHEMA_VERSION,
+    datasetKind: 'review-dataset-bundle',
+    runId,
+    createdAt,
+    product: rawDataset.product,
+    rawDataset,
+    labeledDataset
+  };
+}
+
+function datasetFingerprint(product, rawDataset) {
+  const identity = product?.platform === 'TikTok Shop'
+    ? `tiktok:${product?.productId || ''}`
+    : `shopee:${product?.itemId || ''}`;
+  const reviews = rawDataset.reviews.map((review) => ({
+    reviewId: review.reviewId,
+    itemId: review.itemId,
+    authorId: review.authorId,
+    rating: review.rating,
+    text: review.text,
+    date: review.date,
+    createdAt: review.createdAt
+  })).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+  const canonical = JSON.stringify({
+    identity,
+    collection: rawDataset.source?.collection || null,
+    reviews
+  });
+  return createHash('sha256').update(canonical).digest('hex').slice(0, 32);
+}
+
+function dedupeResultKey(fingerprint) {
+  return `realview:dataset:write:v2:${fingerprint}`;
+}
+
+function dedupeLockKey(fingerprint) {
+  return `${dedupeResultKey(fingerprint)}:lock`;
+}
+
+function parseJson(value) {
+  try { return value ? JSON.parse(value) : null; } catch { return null; }
+}
+
+async function waitForDedupeResult(fingerprint, options = {}) {
+  const deadline = Date.now() + (options.datasetWriteWaitMs ?? DATASET_WRITE_WAIT_MS);
+  const sleep = options.sleepImpl || ((delay) => new Promise((resolve) => setTimeout(resolve, delay)));
+  do {
+    const value = await redisCommand(['GET', dedupeResultKey(fingerprint)], {
+      fetchImpl: options.redisFetchImpl,
+      timeoutMs: 1_200
+    }).catch(() => null);
+    const location = parseJson(value);
+    if (location?.bundlePath || location?.rawPath) return location;
+    await sleep(options.datasetWritePollMs ?? DATASET_WRITE_POLL_MS);
+  } while (Date.now() < deadline);
+  return null;
+}
+
+async function releaseOwnedDedupeLock(fingerprint, lockId, options = {}) {
+  if (!fingerprint || !lockId) return;
+  const activeLock = await redisCommand(['GET', dedupeLockKey(fingerprint)], {
+    fetchImpl: options.redisFetchImpl,
+    timeoutMs: 1_200
+  }).catch(() => null);
+  if (activeLock !== lockId) return;
+  await redisCommand(['DEL', dedupeLockKey(fingerprint)], {
+    fetchImpl: options.redisFetchImpl,
+    timeoutMs: 1_200
+  }).catch(() => null);
+}
+
+async function saveLocally(pathPrefix, bundleJson, options = {}) {
   const root = options.localRoot || process.env.REVIEW_DATA_DIR || join(process.cwd(), 'data', 'review-runs');
   const directory = join(root, ...pathPrefix.split('/'));
   await mkdir(directory, { recursive: true });
-  const rawPath = join(directory, 'reviews.raw.json');
-  const labeledPath = join(directory, 'reviews.labeled.json');
-  await Promise.all([
-    writeFile(rawPath, rawJson, { encoding: 'utf8', flag: 'wx' }),
-    writeFile(labeledPath, labeledJson, { encoding: 'utf8', flag: 'wx' })
-  ]);
-  return { provider: 'local-filesystem', rawPath, labeledPath };
+  const bundlePath = join(directory, 'reviews.dataset.json');
+  await writeFile(bundlePath, bundleJson, { encoding: 'utf8', flag: 'wx' });
+  return {
+    provider: 'local-filesystem',
+    bundlePath,
+    rawPath: bundlePath,
+    labeledPath: bundlePath,
+    blobOperations: 0
+  };
 }
 
-async function saveToVercelBlob(pathPrefix, rawJson, labeledJson) {
-  const { put } = await import('@vercel/blob');
+async function saveToVercelBlob(pathPrefix, bundleJson, fingerprint, options = {}) {
+  const put = options.blobPutImpl || (await import('@vercel/blob')).put;
   const common = {
     access: 'private',
     addRandomSuffix: false,
+    allowOverwrite: true,
     contentType: 'application/json; charset=utf-8',
-    token: process.env.BLOB_READ_WRITE_TOKEN
+    token: options.blobToken || process.env.BLOB_READ_WRITE_TOKEN
   };
-  const [raw, labeled] = await Promise.all([
-    put(`review-datasets/${pathPrefix}/reviews.raw.json`, rawJson, common),
-    put(`review-datasets/${pathPrefix}/reviews.labeled.json`, labeledJson, common)
-  ]);
+  const bundle = await put(`review-datasets/${pathPrefix}/reviews.dataset.json`, bundleJson, common);
   return {
     provider: 'vercel-blob-private',
-    rawPath: raw.pathname,
-    labeledPath: labeled.pathname,
-    rawUrl: raw.url,
-    labeledUrl: labeled.url
+    schemaVersion: BUNDLE_SCHEMA_VERSION,
+    fingerprint,
+    bundlePath: bundle.pathname,
+    bundleUrl: bundle.url,
+    // Aliases keep v1 cache callers working while readers learn schema v2.
+    rawPath: bundle.pathname,
+    labeledPath: bundle.pathname,
+    rawUrl: bundle.url,
+    labeledUrl: bundle.url,
+    blobOperations: 1
   };
 }
 
@@ -124,15 +210,66 @@ export async function saveReviewDatasets({ rawReviews = [], labeledReviews = [],
     kind: 'labeled-reviews', runId, createdAt, product, source, labeling,
     reviews: labeledReviews.map(classifiedReview)
   });
-  const rawJson = `${JSON.stringify(rawDataset, null, 2)}\n`;
-  const labeledJson = `${JSON.stringify(labeledDataset, null, 2)}\n`;
+  const bundle = datasetBundle({ runId, createdAt, product, rawDataset, labeledDataset });
+  const bundleJson = `${JSON.stringify(bundle)}\n`;
+  const fingerprint = datasetFingerprint(product, rawDataset);
+  const storagePathPrefix = `${datePath}/${productKey}/${fingerprint}`;
+  let claimedLockId = null;
 
   try {
-    const location = process.env.VERCEL
-      ? process.env.BLOB_READ_WRITE_TOKEN
-        ? await saveToVercelBlob(pathPrefix, rawJson, labeledJson)
-        : null
-      : await saveLocally(pathPrefix, rawJson, labeledJson, options);
+    let location;
+    const blobEnabled = process.env.VERCEL && (options.blobToken || process.env.BLOB_READ_WRITE_TOKEN);
+    if (blobEnabled) {
+      const redisEnabled = isRedisConfigured() || options.redisFetchImpl;
+      if (redisEnabled) {
+        const existing = parseJson(await redisCommand(['GET', dedupeResultKey(fingerprint)], {
+          fetchImpl: options.redisFetchImpl,
+          timeoutMs: 1_200
+        }).catch(() => null));
+        if (existing?.bundlePath || existing?.rawPath) {
+          location = { ...existing, reused: true, blobOperations: 0 };
+        } else {
+          claimedLockId = randomUUID();
+          const claimed = await redisCommand([
+            'SET', dedupeLockKey(fingerprint), claimedLockId, 'NX', 'EX', String(DATASET_WRITE_LOCK_SECONDS)
+          ], {
+            fetchImpl: options.redisFetchImpl,
+            timeoutMs: 1_200
+          }).catch(() => null);
+          if (!claimed) {
+            const reused = await waitForDedupeResult(fingerprint, options);
+            if (reused) location = { ...reused, reused: true, blobOperations: 0 };
+            else {
+              return {
+                saved: false,
+                reused: true,
+                runId,
+                provider: 'vercel-blob-write-in-progress',
+                warning: 'Dataset của sản phẩm đang được một request khác lưu; không tạo bản trùng.'
+              };
+            }
+          }
+        }
+      }
+      if (!location) {
+        location = await saveToVercelBlob(storagePathPrefix, bundleJson, fingerprint, options);
+        location = { ...location, storedRunId: runId, storedCreatedAt: createdAt };
+        if (redisEnabled) {
+          await redisCommand([
+            'SET', dedupeResultKey(fingerprint), JSON.stringify(location), 'EX', String(DATASET_DEDUPE_TTL_SECONDS)
+          ], {
+            fetchImpl: options.redisFetchImpl,
+            timeoutMs: 1_200
+          }).catch(() => null);
+          await releaseOwnedDedupeLock(fingerprint, claimedLockId, options);
+          claimedLockId = null;
+        }
+      }
+    } else if (process.env.VERCEL) {
+      location = null;
+    } else {
+      location = await saveLocally(pathPrefix, bundleJson, options);
+    }
     if (!location) {
       return {
         saved: false,
@@ -141,8 +278,20 @@ export async function saveReviewDatasets({ rawReviews = [], labeledReviews = [],
         warning: 'Đang chạy trên Vercel nhưng chưa có BLOB_READ_WRITE_TOKEN; dataset không thể lưu bền vững.'
       };
     }
-    return { saved: true, runId, createdAt, rawDataset, ...location };
+    const effectiveRunId = location.storedRunId || runId;
+    const effectiveCreatedAt = location.storedCreatedAt || createdAt;
+    const effectiveRawDataset = location.reused
+      ? { ...rawDataset, runId: effectiveRunId, createdAt: effectiveCreatedAt }
+      : rawDataset;
+    return {
+      saved: true,
+      runId: effectiveRunId,
+      createdAt: effectiveCreatedAt,
+      rawDataset: effectiveRawDataset,
+      ...location
+    };
   } catch (error) {
+    await releaseOwnedDedupeLock(fingerprint, claimedLockId, options);
     return {
       saved: false,
       runId,

@@ -51,7 +51,7 @@ export async function syncRecentProductDatasets(options = {}) {
   const listBlobs = options.blobListImpl || (await import('@vercel/blob')).list;
   const pages = await Promise.all(recentDatePrefixes(now).map((prefix) => listAll(listBlobs, prefix, token)));
   const candidates = [...new Map(pages.flat()
-    .filter((blob) => /\/(?:shopee-\d+|tiktok-\d{8,25})\/[^/]+\/reviews\.raw\.json$/u.test(String(blob.pathname || '')))
+    .filter((blob) => /\/(?:shopee-\d+|tiktok-\d{8,25})\/[^/]+\/(?:reviews\.raw|reviews\.dataset)\.json$/u.test(String(blob.pathname || '')))
     .map((blob) => [blob.pathname, blob])).values()];
 
   const inspected = await mapWithConcurrency(candidates, 4, async (blob) => {

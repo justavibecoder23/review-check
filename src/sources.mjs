@@ -9,8 +9,7 @@ import {
   getCachedTikTokDataset,
   getFallbackTikTokDataset,
   recordShopeeCacheHit,
-  recordShopeeServed,
-  setCachedTikTokDataset
+  recordShopeeServed
 } from './product-cache.mjs';
 import { assertPlatformReviewEnabled } from './platform-availability.mjs';
 
@@ -556,7 +555,7 @@ export async function getReviews(url, options = {}) {
     ? await resolveShopeeProductUrl(parsed.href, { signal: options.signal })
     : null;
   const tiktokProduct = platform === 'TikTok Shop'
-    ? await resolveTikTokProductUrl(parsed.href, { signal: options.signal })
+    ? await resolveTikTokProductUrl(parsed.href, { signal: options.signal, fetchImpl: options.fetchImpl })
     : null;
   const productUrl = shopeeProduct?.canonicalUrl || tiktokProduct?.productUrl || parsed.href;
   const perStarLimit = platform === 'Shopee' ? getShopeeReviewsPerStar() : null;
@@ -576,7 +575,7 @@ export async function getReviews(url, options = {}) {
   // TikTok ưu tiên raw dataset không quá năm ngày của đúng productId. Cache
   // không yêu cầu năm tầng sao vì actor tạm thời chỉ hỗ trợ lấy mẫu gần nhất.
   if (platform === 'TikTok Shop'
-    && isTikTokRecentRawCacheEnabled()
+    && isTikTokRecentRawCacheEnabled(options.env || process.env)
     && tiktokProduct?.productId) {
     progress('cache', 12, 'Đang lấy dữ liệu review của sản phẩm...');
     let cached = await getCachedTikTokDataset(tiktokProduct.productId, {
@@ -585,23 +584,6 @@ export async function getReviews(url, options = {}) {
       blobToken: options.blobToken,
       now: options.now
     });
-    if (!cached) {
-      const fallback = await getFallbackTikTokDataset(tiktokProduct.productId, {
-        blobListImpl: options.blobListImpl,
-        blobGetImpl: options.blobGetImpl,
-        blobToken: options.blobToken,
-        now: options.now
-      });
-      if (fallback?.dataset) {
-        cached = fallback;
-        await setCachedTikTokDataset(tiktokProduct.productId, {
-          rawPath: fallback.blobPath
-        }, fallback.dataset, {
-          redisFetchImpl: options.redisFetchImpl,
-          now: options.now
-        }).catch(() => null);
-      }
-    }
     if (cached?.dataset) {
       const cachedReviews = cached.dataset.reviews.slice(0, 200);
       const cachedProduct = cached.dataset.product || {};
@@ -628,6 +610,7 @@ export async function getReviews(url, options = {}) {
             runId: cached.dataset.runId || null,
             createdAt: cached.dataset.createdAt || null,
             ageMs: cached.validation?.ageMs ?? null,
+            recoveredFromPointer: Boolean(cached.recoveredFromPointer),
             rawOnly: true,
             exactMatch: true
           }
@@ -673,7 +656,8 @@ export async function getReviews(url, options = {}) {
             hit: true,
             runId: cached.dataset.runId,
             createdAt: cached.dataset.createdAt,
-            ageMs: cached.validation.ageMs
+            ageMs: cached.validation.ageMs,
+            recoveredFromPointer: Boolean(cached.recoveredFromPointer)
           }
         },
         product,
@@ -693,10 +677,14 @@ export async function getReviews(url, options = {}) {
       expectedProductId: tiktokProduct?.productId,
       expectedShopId: shopeeProduct?.shopId,
       expectedItemId: shopeeProduct?.itemId,
-      signal: options.signal
+      signal: options.signal,
+      fetchImpl: options.fetchImpl
     }),
     shopeeProduct
-      ? fetchShopeeProductApiMeta(shopeeProduct.shopId, shopeeProduct.itemId, { signal: options.signal })
+      ? fetchShopeeProductApiMeta(shopeeProduct.shopId, shopeeProduct.itemId, {
+          signal: options.signal,
+          fetchImpl: options.fetchImpl
+        })
       : Promise.resolve({})
   ])
     .then(([pageMeta, platformMeta]) => ({ ...pageMeta, ...platformMeta }))
@@ -721,9 +709,15 @@ export async function getReviews(url, options = {}) {
     .catch(() => ({}));
   try {
     progress('collecting', 14, 'Đang khởi tạo hệ thống lấy reviews...');
+    const collectShopee = options.collectShopeeReviewsImpl || collectShopeeReviews;
+    const collectTikTok = options.collectTikTokReviewsImpl || collectTikTokReviews;
     const collected = platform === 'Shopee'
-      ? await collectShopeeReviews(productUrl, { onProgress: options.onProgress, signal: options.signal })
-      : await collectTikTokReviews(tiktokProduct.productId, { productUrl, onProgress: options.onProgress, signal: options.signal });
+      ? await collectShopee(productUrl, { onProgress: options.onProgress, signal: options.signal })
+      : await collectTikTok(tiktokProduct.productId, {
+          productUrl,
+          onProgress: options.onProgress,
+          signal: options.signal
+        });
     const reviews = collected.reviews;
     const pageMeta = await productMetaPromise;
     const collectedMeta = normaliseProductMeta({
@@ -767,7 +761,7 @@ export async function getReviews(url, options = {}) {
     // exact product. A dataset from another product is never substituted.
     if (platform === 'TikTok Shop' && tiktokProduct?.productId) {
       const fallback = await getFallbackTikTokDataset(tiktokProduct.productId, {
-        blobListImpl: options.blobListImpl,
+        redisFetchImpl: options.redisFetchImpl,
         blobGetImpl: options.blobGetImpl,
         blobToken: options.blobToken,
         now: options.now
