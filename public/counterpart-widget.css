@@ -135,13 +135,32 @@
   top: 0;
   right: 0;
   left: 0;
-  height: 4px;
+  height: 28px;
+  border-radius: 24px 24px 0 0;
   background: linear-gradient(90deg, #25F4EE, #000000, #FE2C55);
   content: '';
 }
-.counterpart-product-image {
+.counterpart-product-card--tiktok::after {
+  position: absolute;
+  top: 4px;
+  right: 1px;
+  left: 1px;
+  height: 24px;
+  border-radius: 20px 20px 0 0;
+  background: #F8FAFC;
+  content: '';
+}
+.counterpart-media-column {
   position: relative;
+  z-index: 1;
   width: 164px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+.counterpart-product-image {
+  width: 100%;
   aspect-ratio: 1;
   overflow: hidden;
   border-radius: 20px;
@@ -149,15 +168,13 @@
 }
 .counterpart-product-image img { width: 100%; height: 100%; display: block; object-fit: cover; }
 .counterpart-platform-tag {
-  position: absolute;
-  top: 8px;
-  left: 8px;
+  width: fit-content;
   min-height: 28px;
-  padding: 5px 9px;
+  padding: 4px 12px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border-radius: 999px;
+  border-radius: 99px;
   color: white;
   font-size: 10px;
   font-weight: 900;
@@ -169,7 +186,7 @@
 .counterpart-product-card--shopee .counterpart-platform-tag { background: #EE4D2D; }
 .counterpart-product-card--tiktok .counterpart-platform-tag { background: #000; }
 .counterpart-platform-icon { width: 16px; height: 16px; flex: 0 0 16px; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.counterpart-product-copy { min-width: 0; }
+.counterpart-product-copy { position: relative; z-index: 1; min-width: 0; }
 .counterpart-card-kicker { margin: 0 0 8px; color: #d6520d; font-size: 11px; font-weight: 950; letter-spacing: 1.15px; text-transform: uppercase; }
 .counterpart-product-card--shopee .counterpart-card-kicker { color: #EE4D2D; }
 .counterpart-product-card--tiktok .counterpart-card-kicker { color: #111827; }
@@ -332,7 +349,8 @@
   .counterpart-product-card { padding: 13px; grid-template-columns: 104px minmax(0, 1fr); gap: 14px; border-radius: 19px; }
   .counterpart-product-card--shopee { padding-top: 13px; }
   .counterpart-product-card--tiktok { padding-top: 17px; }
-  .counterpart-product-image { width: 104px; border-radius: 15px; }
+  .counterpart-media-column { width: 104px; }
+  .counterpart-product-image { border-radius: 15px; }
   .counterpart-product-card h3 { font-size: 16px; letter-spacing: -.02em; -webkit-line-clamp: 2; }
   .counterpart-card-kicker { font-size: 11px; }
   .counterpart-facts { margin-top: 10px; gap: 5px; }
@@ -349,8 +367,7 @@
   .counterpart-progress { grid-template-columns: 35px minmax(0, 1fr) auto; }
   .counterpart-progress-mark { width: 35px; height: 35px; }
   .counterpart-progress-copy small { white-space: normal; }
-  .counterpart-product-card { grid-template-columns: 88px minmax(0, 1fr); }
-  .counterpart-product-image { width: 88px; }
+  .counterpart-product-card { grid-template-columns: 104px minmax(0, 1fr); }
   .counterpart-product-card h3 { font-size: 16px; }
   .counterpart-product-card .counterpart-fact:nth-child(n+3) { display: none; }
   .results-page .result-action-bar.has-counterpart .action-button { font-size: 11px; }

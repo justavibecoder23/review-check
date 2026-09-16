@@ -32,7 +32,7 @@ function ensureStylesheet() {
   stylesheetPromise = new Promise((resolve) => {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = '/counterpart-widget.css?v=9';
+    link.href = '/counterpart-widget.css?v=10';
     link.dataset.counterpartStyles = 'true';
     link.addEventListener('load', resolve, { once: true });
     link.addEventListener('error', resolve, { once: true });
@@ -245,7 +245,7 @@ function renderProductCard(product, options = {}) {
   const platform = platformName(product.platform);
   const platformKey = platform === 'Shopee' ? 'shopee' : 'tiktok';
   const platformIcon = platformKey === 'shopee'
-    ? '<svg class="counterpart-platform-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6.5 8.5h11l1 11h-13l1-11Z" /><path d="M9 9V6.5a3 3 0 0 1 6 0V9" /><path d="M14.8 12.2c-.7-.5-1.5-.7-2.4-.7-1.3 0-2.2.6-2.2 1.5 0 2.1 4.8 1 4.8 3.5 0 1-.9 1.8-2.5 1.8-1 0-1.9-.3-2.7-.9" /></svg>'
+    ? '<svg class="counterpart-platform-icon" viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M8.2 11.5h15.6l1.3 15H6.9l1.3-15Z" /><path d="M11.5 12V8.8a4.5 4.5 0 0 1 9 0V12" /><path d="M20.2 16.1c-1.1-.7-2.4-1.1-3.8-1.1-2 0-3.4.9-3.4 2.3 0 3.1 7.2 1.5 7.2 5.2 0 1.6-1.4 2.7-3.8 2.7-1.6 0-3.1-.5-4.3-1.4" /></svg>'
     : '<svg class="counterpart-platform-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M14 4v10.2a4.2 4.2 0 1 1-3.4-4.1" /><path d="M14 4c.7 2.4 2.4 3.8 5 4" /></svg>';
   const reviewCount = Number(product.reviewCount);
   const facts = [
@@ -255,9 +255,11 @@ function renderProductCard(product, options = {}) {
   ].filter(Boolean).join('');
   return `
     <article class="counterpart-product-card counterpart-product-card--${platformKey}${options.match ? ' counterpart-product-card--match' : ''}">
-      <div class="counterpart-product-image">
-        ${image ? `<img src="${escapeHtml(image)}" alt="Ảnh ${escapeHtml(product.title)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" />` : ''}
+      <div class="counterpart-media-column">
         <span class="counterpart-platform-tag">${platformIcon}<span>${escapeHtml(platform)}</span></span>
+        <div class="counterpart-product-image">
+          ${image ? `<img src="${escapeHtml(image)}" alt="Ảnh ${escapeHtml(product.title)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" />` : ''}
+        </div>
       </div>
       <div class="counterpart-product-copy">
         <p class="counterpart-card-kicker">${options.match ? 'Kết quả gần giống nhất' : 'Sản phẩm vừa phân tích'}</p>
