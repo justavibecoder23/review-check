@@ -53,6 +53,21 @@ test('khách chỉ thấy một nút tài khoản màu cam và nút liên hệ m
   assert.match(styles, /\.header-contact[\s\S]*background:\s*rgba\(255,255,255,\.82\)/);
 });
 
+test('menu tài khoản chỉ hiện lối vào quản trị blog sau khi backend xác nhận quyền', async () => {
+  const [auth, authCss, adminRoute] = await Promise.all([
+    readFile(new URL('../public/auth.js', import.meta.url), 'utf8'),
+    readFile(new URL('../public/auth.css', import.meta.url), 'utf8'),
+    readFile(new URL('../src/blog-admin-route.mjs', import.meta.url), 'utf8')
+  ]);
+  assert.match(auth, /fetch\('\/api\/admin-blog\?action=access'/);
+  assert.match(auth, /currentBlogRole \? '<a class="account-admin-link" href="\/admin\/blog">/);
+  assert.match(auth, /\['admin', 'editor'\]\.includes\(payload\.role\)/);
+  assert.doesNotMatch(auth, /nhantrietka07@gmail\.com|realviewueh@gmail\.com/);
+  assert.match(authCss, /\.account-popover \.account-admin-link/);
+  assert.match(adminRoute, /action === 'access'/);
+  assert.match(adminRoute, /authorized: true/);
+});
+
 test('mobile luôn có nút liên hệ dạng icon với vùng chạm đạt chuẩn', async () => {
   const authCss = await readFile(new URL('../public/auth.css', import.meta.url), 'utf8');
   assert.match(authCss, /@media \(max-width: 900px\)[\s\S]*\.header-contact\s*\{[\s\S]*display:\s*inline-flex/);

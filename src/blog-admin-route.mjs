@@ -75,6 +75,12 @@ async function previewStored(request) {
 
 async function handleGet(request, response, actor) {
   const action = String(firstQueryValue(request.query?.action) || 'list').trim().toLowerCase();
+  if (action === 'access') {
+    return sendAdminJson(response, 200, {
+      authorized: true,
+      role: actor.role
+    });
+  }
   if (action === 'list') {
     const posts = await listBlogPosts({
       status: firstQueryValue(request.query?.status),
