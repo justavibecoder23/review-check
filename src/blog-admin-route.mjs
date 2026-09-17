@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { requireBlogRole } from './blog-admin-auth.mjs';
 import {
   adminErrorPayload,
@@ -21,6 +22,22 @@ import {
 import { normalizeBlogPost, validateBlogPost } from './blog-post-model.mjs';
 import { renderBlogPreviewDocument } from './blog-admin-preview.mjs';
 import { saveBlogMedia } from './blog-media-store.mjs';
+import { LEGACY_BLOG_SLUGS } from './blog-public-config.mjs';
+import { restoreStaticBlogPresentation } from './blog-static-migration.mjs';
+
+const legacySlugSet = new Set(LEGACY_BLOG_SLUGS);
+
+async function withLegacyPresentation(value) {
+  const post = value?.post && typeof value.post === 'object' ? value.post : value;
+  const slug = String(post?.slug || '').trim();
+  if (!legacySlugSet.has(slug)) return value;
+  try {
+    const html = await readFile(new URL(`../public/blog/${slug}.html`, import.meta.url), 'utf8');
+    return restoreStaticBlogPresentation(value, html, { sourcePath: `public/blog/${slug}.html` });
+  } catch {
+    return value;
+  }
+}
 
 function idFrom(request, body = {}) {
   return String(body.id || firstQueryValue(request.query?.id) || '').trim();
@@ -44,7 +61,7 @@ async function previewStored(request) {
     error.code = 'BLOG_POST_ID_REQUIRED';
     throw error;
   }
-  const value = await getBlogPost(id, { revision: revisionFrom(request) });
+  const value = await withLegacyPresentation(await getBlogPost(id, { revision: revisionFrom(request) }));
   const preview = renderBlogPreviewDocument(value.post, {
     publishedAt: value.meta.publishedAt,
     updatedAt: value.meta.updatedAt
@@ -69,7 +86,7 @@ async function handleGet(request, response, actor) {
   if (action === 'detail') {
     const id = idFrom(request);
     if (!id) return sendAdminJson(response, 400, { error: 'Thiếu mã bài viết.', code: 'BLOG_POST_ID_REQUIRED' });
-    return sendAdminJson(response, 200, await getBlogPost(id, { revision: revisionFrom(request) }));
+    return sendAdminJson(response, 200, await withLegacyPresentation(await getBlogPost(id, { revision: revisionFrom(request) })));
   }
   if (action === 'revisions') {
     const id = idFrom(request);
@@ -88,9 +105,10 @@ async function handlePost(request, response, body, actor) {
   const action = String(body.action || '').trim().toLowerCase().replace(/-/g, '_');
   if (action === 'save') {
     const id = idFrom(request, body);
+    const presentedPost = (await withLegacyPresentation(body.post || {}))?.post || body.post || {};
     const result = id
-      ? await updateBlogPost(id, body.post || {}, expectedRevision(body), actor)
-      : await createBlogPost(body.post || {}, actor);
+      ? await updateBlogPost(id, presentedPost, expectedRevision(body), actor)
+      : await createBlogPost(presentedPost, actor);
     return sendAdminJson(response, id ? 200 : 201, {
       id: result.meta.id,
       revision: result.revision,
@@ -100,7 +118,8 @@ async function handlePost(request, response, body, actor) {
     });
   }
   if (action === 'preview') {
-    const post = normalizeBlogPost(body.post || {}, { fallbackSlug: 'ban-nhap-xem-truoc' });
+    const presentedPost = (await withLegacyPresentation(body.post || {}))?.post || body.post || {};
+    const post = normalizeBlogPost(presentedPost, { fallbackSlug: 'ban-nhap-xem-truoc' });
     const validation = validateBlogPost(post, { forPublish: false });
     const preview = renderBlogPreviewDocument(post);
     return sendAdminJson(response, 200, {

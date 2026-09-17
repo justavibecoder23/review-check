@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { resolvePublishedBlogRoute } from './blog-cms-store.mjs';
 import { LEGACY_BLOG_SLUGS, blogPublicBaseUrl } from './blog-public-config.mjs';
 import { renderBlogPost } from './blog-renderer.mjs';
+import { restoreStaticBlogPresentation } from './blog-static-migration.mjs';
 
 const legacySlugSet = new Set(LEGACY_BLOG_SLUGS);
 
@@ -40,7 +41,11 @@ export default async function handler(request, response) {
       response.setHeader('Cache-Control', 'public, s-maxage=30, must-revalidate');
       return response.end();
     }
-    const html = renderBlogPost(route, { baseUrl: blogPublicBaseUrl(), forPublish: true });
+    const legacyHtml = await readLegacyBlogHtml(slug);
+    const presentedRoute = legacyHtml
+      ? restoreStaticBlogPresentation(route, legacyHtml, { sourcePath: `public/blog/${slug}.html` })
+      : route;
+    const html = renderBlogPost(presentedRoute, { baseUrl: blogPublicBaseUrl(), forPublish: true });
     if (request.method === 'HEAD') {
       response.statusCode = 200;
       response.setHeader('Content-Type', 'text/html; charset=utf-8');

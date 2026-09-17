@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { resolveBlogRole, hasBlogRole } from '../src/blog-admin-auth.mjs';
 import {
   createBlogPost,
@@ -22,6 +23,7 @@ import { normalizeBlogPost, validateBlogPost } from '../src/blog-post-model.mjs'
 import { renderBlogPreview } from '../src/blog-admin-preview.mjs';
 import { publicBlogSummary, summaryToBlogRecord } from '../src/blog-public-data.mjs';
 import { renderBlogIndexTemplate, renderBlogPost, renderSitemap } from '../src/blog-renderer.mjs';
+import { migrateStaticBlogHtml, restoreStaticBlogPresentation } from '../src/blog-static-migration.mjs';
 
 function redisMock() {
   const strings = new Map();
@@ -133,6 +135,43 @@ function completePost(overrides = {}) {
     ...overrides
   };
 }
+
+test('migration và renderer giữ nguyên format ảnh riêng của bài blog hiện có', async () => {
+  const sourcePath = new URL('../public/blog/review-san-pham-co-dang-tin-khong.html', import.meta.url);
+  const sourceHtml = await readFile(sourcePath, 'utf8');
+  const migrated = migrateStaticBlogHtml(sourceHtml, { sourcePath: 'public/blog/review-san-pham-co-dang-tin-khong.html' });
+  assert.deepEqual(migrated.post.heroImage.variants, ['article-lead-image--seo07']);
+  assert.deepEqual(
+    migrated.post.blocks.find((block) => block.url === '/assets/blog/seo08-27-image5.jpg').variants,
+    ['article-figure--seo07']
+  );
+  assert.deepEqual(
+    migrated.post.blocks.find((block) => block.url === '/assets/blog/seo08-53-image1.jpg').variants,
+    ['article-figure--seo08-source-crop']
+  );
+  assert.equal(migrated.post.readingMinutes, 9);
+
+  const lossy = normalizeBlogPost(migrated.post);
+  lossy.heroImage.variants = [];
+  lossy.readingMinutes = 0;
+  lossy.blocks.forEach((block) => {
+    if (block.type === 'image') {
+      block.variants = [];
+      block.captionPlacement = 'inside';
+    }
+  });
+  const restored = restoreStaticBlogPresentation({
+    post: lossy,
+    meta: migrated.meta
+  }, sourceHtml, { sourcePath: 'public/blog/review-san-pham-co-dang-tin-khong.html' });
+  const output = renderBlogPost(restored);
+  assert.match(output, /class="article-lead-image article-lead-image--seo07"/);
+  assert.match(output, /class="article-figure article-figure--seo07"[^>]*><img[^>]*seo08-27-image5\.jpg/);
+  assert.match(output, /class="article-figure article-figure--seo08-source-crop"[^>]*><img[^>]*seo08-53-image1\.jpg/);
+  assert.match(output, /<\/figure><p class="article-caption">Hình 3:/);
+  assert.match(output, />9 phút đọc</);
+  assert.doesNotMatch(output, /<p class="article-deck"><\/p>/);
+});
 
 function htmlResponseMock() {
   const headers = new Map();

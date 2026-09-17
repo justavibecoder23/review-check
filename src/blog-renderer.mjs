@@ -113,6 +113,7 @@ function recordParts(value, options = {}) {
 }
 
 function readMinutes(post) {
+  if (Number(post.readingMinutes) > 0) return Number(post.readingMinutes);
   const words = [post.h1, post.deck, ...post.blocks.flatMap((block) => {
     if (block.text) return [block.text];
     if (block.items) return block.items.flatMap((item) => typeof item === 'string' ? item : [item.text, item.question, item.answer]);
@@ -120,6 +121,12 @@ function readMinutes(post) {
     return [];
   })].join(' ').trim().split(/\s+/).filter(Boolean).length;
   return Math.max(1, Math.round(words / 220));
+}
+
+function imageVariantClasses(image, baseClass) {
+  const variants = Array.isArray(image?.variants) ? image.variants : [];
+  const fallback = image?.display && image.display !== 'wide' ? [`${baseClass}--${image.display}`] : [];
+  return [baseClass, ...(variants.length ? variants : fallback)].join(' ');
 }
 
 function relatedTitle(slug, options) {
@@ -145,7 +152,9 @@ function renderBlock(block, options = {}) {
     case 'checklist':
       return `<ul class="article-checklist">${block.items.map((item) => `<li data-checked="${item.checked ? 'true' : 'false'}"><span aria-hidden="true">${item.checked ? '✓' : '○'}</span> ${textHtml(item.text)}</li>`).join('')}</ul>`;
     case 'image':
-      return `<figure class="article-figure article-figure--${escapeHtml(block.display)}"><img${attrs({ src: block.url, alt: block.alt, width: block.width || null, height: block.height || null, loading: 'lazy', decoding: 'async' })}>${block.caption ? `<figcaption class="article-caption">${textHtml(block.caption)}</figcaption>` : ''}</figure>`;
+      return block.caption && block.captionPlacement === 'separate'
+        ? `<figure class="${escapeHtml(imageVariantClasses(block, 'article-figure'))}"><img${attrs({ src: block.url, alt: block.alt, width: block.width || null, height: block.height || null, loading: 'lazy', decoding: 'async' })}></figure><p class="article-caption">${textHtml(block.caption)}</p>`
+        : `<figure class="${escapeHtml(imageVariantClasses(block, 'article-figure'))}"><img${attrs({ src: block.url, alt: block.alt, width: block.width || null, height: block.height || null, loading: 'lazy', decoding: 'async' })}>${block.caption ? `<figcaption>${textHtml(block.caption)}</figcaption>` : ''}</figure>`;
     case 'table':
       return `<figure class="article-table-wrap">${block.caption ? `<figcaption>${textHtml(block.caption)}</figcaption>` : ''}<div class="article-table-scroll"><table class="article-table">${block.headers.length ? `<thead><tr>${block.headers.map((item) => `<th scope="col">${textHtml(item)}</th>`).join('')}</tr></thead>` : ''}<tbody>${block.rows.map((row) => `<tr>${row.map((item) => `<td>${textHtml(item)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></figure>`;
     case 'callout':
@@ -307,7 +316,7 @@ export function renderBlogPost(value, options = {}) {
     ? renderBlock({ type: 'relatedPosts', slugs: post.relatedSlugs }, options)
     : '';
   const body = `${bodyBlocks}${related}`;
-  return `<!doctype html><html lang="vi">${renderArticleHead(value, options)}<body class="subpage blog-page article-page">${renderSharedHeader()}<main id="noi-dung-chinh" class="article-main"><article class="container article-shell"><nav class="article-breadcrumb" aria-label="Đường dẫn trang"><a href="/">Trang chủ</a><span aria-hidden="true">/</span><a href="/bai-viet">Blog</a><span aria-hidden="true">/</span><span>${escapeHtml(post.title)}</span></nav><div class="article-reading-grid"><h1 class="article-title">${escapeHtml(post.h1)}</h1><aside class="article-sidebar" aria-label="Thông tin và mục lục bài viết"><div class="article-metadata"><span class="article-category">${escapeHtml(post.categoryLabel || post.category)}</span><p class="article-author">${authorNames}</p><div class="article-date">${dateLabel ? `<time datetime="${escapeHtml(dateOnly(meta.publishedAt))}">Đăng ${escapeHtml(dateLabel)}</time>` : ''}${modifiedLabel ? `<time datetime="${escapeHtml(dateOnly(meta.updatedAt))}">Cập nhật ${escapeHtml(modifiedLabel)}</time>` : ''}<span>${readMinutes(post)} phút đọc</span></div></div><details class="article-toc" data-article-toc><summary>Mục lục</summary><nav class="article-toc-links" aria-label="Mục lục bài viết"><ol></ol></nav></details><a class="article-sidebar-cta" href="/#trang-chu">Sử dụng RealView ngay <span aria-hidden="true">→</span></a></aside><p class="article-deck">${textHtml(post.deck)}</p><div class="article-body-column"><img class="article-lead-image"${attrs({ src: hero.url, alt: hero.alt, width: hero.width || null, height: hero.height || null, fetchpriority: 'high', loading: 'eager', decoding: 'async' })}><div class="article-content">${body}</div></div></div></article></main>${renderSharedFooter()}${renderScripts({ article: true })}</body></html>`;
+  return `<!doctype html><html lang="vi">${renderArticleHead(value, options)}<body class="subpage blog-page article-page">${renderSharedHeader()}<main id="noi-dung-chinh" class="article-main"><article class="container article-shell"><nav class="article-breadcrumb" aria-label="Đường dẫn trang"><a href="/">Trang chủ</a><span aria-hidden="true">/</span><a href="/bai-viet">Blog</a><span aria-hidden="true">/</span><span>${escapeHtml(post.title)}</span></nav><div class="article-reading-grid"><h1 class="article-title">${escapeHtml(post.h1)}</h1><aside class="article-sidebar" aria-label="Thông tin và mục lục bài viết"><div class="article-metadata"><span class="article-category">${escapeHtml(post.categoryLabel || post.category)}</span><p class="article-author">${authorNames}</p><div class="article-date">${dateLabel ? `<time datetime="${escapeHtml(dateOnly(meta.publishedAt))}">${escapeHtml(dateLabel)}</time>` : ''}${modifiedLabel ? `<time datetime="${escapeHtml(dateOnly(meta.updatedAt))}">Cập nhật ${escapeHtml(modifiedLabel)}</time>` : ''}<span>${readMinutes(post)} phút đọc</span></div></div><details class="article-toc" data-article-toc><summary>Mục lục</summary><nav class="article-toc-links" aria-label="Mục lục bài viết"><ol></ol></nav></details><a class="article-sidebar-cta" href="/#trang-chu">Sử dụng RealView ngay <span aria-hidden="true">→</span></a></aside>${post.deck ? `<p class="article-deck">${textHtml(post.deck)}</p>` : ''}<div class="article-body-column"><img class="${escapeHtml(imageVariantClasses(hero, 'article-lead-image'))}"${attrs({ src: hero.url, alt: hero.alt, width: hero.width || null, height: hero.height || null, fetchpriority: 'high', loading: 'eager', decoding: 'async' })}><div class="article-content">${body}</div></div></div></article></main>${renderSharedFooter()}${renderScripts({ article: true })}</body></html>`;
 }
 
 export function renderBlogCard(value, options = {}) {

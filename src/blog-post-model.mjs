@@ -57,13 +57,25 @@ function textList(value, maximum = 30, itemMaximum = 160) {
 }
 
 function normalizedImage(value = {}) {
+  const allowedVariants = new Set([
+    'article-lead-image--seo07',
+    'article-figure--seo07',
+    'article-figure--seo08-source-crop',
+    'article-figure--compact',
+    'article-figure--reduced',
+    'article-figure--smaller'
+  ]);
   return {
     url: safeUrl(value.url, { allowRelative: true, image: true }),
     alt: cleanText(value.alt, 300),
     caption: cleanText(value.caption, 1_000),
     width: Math.max(0, Math.min(8_000, Number.parseInt(value.width, 10) || 0)),
     height: Math.max(0, Math.min(8_000, Number.parseInt(value.height, 10) || 0)),
-    display: ['wide', 'compact', 'reduced', 'smaller'].includes(value.display) ? value.display : 'wide'
+    display: ['wide', 'compact', 'reduced', 'smaller'].includes(value.display) ? value.display : 'wide',
+    variants: [...new Set((Array.isArray(value.variants) ? value.variants : [])
+      .map((item) => cleanText(item, 80))
+      .filter((item) => allowedVariants.has(item)))],
+    captionPlacement: value.captionPlacement === 'separate' ? 'separate' : 'inside'
   };
 }
 
@@ -212,6 +224,7 @@ export function normalizeBlogPost(input = {}, options = {}) {
       .filter((author) => author.name)
       .slice(0, 10),
     heroImage: normalizedImage(input.heroImage),
+    readingMinutes: Math.max(0, Math.min(180, Number.parseInt(input.readingMinutes, 10) || 0)),
     featured: input.featured === true,
     seo: {
       title: cleanText(seoInput.title, 300),

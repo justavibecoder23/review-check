@@ -128,6 +128,7 @@ function imageBlock(html) {
   const tag = html.match(/<img\b[^>]*>/i)?.[0] || '';
   if (!tag) return null;
   const className = tagAttribute(html.match(/<figure\b[^>]*>/i)?.[0] || '', 'class');
+  const variants = className.split(/\s+/).filter((item) => item.startsWith('article-figure--'));
   let display = 'wide';
   if (className.includes('--smaller')) display = 'smaller';
   else if (className.includes('--reduced')) display = 'reduced';
@@ -139,16 +140,26 @@ function imageBlock(html) {
     width: Number(tagAttribute(tag, 'width')) || 0,
     height: Number(tagAttribute(tag, 'height')) || 0,
     caption: stripTags(firstMatch(html, /<(?:figcaption|p)\b[^>]*>([\s\S]*?)<\/(?:figcaption|p)>/i)),
-    display
+    display,
+    variants,
+    captionPlacement: 'separate'
   };
 }
 
 function tableBlock(html) {
-  const headers = [...html.matchAll(/<th\b[^>]*>([\s\S]*?)<\/th>/gi)].map((match) => inlineMarkdown(match[1]));
-  const rows = [...html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)]
-    .map((match) => [...match[1].matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map((cell) => inlineMarkdown(cell[1])))
+  const headHtml = firstMatch(html, /<thead\b[^>]*>([\s\S]*?)<\/thead>/i);
+  const bodyHtml = firstMatch(html, /<tbody\b[^>]*>([\s\S]*?)<\/tbody>/i) || html;
+  const headers = [...headHtml.matchAll(/<th\b[^>]*>([\s\S]*?)<\/th>/gi)].map((match) => inlineMarkdown(match[1]));
+  const rows = [...bodyHtml.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)]
+    .map((match) => [...match[1].matchAll(/<(?:th|td)\b[^>]*>([\s\S]*?)<\/(?:th|td)>/gi)].map((cell) => inlineMarkdown(cell[1])))
     .filter((row) => row.length);
   return headers.length || rows.length ? { type: 'table', headers, rows, caption: '' } : null;
+}
+
+function readMinutesFromHtml(html) {
+  const articleDate = firstMatch(html, /<div\b[^>]*class=["'][^"']*article-date[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
+  const match = stripTags(articleDate).match(/(\d+)\s*phút\s*đọc/i);
+  return Number(match?.[1]) || 0;
 }
 
 function basicBlocks(contentHtml) {
@@ -286,7 +297,8 @@ export function migrateStaticBlogHtml(html, options = {}) {
     alt: tagAttribute(heroTag, 'alt'),
     width: Number(tagAttribute(heroTag, 'width')) || 0,
     height: Number(tagAttribute(heroTag, 'height')) || 0,
-    display: 'wide'
+    display: 'wide',
+    variants: tagAttribute(heroTag, 'class').split(/\s+/).filter((item) => item.startsWith('article-lead-image--'))
   };
   const authors = Array.isArray(blogPosting.author)
     ? blogPosting.author.map((author) => ({ name: author?.name, url: author?.url })).filter((author) => author.name)
@@ -301,6 +313,7 @@ export function migrateStaticBlogHtml(html, options = {}) {
     categoryLabel,
     authors,
     heroImage,
+    readingMinutes: readMinutesFromHtml(sourceHtml),
     blocks,
     seo: {
       title: documentTitle,
@@ -330,6 +343,46 @@ export function migrateStaticBlogHtml(html, options = {}) {
       hadFaqSchema: Boolean(faqSchema)
     },
     migrationValidation: validation
+  };
+}
+
+export function restoreStaticBlogPresentation(value, html, options = {}) {
+  const source = migrateStaticBlogHtml(html, options).post;
+  const record = value?.post && typeof value.post === 'object' ? value : { post: value };
+  const post = record.post || {};
+  const imageByUrl = new Map(source.blocks
+    .filter((block) => block.type === 'image' && block.url)
+    .map((block) => [block.url, block]));
+  const sourceTables = source.blocks.filter((block) => block.type === 'table');
+  let tableIndex = 0;
+  const blocks = (Array.isArray(post.blocks) ? post.blocks : []).map((block) => {
+    if (block.type === 'image') {
+      const presentation = imageByUrl.get(block.url);
+      return presentation ? {
+        ...block,
+        variants: presentation.variants,
+        captionPlacement: presentation.captionPlacement
+      } : block;
+    }
+    if (block.type === 'table') {
+      const presentation = sourceTables[tableIndex++];
+      const currentColumns = Math.max(block.headers?.length || 0, ...(block.rows || []).map((row) => row.length));
+      const sourceColumns = Math.max(presentation?.headers?.length || 0, ...(presentation?.rows || []).map((row) => row.length));
+      if (presentation && currentColumns < sourceColumns) return { ...presentation, id: block.id };
+    }
+    return block;
+  });
+  return {
+    ...record,
+    post: {
+      ...post,
+      readingMinutes: source.readingMinutes || post.readingMinutes,
+      heroImage: {
+        ...post.heroImage,
+        variants: source.heroImage.variants
+      },
+      blocks
+    }
   };
 }
 
