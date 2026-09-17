@@ -57,6 +57,9 @@ test('fake-review article preserves the source image, words, and supplied nine-s
   assert.equal((fakeReviewArticleHtml.match(/<h2 [^>]*data-toc-entry>/g) || []).length, 9);
   assert.match(fakeReviewArticleHtml, /Review nhận xu có đáng tin không\?/);
   assert.match(fakeReviewArticleHtml, /☐ Review có mô tả trải nghiệm cụ thể không\?/);
+  assert.doesNotMatch(fakeReviewArticleHtml, /<h2[^>]*>CTA<\/h2>/);
+  assert.match(fakeReviewArticleHtml, /Đừng để vài ngôi sao quyết định thay bạn\./);
+  assert.match(fakeReviewArticleHtml, /Kiểm tra độ tin cậy của review với RealView trước khi mua\./);
   assert.match(fakeReviewArticleHtml, /Hạ Thúy Ngân, Nguyễn Ngọc Thiện - SEO Content Member tại RealView/);
   assert.doesNotMatch(fakeReviewArticleHtml, /Bài SEO 9|Cụm chủ đề: Review sản phẩm|>Sapo</);
   assert.match(sitemapXml, /<loc>https:\/\/www\.realview\.com\.vn\/bai-viet\/review-gia-la-gi-dau-hieu-nhan-biet<\/loc>/);
