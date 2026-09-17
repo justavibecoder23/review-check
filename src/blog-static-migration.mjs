@@ -125,7 +125,8 @@ function links(html) {
 }
 
 function imageBlock(html) {
-  const tag = html.match(/<img\b[^>]*>/i)?.[0] || '';
+  const tags = [...html.matchAll(/<img\b[^>]*>/gi)].map((match) => match[0]);
+  const tag = tags[0] || '';
   if (!tag) return null;
   const className = tagAttribute(html.match(/<figure\b[^>]*>/i)?.[0] || '', 'class');
   const variants = className.split(/\s+/).filter((item) => item.startsWith('article-figure--'));
@@ -139,6 +140,12 @@ function imageBlock(html) {
     alt: tagAttribute(tag, 'alt'),
     width: Number(tagAttribute(tag, 'width')) || 0,
     height: Number(tagAttribute(tag, 'height')) || 0,
+    galleryImages: tags.slice(1).map((galleryTag) => ({
+      url: tagAttribute(galleryTag, 'src'),
+      alt: tagAttribute(galleryTag, 'alt'),
+      width: Number(tagAttribute(galleryTag, 'width')) || 0,
+      height: Number(tagAttribute(galleryTag, 'height')) || 0
+    })).filter((image) => image.url),
     caption: stripTags(firstMatch(html, /<(?:figcaption|p)\b[^>]*>([\s\S]*?)<\/(?:figcaption|p)>/i)),
     display,
     variants,
@@ -361,6 +368,7 @@ export function restoreStaticBlogPresentation(value, html, options = {}) {
       return presentation ? {
         ...block,
         variants: presentation.variants,
+        galleryImages: presentation.galleryImages,
         captionPlacement: presentation.captionPlacement
       } : block;
     }

@@ -1,4 +1,5 @@
 export const LEGACY_BLOG_SLUGS = Object.freeze([
+  'review-gia-la-gi-dau-hieu-nhan-biet',
   'review-san-pham-co-dang-tin-khong',
   'review-san-pham-la-gi',
   'trustscore-la-gi',
@@ -10,6 +11,14 @@ export const LEGACY_BLOG_SLUGS = Object.freeze([
 ]);
 
 export const LEGACY_BLOG_SUMMARIES = Object.freeze([
+  {
+    slug: 'review-gia-la-gi-dau-hieu-nhan-biet',
+    title: 'Review giả là gì? Dấu hiệu nhận biết review không đáng tin',
+    excerpt: 'Review giả là gì? Tìm hiểu dấu hiệu nhận biết review không đáng tin, cách kiểm tra đánh giá sản phẩm và đọc review trước khi mua hàng online.',
+    category: 'doc-review', categoryLabel: 'Đọc review', publishedAt: '2026-09-17T01:00:00.000Z', updatedAt: '2026-09-17T01:00:00.000Z', readingMinutes: 15,
+    heroImage: { url: '/assets/blog/review-gia-la-gi-dau-hieu-nhan-biet.jpg', alt: 'Review giả là gì và cách nhận biết review không đáng tin', width: 1672, height: 941 },
+    authors: [{ name: 'Hạ Thúy Ngân' }, { name: 'Nguyễn Ngọc Thiện' }]
+  },
   {
     slug: 'review-san-pham-co-dang-tin-khong',
     title: 'Review sản phẩm có đáng tin không? 7 yếu tố kiểm tra độ tin cậy trước khi đặt hàng',
@@ -71,7 +80,7 @@ export const LEGACY_BLOG_SUMMARIES = Object.freeze([
   h1: post.title,
   deck: post.excerpt,
   tags: [],
-  authors: [{ name: 'Nhóm RealView' }],
+  authors: post.authors || [{ name: 'Nhóm RealView' }],
   featured: post.slug === 'kiem-tra-do-tin-cay-review-truoc-khi-mua-hang',
   seo: {
     title: `${post.title} | RealView`,
@@ -89,8 +98,13 @@ export const STATIC_SITEMAP_ENTRIES = Object.freeze([
   { path: '/lien-he', lastmod: '2026-09-14' },
   {
     path: '/bai-viet',
-    lastmod: '2026-09-16',
+    lastmod: '2026-09-17',
     image: { url: '/assets/photos/pexels-pavel-danilyuk-7190922.jpg', alt: 'Người dùng xem thông tin mua sắm trên điện thoại' }
+  },
+  {
+    path: '/bai-viet/review-gia-la-gi-dau-hieu-nhan-biet',
+    lastmod: '2026-09-17',
+    image: { url: '/assets/blog/review-gia-la-gi-dau-hieu-nhan-biet.jpg', alt: 'Review giả là gì và cách nhận biết review không đáng tin' }
   },
   {
     path: '/bai-viet/review-san-pham-co-dang-tin-khong',

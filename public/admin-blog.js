@@ -61,6 +61,7 @@ function emptyPost() {
     seo: { title: '', metaDescription: '', canonicalUrl: '', primaryKeyword: '', searchIntent: 'informational', robots: 'index,follow,max-image-preview:large', ogTitle: '', ogDescription: '', ogImageUrl: '' },
     heroImage: { url: '', alt: '', caption: '' },
     blocks: [createBlock('paragraph')], relatedSlugs: [],
+    toc: { mode: 'auto', title: 'Mục lục', entries: [] },
     settings: { includeFaqSchema: true, allowIndexing: true }
   };
 }
@@ -113,6 +114,16 @@ function normalizePost(raw = {}) {
     authors: source.authors?.length ? source.authors : [{ name: author.name || 'Nhóm RealView', email: author.email || '', url: author.url || '' }],
     tags: Array.isArray(source.tags) ? source.tags : String(source.tags || '').split(',').map((item) => item.trim()).filter(Boolean),
     blocks,
+    toc: {
+      ...emptyPost().toc,
+      ...(source.toc || {}),
+      mode: source.toc?.mode === 'manual' ? 'manual' : 'auto',
+      entries: Array.isArray(source.toc?.entries) ? source.toc.entries.map((entry) => ({
+        anchor: slugify(entry.anchor || entry.id),
+        label: String(entry.label || entry.text || '').trim(),
+        level: Number(entry.level) === 3 ? 3 : 2
+      })).filter((entry) => entry.anchor && entry.label) : []
+    },
     relatedSlugs: source.relatedSlugs || source.relatedPostIds || [],
     settings: { ...emptyPost().settings, ...(source.settings || {}) }
   };
@@ -316,9 +327,6 @@ function openEditor(post = emptyPost()) {
   setFormValue('ogImageUrl', state.currentPost.seo.ogImageUrl);
   setFormValue('category', state.currentPost.category);
   setFormValue('categoryLabel', state.currentPost.categoryLabel || CATEGORY_LABELS[state.currentPost.category]);
-  setFormValue('authorName', state.currentPost.authors?.[0]?.name);
-  setFormValue('authorEmail', state.currentPost.authors?.[0]?.email);
-  setFormValue('authorUrl', state.currentPost.authors?.[0]?.url);
   setFormValue('tags', state.currentPost.tags.join(', '));
   setFormValue('publishedAt', toLocalInput(state.currentPost.publishedAt));
   setFormValue('modifiedAt', toLocalInput(state.currentPost.modifiedAt));
@@ -328,6 +336,8 @@ function openEditor(post = emptyPost()) {
   renderBlocks();
   renderHeroPreview();
   renderRelatedPicker();
+  renderAuthors(state.currentPost.authors);
+  renderTocEditor(state.currentPost.toc);
   updateEditorMeta();
   updateChecks();
   switchEditorTab('content');
@@ -588,6 +598,133 @@ function renderBlocks() {
   state.currentPost.blocks.forEach((block) => list.append(renderBlock(block)));
 }
 
+function renderAuthors(authors = []) {
+  const list = $('[data-author-list]');
+  list.replaceChildren();
+  (authors.length ? authors : [{ name: 'Nhóm RealView', email: '', url: '' }]).forEach((author, index) => {
+    const row = document.createElement('div'); row.className = 'admin-author-row'; row.dataset.authorRow = '';
+    const name = document.createElement('input'); name.type = 'text'; name.maxLength = 120; name.placeholder = 'Tên tác giả'; name.value = author.name || ''; name.dataset.authorName = ''; name.setAttribute('aria-label', `Tên tác giả ${index + 1}`);
+    const email = document.createElement('input'); email.type = 'email'; email.maxLength = 254; email.placeholder = 'Email nội bộ (không bắt buộc)'; email.value = author.email || ''; email.dataset.authorEmail = ''; email.setAttribute('aria-label', `Email tác giả ${index + 1}`);
+    const url = document.createElement('input'); url.type = 'url'; url.maxLength = 2048; url.placeholder = 'URL hồ sơ public (không bắt buộc)'; url.value = author.url || ''; url.dataset.authorUrl = ''; url.setAttribute('aria-label', `URL hồ sơ tác giả ${index + 1}`);
+    const remove = document.createElement('button'); remove.type = 'button'; remove.dataset.removeAuthor = ''; remove.textContent = '×'; remove.title = 'Xóa tác giả'; remove.setAttribute('aria-label', `Xóa tác giả ${index + 1}`);
+    row.append(name, email, url, remove); list.append(row);
+  });
+}
+
+function readAuthors() {
+  const authors = $$('[data-author-row]').map((row) => ({
+    name: $('[data-author-name]', row)?.value.trim() || '',
+    email: $('[data-author-email]', row)?.value.trim() || '',
+    url: $('[data-author-url]', row)?.value.trim() || ''
+  })).filter((author) => author.name);
+  return authors.length ? authors : [{ name: 'Nhóm RealView', email: '', url: '' }];
+}
+
+function tocTargetsFromBlocks(blocks, relatedSlugs = []) {
+  const targets = [];
+  blocks.forEach((block) => {
+    if (['heading', 'subheading'].includes(block.type) && block.text) {
+      targets.push({
+        anchor: slugify(block.anchor || block.text),
+        label: block.text,
+        level: block.type === 'subheading' || Number(block.level) === 3 ? 3 : 2,
+        automatic: block.includeInToc !== false
+      });
+    } else if (block.type === 'faq' && block.items?.some((item) => item.question || item.answer)) {
+      targets.push({ anchor: slugify(block.id === 'block-1' ? 'cau-hoi-thuong-gap' : block.id) || 'cau-hoi-thuong-gap', label: 'Câu hỏi thường gặp', level: 2, automatic: true });
+    } else if (block.type === 'relatedPosts' && block.slugs?.length) {
+      targets.push({ anchor: 'bai-viet-lien-quan', label: 'Bài viết liên quan', level: 2, automatic: true });
+    }
+  });
+  if (!blocks.some((block) => block.type === 'relatedPosts') && relatedSlugs.length) {
+    targets.push({ anchor: 'bai-viet-lien-quan', label: 'Bài viết liên quan', level: 2, automatic: true });
+  }
+  return [...new Map(targets.filter((entry) => entry.anchor).map((entry) => [entry.anchor, entry])).values()];
+}
+
+function editorTocTargets() {
+  const blocks = $$('.admin-block', $('[data-block-list]')).map(readBlock);
+  return tocTargetsFromBlocks(blocks, $$('[data-related-post]:checked').map((input) => input.value));
+}
+
+function readTocEditor() {
+  const editor = $('[data-toc-editor]');
+  const mode = editor?.dataset.tocMode === 'manual' ? 'manual' : 'auto';
+  return {
+    mode,
+    title: $('[data-toc-title]')?.value.trim() || 'Mục lục',
+    entries: mode === 'manual' ? $$('[data-toc-entry-row]', editor).map((row) => ({
+      anchor: $('[data-toc-entry-target]', row)?.value || '',
+      label: $('[data-toc-entry-label]', row)?.value.trim() || '',
+      level: Number(row.dataset.tocLevel) === 3 ? 3 : 2
+    })).filter((entry) => entry.anchor && entry.label) : []
+  };
+}
+
+function renderTocEditor(toc = readTocEditor()) {
+  const editor = $('[data-toc-editor]');
+  if (!editor) return;
+  const mode = toc?.mode === 'manual' ? 'manual' : 'auto';
+  const targets = editorTocTargets();
+  const entries = mode === 'manual' ? (toc.entries || []) : targets.filter((entry) => entry.automatic);
+  editor.dataset.tocMode = mode;
+  $('[data-toc-title]').value = toc.title || 'Mục lục';
+  $('[data-toc-status]').textContent = mode === 'manual' ? 'Danh sách chỉnh tay' : 'Tự động cập nhật';
+  $('[data-toc-use-auto]').classList.toggle('is-active', mode === 'auto');
+  $('[data-toc-generate]').classList.toggle('is-active', mode === 'manual');
+  $('[data-toc-manual-actions]').hidden = mode !== 'manual';
+  $('[data-toc-hint]').textContent = mode === 'manual'
+    ? 'Đổi nhãn chỉ ảnh hưởng mục lục, không đổi tiêu đề trong bài. Mục bị xóa khỏi nội dung sẽ không xuất hiện khi render.'
+    : 'Mọi thay đổi H2/H3 sẽ tự cập nhật mục lục.';
+  const list = $('[data-toc-list]');
+  list.replaceChildren();
+  if (!entries.length) {
+    const empty = document.createElement('p'); empty.className = 'admin-toc-empty';
+    empty.textContent = 'Chưa có mục nào. Hãy thêm H2/H3 hoặc bật “Hiển thị trong mục lục” ở một tiêu đề.';
+    list.append(empty); return;
+  }
+  entries.forEach((entry) => {
+    const target = targets.find((item) => item.anchor === entry.anchor) || entry;
+    const row = document.createElement('div');
+    row.className = `admin-toc-row${mode === 'auto' ? ' is-readonly' : ''}`;
+    row.dataset.tocEntryRow = '';
+    row.dataset.tocLevel = String(entry.level || target.level || 2);
+    const level = document.createElement('span'); level.className = 'admin-toc-level'; level.textContent = `H${row.dataset.tocLevel}`;
+    if (mode === 'auto') {
+      const copy = document.createElement('div');
+      const label = document.createElement('strong'); label.textContent = entry.label;
+      const anchor = document.createElement('small'); anchor.textContent = `#${entry.anchor}`;
+      copy.append(label, anchor); row.append(level, copy);
+    } else {
+      const label = document.createElement('input'); label.type = 'text'; label.maxLength = 300; label.value = entry.label || target.label || ''; label.dataset.tocEntryLabel = ''; label.setAttribute('aria-label', 'Nhãn hiển thị trong mục lục');
+      const select = document.createElement('select'); select.dataset.tocEntryTarget = ''; select.setAttribute('aria-label', 'Phần nội dung được liên kết');
+      targets.forEach((candidate) => {
+        const option = document.createElement('option'); option.value = candidate.anchor; option.textContent = `${candidate.label} (#${candidate.anchor})`; option.selected = candidate.anchor === entry.anchor; select.append(option);
+      });
+      if (!targets.some((candidate) => candidate.anchor === entry.anchor)) {
+        const missing = document.createElement('option'); missing.value = entry.anchor; missing.textContent = `Phần đã bị xóa (#${entry.anchor})`; missing.selected = true; select.prepend(missing); row.classList.add('is-missing');
+      }
+      const actions = document.createElement('div'); actions.className = 'admin-toc-row-actions';
+      [['up', '↑', 'Đưa mục lên'], ['down', '↓', 'Đưa mục xuống'], ['remove', '×', 'Xóa khỏi mục lục']].forEach(([action, text, title]) => {
+        const button = document.createElement('button'); button.type = 'button'; button.dataset.tocEntryAction = action; button.textContent = text; button.title = title; button.setAttribute('aria-label', title); actions.append(button);
+      });
+      row.append(level, label, select, actions);
+    }
+    list.append(row);
+  });
+}
+
+function refreshAutomaticToc() {
+  if ($('[data-toc-editor]')?.dataset.tocMode === 'auto') renderTocEditor(readTocEditor());
+}
+
+function createEditableToc() {
+  const current = readTocEditor();
+  const entries = editorTocTargets().filter((entry) => entry.automatic).map(({ anchor, label, level }) => ({ anchor, label, level }));
+  renderTocEditor({ mode: 'manual', title: current.title, entries });
+  markDirty();
+}
+
 function readBlock(element) {
   const type = element.dataset.blockType;
   const block = { ...(element._originalBlock || {}), id: element.dataset.blockId, type };
@@ -637,10 +774,7 @@ function collectPost() {
     title, h1: title, deck: value('deck'), slug: value('slug'),
     category: value('category'), categoryLabel: value('categoryLabel') || CATEGORY_LABELS[value('category')] || '',
     tags: value('tags').split(',').map((item) => item.trim()).filter(Boolean),
-    authors: [
-      { ...(state.currentPost.authors?.[0] || {}), name: value('authorName') || 'Nhóm RealView', email: value('authorEmail'), url: value('authorUrl') },
-      ...(state.currentPost.authors || []).slice(1)
-    ],
+    authors: readAuthors(),
     featured: checked('featured'), publishedAt: fromLocalInput(value('publishedAt')), modifiedAt: fromLocalInput(value('modifiedAt')),
     seo: {
       ...state.currentPost.seo, title: value('seoTitle'), metaDescription: value('metaDescription'), primaryKeyword: value('primaryKeyword'), searchIntent: value('searchIntent'),
@@ -651,6 +785,7 @@ function collectPost() {
     },
     heroImage,
     blocks: $$('.admin-block', $('[data-block-list]')).map(readBlock),
+    toc: readTocEditor(),
     relatedSlugs: $$('[data-related-post]:checked').map((input) => input.value),
     settings: { includeFaqSchema: checked('includeFaqSchema'), allowIndexing: checked('allowIndexing') }
   });
@@ -1059,7 +1194,7 @@ function openGuide() {
 function addBlock(type) {
   state.currentPost.blocks = $$('.admin-block', $('[data-block-list]')).map(readBlock);
   const block = createBlock(type); state.currentPost.blocks.push(block); $('[data-block-list]').append(renderBlock(block));
-  $('[data-block-menu]').hidden = true; $('[data-add-block-toggle]').setAttribute('aria-expanded', 'false'); markDirty();
+  $('[data-block-menu]').hidden = true; $('[data-add-block-toggle]').setAttribute('aria-expanded', 'false'); refreshAutomaticToc(); markDirty();
   $(`[data-block-id="${block.id}"] input, [data-block-id="${block.id}"] textarea`)?.focus();
 }
 
@@ -1110,9 +1245,56 @@ function initializeEvents() {
   $('[data-editor-form]').addEventListener('input', (event) => {
     if (event.target.name === 'title' && !$('[name="slug"]').value && !state.currentPost.id) $('[name="slug"]').value = slugify(event.target.value);
     if (event.target.name === 'heroImageUrl') renderHeroPreview();
+    if (event.target.closest('.admin-block')) refreshAutomaticToc();
     markDirty();
   });
-  $('[data-editor-form]').addEventListener('change', markDirty);
+  $('[data-editor-form]').addEventListener('change', (event) => { if (event.target.closest('.admin-block') || event.target.matches('[data-related-post]')) refreshAutomaticToc(); markDirty(); });
+  $('[data-toc-use-auto]').addEventListener('click', () => {
+    const current = readTocEditor();
+    renderTocEditor({ mode: 'auto', title: current.title, entries: [] });
+    markDirty();
+  });
+  $('[data-toc-generate]').addEventListener('click', createEditableToc);
+  $('[data-toc-regenerate]').addEventListener('click', createEditableToc);
+  $('[data-toc-add]').addEventListener('click', () => {
+    const current = readTocEditor();
+    const used = new Set(current.entries.map((entry) => entry.anchor));
+    const target = editorTocTargets().find((entry) => !used.has(entry.anchor));
+    if (!target) return toast('Không còn phần nội dung nào để thêm vào mục lục.', 'error');
+    current.entries.push({ anchor: target.anchor, label: target.label, level: target.level });
+    renderTocEditor(current); markDirty();
+  });
+  $('[data-toc-editor]').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-toc-entry-action]');
+    if (!button) return;
+    const row = button.closest('[data-toc-entry-row]');
+    if (button.dataset.tocEntryAction === 'remove') row.remove();
+    if (button.dataset.tocEntryAction === 'up' && row.previousElementSibling) row.parentNode.insertBefore(row, row.previousElementSibling);
+    if (button.dataset.tocEntryAction === 'down' && row.nextElementSibling) row.parentNode.insertBefore(row.nextElementSibling, row);
+    markDirty();
+  });
+  $('[data-toc-editor]').addEventListener('change', (event) => {
+    const select = event.target.closest('[data-toc-entry-target]');
+    if (select) {
+      const target = editorTocTargets().find((entry) => entry.anchor === select.value);
+      const row = select.closest('[data-toc-entry-row]');
+      if (target && row) { row.dataset.tocLevel = String(target.level); $('.admin-toc-level', row).textContent = `H${target.level}`; }
+    }
+    markDirty();
+  });
+  $('[data-add-author]').addEventListener('click', () => {
+    const authors = readAuthors();
+    if ($$('[data-author-row]').length >= 10) return toast('Mỗi bài có tối đa 10 tác giả.', 'error');
+    authors.push({ name: '', email: '', url: '' }); renderAuthors(authors); markDirty();
+    $$('[data-author-name]').at(-1)?.focus();
+  });
+  $('[data-author-list]').addEventListener('click', (event) => {
+    const remove = event.target.closest('[data-remove-author]');
+    if (!remove) return;
+    const rows = $$('[data-author-row]');
+    if (rows.length <= 1) return toast('Bài viết cần ít nhất một tác giả.', 'error');
+    remove.closest('[data-author-row]').remove(); markDirty();
+  });
   $('[data-add-block-toggle]').addEventListener('click', () => { const menu = $('[data-block-menu]'); menu.hidden = !menu.hidden; $('[data-add-block-toggle]').setAttribute('aria-expanded', String(!menu.hidden)); });
   $('[data-block-menu]').addEventListener('click', (event) => { const button = event.target.closest('[data-add-block]'); if (button) addBlock(button.dataset.addBlock); });
 
@@ -1120,12 +1302,12 @@ function initializeEvents() {
     const element = event.target.closest('.admin-block'); if (!element) return;
     const chooseImage = event.target.closest('[data-choose-block-image]');
     if (chooseImage) { $('[data-block-image-file]', element)?.click(); return; }
-    if (event.target.closest('[data-remove-block]')) { if ($$('.admin-block').length === 1) return toast('Bài viết cần ít nhất một khối nội dung.', 'error'); element.remove(); markDirty(); return; }
-    if (event.target.closest('[data-duplicate-block]')) { const block = { ...readBlock(element), id: uid() }; element.insertAdjacentElement('afterend', renderBlock(block)); markDirty(); return; }
+    if (event.target.closest('[data-remove-block]')) { if ($$('.admin-block').length === 1) return toast('Bài viết cần ít nhất một khối nội dung.', 'error'); element.remove(); refreshAutomaticToc(); markDirty(); return; }
+    if (event.target.closest('[data-duplicate-block]')) { const block = { ...readBlock(element), id: uid() }; element.insertAdjacentElement('afterend', renderBlock(block)); refreshAutomaticToc(); markDirty(); return; }
     const move = event.target.closest('[data-move-block]');
     if (move?.dataset.moveBlock === 'up' && element.previousElementSibling) element.parentNode.insertBefore(element, element.previousElementSibling);
     if (move?.dataset.moveBlock === 'down' && element.nextElementSibling) element.parentNode.insertBefore(element.nextElementSibling, element);
-    if (move) markDirty();
+    if (move) { refreshAutomaticToc(); markDirty(); }
     if (event.target.closest('[data-add-faq]')) { const list = $('[data-faq-items]', element); const row = document.createElement('div'); row.className = 'admin-block-fields'; row.dataset.faqItem = ''; addField(row, { field: 'question', placeholder: 'Câu hỏi thường gặp' }); addField(row, { tag: 'textarea', field: 'answer', placeholder: 'Câu trả lời rõ ràng, ngắn gọn', rows: 3 }); const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'admin-text-button'; remove.dataset.removeFaq = ''; remove.textContent = 'Xóa câu hỏi'; row.append(remove); list.append(row); markDirty(); }
     if (event.target.closest('[data-remove-faq]')) { const items = $$('[data-faq-item]', element); if (items.length <= 1) return toast('Khối FAQ cần ít nhất một câu hỏi.', 'error'); event.target.closest('[data-faq-item]').remove(); markDirty(); }
     if (event.target.closest('[data-add-source]')) { const list = $('[data-source-items]', element); const row = document.createElement('div'); row.className = 'admin-block-fields admin-block-fields--split'; row.dataset.sourceItem = ''; addField(row, { field: 'label', placeholder: 'Tên tài liệu hoặc tổ chức' }); addField(row, { field: 'href', placeholder: 'https://…' }); const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'admin-text-button'; remove.dataset.removeSource = ''; remove.textContent = 'Xóa nguồn'; row.append(remove); list.append(row); markDirty(); }

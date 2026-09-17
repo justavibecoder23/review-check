@@ -25,8 +25,9 @@ import { decodeBlogMedia, saveBlogMedia } from '../src/blog-media-store.mjs';
 import { normalizeBlogPost, validateBlogPost } from '../src/blog-post-model.mjs';
 import { renderBlogPreview } from '../src/blog-admin-preview.mjs';
 import { publicBlogSummary, summaryToBlogRecord } from '../src/blog-public-data.mjs';
-import { renderBlogIndexTemplate, renderBlogPost, renderSitemap } from '../src/blog-renderer.mjs';
+import { renderBlogIndexTemplate, renderBlogPost, renderSitemap, resolveBlogToc } from '../src/blog-renderer.mjs';
 import { migrateStaticBlogHtml, restoreStaticBlogPresentation } from '../src/blog-static-migration.mjs';
+import { LEGACY_BLOG_SLUGS, LEGACY_BLOG_SUMMARIES, STATIC_SITEMAP_ENTRIES } from '../src/blog-public-config.mjs';
 
 function redisMock() {
   const strings = new Map();
@@ -239,6 +240,42 @@ test('migration và renderer giữ nguyên format ảnh riêng của bài blog h
   }, sourceHtml, migrated.post.slug), false);
 });
 
+test('migration giữ nguyên gallery hai ảnh và format SEO 09 của bài mới từ main', async () => {
+  const sourcePath = new URL('../public/blog/review-gia-la-gi-dau-hieu-nhan-biet.html', import.meta.url);
+  const sourceHtml = await readFile(sourcePath, 'utf8');
+  const migrated = migrateStaticBlogHtml(sourceHtml, { sourcePath: 'public/blog/review-gia-la-gi-dau-hieu-nhan-biet.html' });
+  const gallery = migrated.post.blocks.find((block) => block.url === '/assets/blog/seo09-image21.jpg');
+
+  assert.equal(migrated.migrationValidation.valid, true);
+  assert.deepEqual(gallery.variants, ['article-figure--seo09', 'article-figure--seo09-gallery']);
+  assert.deepEqual(gallery.galleryImages, [{
+    url: '/assets/blog/seo09-image15.jpg',
+    alt: 'Review giả là gì? Dấu hiệu nhận biết review không đáng tin — ảnh minh họa 39',
+    width: 1290,
+    height: 882
+  }]);
+
+  const normalized = normalizeBlogPost(migrated.post);
+  const output = renderBlogPost({ post: normalized, meta: migrated.meta });
+  assert.match(output, /class="article-figure article-figure--seo09 article-figure--seo09-gallery"[^>]*><img[^>]*seo09-image21\.jpg[^>]*><img[^>]*seo09-image15\.jpg/);
+  assert.equal(blogPostHandlerInternals.isUnchangedLegacyImport({ post: migrated.post, meta: migrated.meta }, sourceHtml, migrated.post.slug), true);
+});
+
+test('bài mới từ main xuất hiện trong fallback CMS, index động và sitemap động', async () => {
+  const slug = 'review-gia-la-gi-dau-hieu-nhan-biet';
+  const summary = LEGACY_BLOG_SUMMARIES.find((post) => post.slug === slug);
+  assert.ok(LEGACY_BLOG_SLUGS.includes(slug));
+  assert.equal(summary.authors.map((author) => author.name).join(' và '), 'Hạ Thúy Ngân và Nguyễn Ngọc Thiện');
+  assert.ok(STATIC_SITEMAP_ENTRIES.some((entry) => entry.path === `/bai-viet/${slug}`));
+
+  const template = await readFile(new URL('../public/blog.html', import.meta.url), 'utf8');
+  const indexHtml = renderBlogIndexTemplate(template, LEGACY_BLOG_SUMMARIES.map(summaryToBlogRecord));
+  const sitemap = renderSitemap(LEGACY_BLOG_SUMMARIES.map(summaryToBlogRecord), STATIC_SITEMAP_ENTRIES);
+  assert.match(indexHtml, new RegExp(`/bai-viet/${slug}`));
+  assert.equal((indexHtml.match(/data-blog-card/g) || []).length, 9);
+  assert.match(sitemap, new RegExp(`<loc>https://www\\.realview\\.com\\.vn/bai-viet/${slug}</loc>`));
+});
+
 function htmlResponseMock() {
   const headers = new Map();
   return {
@@ -323,6 +360,56 @@ test('bài mới hỗ trợ định dạng cơ bản nhưng vẫn dùng typograp
   assert.match(adminSource, /\['lead', 'Mở bài \/ nổi bật'\]/);
   assert.match(adminSource, /case 'heading':/);
   assert.match(adminSource, /case 'subheading':/);
+});
+
+test('mục lục CMS tự động tương thích bài cũ và được render sẵn trong HTML', () => {
+  const post = normalizeBlogPost(completePost());
+  const toc = resolveBlogToc(post);
+  assert.deepEqual(toc.map((entry) => entry.anchor), [
+    'vi-sao-can-doc-review',
+    'dau-hieu-can-luu-y',
+    'faq',
+    'bai-viet-lien-quan'
+  ]);
+  const html = renderBlogPost({
+    post,
+    meta: { status: 'published', publishedAt: '2026-09-17T00:00:00.000Z' }
+  });
+  assert.match(html, /<summary>Mục lục<\/summary>/);
+  assert.match(html, /<ol><li data-toc-level="2"><a href="#vi-sao-can-doc-review">Vì sao cần đọc review\?<\/a><\/li>/);
+  assert.match(html, /<a href="#faq">Câu hỏi thường gặp<\/a>/);
+  assert.match(html, /<a href="#bai-viet-lien-quan">Bài viết liên quan<\/a>/);
+});
+
+test('mục lục tạo tự động có thể đổi nhãn và thứ tự bằng tay mà không đổi heading', async () => {
+  const post = normalizeBlogPost(completePost({
+    toc: {
+      mode: 'manual',
+      title: 'Trong bài này',
+      entries: [
+        { anchor: 'dau-hieu-can-luu-y', label: 'Các dấu hiệu chính', level: 3 },
+        { anchor: 'vi-sao-can-doc-review', label: 'Bắt đầu từ đây', level: 2 }
+      ]
+    }
+  }));
+  const html = renderBlogPost({
+    post,
+    meta: { status: 'published', publishedAt: '2026-09-17T00:00:00.000Z' }
+  });
+  assert.match(html, /<summary>Trong bài này<\/summary>[\s\S]*href="#dau-hieu-can-luu-y">Các dấu hiệu chính<\/a>[\s\S]*href="#vi-sao-can-doc-review">Bắt đầu từ đây<\/a>/);
+  assert.match(html, /<h3 id="dau-hieu-can-luu-y" data-toc-entry>Dấu hiệu cần lưu ý<\/h3>/);
+  assert.equal(post.toc.mode, 'manual');
+
+  const adminHtml = await readFile(new URL('../public/admin-blog.html', import.meta.url), 'utf8');
+  const adminJs = await readFile(new URL('../public/admin-blog.js', import.meta.url), 'utf8');
+  const clientJs = await readFile(new URL('../public/blog-post.js', import.meta.url), 'utf8');
+  assert.match(adminHtml, /data-toc-generate>Tạo bản có thể chỉnh sửa/);
+  assert.match(adminHtml, /data-toc-regenerate>Tạo lại từ nội dung/);
+  assert.match(adminHtml, /data-add-author>＋ Thêm đồng tác giả/);
+  assert.match(adminJs, /function readTocEditor\(\)/);
+  assert.match(adminJs, /function createEditableToc\(\)/);
+  assert.match(clientJs, /existingLinks = \[\.\.\.list\.querySelectorAll/);
+  assert.match(clientJs, /trackedHeadings = \[\.\.\.headings\]\.sort/);
 });
 
 test('CMS giữ revision bất biến, chặn ghi đè cũ và ghi audit khi publish', async () => {

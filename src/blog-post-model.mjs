@@ -2,6 +2,7 @@ const MAX_POST_BYTES = 750_000;
 const MAX_BLOCKS = 300;
 const MAX_FAQ_ITEMS = 30;
 const MAX_TABLE_CELLS = 1_000;
+const MAX_TOC_ENTRIES = 80;
 
 function modelError(message, code = 'INVALID_BLOG_POST', details) {
   const error = new Error(message);
@@ -61,6 +62,8 @@ function normalizedImage(value = {}) {
     'article-lead-image--seo07',
     'article-figure--seo07',
     'article-figure--seo08-source-crop',
+    'article-figure--seo09',
+    'article-figure--seo09-gallery',
     'article-figure--compact',
     'article-figure--reduced',
     'article-figure--smaller'
@@ -74,6 +77,15 @@ function normalizedImage(value = {}) {
     .filter((source) => source.url && source.width)
     .sort((left, right) => left.width - right.width)
     .map((source) => [source.width, source])).values()].slice(0, 8);
+  const galleryImages = (Array.isArray(value.galleryImages) ? value.galleryImages : [])
+    .map((image) => ({
+      url: safeUrl(image?.url, { allowRelative: true, image: true }),
+      alt: cleanText(image?.alt, 300),
+      width: Math.max(0, Math.min(8_000, Number.parseInt(image?.width, 10) || 0)),
+      height: Math.max(0, Math.min(8_000, Number.parseInt(image?.height, 10) || 0))
+    }))
+    .filter((image) => image.url)
+    .slice(0, 12);
   return {
     url: safeUrl(value.url, { allowRelative: true, image: true }),
     alt: cleanText(value.alt, 300),
@@ -81,6 +93,7 @@ function normalizedImage(value = {}) {
     width: Math.max(0, Math.min(8_000, Number.parseInt(value.width, 10) || 0)),
     height: Math.max(0, Math.min(8_000, Number.parseInt(value.height, 10) || 0)),
     responsiveSources,
+    galleryImages,
     display: ['wide', 'compact', 'reduced', 'smaller'].includes(value.display) ? value.display : 'wide',
     variants: [...new Set((Array.isArray(value.variants) ? value.variants : [])
       .map((item) => cleanText(item, 80))
@@ -97,6 +110,22 @@ function normalizeAuthor(value) {
     email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value?.email || '').trim())
       ? cleanText(value.email, 254).toLowerCase()
       : ''
+  };
+}
+
+function normalizeToc(value = {}) {
+  const toc = value && typeof value === 'object' ? value : {};
+  return {
+    mode: toc.mode === 'manual' ? 'manual' : 'auto',
+    title: cleanText(toc.title, 80) || 'Mục lục',
+    entries: (Array.isArray(toc.entries) ? toc.entries : [])
+      .map((entry) => ({
+        anchor: cleanSlug(entry?.anchor || entry?.id),
+        label: cleanText(entry?.label || entry?.text, 300),
+        level: Number(entry?.level) === 3 ? 3 : 2
+      }))
+      .filter((entry) => entry.anchor && entry.label)
+      .slice(0, MAX_TOC_ENTRIES)
   };
 }
 
@@ -257,6 +286,7 @@ export function normalizeBlogPost(input = {}, options = {}) {
       ogImageUrl: safeUrl(seoInput.ogImageUrl || seoInput.ogImage?.url || input.heroImage?.url, { allowRelative: true, image: true })
     },
     blocks: rawBlocks.map(normalizeBlock),
+    toc: normalizeToc(input.toc),
     relatedSlugs: textList(input.relatedSlugs || input.relatedPostIds, 12, 160).map((item) => cleanSlug(item)).filter(Boolean),
     relatedPostIds: textList(input.relatedPostIds || input.relatedSlugs, 12, 160).map((item) => cleanSlug(item)).filter(Boolean),
     settings: {
@@ -335,6 +365,9 @@ export function validateBlogPost(post, options = {}) {
     if (block.type === 'image') {
       if (!block.url) issues.push(issue('error', 'IMAGE_URL_REQUIRED', `blocks.${index}.url`, 'Ảnh chưa có URL HTTPS hoặc đường dẫn nội bộ hợp lệ.'));
       if (!block.alt) issues.push(issue(forPublish ? 'error' : 'warning', 'IMAGE_ALT_REQUIRED', `blocks.${index}.alt`, 'Ảnh chưa có alt text.'));
+      block.galleryImages.forEach((image, imageIndex) => {
+        if (!image.alt) issues.push(issue(forPublish ? 'error' : 'warning', 'IMAGE_ALT_REQUIRED', `blocks.${index}.galleryImages.${imageIndex}.alt`, 'Ảnh trong nhóm chưa có alt text.'));
+      });
     }
     if (block.type === 'faq') {
       block.items.forEach((item, itemIndex) => {
@@ -348,6 +381,19 @@ export function validateBlogPost(post, options = {}) {
   }
   if (relatedBlockCount > 1) {
     issues.push(issue('error', 'MULTIPLE_RELATED_POST_BLOCKS', 'blocks', 'Mỗi bài chỉ nên có một khối bài viết liên quan.'));
+  }
+
+  if (post.toc.mode === 'manual') {
+    const tocAnchors = new Set();
+    post.toc.entries.forEach((entry, index) => {
+      if (tocAnchors.has(entry.anchor)) {
+        issues.push(issue('error', 'DUPLICATE_TOC_ANCHOR', `toc.entries.${index}.anchor`, 'Hai mục lục đang trỏ đến cùng một phần.'));
+      }
+      tocAnchors.add(entry.anchor);
+    });
+    if (!post.toc.entries.length) {
+      issues.push(issue(forPublish ? 'error' : 'warning', 'MANUAL_TOC_EMPTY', 'toc.entries', 'Mục lục chỉnh tay chưa có mục nào.'));
+    }
   }
 
   const hasInternalLink = post.blocks.some((block) =>
@@ -379,8 +425,10 @@ export function assertPublishableBlogPost(post) {
 export const blogPostModelInternals = {
   MAX_POST_BYTES,
   MAX_BLOCKS,
+  MAX_TOC_ENTRIES,
   cleanText,
   safeUrl,
   normalizedImage,
-  normalizeBlock
+  normalizeBlock,
+  normalizeToc
 };
