@@ -38,6 +38,7 @@ const publicRouteFiles = new Map([
   ['/bai-viet/cach-tim-shop-uy-tin-tren-shopee', '/blog/cach-tim-shop-uy-tin-tren-shopee.html'],
   ['/bai-viet/review-san-pham-la-gi', '/blog/review-san-pham-la-gi.html'],
   ['/bai-viet/review-san-pham-co-dang-tin-khong', '/blog/review-san-pham-co-dang-tin-khong.html'],
+  ['/bai-viet/review-gia-la-gi-dau-hieu-nhan-biet', '/blog/review-gia-la-gi-dau-hieu-nhan-biet.html'],
   ['/ket-qua', '/results.html'],
 ]);
 
