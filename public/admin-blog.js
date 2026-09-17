@@ -189,6 +189,12 @@ function formatDate(value) {
   return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(date);
 }
 
+function sameDateTime(left, right) {
+  const leftTime = Date.parse(left || '');
+  const rightTime = Date.parse(right || '');
+  return Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime === rightTime;
+}
+
 function setAccess(title, message, { login = false } = {}) {
   const access = $('[data-access-state]');
   $('h1', access).textContent = title;
@@ -275,13 +281,20 @@ function renderPosts() {
     const status = $('.status-pill', row);
     status.textContent = STATUS_LABELS[post.status] || post.status || 'Bản nháp';
     status.className = `status-pill status-${post.status || 'draft'}`;
-    $('time', row).textContent = formatDate(post.modifiedAt || post.updatedAt || post.publishedAt);
-    $('.post-table-revision', row).textContent = `Revision ${post.revision || 0}`;
+    const publishedAt = post.publishedAt || post.updatedAt || post.modifiedAt;
+    const updatedAt = post.modifiedAt || post.publishedUpdatedAt || post.updatedAt;
+    const time = $('time', row);
+    time.dateTime = publishedAt || '';
+    time.textContent = `Xuất bản ${formatDate(publishedAt)}`;
+    const details = [];
+    if (updatedAt && !sameDateTime(publishedAt, updatedAt)) details.push(`Cập nhật ${formatDate(updatedAt)}`);
+    details.push(post.isStaticFallback ? 'Nguồn main · chưa nhập CMS' : `Revision ${post.revision || 0}`);
+    $('.post-table-revision', row).textContent = details.join(' · ');
     $('.post-table-author', row).textContent = post.authors?.[0]?.name || 'Nhóm RealView';
     const viewLink = $('[data-view-row]', row);
     viewLink.href = post.status === 'published' && post.slug ? `/bai-viet/${post.slug}` : `/api/admin-blog?action=preview&id=${encodeURIComponent(post.id || '')}`;
-    $('[data-unpublish-row]', row).hidden = state.role !== 'admin' || post.status !== 'published';
-    $('[data-archive-row]', row).hidden = state.role !== 'admin' || post.status === 'archived';
+    $('[data-unpublish-row]', row).hidden = post.isStaticFallback || state.role !== 'admin' || post.status !== 'published';
+    $('[data-archive-row]', row).hidden = post.isStaticFallback || state.role !== 'admin' || post.status === 'archived';
     tbody.append(row);
   });
   $('[data-list-empty]').hidden = filtered.length > 0;
@@ -360,8 +373,13 @@ async function editPost(id) {
   showView('editor');
   setSaveState('Đang tải bài viết…', 'saving');
   try {
-    const payload = await apiGet('detail', { id });
+    const staticPrefix = 'static:';
+    const isStaticFallback = String(id || '').startsWith(staticPrefix);
+    const payload = isStaticFallback
+      ? await apiPost({ action: 'import_legacy', slug: String(id).slice(staticPrefix.length) })
+      : await apiGet('detail', { id });
     openEditor(normalizeApiPost(payload));
+    if (isStaticFallback) await loadPosts();
   } catch (error) {
     toast(error.message, 'error');
     showView('posts');

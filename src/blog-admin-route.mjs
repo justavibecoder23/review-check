@@ -12,6 +12,7 @@ import {
   createBlogPost,
   discardBlogDraft,
   getBlogPost,
+  getBlogPostBySlug,
   listBlogAudit,
   listBlogPosts,
   listBlogRevisions,
@@ -23,10 +24,100 @@ import {
 import { normalizeBlogPost, validateBlogPost } from './blog-post-model.mjs';
 import { renderBlogPreviewDocument } from './blog-admin-preview.mjs';
 import { saveBlogMedia } from './blog-media-store.mjs';
-import { LEGACY_BLOG_SLUGS } from './blog-public-config.mjs';
-import { restoreStaticBlogPresentation } from './blog-static-migration.mjs';
+import { LEGACY_BLOG_SLUGS, LEGACY_BLOG_SUMMARIES } from './blog-public-config.mjs';
+import { migrateStaticBlogHtml, restoreStaticBlogPresentation } from './blog-static-migration.mjs';
 
 const legacySlugSet = new Set(LEGACY_BLOG_SLUGS);
+const STATIC_POST_PREFIX = 'static:';
+
+function staticPostId(slug) {
+  return `${STATIC_POST_PREFIX}${slug}`;
+}
+
+function staticSlugFromId(id) {
+  const value = String(id || '');
+  if (!value.startsWith(STATIC_POST_PREFIX)) return '';
+  const slug = value.slice(STATIC_POST_PREFIX.length).trim();
+  return legacySlugSet.has(slug) ? slug : '';
+}
+
+function staticAdminSummary(summary) {
+  return {
+    ...summary,
+    id: staticPostId(summary.slug),
+    managedSlugs: [summary.slug],
+    status: 'published',
+    revision: 0,
+    publishedRevision: 0,
+    publishedSlug: summary.slug,
+    hasUnpublishedChanges: false,
+    createdAt: summary.publishedAt,
+    updatedAt: summary.updatedAt || summary.publishedAt,
+    publishedUpdatedAt: summary.updatedAt || summary.publishedAt,
+    isStaticFallback: true
+  };
+}
+
+function postSortTime(post = {}) {
+  const value = post.status === 'published'
+    ? post.publishedAt
+    : (post.updatedAt || post.createdAt || post.publishedAt);
+  const parsed = Date.parse(value || '');
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function mergeAdminPostsWithLegacy(posts = [], status = '') {
+  const records = Array.isArray(posts) ? [...posts] : [];
+  if (status && status !== 'published') return records;
+  const managedSlugs = new Set(records.flatMap((post) => (
+    Array.isArray(post?.managedSlugs)
+      ? post.managedSlugs
+      : [post?.slug, post?.publishedSlug]
+  )).filter(Boolean));
+  for (const summary of LEGACY_BLOG_SUMMARIES) {
+    if (!managedSlugs.has(summary.slug)) records.push(staticAdminSummary(summary));
+  }
+  return records.sort((left, right) => (
+    postSortTime(right) - postSortTime(left)
+    || String(left.title || '').localeCompare(String(right.title || ''), 'vi')
+  ));
+}
+
+async function readStaticLegacyRecord(slug) {
+  if (!legacySlugSet.has(slug)) {
+    const error = new Error('Không tìm thấy bài viết từ main.');
+    error.statusCode = 404;
+    error.code = 'BLOG_POST_NOT_FOUND';
+    throw error;
+  }
+  const sourcePath = `public/blog/${slug}.html`;
+  const html = await readFile(new URL(`../public/blog/${slug}.html`, import.meta.url), 'utf8');
+  const migrated = migrateStaticBlogHtml(html, { sourcePath });
+  const summary = LEGACY_BLOG_SUMMARIES.find((item) => item.slug === slug);
+  const meta = {
+    ...(summary ? staticAdminSummary(summary) : {}),
+    id: staticPostId(slug),
+    slug,
+    managedSlugs: [slug],
+    status: 'published',
+    revision: 0,
+    publishedRevision: 0,
+    publishedSlug: slug,
+    hasUnpublishedChanges: false,
+    publishedAt: migrated.meta.publishedAt,
+    updatedAt: migrated.meta.updatedAt || migrated.meta.publishedAt,
+    publishedUpdatedAt: migrated.meta.updatedAt || migrated.meta.publishedAt,
+    isStaticFallback: true
+  };
+  return {
+    id: meta.id,
+    meta,
+    post: migrated.post,
+    revision: 0,
+    validation: migrated.migrationValidation,
+    isStaticFallback: true
+  };
+}
 
 async function withLegacyPresentation(value) {
   const post = value?.post && typeof value.post === 'object' ? value.post : value;
@@ -37,6 +128,33 @@ async function withLegacyPresentation(value) {
     return restoreStaticBlogPresentation(value, html, { sourcePath: `public/blog/${slug}.html` });
   } catch {
     return value;
+  }
+}
+
+async function importStaticLegacyPost(slug, actor, options = {}) {
+  try {
+    return await withLegacyPresentation(await getBlogPostBySlug(slug, options));
+  } catch (error) {
+    if (error?.code !== 'BLOG_POST_NOT_FOUND') throw error;
+  }
+  const source = await readStaticLegacyRecord(slug);
+  try {
+    const created = await createBlogPost(source.post, actor, {
+      ...options,
+      allowLegacySlug: true,
+      now: source.meta.publishedAt || new Date()
+    });
+    const published = await publishBlogPost(created.meta.id, created.revision, actor, {
+      ...options,
+      publishedAt: source.meta.publishedAt,
+      now: source.meta.updatedAt || source.meta.publishedAt || new Date()
+    });
+    return withLegacyPresentation(published);
+  } catch (error) {
+    if (error?.code === 'BLOG_SLUG_CONFLICT') {
+      return withLegacyPresentation(await getBlogPostBySlug(slug, options));
+    }
+    throw error;
   }
 }
 
@@ -84,16 +202,19 @@ async function handleGet(request, response, actor) {
     });
   }
   if (action === 'list') {
-    const posts = await listBlogPosts({
-      status: firstQueryValue(request.query?.status),
+    const status = String(firstQueryValue(request.query?.status) || '').trim().toLowerCase();
+    const posts = mergeAdminPostsWithLegacy(await listBlogPosts({
+      status,
       limit: firstQueryValue(request.query?.limit),
       offset: firstQueryValue(request.query?.offset)
-    });
+    }), status);
     return sendAdminJson(response, 200, { posts, items: posts, role: actor.role });
   }
   if (action === 'detail') {
     const id = idFrom(request);
     if (!id) return sendAdminJson(response, 400, { error: 'Thiếu mã bài viết.', code: 'BLOG_POST_ID_REQUIRED' });
+    const staticSlug = staticSlugFromId(id);
+    if (staticSlug) return sendAdminJson(response, 200, await readStaticLegacyRecord(staticSlug));
     return sendAdminJson(response, 200, await withLegacyPresentation(await getBlogPost(id, { revision: revisionFrom(request) })));
   }
   if (action === 'revisions') {
@@ -111,6 +232,13 @@ async function handleGet(request, response, actor) {
 
 async function handlePost(request, response, body, actor) {
   const action = String(body.action || '').trim().toLowerCase().replace(/-/g, '_');
+  if (action === 'import_legacy') {
+    const slug = String(body.slug || '').trim();
+    if (!legacySlugSet.has(slug)) {
+      return sendAdminJson(response, 404, { error: 'Không tìm thấy bài viết từ main.', code: 'BLOG_POST_NOT_FOUND' });
+    }
+    return sendAdminJson(response, 200, await importStaticLegacyPost(slug, actor));
+  }
   if (action === 'save') {
     const id = idFrom(request, body);
     const presentedPost = (await withLegacyPresentation(body.post || {}))?.post || body.post || {};
@@ -197,3 +325,14 @@ export default async function handler(request, response) {
     return sendAdminJson(response, error?.statusCode || 500, payload);
   }
 }
+
+export const blogAdminRouteInternals = {
+  STATIC_POST_PREFIX,
+  importStaticLegacyPost,
+  mergeAdminPostsWithLegacy,
+  postSortTime,
+  readStaticLegacyRecord,
+  staticAdminSummary,
+  staticPostId,
+  staticSlugFromId
+};

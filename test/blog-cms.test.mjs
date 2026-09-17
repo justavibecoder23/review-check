@@ -20,6 +20,7 @@ import {
 } from '../src/blog-cms-store.mjs';
 import blogPostHandler from '../src/blog-post-route.mjs';
 import { blogPostHandlerInternals } from '../src/blog-post-route.mjs';
+import { blogAdminRouteInternals } from '../src/blog-admin-route.mjs';
 import sharp from 'sharp';
 import { decodeBlogMedia, saveBlogMedia } from '../src/blog-media-store.mjs';
 import { normalizeBlogPost, validateBlogPost } from '../src/blog-post-model.mjs';
@@ -287,6 +288,62 @@ test('bài mới từ main xuất hiện trong fallback CMS, index động và s
   assert.match(indexHtml, new RegExp(`/bai-viet/${slug}`));
   assert.equal((indexHtml.match(/data-blog-card/g) || []).length, 9);
   assert.match(sitemap, new RegExp(`<loc>https://www\\.realview\\.com\\.vn/bai-viet/${slug}</loc>`));
+});
+
+test('dashboard quản trị hợp nhất bài mới từ main và giữ đúng ngày xuất bản gốc', async () => {
+  const newestSlug = 'review-gia-la-gi-dau-hieu-nhan-biet';
+  const stored = LEGACY_BLOG_SUMMARIES
+    .filter((post) => post.slug !== newestSlug)
+    .map((post, index) => ({
+      ...post,
+      id: `stored-${index}`,
+      managedSlugs: [post.slug],
+      status: 'published',
+      revision: 1,
+      updatedAt: index === 0 ? '2026-09-17T14:18:00.000Z' : post.updatedAt
+    }));
+  const merged = blogAdminRouteInternals.mergeAdminPostsWithLegacy(stored);
+  const newest = merged.find((post) => post.slug === newestSlug);
+  const reliable = merged.find((post) => post.slug === 'review-san-pham-co-dang-tin-khong');
+
+  assert.equal(merged.length, LEGACY_BLOG_SUMMARIES.length);
+  assert.equal(newest.id, `static:${newestSlug}`);
+  assert.equal(newest.isStaticFallback, true);
+  assert.equal(newest.publishedAt, '2026-09-17T01:00:00.000Z');
+  assert.equal(reliable.publishedAt, '2026-09-16T01:00:00.000Z');
+  assert.equal(blogAdminRouteInternals.staticSlugFromId(newest.id), newestSlug);
+
+  const source = await blogAdminRouteInternals.readStaticLegacyRecord(newestSlug);
+  assert.equal(source.meta.publishedAt, '2026-09-17T08:00:00+07:00');
+  assert.equal(source.meta.updatedAt, '2026-09-17T08:00:00+07:00');
+  assert.equal(source.post.slug, newestSlug);
+});
+
+test('nhấn chỉnh sửa bài mới từ main chỉ nhập CMS một lần và bảo toàn ngày gốc', async () => {
+  const previousUrl = process.env.UPSTASH_REDIS_REST_URL;
+  const previousToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'test-token';
+  const mock = redisMock();
+  const actor = { role: 'admin', account: { id: 'admin-1', username: 'Admin', email: 'admin@realview.com.vn' } };
+  const options = { redisFetchImpl: mock.fetchImpl, randomUUIDImpl: () => 'import-main-post' };
+
+  try {
+    const first = await blogAdminRouteInternals.importStaticLegacyPost('review-gia-la-gi-dau-hieu-nhan-biet', actor, options);
+    const second = await blogAdminRouteInternals.importStaticLegacyPost('review-gia-la-gi-dau-hieu-nhan-biet', actor, options);
+    assert.equal(first.meta.id, 'import-main-post');
+    assert.equal(first.meta.status, 'published');
+    assert.equal(first.meta.revision, 1);
+    assert.equal(first.meta.publishedAt, '2026-09-17T01:00:00.000Z');
+    assert.equal(first.meta.publishedUpdatedAt, '2026-09-17T01:00:00.000Z');
+    assert.equal(second.meta.id, first.meta.id);
+    assert.equal(second.meta.revision, 1);
+  } finally {
+    if (previousUrl === undefined) delete process.env.UPSTASH_REDIS_REST_URL;
+    else process.env.UPSTASH_REDIS_REST_URL = previousUrl;
+    if (previousToken === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    else process.env.UPSTASH_REDIS_REST_TOKEN = previousToken;
+  }
 });
 
 function htmlResponseMock() {
