@@ -52,6 +52,8 @@ test('blog hub publishes eight articles and features the five-star review articl
 test('reliable-review article uses the second source image as both thumbnail and lead image', () => {
   assert.match(reliableReviewArticleHtml, /<h1 class="article-title">Review sản phẩm có đáng tin không\? 7 yếu tố kiểm tra độ tin cậy trước khi đặt hàng<\/h1>/);
   assert.match(reliableReviewArticleHtml, /<img class="article-lead-image article-lead-image--seo07" src="\/assets\/blog\/review-san-pham-co-dang-tin-khong\.jpg"/);
+  assert.match(reliableReviewArticleHtml, /<figure class="article-figure article-figure--seo08-source-crop"><img src="\/assets\/blog\/seo08-53-image1\.jpg"/);
+  assert.match(blogStyles, /\.article-figure--seo08-source-crop \{[^}]*aspect-ratio: 5495722 \/ 2558737;/);
   assert.match(reliableReviewArticleHtml, /<link rel="canonical" href="https:\/\/www\.realview\.com\.vn\/bai-viet\/review-san-pham-co-dang-tin-khong"/);
   assert.match(reliableReviewArticleHtml, /Đánh giá thực bằng hình ảnh và video/);
   assert.match(reliableReviewArticleHtml, /Nguyễn Bạch Vy, Nguyễn Trần Khánh Linh - Team SEO Content tại RealView/);
