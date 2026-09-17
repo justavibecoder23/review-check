@@ -1,18 +1,18 @@
-import { requireBlogRole } from '../src/blog-admin-auth.mjs';
+import { requireBlogRole } from './blog-admin-auth.mjs';
 import {
   listAccessAudit,
   listAccessGrants,
   revokeAccessGrant,
   upsertAccessGrant
-} from '../src/blog-access-store.mjs';
+} from './blog-access-store.mjs';
 import {
   adminErrorPayload,
   assertAdminSameOrigin,
   parseRequestBody,
   sendAdminJson
-} from '../src/blog-admin-http.mjs';
+} from './blog-admin-http.mjs';
 
-export default async function handler(request, response) {
+export default async function blogAccessHandler(request, response) {
   let body = {};
   try {
     if (!['GET', 'POST', 'DELETE'].includes(request.method)) {

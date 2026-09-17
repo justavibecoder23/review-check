@@ -37,9 +37,6 @@
     "api/blog.mjs": {
       "maxDuration": 30,
       "includeFiles": "public/blog{.html,/**}"
-    },
-    "api/admin-access.mjs": {
-      "maxDuration": 10
     }
   },
   "headers": [
@@ -126,7 +123,7 @@
     { "source": "/api/gemini-config", "destination": "/api/gemini-config.mjs" },
     { "source": "/api/chatbot-gemini-config", "destination": "/api/chatbot-gemini-config.mjs" },
     { "source": "/api/admin-blog", "destination": "/api/blog.mjs?route=admin" },
-    { "source": "/api/admin-access", "destination": "/api/admin-access.mjs" },
+    { "source": "/api/admin-access", "destination": "/api/blog.mjs?route=access-admin" },
     { "source": "/api/blog-public", "destination": "/api/blog.mjs?route=public" },
     { "source": "/admin/blog", "destination": "/admin-blog.html" },
     { "source": "/admin/access", "destination": "/admin-access.html" },

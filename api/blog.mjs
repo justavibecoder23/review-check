@@ -1,4 +1,5 @@
 import adminBlogHandler from '../src/blog-admin-route.mjs';
+import blogAccessHandler from '../src/blog-access-route.mjs';
 import blogIndexHandler from '../src/blog-index-route.mjs';
 import blogPostHandler from '../src/blog-post-route.mjs';
 import blogPublicHandler from '../src/blog-public-route.mjs';
@@ -6,6 +7,7 @@ import blogRssHandler from '../src/blog-rss-route.mjs';
 import blogSitemapHandler from '../src/blog-sitemap-route.mjs';
 
 const handlers = new Map([
+  ['access-admin', blogAccessHandler],
   ['admin', adminBlogHandler],
   ['index', blogIndexHandler],
   ['post', blogPostHandler],
