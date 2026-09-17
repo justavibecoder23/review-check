@@ -1,8 +1,8 @@
 import { readFile } from 'node:fs/promises';
-import { listBlogPosts } from './blog-cms-store.mjs';
-import { LEGACY_BLOG_SUMMARIES, blogPublicBaseUrl } from './blog-public-config.mjs';
-import { publicBlogSummary, summaryToBlogRecord } from './blog-public-data.mjs';
-import { renderBlogIndexTemplate } from './blog-renderer.mjs';
+import { listBlogPosts } from '../src/blog-cms-store.mjs';
+import { LEGACY_BLOG_SUMMARIES, blogPublicBaseUrl } from '../src/blog-public-config.mjs';
+import { publicBlogSummary, summaryToBlogRecord } from '../src/blog-public-data.mjs';
+import { renderBlogIndexTemplate } from '../src/blog-renderer.mjs';
 
 async function readTemplate() {
   return readFile(new URL('../public/blog.html', import.meta.url), 'utf8');

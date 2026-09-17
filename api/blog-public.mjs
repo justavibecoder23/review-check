@@ -1,5 +1,5 @@
-import { listBlogPosts } from './blog-cms-store.mjs';
-import { publicBlogSummary } from './blog-public-data.mjs';
+import { listBlogPosts } from '../src/blog-cms-store.mjs';
+import { publicBlogSummary } from '../src/blog-public-data.mjs';
 
 export default async function handler(request, response) {
   if (request.method !== 'GET') {

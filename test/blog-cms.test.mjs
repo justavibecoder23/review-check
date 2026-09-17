@@ -16,7 +16,7 @@ import {
   updateBlogPost,
   blogCmsInternals
 } from '../src/blog-cms-store.mjs';
-import blogPostHandler from '../src/blog-post-route.mjs';
+import blogPostHandler from '../api/blog-post.mjs';
 import { decodeBlogMedia } from '../src/blog-media-store.mjs';
 import { normalizeBlogPost, validateBlogPost } from '../src/blog-post-model.mjs';
 import { renderBlogPreview } from '../src/blog-admin-preview.mjs';

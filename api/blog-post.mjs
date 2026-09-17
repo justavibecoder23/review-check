@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
-import { resolvePublishedBlogRoute } from './blog-cms-store.mjs';
-import { LEGACY_BLOG_SLUGS, blogPublicBaseUrl } from './blog-public-config.mjs';
-import { renderBlogPost } from './blog-renderer.mjs';
+import { resolvePublishedBlogRoute } from '../src/blog-cms-store.mjs';
+import { LEGACY_BLOG_SLUGS, blogPublicBaseUrl } from '../src/blog-public-config.mjs';
+import { renderBlogPost } from '../src/blog-renderer.mjs';
 
 const legacySlugSet = new Set(LEGACY_BLOG_SLUGS);
 

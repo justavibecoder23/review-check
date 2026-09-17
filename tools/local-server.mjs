@@ -12,12 +12,12 @@ import contactHandler from '../api/contact.mjs';
 import chatHandler from '../api/chat.mjs';
 import chatbotGeminiConfigHandler from '../api/chatbot-gemini-config.mjs';
 import matchCounterpartHandler from '../api/match-counterpart.mjs';
-import adminBlogHandler from '../src/blog-admin-route.mjs';
-import blogIndexHandler from '../src/blog-index-route.mjs';
-import blogPostHandler from '../src/blog-post-route.mjs';
-import blogPublicHandler from '../src/blog-public-route.mjs';
-import blogSitemapHandler from '../src/blog-sitemap-route.mjs';
-import blogRssHandler from '../src/blog-rss-route.mjs';
+import adminBlogHandler from '../api/admin-blog.mjs';
+import blogIndexHandler from '../api/blog-index.mjs';
+import blogPostHandler from '../api/blog-post.mjs';
+import blogPublicHandler from '../api/blog-public.mjs';
+import blogSitemapHandler from '../api/blog-sitemap.mjs';
+import blogRssHandler from '../api/blog-rss.mjs';
 
 const port = Number(process.env.PORT || 3000);
 const host = process.env.HOST || '127.0.0.1';
