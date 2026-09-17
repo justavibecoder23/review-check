@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { resolvePublishedBlogRoute } from './blog-cms-store.mjs';
 import { LEGACY_BLOG_SLUGS, blogPublicBaseUrl } from './blog-public-config.mjs';
 import { renderBlogPost } from './blog-renderer.mjs';
-import { restoreStaticBlogPresentation } from './blog-static-migration.mjs';
+import { migrateStaticBlogHtml, restoreStaticBlogPresentation } from './blog-static-migration.mjs';
 
 const legacySlugSet = new Set(LEGACY_BLOG_SLUGS);
 
@@ -27,6 +27,22 @@ function sendHtml(response, statusCode, body, cacheControl = 'public, s-maxage=3
   response.end(body);
 }
 
+function sameInstant(left, right) {
+  const leftTime = Date.parse(left || '');
+  const rightTime = Date.parse(right || '');
+  return Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime === rightTime;
+}
+
+function isUnchangedLegacyImport(route, legacyHtml, slug) {
+  if (!route?.post || !legacyHtml) return false;
+  const source = migrateStaticBlogHtml(legacyHtml, { sourcePath: `public/blog/${slug}.html` });
+  return route.post.slug === source.post.slug
+    && route.post.h1 === source.post.h1
+    && route.post.heroImage?.url === source.post.heroImage?.url
+    && sameInstant(route.meta?.publishedAt, source.meta.publishedAt)
+    && sameInstant(route.meta?.updatedAt, source.meta.updatedAt);
+}
+
 export default async function handler(request, response) {
   if (!['GET', 'HEAD'].includes(request.method)) {
     response.setHeader('Allow', 'GET, HEAD');
@@ -42,6 +58,14 @@ export default async function handler(request, response) {
       return response.end();
     }
     const legacyHtml = await readLegacyBlogHtml(slug);
+    if (isUnchangedLegacyImport(route, legacyHtml, slug)) {
+      return sendHtml(
+        response,
+        200,
+        request.method === 'HEAD' ? '' : legacyHtml,
+        'public, s-maxage=300, stale-while-revalidate=3600'
+      );
+    }
     const presentedRoute = legacyHtml
       ? restoreStaticBlogPresentation(route, legacyHtml, { sourcePath: `public/blog/${slug}.html` })
       : route;
@@ -72,4 +96,4 @@ export default async function handler(request, response) {
   }
 }
 
-export const blogPostHandlerInternals = { readLegacyBlogHtml };
+export const blogPostHandlerInternals = { isUnchangedLegacyImport, readLegacyBlogHtml, sameInstant };

@@ -18,6 +18,7 @@ import {
   blogCmsInternals
 } from '../src/blog-cms-store.mjs';
 import blogPostHandler from '../src/blog-post-route.mjs';
+import { blogPostHandlerInternals } from '../src/blog-post-route.mjs';
 import { decodeBlogMedia } from '../src/blog-media-store.mjs';
 import { normalizeBlogPost, validateBlogPost } from '../src/blog-post-model.mjs';
 import { renderBlogPreview } from '../src/blog-admin-preview.mjs';
@@ -171,6 +172,14 @@ test('migration và renderer giữ nguyên format ảnh riêng của bài blog h
   assert.match(output, /<\/figure><p class="article-caption">Hình 3:/);
   assert.match(output, />9 phút đọc</);
   assert.doesNotMatch(output, /<p class="article-deck"><\/p>/);
+  assert.equal(blogPostHandlerInternals.isUnchangedLegacyImport({
+    post: migrated.post,
+    meta: migrated.meta
+  }, sourceHtml, migrated.post.slug), true);
+  assert.equal(blogPostHandlerInternals.isUnchangedLegacyImport({
+    post: migrated.post,
+    meta: { ...migrated.meta, updatedAt: '2026-09-17T10:00:00.000Z' }
+  }, sourceHtml, migrated.post.slug), false);
 });
 
 function htmlResponseMock() {
