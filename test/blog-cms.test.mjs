@@ -195,6 +195,19 @@ test('model và renderer giữ nguồn ảnh responsive an toàn, vẫn có src 
   assert.doesNotMatch(html, /javascript:alert/);
 });
 
+test('validator tương thích revision cũ có block ảnh chưa có galleryImages', () => {
+  const legacyPost = normalizeBlogPost(completePost({
+    blocks: [
+      ...completePost().blocks,
+      { id: 'anh-cu', type: 'image', url: '/assets/blog/review.webp', alt: 'Ảnh từ revision cũ' }
+    ]
+  }));
+  const imageBlock = legacyPost.blocks.find((block) => block.id === 'anh-cu');
+  delete imageBlock.galleryImages;
+
+  assert.doesNotThrow(() => validateBlogPost(legacyPost, { forPublish: true }));
+});
+
 test('migration và renderer giữ nguyên format ảnh riêng của bài blog hiện có', async () => {
   const sourcePath = new URL('../public/blog/review-san-pham-co-dang-tin-khong.html', import.meta.url);
   const sourceHtml = await readFile(sourcePath, 'utf8');
@@ -453,6 +466,50 @@ test('CMS giữ revision bất biến, chặn ghi đè cũ và ghi audit khi pub
     assert.equal((await listBlogPosts({ ...options, status: 'published' })).length, 1);
     assert.deepEqual((await listBlogRevisions('post-1', options)).map((item) => item.revision), [2, 1]);
     assert.deepEqual((await listBlogAudit('post-1', options)).map((item) => item.action), ['published', 'saved', 'created']);
+  } finally {
+    if (previousUrl === undefined) delete process.env.UPSTASH_REDIS_REST_URL;
+    else process.env.UPSTASH_REDIS_REST_URL = previousUrl;
+    if (previousToken === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    else process.env.UPSTASH_REDIS_REST_TOKEN = previousToken;
+  }
+});
+
+test('API đọc được revision CMS cũ trước khi có gallery, TOC và responsive image', async () => {
+  const previousUrl = process.env.UPSTASH_REDIS_REST_URL;
+  const previousToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'test-token';
+  const mock = redisMock();
+  const actor = { role: 'admin', account: { id: 'admin-1', username: 'Admin', email: 'admin@realview.com.vn' } };
+  const options = {
+    redisFetchImpl: mock.fetchImpl,
+    randomUUIDImpl: () => 'legacy-image-post',
+    now: () => new Date('2026-09-16T08:00:00.000Z')
+  };
+
+  try {
+    await createBlogPost(completePost({
+      blocks: [
+        ...completePost().blocks,
+        { id: 'anh-legacy', type: 'image', url: '/assets/blog/review.webp', alt: 'Ảnh bài cũ' }
+      ]
+    }), actor, options);
+    const key = blogCmsInternals.revisionKey('legacy-image-post', 1);
+    const pointer = JSON.parse(mock.strings.get(key));
+    const legacyImage = pointer.document.post.blocks.find((block) => block.id === 'anh-legacy');
+    delete legacyImage.galleryImages;
+    delete legacyImage.responsiveSources;
+    delete legacyImage.variants;
+    delete pointer.document.post.toc;
+    mock.strings.set(key, JSON.stringify(pointer));
+
+    const detail = await getBlogPost('legacy-image-post', options);
+    const image = detail.post.blocks.find((block) => block.id === 'anh-legacy');
+    assert.deepEqual(image.galleryImages, []);
+    assert.deepEqual(image.responsiveSources, []);
+    assert.deepEqual(image.variants, []);
+    assert.equal(detail.post.toc.mode, 'auto');
+    assert.doesNotThrow(() => validateBlogPost(detail.post));
   } finally {
     if (previousUrl === undefined) delete process.env.UPSTASH_REDIS_REST_URL;
     else process.env.UPSTASH_REDIS_REST_URL = previousUrl;

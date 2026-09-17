@@ -365,7 +365,7 @@ export function validateBlogPost(post, options = {}) {
     if (block.type === 'image') {
       if (!block.url) issues.push(issue('error', 'IMAGE_URL_REQUIRED', `blocks.${index}.url`, 'Ảnh chưa có URL HTTPS hoặc đường dẫn nội bộ hợp lệ.'));
       if (!block.alt) issues.push(issue(forPublish ? 'error' : 'warning', 'IMAGE_ALT_REQUIRED', `blocks.${index}.alt`, 'Ảnh chưa có alt text.'));
-      block.galleryImages.forEach((image, imageIndex) => {
+      (Array.isArray(block.galleryImages) ? block.galleryImages : []).forEach((image, imageIndex) => {
         if (!image.alt) issues.push(issue(forPublish ? 'error' : 'warning', 'IMAGE_ALT_REQUIRED', `blocks.${index}.galleryImages.${imageIndex}.alt`, 'Ảnh trong nhóm chưa có alt text.'));
       });
     }

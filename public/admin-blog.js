@@ -97,6 +97,11 @@ function normalizePost(raw = {}) {
         const block = { ...value, id: value.id || uid() };
         if (block.type === 'heading' && Number(block.level) === 3) block.type = 'subheading';
         if (block.type === 'cta') block.url = block.url || block.href || '';
+        if (block.type === 'image') {
+          block.responsiveSources = Array.isArray(block.responsiveSources) ? block.responsiveSources : [];
+          block.galleryImages = Array.isArray(block.galleryImages) ? block.galleryImages : [];
+          block.variants = Array.isArray(block.variants) ? block.variants : [];
+        }
         return block;
       })
     : [createBlock('paragraph')];

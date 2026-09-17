@@ -149,7 +149,17 @@ async function readRevisionDocument(postId, revision, options = {}) {
   if (!document?.post || Number(document.revision) !== Number(revision) || document.postId !== postId) {
     throw cmsError('Dữ liệu phiên bản bài viết không hợp lệ.', 500, 'BLOG_REVISION_CORRUPT');
   }
-  return { document, pointer };
+  // Older CMS revisions were stored before newer optional fields (TOC,
+  // responsive image sources, galleries, settings...) existed. Always expose
+  // the current model shape to validation and the editor without rewriting the
+  // immutable stored revision.
+  return {
+    document: {
+      ...document,
+      post: normalizeBlogPost(document.post, { fallbackSlug: document.post.slug })
+    },
+    pointer
+  };
 }
 
 async function nextRevisionNumber(postId, currentRevision, options = {}) {
