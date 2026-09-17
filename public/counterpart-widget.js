@@ -30,7 +30,7 @@ function ensureStylesheet() {
   stylesheetPromise = new Promise((resolve) => {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = '/counterpart-widget.css?v=13';
+    link.href = '/counterpart-widget.css?v=14';
     link.dataset.counterpartStyles = 'true';
     link.addEventListener('load', resolve, { once: true });
     link.addEventListener('error', resolve, { once: true });
@@ -63,12 +63,25 @@ function targetPlatformName(sourcePlatform) {
   return platformName(sourcePlatform) === 'Shopee' ? 'TikTok Shop' : 'Shopee';
 }
 
+function titleFromProductUrl(value) {
+  try {
+    const parts = new URL(String(value || '')).pathname.split('/').filter(Boolean);
+    const pdpIndex = parts.findIndex((part) => part.toLowerCase() === 'pdp');
+    const slug = pdpIndex >= 0 ? parts[pdpIndex + 1] : '';
+    if (!slug || /^product$/i.test(slug)) return '';
+    return decodeURIComponent(slug).replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+  } catch {
+    return '';
+  }
+}
+
 function sourceFromResult(result = {}) {
   const product = result.product || {};
+  const url = safeUrl(product.url || product.originalUrl);
   return {
     platform: platformName(product.platform),
-    title: String(product.title || '').trim(),
-    url: safeUrl(product.url || product.originalUrl),
+    title: String(product.title || titleFromProductUrl(url)).trim(),
+    url,
     image: safeUrl(product.image || product.imageUrl || product.thumbnail),
     itemId: String(product.itemId || ''),
     productId: String(product.productId || ''),
@@ -215,6 +228,25 @@ async function showProgressUnavailable(result) {
   if (progressCopy) progressCopy.textContent = result?.reason === 'rate_limited'
     ? 'Tìm kiếm đang tạm dừng, bạn có thể thử lại sau'
     : 'Bạn vẫn có thể tiếp tục xem kết quả phân tích hiện tại';
+}
+
+async function showMetadataUnavailable(platform) {
+  if (!progressButton) return;
+  await ensureStylesheet();
+  window.clearInterval(progressTimer);
+  window.clearTimeout(progressReadyTimer);
+  progressButton.hidden = false;
+  progressButton.disabled = true;
+  progressButton.classList.remove('hidden', 'is-searching', 'is-ready');
+  progressButton.classList.add('is-unavailable');
+  progressButton.removeAttribute('role');
+  progressButton.removeAttribute('aria-valuemin');
+  progressButton.removeAttribute('aria-valuemax');
+  progressButton.removeAttribute('aria-valuenow');
+  progressButton.setAttribute('aria-label', 'Chưa lấy được ảnh sản phẩm để đối chiếu');
+  setProgress(100);
+  if (progressTitle) progressTitle.textContent = 'Chưa lấy được ảnh sản phẩm để đối chiếu';
+  if (progressCopy) progressCopy.textContent = `Kết quả phân tích vẫn dùng bình thường; RealView chưa gửi yêu cầu tìm kiếm sang ${platform}`;
 }
 
 function fact(label, value) {
@@ -456,12 +488,16 @@ async function requestMatch(source, signal) {
 
 function beginForResult(result) {
   const source = sourceFromResult(result);
-  if (!source.platform || !source.title || !source.url || !source.image) return;
+  if (!source.platform || !source.url) return;
   const key = sourceKey(source);
   if (key === activeSourceKey) return;
   activeSourceKey = key;
   currentSource = source;
   resetWidget();
+  if (!source.title || !source.image) {
+    void showMetadataUnavailable(targetPlatformName(source.platform));
+    return;
+  }
   const stored = readStoredMatch(key);
   if (stored) announceReady(stored);
   else void showSearchProgress(targetPlatformName(source.platform));

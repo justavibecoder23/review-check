@@ -102,6 +102,7 @@ async function runActor({ productId, productUrl, reviewLimit, reviewFilter, cred
     }
     const datasetItems = await response.json();
     if (!Array.isArray(datasetItems)) throw new Error('Apify không trả về dataset TikTok hợp lệ.');
+    const productMeta = adapter.extractProductMeta(datasetItems);
     const items = adapter.extractItems(datasetItems, productId);
     const expectedRating = ratingFromFilter(reviewFilter);
     const matching = expectedRating === null
@@ -122,6 +123,7 @@ async function runActor({ productId, productUrl, reviewLimit, reviewFilter, cred
       actorStarted: true,
       statusCode: response.status || 200,
       failureClass: null,
+      productMeta,
       items: matching
     };
   } catch (error) {
@@ -140,6 +142,7 @@ async function runActor({ productId, productUrl, reviewLimit, reviewFilter, cred
       retryAfterMs: error?.retryAfterMs || 60_000,
       actorStarted: false,
       error: error?.message || 'Không lấy được reviews TikTok.',
+      productMeta: {},
       items: []
     };
   }
@@ -277,10 +280,20 @@ export async function collectTikTokReviews(productId, options = {}) {
   if (runtime.temporary) warnings.push(`Kết quả TikTok sử dụng tối đa ${targetMaximum} review gần nhất; phân bố sao phản ánh mẫu quan sát và có thể thiên lệch theo thời gian.`);
 
   const firstItem = successful.find((run) => run.items.length)?.items[0] || null;
+  const productMeta = successful.reduce((merged, run) => ({
+    ...merged,
+    ...(!merged.title && run.productMeta?.title ? { title: run.productMeta.title } : {}),
+    ...(!merged.image && run.productMeta?.image ? { image: run.productMeta.image } : {}),
+    ...(!merged.price && run.productMeta?.price ? { price: run.productMeta.price } : {}),
+    ...(!merged.rating && run.productMeta?.rating ? { rating: run.productMeta.rating } : {})
+  }), {});
   return {
     reviews: deduplicated,
     productMetaSource: firstItem,
-    productMeta: firstItem?.product_name ? { title: String(firstItem.product_name) } : {},
+    productMeta: {
+      ...productMeta,
+      ...(!productMeta.title && firstItem?.product_name ? { title: String(firstItem.product_name) } : {})
+    },
     warnings,
     credential: {
       source: allocation.source,
@@ -323,7 +336,7 @@ export async function collectTikTokReviews(productId, options = {}) {
       wrongRatingCount,
       wrongProductCount,
       latencyMs: Math.round(performance.now() - startedAt),
-      runs: runs.map(({ items: _items, error, ...run }) => ({ ...run, ...(error ? { error } : {}) }))
+      runs: runs.map(({ items: _items, productMeta: _productMeta, error, ...run }) => ({ ...run, ...(error ? { error } : {}) }))
     }
   };
 }

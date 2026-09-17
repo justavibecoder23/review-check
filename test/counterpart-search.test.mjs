@@ -240,9 +240,10 @@ test('section đối ứng ẩn mặc định và chỉ có module nền riêng'
   assert.match(script, /removeEventListener\('abort'/);
   assert.match(script, /trustIntroIsOpen/);
   assert.match(loader, /realview:analysis-result/);
-  assert.match(loader, /import\('\.\/counterpart-widget\.js\?v=13'\)/);
-  assert.match(html, /counterpart-loader\.js\?v=13/);
-  assert.match(script, /counterpart-widget\.css\?v=13/);
+  assert.match(loader, /import\('\.\/counterpart-widget\.js\?v=14'\)/);
+  assert.match(html, /counterpart-loader\.js\?v=14/);
+  assert.match(script, /counterpart-widget\.css\?v=14/);
+  assert.match(script, /showMetadataUnavailable/);
   assert.match(html, /results-v2\.css\?v=2/);
   assert.match(html, /results\.js\?v=2/);
   assert.match(script, /showSearchProgress/);

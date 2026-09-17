@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   extractProductPageMeta,
   fetchProductPageMetaCandidates,
+  getReviews,
   mergeProductMetadata,
   normaliseProductMeta
 } from '../src/sources.mjs';
@@ -92,4 +93,33 @@ test('metadata actor giữ category path để xác định ngành hàng', () =>
     mergeProductMetadata({ category: 'Thực phẩm' }, { categoryPath: metadata.categoryPath }, 'TikTok Shop').categoryPath,
     ['Thực phẩm', 'Đồ ăn vặt']
   );
+});
+
+test('TikTok dùng metadata cấp sản phẩm từ Actor khi trang sản phẩm bị chặn', async () => {
+  const productId = '1732344645376247746';
+  const actorImage = 'https://p16-oec-sg.ibyteimg.com/tos/product-cover.webp';
+  const result = await getReviews(`https://shop.tiktok.com/vn/pdp/op-lung-iphone-tpu/${productId}`, {
+    env: { TIKTOK_RECENT_RAW_CACHE: 'false' },
+    fetchImpl: async () => ({
+      ok: false,
+      status: 403,
+      headers: { get: () => null }
+    }),
+    collectTikTokReviewsImpl: async () => ({
+      reviews: Array.from({ length: 20 }, (_, index) => ({
+        id: `review-${index}`,
+        rating: 5,
+        text: `Nội dung đánh giá ${index}`
+      })),
+      productMeta: {
+        title: 'Ốp lưng iPhone TPU từ Actor',
+        image: actorImage
+      },
+      collection: { targetMaximum: 100, strategy: 'single-unfiltered' },
+      warnings: []
+    })
+  });
+
+  assert.equal(result.product.title, 'Ốp lưng iPhone TPU từ Actor');
+  assert.equal(result.product.image, actorImage);
 });

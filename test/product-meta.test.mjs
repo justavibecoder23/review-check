@@ -247,7 +247,7 @@ test('thử route Shopee có dữ liệu SSR trước route canonical dùng đ�
   );
 });
 
-test('yêu cầu metadata TikTok bằng chế độ preview để nhận ảnh Open Graph', async () => {
+test('yêu cầu metadata TikTok bằng chế độ trình duyệt để nhận SSR đầy đủ', async () => {
   let requestedUserAgent = '';
   const metadata = await fetchProductPageMeta(
     'https://shop.tiktok.com/vn/pdp/example/1731159356089795879',
@@ -271,7 +271,7 @@ test('yêu cầu metadata TikTok bằng chế độ preview để nhận ảnh O
     }
   );
 
-  assert.equal(requestedUserAgent, 'Twitterbot/1.0');
+  assert.match(requestedUserAgent, /Chrome\/128/);
   assert.deepEqual(metadata, {
     title: 'Sản phẩm TikTok',
     image: 'https://p16-oec-sg.ibyteimg.com/tos/product.webp'

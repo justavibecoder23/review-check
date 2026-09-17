@@ -10,11 +10,14 @@ import {
   getLatestDatasetPointerKey,
   getShopeeCacheKey,
   getTikTokCacheKey,
+  getTikTokProductMetaKey,
+  getTikTokProductMetadata,
   isShopeeCacheEligible,
   recordShopeeCacheHit,
   recordShopeeServed,
   setCachedShopeeDataset,
   setCachedTikTokDataset,
+  setTikTokProductMetadata,
   validateShopeeCachedDataset,
   validateTikTokCachedDataset
 } from '../src/product-cache.mjs';
@@ -187,6 +190,27 @@ test('ghi và đọc TikTok raw cache với TTL năm ngày', async (context) => 
   assert.equal(cached.dataset.datasetKind, 'raw-reviews');
   assert.equal(cached.dataset.product.productId, productId);
   assert.equal(JSON.parse(redis.values.get(getTikTokCacheKey(productId))).ratingStrataRequired, false);
+});
+
+test('metadata TikTok được lưu riêng và không tạo thêm Blob dataset', async (context) => {
+  enableRedisEnv(context);
+  const redis = createRedisFake();
+  const productId = '1732344645376247746';
+  const saved = await setTikTokProductMetadata(productId, {
+    title: 'Ốp lưng iPhone TPU',
+    image: 'https://p16-oec-sg.ibyteimg.com/tos/product-cover.webp'
+  }, {
+    redisFetchImpl: redis.fetchImpl,
+    source: 'page',
+    now: new Date('2026-09-17T14:00:00.000Z')
+  });
+  assert.equal(saved.saved, true);
+  const metadata = await getTikTokProductMetadata(productId, { redisFetchImpl: redis.fetchImpl });
+  assert.equal(metadata.title, 'Ốp lưng iPhone TPU');
+  assert.equal(metadata.image, 'https://p16-oec-sg.ibyteimg.com/tos/product-cover.webp');
+  assert.equal(metadata.source, 'page');
+  assert.ok(redis.values.has(getTikTokProductMetaKey(productId)));
+  assert.equal(redis.commands.some((command) => command[0] === 'HINCRBY'), false);
 });
 
 test('ghi và đọc mapping cache với TTL còn lại của mốc năm ngày', async (context) => {
@@ -397,6 +421,60 @@ test('getReviews ưu tiên TikTok raw cache năm ngày và bỏ qua Actor', asyn
   assert.equal(result.source.cache.exactMatch, true);
   assert.equal(result.source.collection.ratingStrataRequired, false);
   assert.equal(result.reviews.length, 20);
+});
+
+test('TikTok cache cũ thiếu metadata được tự phục hồi mà không chạy Actor', async (context) => {
+  const productId = '1732344645376247746';
+  const dataset = tiktokDataset(productId);
+  dataset.product = { platform: 'TikTok Shop', productId };
+  enableRedisEnv(context);
+  const redis = createRedisFake({
+    [getTikTokCacheKey(productId)]: JSON.stringify({
+      version: 2,
+      platform: 'TikTok Shop',
+      productId,
+      bundlePath: `review-datasets/tiktok-${productId}/reviews.dataset.json`,
+      createdAt: dataset.createdAt
+    })
+  });
+  let metadataRequests = 0;
+  const result = await getReviews(`https://shop.tiktok.com/vn/pdp/op-lung-iphone-tpu/${productId}`, {
+    redisFetchImpl: redis.fetchImpl,
+    blobGetImpl: blobGetFor(dataset),
+    now: new Date('2026-09-10T00:00:00.000Z'),
+    fetchImpl: async () => {
+      metadataRequests += 1;
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: (name) => name === 'content-type' ? 'text/html; charset=utf-8' : null },
+        body: null,
+        async text() {
+          return '<meta property="og:title" content="Ốp lưng iPhone TPU"><meta property="og:image" content="https://p16-oec-sg.ibyteimg.com/tos/product-cover.webp">';
+        }
+      };
+    }
+  });
+  assert.equal(result.source.type, 'cached');
+  assert.equal(result.product.title, 'Ốp lưng iPhone TPU');
+  assert.equal(result.product.image, 'https://p16-oec-sg.ibyteimg.com/tos/product-cover.webp');
+  assert.equal(metadataRequests, 1);
+  assert.ok(redis.values.has(getTikTokProductMetaKey(productId)));
+  assert.equal(redis.commands.some((command) => command[0] === 'HINCRBY'), false);
+
+  metadataRequests = 0;
+  const restoredFromOverlay = await getReviews(`https://shop.tiktok.com/vn/pdp/op-lung-iphone-tpu/${productId}`, {
+    redisFetchImpl: redis.fetchImpl,
+    blobGetImpl: blobGetFor(dataset),
+    now: new Date('2026-09-10T00:00:00.000Z'),
+    fetchImpl: async () => {
+      metadataRequests += 1;
+      throw new Error('Trang sản phẩm không nên được gọi lại khi overlay đã đủ.');
+    }
+  });
+  assert.equal(restoredFromOverlay.product.title, 'Ốp lưng iPhone TPU');
+  assert.equal(restoredFromOverlay.product.image, 'https://p16-oec-sg.ibyteimg.com/tos/product-cover.webp');
+  assert.equal(metadataRequests, 0);
 });
 
 test('getReviews chấp nhận cache TikTok 100 hoặc 200 review', async (context) => {
