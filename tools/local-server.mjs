@@ -12,12 +12,6 @@ import contactHandler from '../api/contact.mjs';
 import chatHandler from '../api/chat.mjs';
 import chatbotGeminiConfigHandler from '../api/chatbot-gemini-config.mjs';
 import matchCounterpartHandler from '../api/match-counterpart.mjs';
-import adminBlogHandler from '../api/admin-blog.mjs';
-import blogIndexHandler from '../api/blog-index.mjs';
-import blogPostHandler from '../api/blog-post.mjs';
-import blogPublicHandler from '../api/blog-public.mjs';
-import blogSitemapHandler from '../api/blog-sitemap.mjs';
-import blogRssHandler from '../api/blog-rss.mjs';
 
 const port = Number(process.env.PORT || 3000);
 const host = process.env.HOST || '127.0.0.1';
@@ -30,15 +24,20 @@ const mimeTypes = {
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.png': 'image/png',
-  '.webp': 'image/webp',
-  '.avif': 'image/avif',
-  '.xml': 'application/xml; charset=utf-8',
   '.ico': 'image/x-icon'
 };
 const publicRouteFiles = new Map([
   ['/tieu-chi-loc', '/criteria.html'],
   ['/lien-he', '/contact.html'],
-  ['/admin/blog', '/admin-blog.html'],
+  ['/bai-viet', '/blog.html'],
+  ['/bai-viet/trustscore-la-gi', '/blog/trustscore-la-gi.html'],
+  ['/bai-viet/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang', '/blog/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html'],
+  ['/bai-viet/shopee-hay-tiktok-shop-mua-hang-o-dau-tot-hon', '/blog/shopee-hay-tiktok-shop-mua-hang-o-dau-tot-hon.html'],
+  ['/bai-viet/shopee-mall-la-gi-co-nen-mua-khong', '/blog/shopee-mall-la-gi-co-nen-mua-khong.html'],
+  ['/bai-viet/tiktok-shop-la-gi-mua-hang-tren-tiktok-co-an-toan-khong', '/blog/tiktok-shop-la-gi-mua-hang-tren-tiktok-co-an-toan-khong.html'],
+  ['/bai-viet/cach-tim-shop-uy-tin-tren-shopee', '/blog/cach-tim-shop-uy-tin-tren-shopee.html'],
+  ['/bai-viet/review-san-pham-la-gi', '/blog/review-san-pham-la-gi.html'],
+  ['/bai-viet/review-san-pham-co-dang-tin-khong', '/blog/review-san-pham-co-dang-tin-khong.html'],
   ['/ket-qua', '/results.html'],
 ]);
 
@@ -61,11 +60,11 @@ function vercelResponse(response) {
   };
 }
 
-async function getBody(request, maximumBytes = 512_000) {
+async function getBody(request) {
   let raw = '';
   for await (const chunk of request) {
     raw += chunk;
-    if (raw.length > maximumBytes) throw new Error('Nội dung gửi lên quá lớn.');
+    if (raw.length > 512_000) throw new Error('Nội dung gửi lên quá lớn.');
   }
   return raw ? JSON.parse(raw) : {};
 }
@@ -151,19 +150,8 @@ const server = createServer(async (request, response) => {
       return chatbotGeminiConfigHandler(request, vercelResponse(response));
     }
 
-    if (['GET', 'POST', 'DELETE'].includes(request.method) && apiPath === '/api/admin-blog') {
-      request.query = Object.fromEntries(url.searchParams.entries());
-      if (request.method !== 'GET') request.body = await getBody(request, 5 * 1024 * 1024);
-      return adminBlogHandler(request, vercelResponse(response));
-    }
-
-    if (request.method === 'GET' && apiPath === '/api/blog-public') {
-      request.query = Object.fromEntries(url.searchParams.entries());
-      return blogPublicHandler(request, vercelResponse(response));
-    }
-
     if (apiPath.startsWith('/api/')) {
-      const knownPath = ['/api/analyze', '/api/analyze-stream', '/api/chat', '/api/match-counterpart', '/api/auth', '/api/history', '/api/contact', '/api/apify-config', '/api/gemini-config', '/api/chatbot-gemini-config', '/api/admin-blog', '/api/blog-public'].includes(apiPath);
+      const knownPath = ['/api/analyze', '/api/analyze-stream', '/api/chat', '/api/match-counterpart', '/api/auth', '/api/history', '/api/contact', '/api/apify-config', '/api/gemini-config', '/api/chatbot-gemini-config'].includes(apiPath);
       return sendJson(response, knownPath ? 405 : 404, {
         error: knownPath ? 'Phương thức không được hỗ trợ.' : 'API không tồn tại.'
       });
@@ -171,14 +159,6 @@ const server = createServer(async (request, response) => {
 
     if (request.method !== 'GET' && request.method !== 'HEAD') {
       return sendJson(response, 405, { error: 'Phương thức không được hỗ trợ.' });
-    }
-
-    if (url.pathname === '/sitemap.xml') return blogSitemapHandler(request, response);
-    if (url.pathname === '/bai-viet/rss.xml') return blogRssHandler(request, response);
-    if (url.pathname === '/bai-viet') return blogIndexHandler(request, response);
-    if (url.pathname.startsWith('/bai-viet/')) {
-      request.query = { slug: decodeURIComponent(url.pathname.slice('/bai-viet/'.length)) };
-      return blogPostHandler(request, response);
     }
 
     const requested = url.pathname === '/' ? '/index.html' : (publicRouteFiles.get(url.pathname) || url.pathname);

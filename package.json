@@ -9,7 +9,6 @@
     "generate:apify-pool": "node tools/generate-apify-pool.mjs",
     "generate:gemini-pool": "node tools/generate-gemini-pool.mjs",
     "generate:chatbot-gemini-pool": "node tools/generate-gemini-pool.mjs --chatbot",
-    "migrate:blog": "node tools/migrate-static-blog.mjs",
     "sync:shopee-cache": "node tools/sync-blob-to-redis.mjs --platform=shopee",
     "sync:product-cache": "node tools/sync-blob-to-redis.mjs",
     "test": "node --test"
