@@ -1,5 +1,8 @@
 let currentUser = null;
 let statusPromise;
+let currentBlogRole = null;
+let currentBlogCapabilities = null;
+let blogAccessPromise;
 let returnFocus;
 let pendingRegistration = null;
 
@@ -30,6 +33,8 @@ function accountControlsMarkup() {
       </button>
       <div class="account-popover" data-account-popover hidden>
         <div><span>Tài khoản RealView</span><strong>${escapeHtml(currentUser.username)}</strong><small>${escapeHtml(currentUser.email)}</small></div>
+        ${currentBlogCapabilities?.managePosts ? '<a class="account-admin-link" href="/admin/blog"><i aria-hidden="true">✎</i><b>Quản trị bài viết<small>Đăng và chỉnh sửa Blog</small></b></a>' : ''}
+        ${currentBlogCapabilities?.manageAccess ? '<a class="account-admin-link account-admin-link--access" href="/admin/access"><i aria-hidden="true">⌘</i><b>Quyền truy cập<small>Quản lý admin và editor</small></b></a>' : ''}
         <button type="button" data-auth-logout>Đăng xuất</button>
       </div>`;
   }
@@ -42,6 +47,41 @@ function renderAccountControls() {
     slot.classList.toggle('is-signed-in', Boolean(currentUser));
     slot.innerHTML = accountControlsMarkup();
   });
+}
+
+async function refreshBlogAccess({ refresh = false } = {}) {
+  if (!currentUser) {
+    currentBlogRole = null;
+    currentBlogCapabilities = null;
+    blogAccessPromise = null;
+    renderAccountControls();
+    return null;
+  }
+  if (blogAccessPromise && !refresh) return blogAccessPromise;
+  const accountId = currentUser.id;
+  blogAccessPromise = fetch('/api/admin-blog?action=access', {
+    credentials: 'same-origin',
+    cache: 'no-store'
+  }).then(async (response) => {
+    const payload = await response.json().catch(() => ({}));
+    if (currentUser?.id !== accountId) return null;
+    currentBlogRole = response.ok && ['admin', 'editor'].includes(payload.role) ? payload.role : null;
+    currentBlogCapabilities = currentBlogRole ? {
+      managePosts: payload.capabilities?.managePosts !== false,
+      publishPosts: payload.capabilities?.publishPosts === true,
+      manageAccess: payload.capabilities?.manageAccess === true
+    } : null;
+    renderAccountControls();
+    return currentBlogRole;
+  }).catch(() => {
+    if (currentUser?.id === accountId) {
+      currentBlogRole = null;
+      currentBlogCapabilities = null;
+      renderAccountControls();
+    }
+    return null;
+  });
+  return blogAccessPromise;
 }
 
 function ensureAccountControls() {
@@ -184,11 +224,16 @@ export async function getCurrentUser({ refresh = false } = {}) {
     .then(async (response) => {
       const payload = await response.json().catch(() => ({}));
       currentUser = response.ok ? payload.user || null : null;
+      currentBlogRole = null;
+      currentBlogCapabilities = null;
       renderAccountControls();
+      if (currentUser) void refreshBlogAccess({ refresh: true });
       return currentUser;
     })
     .catch(() => {
       currentUser = null;
+      currentBlogRole = null;
+      currentBlogCapabilities = null;
       renderAccountControls();
       return null;
     });
@@ -232,9 +277,12 @@ async function submitAccountForm(form) {
         code: values.code
       });
       currentUser = payload.user;
+      currentBlogRole = null;
+      currentBlogCapabilities = null;
       pendingRegistration = null;
       statusPromise = Promise.resolve(currentUser);
       renderAccountControls();
+      void refreshBlogAccess({ refresh: true });
       closeAuthDialog();
       window.realviewTrackEvent?.('sign_up', { method: 'verified_email' });
       window.dispatchEvent(new CustomEvent('realview:auth-changed', { detail: { user: currentUser } }));
@@ -257,8 +305,11 @@ async function submitAccountForm(form) {
       return;
     }
     currentUser = payload.user;
+    currentBlogRole = null;
+    currentBlogCapabilities = null;
     statusPromise = Promise.resolve(currentUser);
     renderAccountControls();
+    void refreshBlogAccess({ refresh: true });
     closeAuthDialog();
     const eventName = action === 'register' ? 'sign_up' : action === 'reset_password' ? 'password_reset' : 'login';
     window.realviewTrackEvent?.(eventName, { method: action === 'reset_password' ? 'email_code' : 'username' });
@@ -275,6 +326,9 @@ async function submitAccountForm(form) {
 async function logout() {
   await apiRequest({ action: 'logout' }).catch(() => {});
   currentUser = null;
+  currentBlogRole = null;
+  currentBlogCapabilities = null;
+  blogAccessPromise = null;
   statusPromise = Promise.resolve(null);
   renderAccountControls();
   window.dispatchEvent(new CustomEvent('realview:auth-changed', { detail: { user: null } }));

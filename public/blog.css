@@ -144,6 +144,8 @@
 .article-content h2 { margin: 56px 0 18px; scroll-margin-top: 112px; color: #111827; font-size: 34px; line-height: 1.25; letter-spacing: -.035em; }
 .article-content h3 { margin: 38px 0 12px; scroll-margin-top: 112px; color: #111827; font-size: 23px; line-height: 1.35; }
 .article-content p { margin: 0 0 24px; }
+.article-content .article-text--lead { color: #252b33; font-size: 1.16em; line-height: 1.72; }
+.article-content .article-text--small { color: #6b7280; font-size: .88em; line-height: 1.7; }
 .article-content ul, .article-content ol { margin: 0 0 28px; padding-left: 25px; }
 .article-content li { margin: 10px 0; padding-left: 5px; }
 .article-content a { color: var(--orange-dark); font-weight: 700; text-underline-offset: 4px; }

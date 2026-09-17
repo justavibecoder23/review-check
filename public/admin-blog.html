@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex,nofollow,noarchive,nosnippet" />
+    <meta name="referrer" content="same-origin" />
+    <meta name="theme-color" content="#f4f3ef" />
+    <title>Quản trị Blog | RealView</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-v1-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon-v1.png" />
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/auth.css" />
+    <link rel="stylesheet" href="/admin-blog.css" />
+  </head>
+  <body class="admin-blog-page">
+    <a class="skip-link" href="#admin-main">Đi đến nội dung chính</a>
+
+    <header class="admin-topbar">
+      <a class="admin-brand" href="/" aria-label="RealView - Trang chủ">
+        <img src="/assets/realview-logo-v1.webp" alt="" width="128" height="75" />
+        <span><b>REAL</b>VIEW</span>
+        <em>Blog Studio</em>
+      </a>
+      <div class="admin-topbar-actions">
+        <span class="admin-save-state" data-save-state aria-live="polite">Chưa có thay đổi</span>
+        <a class="admin-site-link" href="/bai-viet" target="_blank" rel="noopener">Xem blog <span aria-hidden="true">↗</span></a>
+        <div class="header-auth" data-auth-controls></div>
+      </div>
+    </header>
+
+    <div class="admin-shell">
+      <aside class="admin-sidebar" aria-label="Điều hướng quản trị blog">
+        <div class="admin-sidebar-heading">
+          <span>NỘI DUNG</span>
+          <strong>Blog RealView</strong>
+        </div>
+        <nav class="admin-nav">
+          <button class="is-active" type="button" data-view-link="posts" aria-current="page">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-13Z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+            <span>Bài viết</span>
+            <b data-total-badge>0</b>
+          </button>
+          <button type="button" data-view-link="new">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            <span>Viết bài mới</span>
+          </button>
+          <button type="button" data-view-link="guide">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 4.5A2.5 2.5 0 0 1 7.5 2H20v17H7.5A2.5 2.5 0 0 0 5 21.5v-17Z"/><path d="M5 21.5A2.5 2.5 0 0 1 7.5 19H20M9 7h7M9 11h7"/></svg>
+            <span>Hướng dẫn</span>
+          </button>
+          <button type="button" data-access-management hidden>
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c.5-4 2.3-6 5.5-6s5 2 5.5 6M16 8h5M18.5 5.5v5"/></svg>
+            <span>Quyền truy cập</span>
+          </button>
+        </nav>
+        <div class="admin-sidebar-note">
+          <span aria-hidden="true">✓</span>
+          <p><strong>SEO tự động</strong>Schema, mục lục và sitemap được đồng bộ khi xuất bản.</p>
+        </div>
+      </aside>
+
+      <main id="admin-main" class="admin-main">
+        <section class="admin-access" data-access-state aria-live="polite">
+          <div class="admin-access-card">
+            <span class="admin-access-mark" aria-hidden="true">RV</span>
+            <p class="admin-eyebrow">KHU VỰC QUẢN TRỊ</p>
+            <h1>Đang kiểm tra quyền truy cập</h1>
+            <p data-access-message>Vui lòng chờ trong giây lát.</p>
+            <button class="admin-primary-button" type="button" data-access-login hidden>Đăng nhập tài khoản admin <span aria-hidden="true">→</span></button>
+          </div>
+        </section>
+
+        <section class="admin-view" data-view="posts" hidden>
+          <div class="admin-page-heading">
+            <div>
+              <p class="admin-eyebrow">THƯ VIỆN NỘI DUNG</p>
+              <h1>Quản lý bài viết</h1>
+              <p>Tạo, chỉnh sửa và theo dõi trạng thái xuất bản của Blog RealView.</p>
+            </div>
+            <button class="admin-primary-button" type="button" data-create-post>
+              <span aria-hidden="true">＋</span> Viết bài mới
+            </button>
+          </div>
+
+          <div class="admin-overview" aria-label="Tổng quan bài viết">
+            <article><span>Tổng bài viết</span><strong data-stat="all">0</strong><small>Tất cả nội dung</small></article>
+            <article><span>Đã xuất bản</span><strong data-stat="published">0</strong><small>Đang hiển thị công khai</small></article>
+            <article><span>Bản nháp</span><strong data-stat="draft">0</strong><small>Đang được biên tập</small></article>
+            <article><span>Lưu trữ</span><strong data-stat="archived">0</strong><small>Nội dung đã ngừng sử dụng</small></article>
+          </div>
+
+          <div class="admin-list-panel">
+            <div class="admin-list-tools">
+              <label class="admin-search">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+                <span class="sr-only">Tìm kiếm bài viết</span>
+                <input type="search" data-post-search placeholder="Tìm theo tiêu đề, slug hoặc tác giả…" autocomplete="off" />
+              </label>
+              <div class="admin-filter-group" role="group" aria-label="Lọc bài viết theo trạng thái">
+                <button class="is-active" type="button" data-status-filter="all" aria-pressed="true">Tất cả</button>
+                <button type="button" data-status-filter="published" aria-pressed="false">Đã đăng</button>
+                <button type="button" data-status-filter="draft" aria-pressed="false">Bản nháp</button>
+                <button type="button" data-status-filter="archived" aria-pressed="false">Lưu trữ</button>
+              </div>
+            </div>
+
+            <div class="admin-post-table-wrap">
+              <table class="admin-post-table">
+                <thead><tr><th scope="col">Bài viết</th><th scope="col">Trạng thái</th><th scope="col">Xuất bản / cập nhật</th><th scope="col">Tác giả</th><th scope="col"><span class="sr-only">Hành động</span></th></tr></thead>
+                <tbody data-post-list></tbody>
+              </table>
+              <div class="admin-list-loading" data-list-loading><span></span><p>Đang tải thư viện bài viết…</p></div>
+              <div class="admin-empty-state" data-list-empty hidden>
+                <span aria-hidden="true">✦</span><h2>Chưa tìm thấy bài viết</h2><p>Hãy đổi bộ lọc hoặc bắt đầu một bài viết mới.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="admin-view admin-guide-view" data-view="guide" hidden>
+          <div class="admin-page-heading admin-guide-heading">
+            <div>
+              <p class="admin-eyebrow">CẨM NANG BLOG STUDIO</p>
+              <h1>Viết bài đúng ngay từ đầu</h1>
+              <p>Giải thích từng trường nhập bằng ngôn ngữ dễ hiểu, với ví dụ lấy từ các bài đang có trên Blog RealView.</p>
+            </div>
+            <button class="admin-primary-button" type="button" data-guide-new>＋ Viết bài mới</button>
+          </div>
+
+          <div class="admin-guide-layout">
+            <nav class="admin-guide-toc" aria-label="Mục lục hướng dẫn">
+              <strong>Mục lục</strong>
+              <a href="#guide-start">Bắt đầu nhanh</a>
+              <a href="#guide-content"><span>01</span>Nội dung</a>
+              <a href="#guide-seo"><span>02</span>SEO</a>
+              <a href="#guide-media"><span>03</span>Hình ảnh</a>
+              <a href="#guide-settings"><span>04</span>Thiết lập</a>
+              <a href="#guide-revisions"><span>05</span>Phiên bản</a>
+              <a href="#guide-publish">Checklist xuất bản</a>
+            </nav>
+
+            <article class="admin-guide-content">
+              <section id="guide-start" class="admin-guide-hero">
+                <div>
+                  <p class="admin-eyebrow">LUỒNG LÀM VIỆC KHUYẾN NGHỊ</p>
+                  <h2>Soạn nội dung trước, hoàn thiện SEO sau</h2>
+                  <p>Bạn không cần là developer. Hãy đi lần lượt qua năm tab từ trái sang phải, dùng <b>Xem trước</b> để kiểm tra và chỉ nhấn <b>Xuất bản</b> khi checklist đã ổn.</p>
+                </div>
+                <ol class="admin-guide-flow">
+                  <li><b>1</b><span>Viết nội dung</span></li><li><b>2</b><span>Điền SEO</span></li><li><b>3</b><span>Chọn ảnh</span></li><li><b>4</b><span>Thiết lập</span></li><li><b>5</b><span>Xem trước</span></li>
+                </ol>
+                <aside><strong>Ba nút dễ nhầm</strong><p><b>Lưu bản nháp</b> chỉ lưu nội dung cho nhóm biên tập, không thay bài đang public. <b>Cập nhật bài viết</b> mới đưa revision mới lên public. <b>Xem trước</b> không lưu và không tạo revision.</p></aside>
+              </section>
+
+              <section id="guide-content" class="admin-guide-chapter">
+                <header><span>01</span><div><p class="admin-eyebrow">TAB NỘI DUNG</p><h2>Xây cấu trúc bài để người đọc dễ theo dõi</h2></div></header>
+                <div class="admin-guide-grid">
+                  <article class="admin-guide-card admin-guide-card--wide"><h3>Tiêu đề bài viết và đoạn mở đầu</h3><p><b>Tiêu đề bài viết</b> là H1 duy nhất trên trang. Viết đúng câu hỏi hoặc nhu cầu chính, không thêm dấu chấm ở cuối. <b>Đoạn mở đầu</b> nằm ngay dưới H1 và nên trả lời nhanh người đọc sẽ nhận được gì.</p><div class="admin-guide-example"><span>Ví dụ tốt</span><strong>Review sản phẩm có đáng tin không? 7 yếu tố kiểm tra trước khi đặt hàng</strong><p>Không phải review nào cũng phản ánh đúng chất lượng sản phẩm. Bài viết này giúp bạn nhận biết phản hồi có ích trước khi mua.</p></div></article>
+                  <article class="admin-guide-card"><h3>Kích thước đoạn văn</h3><dl><dt>Tiêu chuẩn</dt><dd>Dùng cho phần lớn nội dung giải thích.</dd><dt>Mở bài / nổi bật</dt><dd>Chữ lớn hơn, chỉ dùng cho một đoạn quan trọng hoặc phần dẫn.</dd><dt>Thông tin phụ</dt><dd>Chữ nhỏ hơn cho chú thích, lưu ý phụ; không dùng cho ý chính.</dd></dl><div class="admin-guide-text-demo"><p class="is-lead">Mở bài / nổi bật giúp dẫn người đọc vào vấn đề.</p><p>Tiêu chuẩn dùng để giải thích nội dung chính.</p><p class="is-small">Thông tin phụ không nên chứa kết luận quan trọng.</p></div></article>
+                  <article class="admin-guide-card"><h3>In đậm, in nghiêng và liên kết</h3><p>Bôi đen đoạn chữ rồi nhấn <b>B</b>, <i>I</i> hoặc biểu tượng liên kết. In đậm cho kết luận; in nghiêng cho thuật ngữ; liên kết cho nguồn hoặc bài liên quan.</p><div class="admin-guide-example"><span>Ví dụ nhập</span><code>Ưu tiên **review có mô tả cụ thể** và đọc thêm [tiêu chí lọc](/tieu-chi-loc).</code><span>Kết quả</span><p>Ưu tiên <strong>review có mô tả cụ thể</strong> và đọc thêm <u>tiêu chí lọc</u>.</p></div></article>
+                  <article class="admin-guide-card"><h3>H2, H3, anchor và mục lục</h3><p><b>H2</b> là phần lớn của bài; <b>H3</b> là ý nhỏ nằm trong H2. Anchor là tên định danh không dấu dùng để nhảy tới mục, ví dụ <code>dau-hieu-review-ao</code>. Bật “Hiển thị trong mục lục” khi mục đó hữu ích cho việc điều hướng.</p><p><b>Theo cấu trúc bài</b> sẽ tự cập nhật khi bạn sửa H2/H3. Nhấn <b>Tạo bản có thể chỉnh sửa</b> để chụp danh sách hiện tại, rồi đổi nhãn, sắp xếp hoặc bỏ bớt mục mà không đổi tiêu đề trong nội dung. Có thể nhấn “Tạo lại từ nội dung” bất cứ lúc nào.</p><div class="admin-guide-outline"><b>H1: Review sản phẩm có đáng tin?</b><span>H2: 7 yếu tố cần kiểm tra</span><i>H3: Nội dung có đủ cụ thể không?</i><i>H3: Người mua có ảnh thực tế không?</i><span>H2: Cách ra quyết định</span></div></article>
+                  <article class="admin-guide-card"><h3>Danh sách và checklist</h3><p><b>Danh sách</b> dùng cho các ý ngang hàng; chọn đánh số nếu thứ tự quan trọng. <b>Checklist</b> dùng khi người đọc cần tự đánh dấu bước đã làm.</p><div class="admin-guide-example"><ul><li>Đọc cả review thấp sao</li><li>Kiểm tra hình ảnh thực tế</li></ul><p>Checklist nhập mỗi dòng bằng <code>[x]</code> hoặc <code>[ ]</code>.</p></div></article>
+                  <article class="admin-guide-card"><h3>Ghi chú, trích dẫn và công thức</h3><p><b>Ghi chú</b> làm nổi bật cảnh báo hoặc kết luận. <b>Trích dẫn</b> phải có nguồn rõ ràng. <b>Công thức</b> dùng cho biểu thức; “cách đọc công thức” giúp trình đọc màn hình hiểu nội dung.</p><div class="admin-guide-callout"><b>Lưu ý</b><p>Số sao cao không tự động chứng minh review đáng tin.</p></div></article>
+                  <article class="admin-guide-card"><h3>Bảng và đường phân cách</h3><p>Bảng phù hợp khi so sánh cùng tiêu chí. Nhập tiêu đề cột bằng dấu <code>|</code>; mỗi dòng textarea là một hàng. Đường phân cách chỉ tạo nhịp nghỉ, không nên dùng thay H2/H3.</p><div class="admin-guide-mini-table"><b>Tín hiệu</b><b>Nên hiểu</b><span>Có ảnh thật</span><span>Tăng ngữ cảnh</span><span>Chỉ nói “tốt”</span><span>Ít thông tin</span></div></article>
+                  <article class="admin-guide-card"><h3>FAQ, nguồn và bài liên quan</h3><p><b>FAQ</b> trả lời câu hỏi thực người dùng thường hỏi. <b>Nguồn tham khảo</b> cần tên nguồn và URL. <b>Bài liên quan</b> dùng slug, ví dụ <code>trustscore-la-gi</code>, để tạo liên kết nội bộ.</p><div class="admin-guide-example"><span>FAQ mẫu</span><strong>Có nên chỉ đọc review 5 sao?</strong><p>Không. Hãy đọc nhiều mức sao và ưu tiên phản hồi mô tả trải nghiệm cụ thể.</p></div></article>
+                  <article class="admin-guide-card"><h3>CTA RealView</h3><p>CTA là lời mời hành động cuối bài. Eyebrow là nhãn nhỏ; title là lời kêu gọi chính; label là chữ trên nút; URL thường là <code>/#trang-chu</code>.</p><div class="admin-guide-cta"><small>KIỂM TRA TRƯỚC KHI MUA</small><strong>Đọc review nhanh hơn cùng RealView</strong><span>Phân tích sản phẩm →</span></div></article>
+                  <article class="admin-guide-card admin-guide-card--wide"><h3>Sắp xếp, nhân bản và xóa khối</h3><p>Dùng mũi tên bên trái để đổi thứ tự; biểu tượng hai ô để nhân bản; dấu × để xóa. Việc sắp xếp trong màn hình chưa làm thay đổi bài public cho tới khi bạn lưu và xuất bản.</p></article>
+                </div>
+              </section>
+
+              <section id="guide-seo" class="admin-guide-chapter">
+                <header><span>02</span><div><p class="admin-eyebrow">TAB SEO</p><h2>Giúp Google hiểu đúng nội dung bài viết</h2></div></header>
+                <div class="admin-guide-grid">
+                  <article class="admin-guide-card"><h3>SEO title</h3><p>Tiêu đề có thể xuất hiện trên Google. Nên mô tả chính xác chủ đề, đặt ý quan trọng sớm và giữ trong khoảng hiển thị mà checklist hướng dẫn.</p><div class="admin-guide-serp"><small>www.realview.com.vn › bai-viet</small><b>Review 5 sao có đáng tin? Cách kiểm tra trước khi mua</b><p>Nhận biết review 5 sao ít thông tin và cách đọc phản hồi thực tế.</p></div></article>
+                  <article class="admin-guide-card"><h3>Meta description</h3><p>Đoạn mô tả ngắn dưới tiêu đề tìm kiếm. Viết như lời hứa rõ ràng về giá trị bài viết; không nhồi từ khóa và không sao chép nguyên tiêu đề.</p><div class="admin-guide-example"><span>Ví dụ</span><p>Tìm hiểu dấu hiệu review 5 sao thiếu thông tin và 5 bước đối chiếu trước khi đặt hàng trên Shopee hoặc TikTok Shop.</p></div></article>
+                  <article class="admin-guide-card"><h3>Slug là gì?</h3><p>Slug là phần cuối của địa chỉ bài viết. Chỉ dùng chữ thường không dấu, số và dấu gạch ngang. Slug nên ngắn, ổn định và mô tả đúng chủ đề.</p><div class="admin-guide-url"><span>https://www.realview.com.vn/bai-viet/</span><b>review-5-sao-co-dang-tin</b></div><p class="admin-guide-warn">Không đổi slug của bài đã có traffic nếu không thật sự cần. Hệ thống có redirect nhưng URL ổn định vẫn tốt hơn.</p></article>
+                  <article class="admin-guide-card"><h3>Từ khóa chính</h3><p>Cụm từ mô tả truy vấn quan trọng nhất mà bài trả lời. Đây là công cụ định hướng cho người viết, không phải nơi nhồi nhiều từ khóa.</p><div class="admin-guide-example"><span>Ví dụ</span><strong>review 5 sao có đáng tin</strong><p>Biến thể tự nhiên có thể là “có nên tin đánh giá 5 sao” hoặc “review 5 sao có thật không”.</p></div></article>
+                  <article class="admin-guide-card"><h3>Search intent</h3><dl><dt>Tìm hiểu thông tin</dt><dd>Người đọc muốn hiểu khái niệm hoặc cách làm.</dd><dt>So sánh/cân nhắc</dt><dd>Người đọc đang chọn giữa các phương án.</dd><dt>Thực hiện hành động</dt><dd>Người đọc muốn dùng công cụ hoặc mua hàng.</dd><dt>Tìm thương hiệu/trang</dt><dd>Người đọc đang tìm đúng RealView hoặc một trang cụ thể.</dd></dl></article>
+                  <article class="admin-guide-card"><h3>Canonical URL là gì?</h3><p>Canonical nói với Google đâu là URL chính thức nếu cùng nội dung có thể xuất hiện ở nhiều địa chỉ. Với bài bình thường, <b>để trống</b> để hệ thống tự tạo từ slug.</p><div class="admin-guide-example"><span>Khi nào điền?</span><p>Chỉ điền khi nội dung này có một URL chuẩn khác đã được quyết định. URL phải là đường dẫn bài trên RealView, không phải link Shopee/TikTok hay trang quản trị.</p></div></article>
+                  <article class="admin-guide-card admin-guide-card--wide"><h3>Open Graph và Twitter Card</h3><p>Đây là tiêu đề, mô tả và ảnh khi link được chia sẻ trên Facebook, Zalo hoặc mạng xã hội. Người viết không cần biết mã kỹ thuật: nhấn <b>Điền từ SEO</b> để sao chép SEO title/meta description; nếu URL ảnh OG để trống, hệ thống dùng ảnh đại diện.</p><div class="admin-guide-social"><img src="/assets/blog/review-5-sao-co-dang-tin-thumbnail.jpg" alt="Ảnh bài Review 5 sao có đáng tin trên Blog RealView" loading="lazy" width="640" height="360"/><div><small>REALVIEW.COM.VN</small><strong>Review 5 sao có đáng tin?</strong><p>Cách kiểm tra review trước khi quyết định mua hàng.</p></div></div></article>
+                  <article class="admin-guide-card admin-guide-card--wide"><h3>Những phần SEO hệ thống tự làm</h3><ul class="admin-guide-checks"><li>Canonical mặc định từ slug</li><li>Open Graph và Twitter Card</li><li>BlogPosting, Breadcrumb và FAQ schema</li><li>Mục lục từ H2/H3</li><li>Sitemap và RSS khi xuất bản</li><li><code>noindex</code> cho bản nháp/xem trước</li></ul><p>Bạn vẫn phải viết tiêu đề, mô tả, nội dung và alt ảnh đúng sự thật; “tự động” không thể thay chất lượng biên tập.</p></article>
+                </div>
+              </section>
+
+              <section id="guide-media" class="admin-guide-chapter">
+                <header><span>03</span><div><p class="admin-eyebrow">TAB HÌNH ẢNH</p><h2>Dùng ảnh đúng ngữ cảnh, nhẹ và dễ hiểu</h2></div></header>
+                <div class="admin-guide-grid">
+                  <article class="admin-guide-card admin-guide-card--wide"><h3>Ảnh đại diện, ảnh trong bài và ảnh OG</h3><p><b>Ảnh đại diện</b> xuất hiện đầu bài và trên thẻ bài ở trang blog. <b>Ảnh trong bài</b> minh họa một ý cụ thể. <b>Ảnh OG</b> dùng khi chia sẻ link; để trống nếu muốn dùng ảnh đại diện.</p><div class="admin-guide-image-row"><figure><img src="/assets/blog/review-san-pham-co-dang-tin-khong.jpg" alt="Ảnh đại diện bài Review sản phẩm có đáng tin không" loading="lazy"/><figcaption>Ảnh đại diện: bao quát chủ đề bài.</figcaption></figure><figure><img src="/assets/blog/seo08-27-image5.jpg" alt="Ảnh review sản phẩm có nội dung và hình thực tế" loading="lazy"/><figcaption>Ảnh nội dung: chứng minh một ý cụ thể.</figcaption></figure></div></article>
+                  <article class="admin-guide-card"><h3>Alt mô tả nội dung ảnh là gì?</h3><p>Alt là câu thay thế ảnh cho người dùng trình đọc màn hình và khi ảnh lỗi. Hãy mô tả điều quan trọng nhìn thấy trong ảnh và mối liên hệ với đoạn văn.</p><div class="admin-guide-example"><span>Alt tốt</span><p>“Review Shopee 5 sao có nội dung giao hàng nhanh và hai ảnh sản phẩm thực tế”</p><span>Alt không tốt</span><p>“ảnh review, review Shopee, review uy tín, mua hàng” — đây là nhồi từ khóa và không mô tả ảnh.</p></div></article>
+                  <article class="admin-guide-card"><h3>Chú thích và nguồn ảnh</h3><p>Chú thích hiển thị cho mọi người đọc; dùng để giải thích ngữ cảnh hoặc ghi nguồn. Alt và chú thích không phải một: alt mô tả cái nhìn thấy, chú thích giải thích vì sao ảnh có mặt.</p><div class="admin-guide-example"><span>Ví dụ từ bài hiện có</span><p>“Hình 3: Kiểm tra sự đồng nhất giữa nội dung, hình ảnh và sản phẩm.”</p></div></article>
+                  <article class="admin-guide-card"><h3>Ảnh rộng, gọn, thu gọn, nhỏ</h3><dl><dt>Ảnh rộng</dt><dd>Biểu đồ, screenshot có nhiều chi tiết.</dd><dt>Ảnh gọn</dt><dd>Minh họa thông thường trong mạch đọc.</dd><dt>Ảnh thu gọn</dt><dd>Ảnh phụ không cần chiếm toàn cột.</dd><dt>Ảnh nhỏ</dt><dd>Icon, ví dụ rất đơn giản.</dd></dl><p>Không chọn “nhỏ” cho ảnh có chữ vì người đọc sẽ khó xem trên mobile.</p></article>
+                  <article class="admin-guide-card"><h3>Kéo thả và tối ưu tự động</h3><p>JPEG, PNG, WebP hoặc AVIF tối đa 3 MB. Hệ thống đổi sang WebP, tạo bản 480/960/1600 px, cấp URL và giúp trình duyệt tải đúng kích thước. Ảnh nhỏ không bị phóng lớn.</p><div class="admin-guide-drop-demo"><b>↓</b><strong>Kéo ảnh vào khối hình ảnh</strong><span>URL được điền tự động sau khi tải xong</span></div></article>
+                  <article class="admin-guide-card"><h3>Quy tắc chọn ảnh</h3><ul><li>Ảnh liên quan trực tiếp đến đoạn viết.</li><li>Ưu tiên ảnh chụp/screenshot/bằng chứng do con người tạo.</li><li>Không tải dữ liệu cá nhân hoặc thông tin nhạy cảm.</li><li>Không dùng ảnh AI làm bằng chứng sản phẩm.</li><li>Kiểm tra quyền sử dụng và ghi nguồn khi cần.</li></ul></article>
+                </div>
+              </section>
+
+              <section id="guide-settings" class="admin-guide-chapter">
+                <header><span>04</span><div><p class="admin-eyebrow">TAB THIẾT LẬP</p><h2>Phân loại, tác giả và quyền hiển thị</h2></div></header>
+                <div class="admin-guide-grid">
+                  <article class="admin-guide-card"><h3>Chuyên mục và nhãn hiển thị</h3><p>Chuyên mục là nhóm nội dung dùng để lọc. Nhãn hiển thị là chữ người đọc thấy. Ví dụ: chuyên mục <code>doc-review</code>, nhãn <b>Đọc review</b>. Chọn nhóm gần nhất, không tạo nhãn mới chỉ vì khác cách viết.</p></article>
+                  <article class="admin-guide-card"><h3>Tác giả, email và URL hồ sơ</h3><p>Tên tác giả xuất hiện công khai. Nhấn <b>Thêm đồng tác giả</b> nếu bài có nhiều người viết; trang public sẽ nối tên bằng chữ “và” như các bài cũ. Email dùng nội bộ và không lộ trong dữ liệu public. URL hồ sơ phải là trang công khai giới thiệu tác giả; để trống nếu chưa có, không dùng link trang quản trị hoặc mạng xã hội riêng tư.</p></article>
+                  <article class="admin-guide-card"><h3>Tags</h3><p>Tags giúp quản lý chủ đề nhỏ hơn chuyên mục. Phân cách bằng dấu phẩy, dùng ít nhưng nhất quán.</p><div class="admin-guide-example"><span>Ví dụ</span><code>review 5 sao, Shopee, mua hàng online</code></div></article>
+                  <article class="admin-guide-card"><h3>Ngày xuất bản và cập nhật</h3><p>Hai trường này chỉ để xem. Ngày xuất bản được ghi lần đầu khi public; ngày cập nhật công khai chỉ đổi khi revision mới thực sự được xuất bản, không đổi khi mở bài hoặc lưu nháp.</p></article>
+                  <article class="admin-guide-card"><h3>Bài viết nổi bật</h3><p>Bật để ưu tiên bài ở đầu trang blog. Chỉ nên có một số ít bài chiến lược; nếu bật quá nhiều, “nổi bật” mất ý nghĩa.</p></article>
+                  <article class="admin-guide-card"><h3>FAQ schema</h3><p>Bật khi bài có khối FAQ với câu hỏi/câu trả lời thật sự hiển thị trong bài. Hệ thống tạo dữ liệu có cấu trúc từ chính nội dung đó; không thêm câu hỏi chỉ để thao túng kết quả tìm kiếm.</p></article>
+                  <article class="admin-guide-card"><h3>Cho phép Google lập chỉ mục</h3><p>Bật cho bài public hoàn chỉnh. Tắt nếu nội dung tạm thời không nên xuất hiện trên Google; bài sẽ có <code>noindex</code> và bị loại khỏi sitemap. Bản nháp luôn noindex dù công tắc đang bật.</p></article>
+                  <article class="admin-guide-card"><h3>Bài viết liên quan</h3><p>Chọn các bài bổ sung trực tiếp cho chủ đề hiện tại. Liên kết nội bộ tốt giúp người đọc đi sâu hơn; đừng chọn mọi bài chỉ để tăng số link.</p><div class="admin-guide-example"><span>Ví dụ</span><p>Bài “Review 5 sao có đáng tin?” có thể liên kết “Review sản phẩm là gì?” và “Cách tìm shop uy tín trên Shopee”.</p></div></article>
+                </div>
+              </section>
+
+              <section id="guide-revisions" class="admin-guide-chapter">
+                <header><span>05</span><div><p class="admin-eyebrow">TAB PHIÊN BẢN</p><h2>Hiểu đúng bản nháp, revision và xuất bản</h2></div></header>
+                <div class="admin-guide-grid">
+                  <article class="admin-guide-card"><h3>Revision là gì?</h3><p>Revision là một mốc nội dung đã được chủ động lưu. Chỉ mở bài, chuyển tab, xem trước hoặc quay lại không tạo revision. Revision giúp biết ai đã lưu và có thể khôi phục nội dung cũ.</p></article>
+                  <article class="admin-guide-card"><h3>Lưu bản nháp</h3><p>Tạo revision làm việc dùng chung cho người có quyền biên tập. Nếu bài đã public, lưu nháp <b>không thay đổi</b> bản người đọc đang xem. Các editor/admin khác có thể tiếp tục từ bản nháp này.</p></article>
+                  <article class="admin-guide-card"><h3>Xuất bản / Cập nhật bài viết</h3><p><b>Xuất bản</b> đưa bài mới lên website. Với bài đã public, nút đổi thành <b>Cập nhật bài viết</b> và đưa revision nháp hiện tại lên public. Sitemap, RSS và metadata SEO được đồng bộ lúc này.</p></article>
+                  <article class="admin-guide-card"><h3>Bỏ bản nháp và gỡ xuất bản</h3><p><b>Bỏ bản nháp</b> xóa thay đổi chưa public và quay về revision công khai. <b>Gỡ xuất bản</b> làm bài không còn public; đây là thao tác khác hoàn toàn và cần cân nhắc tác động SEO.</p></article>
+                  <article class="admin-guide-card"><h3>Xem và khôi phục phiên bản</h3><p>“Xem phiên bản” chỉ mở nội dung cũ để đối chiếu. “Khôi phục” sao chép nội dung revision cũ thành một revision mới, không xóa lịch sử đã có; bạn vẫn cần xuất bản nếu muốn public bản khôi phục.</p></article>
+                  <article class="admin-guide-card"><h3>Xung đột chỉnh sửa</h3><p>Nếu người khác đã lưu bản mới hơn, hệ thống chặn ghi đè. Chọn tải phiên bản mới để tiếp tục hoặc lưu nội dung hiện tại thành bản sao riêng. Không cố ghi đè vì có thể mất nội dung của đồng đội.</p></article>
+                </div>
+              </section>
+
+              <section id="guide-publish" class="admin-guide-publish">
+                <p class="admin-eyebrow">TRƯỚC KHI NHẤN XUẤT BẢN</p><h2>Checklist cuối cùng</h2>
+                <ul class="admin-guide-checks"><li>H1 rõ chủ đề và không có dấu chấm cuối</li><li>Đoạn mở đầu trả lời đúng nhu cầu tìm kiếm</li><li>Cấu trúc H2/H3 hợp lý, không nhảy cấp</li><li>Ảnh có alt mô tả và nguồn nếu cần</li><li>SEO title, meta description và slug dễ hiểu</li><li>Canonical để trống nếu không có trường hợp đặc biệt</li><li>FAQ và nguồn tham khảo phản ánh đúng nội dung</li><li>Xem trước trên desktop và mobile</li><li>Không có dữ liệu cá nhân hoặc khẳng định thiếu bằng chứng</li><li>Kiểm tra nút CTA và mọi liên kết</li></ul>
+                <button class="admin-primary-button" type="button" data-guide-new>＋ Bắt đầu viết bài</button>
+              </section>
+            </article>
+          </div>
+        </section>
+
+        <section class="admin-view admin-editor-view" data-view="editor" hidden>
+          <form class="admin-editor" data-editor-form novalidate>
+            <div class="admin-editor-topline">
+              <button class="admin-back-button" type="button" data-close-editor aria-label="Quay lại danh sách bài viết">← <span>Danh sách bài viết</span></button>
+              <div class="admin-editor-top-actions">
+                <button class="admin-secondary-button" type="button" data-preview-post>Xem trước <span aria-hidden="true">↗</span></button>
+                <button class="admin-secondary-button" type="button" data-save-post>Lưu bản nháp</button>
+                <button class="admin-secondary-button" type="button" data-discard-draft hidden>Bỏ bản nháp</button>
+                <button class="admin-primary-button" type="button" data-publish-post>Xuất bản <span aria-hidden="true">→</span></button>
+                <button class="admin-danger-button" type="button" data-unpublish-post hidden>Gỡ xuất bản</button>
+              </div>
+            </div>
+
+            <div class="admin-editor-heading">
+              <div>
+                <p class="admin-eyebrow" data-editor-kicker>BÀI VIẾT MỚI</p>
+                <h1 data-editor-title>Soạn bài viết</h1>
+              </div>
+              <div class="admin-document-state"><span data-document-status class="status-pill status-draft">Bản nháp</span><small data-revision-label>Revision 0</small></div>
+            </div>
+
+            <div class="admin-editor-tabs" role="tablist" aria-label="Các nhóm thông tin bài viết">
+              <button id="editor-tab-content" class="is-active" type="button" role="tab" aria-selected="true" aria-controls="editor-panel-content" data-editor-tab="content">Nội dung</button>
+              <button id="editor-tab-seo" type="button" role="tab" aria-selected="false" aria-controls="editor-panel-seo" data-editor-tab="seo">SEO <span data-seo-count hidden>0</span></button>
+              <button id="editor-tab-media" type="button" role="tab" aria-selected="false" aria-controls="editor-panel-media" data-editor-tab="media">Hình ảnh</button>
+              <button id="editor-tab-settings" type="button" role="tab" aria-selected="false" aria-controls="editor-panel-settings" data-editor-tab="settings">Thiết lập</button>
+              <button id="editor-tab-revisions" type="button" role="tab" aria-selected="false" aria-controls="editor-panel-revisions" data-editor-tab="revisions">Phiên bản</button>
+            </div>
+
+            <div id="editor-panel-content" class="admin-editor-panel" role="tabpanel" aria-labelledby="editor-tab-content" data-editor-panel="content">
+              <div class="admin-editor-grid">
+                <div class="admin-editor-column">
+                  <section class="admin-form-card admin-lead-card">
+                    <label class="admin-field admin-field--title"><span>Tiêu đề bài viết <b>*</b></span><textarea name="title" rows="2" maxlength="180" required placeholder="Nhập tiêu đề chính của bài viết"></textarea><small><i data-title-count>0</i>/180 ký tự</small></label>
+                    <label class="admin-field"><span>Đoạn mở đầu</span><textarea name="deck" rows="4" maxlength="600" placeholder="Trả lời ngắn gọn vấn đề người đọc đang tìm kiếm…"></textarea><small>Hiển thị ngay dưới tiêu đề bài viết.</small></label>
+                  </section>
+
+                  <section class="admin-form-card admin-toc-card" data-toc-editor data-toc-mode="auto">
+                    <div class="admin-card-heading">
+                      <div><p class="admin-eyebrow">ĐIỀU HƯỚNG BÀI VIẾT</p><h2>Mục lục</h2></div>
+                      <span data-toc-status>Tự động cập nhật</span>
+                    </div>
+                    <p class="admin-aside-copy">Mục lục mặc định lấy các H2/H3 đã bật “Hiển thị trong mục lục”, cùng phần FAQ và Bài viết liên quan. Bạn có thể giữ tự động hoặc tạo một bản để đổi nhãn và thứ tự bằng tay.</p>
+                    <label class="admin-field admin-toc-title"><span>Tiêu đề mục lục</span><input type="text" maxlength="80" value="Mục lục" data-toc-title></label>
+                    <div class="admin-toc-mode-actions">
+                      <button class="admin-secondary-button is-active" type="button" data-toc-use-auto>Theo cấu trúc bài</button>
+                      <button class="admin-secondary-button" type="button" data-toc-generate>Tạo bản có thể chỉnh sửa</button>
+                    </div>
+                    <div class="admin-toc-list" data-toc-list></div>
+                    <div class="admin-toc-manual-actions" data-toc-manual-actions hidden>
+                      <button class="admin-secondary-button" type="button" data-toc-add>＋ Thêm mục</button>
+                      <button class="admin-text-button" type="button" data-toc-regenerate>Tạo lại từ nội dung</button>
+                    </div>
+                    <p class="admin-form-hint" data-toc-hint>Mọi thay đổi H2/H3 sẽ tự cập nhật mục lục.</p>
+                  </section>
+
+                  <section class="admin-form-card admin-blocks-card">
+                    <div class="admin-card-heading"><div><p class="admin-eyebrow">NỘI DUNG CÓ CẤU TRÚC</p><h2>Các khối bài viết</h2></div><span data-word-count>0 từ · 1 phút đọc</span></div>
+                    <div class="admin-block-list" data-block-list></div>
+                    <div class="admin-add-block">
+                      <button type="button" data-add-block-toggle aria-expanded="false">＋ Thêm khối nội dung</button>
+                      <div class="admin-block-menu" data-block-menu hidden>
+                        <button type="button" data-add-block="paragraph"><b>¶</b><span><strong>Đoạn văn</strong><small>Nội dung thông thường</small></span></button>
+                        <button type="button" data-add-block="heading"><b>H2</b><span><strong>Tiêu đề mục</strong><small>Phần chính trong mục lục</small></span></button>
+                        <button type="button" data-add-block="subheading"><b>H3</b><span><strong>Tiêu đề phụ</strong><small>Ý nhỏ bên trong một mục</small></span></button>
+                        <button type="button" data-add-block="list"><b>≡</b><span><strong>Danh sách</strong><small>Dấu đầu dòng hoặc đánh số</small></span></button>
+                        <button type="button" data-add-block="checklist"><b>✓</b><span><strong>Checklist</strong><small>Danh sách kiểm tra có trạng thái</small></span></button>
+                        <button type="button" data-add-block="image"><b>▧</b><span><strong>Hình ảnh</strong><small>Ảnh, alt và chú thích</small></span></button>
+                        <button type="button" data-add-block="callout"><b>!</b><span><strong>Ghi chú</strong><small>Thông tin cần nhấn mạnh</small></span></button>
+                        <button type="button" data-add-block="quote"><b>“</b><span><strong>Trích dẫn</strong><small>Nguồn hoặc nhận định</small></span></button>
+                        <button type="button" data-add-block="formula"><b>ƒ</b><span><strong>Công thức</strong><small>Biểu thức và mô tả trợ năng</small></span></button>
+                        <button type="button" data-add-block="table"><b>⌗</b><span><strong>Bảng</strong><small>So sánh dữ liệu</small></span></button>
+                        <button type="button" data-add-block="faq"><b>?</b><span><strong>FAQ</strong><small>Câu hỏi và câu trả lời</small></span></button>
+                        <button type="button" data-add-block="sources"><b>↗</b><span><strong>Nguồn tham khảo</strong><small>Tên nguồn và liên kết</small></span></button>
+                        <button type="button" data-add-block="relatedPosts"><b>↔</b><span><strong>Bài liên quan</strong><small>Liên kết bằng slug bài viết</small></span></button>
+                        <button type="button" data-add-block="cta"><b>→</b><span><strong>CTA RealView</strong><small>Lời mời sử dụng công cụ</small></span></button>
+                        <button type="button" data-add-block="divider"><b>—</b><span><strong>Phân cách</strong><small>Ngắt nhịp giữa các phần</small></span></button>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+
+                <aside class="admin-editor-aside">
+                  <section class="admin-check-card">
+                    <div class="admin-card-heading"><div><p class="admin-eyebrow">KIỂM TRA NHANH</p><h2>Chất lượng bài viết</h2></div><span class="admin-score" data-content-score>0%</span></div>
+                    <ul data-content-checks></ul>
+                    <button type="button" data-open-seo>Kiểm tra toàn bộ SEO <span aria-hidden="true">→</span></button>
+                  </section>
+                </aside>
+              </div>
+            </div>
+
+            <div id="editor-panel-seo" class="admin-editor-panel" role="tabpanel" aria-labelledby="editor-tab-seo" data-editor-panel="seo" hidden>
+              <div class="admin-editor-grid">
+                <div class="admin-editor-column">
+                  <section class="admin-form-card">
+                    <div class="admin-card-heading"><div><p class="admin-eyebrow">HIỂN THỊ TRÊN GOOGLE</p><h2>Thông tin tìm kiếm</h2></div></div>
+                    <div class="admin-fields-grid">
+                      <label class="admin-field admin-field--wide"><span>SEO title <b>*</b></span><input name="seoTitle" maxlength="70" placeholder="Tiêu đề hiển thị trên kết quả tìm kiếm" /><small><i data-seo-title-count>0</i>/70 ký tự</small></label>
+                      <label class="admin-field admin-field--wide"><span>Meta description <b>*</b></span><textarea name="metaDescription" rows="4" maxlength="180" placeholder="Mô tả ngắn gọn giá trị của bài viết"></textarea><small><i data-meta-count>0</i>/180 ký tự</small></label>
+                      <label class="admin-field"><span>Slug <b>*</b></span><div class="admin-prefix-input"><span>/bai-viet/</span><input name="slug" maxlength="120" autocomplete="off" placeholder="duong-dan-bai-viet" /></div></label>
+                      <label class="admin-field"><span>Từ khóa chính</span><input name="primaryKeyword" maxlength="100" placeholder="Ví dụ: review 5 sao có đáng tin" /></label>
+                      <label class="admin-field"><span>Search intent</span><select name="searchIntent"><option value="informational">Tìm hiểu thông tin</option><option value="commercial">So sánh/cân nhắc</option><option value="transactional">Thực hiện hành động</option><option value="navigational">Tìm thương hiệu/trang</option></select></label>
+                      <label class="admin-field"><span>Canonical URL</span><input name="canonicalUrl" type="url" placeholder="Tự tạo từ slug nếu để trống" /></label>
+                    </div>
+                  </section>
+
+                  <section class="admin-form-card">
+                    <div class="admin-card-heading"><div><p class="admin-eyebrow">MẠNG XÃ HỘI</p><h2>Open Graph và Twitter</h2></div><button class="admin-text-button" type="button" data-copy-social>Điền từ SEO</button></div>
+                    <div class="admin-fields-grid">
+                      <label class="admin-field admin-field--wide"><span>Tiêu đề chia sẻ</span><input name="ogTitle" maxlength="90" placeholder="Mặc định dùng SEO title" /></label>
+                      <label class="admin-field admin-field--wide"><span>Mô tả chia sẻ</span><textarea name="ogDescription" rows="3" maxlength="220" placeholder="Mặc định dùng meta description"></textarea></label>
+                    </div>
+                  </section>
+                </div>
+                <aside class="admin-editor-aside">
+                  <section class="admin-preview-card">
+                    <p class="admin-eyebrow">XEM TRƯỚC GOOGLE</p>
+                    <div class="google-preview">
+                      <span>https://www.realview.com.vn › bai-viet › <i data-google-slug>duong-dan-bai-viet</i></span>
+                      <strong data-google-title>Tiêu đề bài viết | RealView</strong>
+                      <p data-google-description>Mô tả bài viết sẽ xuất hiện tại đây.</p>
+                    </div>
+                  </section>
+                  <section class="admin-check-card">
+                    <div class="admin-card-heading"><div><p class="admin-eyebrow">SEO CHECKLIST</p><h2>Trước khi xuất bản</h2></div><span class="admin-score" data-seo-score>0%</span></div>
+                    <ul data-seo-checks></ul>
+                  </section>
+                </aside>
+              </div>
+            </div>
+
+            <div id="editor-panel-media" class="admin-editor-panel" role="tabpanel" aria-labelledby="editor-tab-media" data-editor-panel="media" hidden>
+              <div class="admin-editor-grid">
+                <div class="admin-editor-column">
+                  <section class="admin-form-card">
+                    <div class="admin-card-heading"><div><p class="admin-eyebrow">ẢNH ĐẠI DIỆN</p><h2>Hero và thumbnail</h2></div></div>
+                    <div class="admin-media-uploader" data-hero-dropzone>
+                      <input id="hero-file" type="file" accept="image/jpeg,image/png,image/webp,image/avif" data-hero-file hidden />
+                      <div class="admin-media-preview" data-hero-preview><span>▧</span><p>Chưa có ảnh đại diện</p></div>
+                      <div><strong>Kéo thả ảnh hoặc chọn từ máy</strong><p>Khuyến nghị tỷ lệ 16:9, tối thiểu 1200×675 px, tối đa 3 MB.</p><button class="admin-secondary-button" type="button" data-choose-hero>Chọn ảnh</button></div>
+                    </div>
+                    <div class="admin-fields-grid admin-media-fields">
+                      <label class="admin-field admin-field--wide"><span>URL ảnh đại diện <b>*</b></span><input name="heroImageUrl" type="text" placeholder="/assets/blog/ten-anh.webp hoặc URL từ Media" /></label>
+                      <label class="admin-field admin-field--wide"><span>Alt ảnh <b>*</b></span><input name="heroImageAlt" maxlength="180" placeholder="Mô tả chính xác nội dung hình ảnh" /></label>
+                      <label class="admin-field admin-field--wide"><span>Chú thích ảnh</span><input name="heroImageCaption" maxlength="240" placeholder="Nguồn hoặc ngữ cảnh của hình ảnh" /></label>
+                    </div>
+                  </section>
+                  <section class="admin-form-card">
+                    <div class="admin-card-heading"><div><p class="admin-eyebrow">ẢNH CHIA SẺ</p><h2>Open Graph image</h2></div></div>
+                    <label class="admin-field"><span>URL ảnh OG</span><input name="ogImageUrl" placeholder="Mặc định dùng ảnh đại diện" /></label>
+                    <p class="admin-form-hint">Ảnh Open Graph nên có kích thước 1200×630 px. Hệ thống có thể dùng ảnh đại diện nếu để trống.</p>
+                  </section>
+                </div>
+                <aside class="admin-editor-aside">
+                  <section class="admin-check-card"><p class="admin-eyebrow">QUY TẮC HÌNH ẢNH</p><h2>Trước khi tải lên</h2><ul class="admin-static-checks"><li><span>✓</span>Ảnh rõ, liên quan trực tiếp đến nội dung</li><li><span>✓</span>Không dùng ảnh AI thay cho bằng chứng thực tế</li><li><span>✓</span>Alt mô tả ảnh, không nhồi từ khóa</li><li><span>✓</span>Không tải ảnh chứa dữ liệu nhạy cảm</li></ul></section>
+                </aside>
+              </div>
+            </div>
+
+            <div id="editor-panel-settings" class="admin-editor-panel" role="tabpanel" aria-labelledby="editor-tab-settings" data-editor-panel="settings" hidden>
+              <div class="admin-editor-grid">
+                <div class="admin-editor-column">
+                  <section class="admin-form-card">
+                    <div class="admin-card-heading"><div><p class="admin-eyebrow">PHÂN LOẠI</p><h2>Thông tin xuất bản</h2></div></div>
+                    <div class="admin-fields-grid">
+                      <label class="admin-field"><span>Chuyên mục</span><select name="category"><option value="doc-review">Đọc review</option><option value="nen-tang">Nền tảng mua sắm</option><option value="realview">RealView</option><option value="huong-dan">Hướng dẫn</option><option value="so-sanh">So sánh</option></select></label>
+                      <label class="admin-field"><span>Nhãn hiển thị</span><input name="categoryLabel" maxlength="40" placeholder="Ví dụ: Đọc review" /></label>
+                      <div class="admin-field admin-field--wide admin-authors-field"><span>Tác giả</span><div class="admin-author-list" data-author-list></div><button class="admin-secondary-button" type="button" data-add-author>＋ Thêm đồng tác giả</button><small>Tên tác giả hiện trên bài; email chỉ dùng nội bộ. URL public giúp Google nối bài viết với hồ sơ tác giả.</small></div>
+                      <label class="admin-field admin-field--wide"><span>Tags</span><input name="tags" maxlength="300" placeholder="review, shopee, mua hàng online" /><small>Phân cách các tag bằng dấu phẩy.</small></label>
+                      <label class="admin-field"><span>Ngày xuất bản</span><input name="publishedAt" type="datetime-local" disabled /><small>Hệ thống ghi tự động khi xuất bản lần đầu.</small></label>
+                      <label class="admin-field"><span>Ngày cập nhật công khai</span><input name="modifiedAt" type="datetime-local" disabled /><small>Chỉ thay đổi khi revision được xuất bản.</small></label>
+                    </div>
+                    <div class="admin-switch-list">
+                      <label><input name="featured" type="checkbox" /><span><b>Bài viết nổi bật</b><small>Ưu tiên hiển thị ở đầu trang blog.</small></span></label>
+                      <label><input name="includeFaqSchema" type="checkbox" checked /><span><b>Tạo FAQ schema</b><small>Sinh tự động từ các khối FAQ trong bài.</small></span></label>
+                      <label><input name="allowIndexing" type="checkbox" checked /><span><b>Cho phép Google lập chỉ mục</b><small>Tự động loại khỏi sitemap khi tắt.</small></span></label>
+                    </div>
+                  </section>
+                  <section class="admin-form-card">
+                    <div class="admin-card-heading"><div><p class="admin-eyebrow">LIÊN KẾT NỘI BỘ</p><h2>Bài viết liên quan</h2></div></div>
+                    <div class="admin-related-picker" data-related-picker><p>Đang tải danh sách bài viết…</p></div>
+                  </section>
+                </div>
+                <aside class="admin-editor-aside">
+                  <section class="admin-check-card"><p class="admin-eyebrow">TRẠNG THÁI</p><h2>Quyền hiển thị</h2><p class="admin-aside-copy">Bản nháp và URL xem trước luôn có <code>noindex</code>. Chỉ bài đã xuất bản và cho phép lập chỉ mục mới xuất hiện trong sitemap.</p></section>
+                </aside>
+              </div>
+            </div>
+
+            <div id="editor-panel-revisions" class="admin-editor-panel" role="tabpanel" aria-labelledby="editor-tab-revisions" data-editor-panel="revisions" hidden>
+              <section class="admin-form-card">
+                <div class="admin-card-heading"><div><p class="admin-eyebrow">LỊCH SỬ CHỈNH SỬA</p><h2>Các phiên bản của bài viết</h2></div><button class="admin-text-button" type="button" data-refresh-revisions>Làm mới</button></div>
+                <div class="admin-revision-list" data-revision-list><p>Hãy lưu bài viết để bắt đầu lưu lịch sử phiên bản.</p></div>
+              </section>
+            </div>
+          </form>
+        </section>
+      </main>
+    </div>
+
+    <template id="post-row-template">
+      <tr>
+        <td><div class="post-table-title"><div class="post-table-thumb"><span>RV</span></div><div><strong></strong><small></small></div></div></td>
+        <td><span class="status-pill"></span></td>
+        <td><time></time><small class="post-table-revision"></small></td>
+        <td><span class="post-table-author"></span></td>
+        <td><div class="post-row-actions"><button type="button" data-edit-row>Chỉnh sửa</button><button type="button" data-row-menu aria-label="Mở menu bài viết">•••</button><div class="post-row-menu" hidden><button type="button" data-duplicate-row>Nhân bản</button><a target="_blank" rel="noopener" data-view-row>Xem bài viết</a><button type="button" data-unpublish-row>Gỡ xuất bản</button><button type="button" data-archive-row>Lưu trữ</button></div></div></td>
+      </tr>
+    </template>
+
+    <dialog class="admin-dialog" data-confirm-dialog aria-labelledby="confirm-title">
+      <form method="dialog" class="admin-dialog-card"><span class="admin-dialog-icon" aria-hidden="true">!</span><h2 id="confirm-title" data-confirm-title>Xác nhận thao tác</h2><p data-confirm-message></p><div><button class="admin-secondary-button" value="cancel">Hủy</button><button class="admin-primary-button" value="confirm" data-confirm-submit>Xác nhận</button></div></form>
+    </dialog>
+
+    <dialog class="admin-dialog" data-conflict-dialog aria-labelledby="conflict-title">
+      <div class="admin-dialog-card"><span class="admin-dialog-icon admin-dialog-icon--warning" aria-hidden="true">↻</span><h2 id="conflict-title">Bài viết vừa được cập nhật ở nơi khác</h2><p>Phiên bản trên máy chủ mới hơn bản bạn đang chỉnh sửa. Tải lại để nhận nội dung mới, hoặc lưu bản hiện tại thành một bài nháp riêng.</p><div><button class="admin-secondary-button" type="button" data-conflict-copy>Lưu thành bản sao</button><button class="admin-primary-button" type="button" data-conflict-reload>Tải phiên bản mới</button></div></div>
+    </dialog>
+
+    <div class="admin-toast-region" data-toast-region aria-live="polite" aria-atomic="true"></div>
+
+    <script type="module" src="/auth.js"></script>
+    <script type="module" src="/admin-blog.js"></script>
+  </body>
+</html>

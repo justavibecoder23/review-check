@@ -86,6 +86,14 @@
 .account-popover span { color: #8a8a82; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; }
 .account-popover strong { font-size: 15px; }
 .account-popover small { overflow: hidden; color: #686862; font-size: 11px; text-overflow: ellipsis; }
+.account-popover .account-admin-link { min-height: 48px; margin-bottom: 7px; padding: 8px 10px; display: grid; grid-template-columns: 27px minmax(0, 1fr); align-items: center; gap: 9px; border: 1px solid rgba(31,143,96,.2); border-radius: 11px; background: #edf8f2; color: #176f4b; text-decoration: none; }
+.account-popover .account-admin-link:hover { border-color: rgba(31,143,96,.42); background: #e4f5ec; }
+.account-popover .account-admin-link:focus-visible { outline: 3px solid rgba(31,143,96,.25); outline-offset: 2px; }
+.account-popover .account-admin-link > i { width: 27px; height: 27px; display: grid; place-items: center; border-radius: 8px; background: #fff; font-size: 14px; font-style: normal; }
+.account-popover .account-admin-link > b { min-width: 0; display: grid; gap: 2px; font-size: 12px; }
+.account-popover .account-admin-link small { font-size: 9px; font-weight: 650; }
+.account-popover .account-admin-link--access { border-color: rgba(168,69,4,.2); background: #fff5ed; color: #9b4108; }
+.account-popover .account-admin-link--access:hover { border-color: rgba(168,69,4,.42); background: #ffecde; }
 .account-popover button { width: 100%; min-height: 38px; border: 0; border-radius: 11px; background: #f2f1ed; color: #8a3426; font-weight: 800; cursor: pointer; }
 
 .account-dialog {

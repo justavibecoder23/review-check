@@ -10,6 +10,7 @@
     <meta name="robots" content="index,follow,max-image-preview:large" />
     <meta name="theme-color" content="#EFEFEB" />
     <link rel="canonical" href="https://www.realview.com.vn/bai-viet" />
+    <link rel="alternate" type="application/rss+xml" title="Blog RealView" href="https://www.realview.com.vn/bai-viet/rss.xml" />
     <meta property="og:locale" content="vi_VN" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="RealView" />
@@ -35,6 +36,7 @@
     <link rel="stylesheet" href="/auth.css" />
     <link rel="stylesheet" href="/chatbot.css" />
     <link rel="stylesheet" href="/blog.css" />
+    <!-- BLOG_COLLECTION_SCHEMA_START -->
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -62,6 +64,7 @@
         }
       }
     </script>
+    <!-- BLOG_COLLECTION_SCHEMA_END -->
   </head>
   <body class="subpage blog-page">
     <a class="skip-link" href="#noi-dung-chinh">Đi đến nội dung chính</a>
@@ -107,6 +110,8 @@
               <button type="button" data-blog-filter="doc-review" aria-pressed="false">Đọc review</button>
               <button type="button" data-blog-filter="nen-tang" aria-pressed="false">Nền tảng mua sắm</button>
               <button type="button" data-blog-filter="realview" aria-pressed="false">RealView</button>
+              <button type="button" data-blog-filter="huong-dan" aria-pressed="false">Hướng dẫn</button>
+              <button type="button" data-blog-filter="so-sanh" aria-pressed="false">So sánh</button>
             </div>
             <label class="blog-search" for="blog-search-input">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
@@ -117,6 +122,7 @@
 
           <div class="blog-layout">
             <div class="blog-feed">
+              <!-- BLOG_FEATURED_START -->
               <div class="blog-list-item" data-blog-card data-category="doc-review" data-search="review 5 sao có đáng tin cách kiểm tra độ tin cậy shopee tiktok shop">
                 <article class="featured-post">
                   <a class="featured-post-image" href="/bai-viet/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang" aria-label="Đọc bài Review 5 sao có đáng tin không"><img src="/assets/blog/review-5-sao-co-dang-tin-thumbnail.jpg" alt="Review 5 sao có đáng tin không và cách kiểm tra độ tin cậy review" width="2048" height="1152" loading="lazy" decoding="async" /></a>
@@ -128,8 +134,10 @@
                   </div>
                 </article>
               </div>
+              <!-- BLOG_FEATURED_END -->
 
               <div class="post-grid" aria-live="polite">
+                <!-- BLOG_GRID_START -->
                 <div class="blog-list-item" data-blog-card data-category="doc-review" data-search="review giả là gì dấu hiệu nhận biết review không đáng tin review ảo shopee tiktok shop nhận xu">
                   <article class="post-card">
                     <a href="/bai-viet/review-gia-la-gi-dau-hieu-nhan-biet" aria-label="Đọc bài Review giả là gì"><img src="/assets/blog/review-gia-la-gi-dau-hieu-nhan-biet.jpg" alt="Review giả là gì và cách nhận biết review không đáng tin" width="1672" height="941" loading="lazy" decoding="async" /></a>
@@ -178,6 +186,7 @@
                     <div class="post-card-body"><div class="post-meta"><span>RealView</span><time datetime="2026-09-11">11 tháng 9, 2026</time><span>17 phút đọc</span></div><h3><a href="/bai-viet/trustscore-la-gi">TrustScore là gì? Cách đọc điểm tin cậy</a></h3><p>Hiểu cách RealView đo độ tin cậy của tập review và vì sao đây không phải điểm chất lượng sản phẩm.</p><a class="read-more" href="/bai-viet/trustscore-la-gi">Đọc bài viết <span aria-hidden="true">→</span></a></div>
                   </article>
                 </div>
+                <!-- BLOG_GRID_END -->
               </div>
               <p class="blog-empty" data-blog-empty hidden>Chưa có bài viết phù hợp. Hãy thử từ khóa hoặc chủ đề khác.</p>
             </div>

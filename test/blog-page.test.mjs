@@ -51,10 +51,11 @@ test('blog hub publishes nine articles and features the five-star review article
   assert.match(blogHtml, /href="\/bai-viet\/review-gia-la-gi-dau-hieu-nhan-biet"/);
 });
 
-test('fake-review article preserves the source image, words, and supplied nine-section outline', () => {
+test('fake-review article preserves the main source, words, and supplied nine-section outline', () => {
   assert.match(fakeReviewArticleHtml, /<h1 class="article-title">Review giả là gì\? Dấu hiệu nhận biết review không đáng tin<\/h1>/);
   assert.match(fakeReviewArticleHtml, /<img class="article-lead-image article-lead-image--seo07" src="\/assets\/blog\/review-gia-la-gi-dau-hieu-nhan-biet\.jpg"/);
   assert.equal((fakeReviewArticleHtml.match(/<h2 [^>]*data-toc-entry>/g) || []).length, 9);
+  assert.match(fakeReviewArticleHtml, /article-figure--seo09-gallery/);
   assert.match(fakeReviewArticleHtml, /Review nhận xu có đáng tin không\?/);
   assert.match(fakeReviewArticleHtml, /☐ Review có mô tả trải nghiệm cụ thể không\?/);
   assert.doesNotMatch(fakeReviewArticleHtml, /<h2[^>]*>CTA<\/h2>/);
@@ -461,6 +462,7 @@ test('sitemap and robots expose all nine published Blog articles', () => {
   assert.match(sitemapXml, /tiktok-shop-la-gi-mua-hang-tren-tiktok-co-an-toan-khong/);
   assert.match(sitemapXml, /cach-tim-shop-uy-tin-tren-shopee/);
   assert.match(sitemapXml, /<loc>https:\/\/www\.realview\.com\.vn\/bai-viet\/review-san-pham-la-gi<\/loc>/);
+  assert.match(sitemapXml, /<loc>https:\/\/www\.realview\.com\.vn\/bai-viet\/review-gia-la-gi-dau-hieu-nhan-biet<\/loc>/);
   assert.doesNotMatch(sitemapXml, /cach-doc-review-thong-minh/);
   assert.doesNotMatch(sitemapXml, /https:\/\/realview\.com\.vn\//);
   assert.doesNotMatch(sitemapXml, /results\.html/);

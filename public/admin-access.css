@@ -1,0 +1,62 @@
+.access-shell { width: min(1460px, calc(100% - 40px)); margin: 0 auto; padding: 52px 0 80px; }
+.access-heading { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
+.access-heading h1 { margin: 4px 0 8px; font-size: clamp(36px, 5vw, 64px); letter-spacing: -.055em; }
+.access-heading p:last-child { margin: 0; color: #66645f; }
+.access-overview { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
+.access-overview article { padding: 20px; display: grid; gap: 5px; border: 1px solid rgba(22,22,22,.1); border-radius: 20px; background: #fff; }
+.access-overview span { color: #66645f; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+.access-overview strong { font-size: 34px; letter-spacing: -.04em; }
+.access-overview small { color: #8a8882; }
+.access-layout { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(300px, .7fr); gap: 20px; align-items: start; }
+.access-panel { overflow: hidden; border: 1px solid rgba(22,22,22,.1); border-radius: 24px; background: #fff; box-shadow: 0 18px 50px rgba(22,22,22,.06); }
+.access-panel-heading { padding: 22px 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px; border-bottom: 1px solid rgba(22,22,22,.08); }
+.access-panel-heading h2 { margin: 3px 0 0; font-size: 22px; }
+.access-table-wrap { position: relative; min-height: 170px; overflow-x: auto; }
+.access-table { width: 100%; border-collapse: collapse; }
+.access-table th, .access-table td { padding: 16px 18px; text-align: left; border-bottom: 1px solid rgba(22,22,22,.07); vertical-align: middle; }
+.access-table th { color: #74726d; font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
+.access-email { display: grid; gap: 4px; min-width: 190px; }
+.access-email strong { font-size: 13px; overflow-wrap: anywhere; }
+.access-email small { color: #898781; font-size: 10px; }
+.access-role, .access-status { display: inline-flex; min-height: 28px; align-items: center; padding: 0 10px; border-radius: 999px; font-size: 10px; font-weight: 850; text-transform: uppercase; letter-spacing: .04em; }
+.access-role--admin { background: #fff0e5; color: #a84504; }
+.access-role--editor { background: #e9f6ef; color: #176f4b; }
+.access-status--owner { background: #161616; color: #fff; }
+.access-status--configured { background: #f0ecff; color: #5c45a0; }
+.access-status--active { background: #e9f6ef; color: #176f4b; }
+.access-status--scheduled { background: #eef3ff; color: #345aa0; }
+.access-status--expired, .access-status--revoked { background: #f2f1ed; color: #77746d; }
+.access-validity { min-width: 135px; display: grid; gap: 3px; color: #55534e; font-size: 11px; }
+.access-actions { display: flex; justify-content: flex-end; gap: 7px; }
+.access-actions button { min-height: 34px; padding: 0 11px; border: 1px solid rgba(22,22,22,.12); border-radius: 9px; background: #fff; font: inherit; font-size: 10px; font-weight: 800; cursor: pointer; }
+.access-actions button[data-revoke] { color: #a0382b; }
+.access-actions span { color: #8a8882; font-size: 10px; font-weight: 750; }
+.access-audit { padding: 8px 22px 18px; }
+.access-audit > p { color: #85827c; }
+.access-audit-item { padding: 15px 0; display: grid; gap: 5px; border-bottom: 1px solid rgba(22,22,22,.07); }
+.access-audit-item:last-child { border-bottom: 0; }
+.access-audit-item strong { font-size: 12px; overflow-wrap: anywhere; }
+.access-audit-item span, .access-audit-item small { color: #77746d; font-size: 10px; line-height: 1.5; }
+.access-dialog { width: min(94vw, 590px); }
+.access-form { position: relative; display: grid; gap: 16px; }
+.access-form > h2 { margin: 0; font-size: 28px; }
+.access-form > p { margin: 0; color: #6d6a64; }
+.access-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.access-dialog-close { position: absolute; top: 18px; right: 18px; width: 38px; height: 38px; border: 0; border-radius: 50%; background: #efede8; font-size: 22px; cursor: pointer; }
+.access-form-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+.access-form-error { padding: 10px 12px; border-radius: 10px; background: #fff0ed; color: #9c3428 !important; font-size: 12px; font-weight: 750; }
+@media (max-width: 1050px) { .access-layout { grid-template-columns: 1fr; } .access-overview { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 700px) {
+  .access-shell { width: min(100% - 24px, 1460px); padding-top: 28px; }
+  .access-heading { align-items: stretch; flex-direction: column; }
+  .access-heading .admin-primary-button { width: 100%; }
+  .access-overview { grid-template-columns: 1fr 1fr; gap: 9px; }
+  .access-overview article { padding: 15px; border-radius: 15px; }
+  .access-table thead { display: none; }
+  .access-table, .access-table tbody, .access-table tr, .access-table td { display: block; width: 100%; }
+  .access-table tr { padding: 16px; border-bottom: 1px solid rgba(22,22,22,.1); }
+  .access-table td { padding: 5px 0; border: 0; }
+  .access-actions { justify-content: flex-start; padding-top: 5px; }
+  .access-form-grid { grid-template-columns: 1fr; }
+  .admin-topbar .admin-brand em { display: none; }
+}

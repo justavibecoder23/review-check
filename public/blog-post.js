@@ -6,9 +6,13 @@
   if (!toc || !content || !tocScroller || !list) return;
 
   const configuredHeadings = [...content.querySelectorAll(':scope > [data-toc-entry][id]')];
-  const headings = configuredHeadings.length
-    ? configuredHeadings
-    : [...content.querySelectorAll(':scope > h2[id]')];
+  const existingLinks = [...list.querySelectorAll('a[href^="#"]')];
+  const existingHeadings = existingLinks
+    .map((link) => document.getElementById(decodeURIComponent(link.hash.slice(1))))
+    .filter(Boolean);
+  const headings = existingHeadings.length
+    ? existingHeadings
+    : (configuredHeadings.length ? configuredHeadings : [...content.querySelectorAll(':scope > h2[id]')]);
   const links = new Map();
   const HEADING_SCROLL_OFFSET = 112;
   const ACTIVE_HEADING_THRESHOLD = 180;
@@ -37,11 +41,13 @@
     window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
   };
 
-  headings.forEach((heading) => {
+  headings.forEach((heading, index) => {
     const item = document.createElement('li');
-    const link = document.createElement('a');
-    link.href = `#${heading.id}`;
-    link.textContent = heading.textContent.trim();
+    const link = existingLinks[index] || document.createElement('a');
+    if (!existingLinks[index]) {
+      link.href = `#${heading.id}`;
+      link.textContent = heading.textContent.trim();
+    }
     link.addEventListener('click', (event) => {
       event.preventDefault();
       lockActiveHeading(heading.id);
@@ -50,10 +56,15 @@
       scrollToHeading(heading);
       scheduleLockRelease();
     });
-    item.append(link);
-    list.append(item);
+    if (!existingLinks[index]) {
+      item.append(link);
+      list.append(item);
+    }
     links.set(heading.id, link);
   });
+  const trackedHeadings = [...headings].sort((left, right) => (
+    left === right ? 0 : (left.compareDocumentPosition(right) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1)
+  ));
 
   const desktopQuery = window.matchMedia('(min-width: 1025px)');
   const syncTocState = ({ matches }) => {
@@ -88,7 +99,7 @@
     if (activeLink) keepLinkVisible(activeLink);
   };
 
-  if (!headings.length) return;
+  if (!trackedHeadings.length) return;
   const updateFromPosition = () => {
     if (lockedId && performance.now() < lockUntil) {
       setActive(lockedId);
@@ -96,9 +107,9 @@
     }
     lockedId = '';
     const atPageEnd = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
-    const current = atPageEnd ? headings.at(-1) : headings.reduce((active, heading) => (
+    const current = atPageEnd ? trackedHeadings.at(-1) : trackedHeadings.reduce((active, heading) => (
       heading.getBoundingClientRect().top <= ACTIVE_HEADING_THRESHOLD ? heading : active
-    ), headings[0]);
+    ), trackedHeadings[0]);
     setActive(current.id);
   };
   let updateQueued = false;
@@ -110,11 +121,11 @@
       updateQueued = false;
     });
   };
-  setActive(location.hash.slice(1) || headings[0].id);
+  setActive(location.hash.slice(1) || trackedHeadings[0].id);
 
   if ('IntersectionObserver' in window) {
     const observer = new IntersectionObserver(queuePositionUpdate, { rootMargin: '-100px 0px -72% 0px', threshold: [0, 1] });
-    headings.forEach((heading) => observer.observe(heading));
+    trackedHeadings.forEach((heading) => observer.observe(heading));
   }
   window.addEventListener('scroll', () => {
     if (lockedId) scheduleLockRelease();
