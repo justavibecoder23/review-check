@@ -1,12 +1,10 @@
 (() => {
-  const cards = [...document.querySelectorAll('[data-blog-card]')];
   const filterButtons = [...document.querySelectorAll('[data-blog-filter]')];
   const sidebarButtons = [...document.querySelectorAll('[data-sidebar-filter]')];
   const searchInput = document.querySelector('#blog-search-input');
   const emptyState = document.querySelector('[data-blog-empty]');
-  if (!cards.length) return;
-
   let activeFilter = 'all';
+  const cards = () => [...document.querySelectorAll('[data-blog-card]')];
 
   const normalize = (value) => String(value || '')
     .normalize('NFD')
@@ -18,7 +16,7 @@
     const query = normalize(searchInput?.value);
     let visibleCount = 0;
 
-    cards.forEach((card) => {
+    cards().forEach((card) => {
       const categories = String(card.dataset.category || '').split(/\s+/);
       const searchText = normalize(`${card.dataset.search || ''} ${card.textContent || ''}`);
       const matchesFilter = activeFilter === 'all' || categories.includes(activeFilter);
@@ -45,4 +43,6 @@
   filterButtons.forEach((button) => button.addEventListener('click', () => chooseFilter(button.dataset.blogFilter)));
   sidebarButtons.forEach((button) => button.addEventListener('click', () => chooseFilter(button.dataset.sidebarFilter, true)));
   searchInput?.addEventListener('input', update);
+
+  update();
 })();
