@@ -62,9 +62,10 @@ export function isBootstrapAdmin(email, env = process.env) {
 }
 
 export function accessCapabilities(role) {
+  const canManagePosts = role === 'admin' || role === 'editor';
   return {
-    managePosts: role === 'admin' || role === 'editor',
-    publishPosts: role === 'admin',
+    managePosts: canManagePosts,
+    publishPosts: canManagePosts,
     manageAccess: role === 'admin'
   };
 }

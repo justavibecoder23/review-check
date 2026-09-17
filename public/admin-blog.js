@@ -293,8 +293,9 @@ function renderPosts() {
     $('.post-table-author', row).textContent = post.authors?.[0]?.name || 'Nhóm RealView';
     const viewLink = $('[data-view-row]', row);
     viewLink.href = post.status === 'published' && post.slug ? `/bai-viet/${post.slug}` : `/api/admin-blog?action=preview&id=${encodeURIComponent(post.id || '')}`;
-    $('[data-unpublish-row]', row).hidden = post.isStaticFallback || state.role !== 'admin' || post.status !== 'published';
-    $('[data-archive-row]', row).hidden = post.isStaticFallback || state.role !== 'admin' || post.status === 'archived';
+    const canManagePosts = ['admin', 'editor'].includes(state.role);
+    $('[data-unpublish-row]', row).hidden = post.isStaticFallback || !canManagePosts || post.status !== 'published';
+    $('[data-archive-row]', row).hidden = post.isStaticFallback || !canManagePosts || post.status === 'archived';
     tbody.append(row);
   });
   $('[data-list-empty]').hidden = filtered.length > 0;
@@ -303,8 +304,9 @@ function renderPosts() {
 
 function applyRolePermissions() {
   const isAdmin = state.role === 'admin';
-  $('[data-publish-post]').hidden = !isAdmin;
-  $('[data-unpublish-post]').hidden = !isAdmin || state.currentPost?.status !== 'published';
+  const canManagePosts = isAdmin || state.role === 'editor';
+  $('[data-publish-post]').hidden = !canManagePosts;
+  $('[data-unpublish-post]').hidden = !canManagePosts || state.currentPost?.status !== 'published';
   $('[data-access-management]').hidden = !isAdmin;
 }
 

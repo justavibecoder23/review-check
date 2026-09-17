@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import {
+  accessCapabilities,
   getDynamicAccessGrant,
   listAccessAudit,
   listAccessGrants,
@@ -50,6 +51,19 @@ async function withRedis(run) {
 const actor = { account: { id: 'owner-1', email: 'owner@realview.com.vn', username: 'owner' }, role: 'admin' };
 const env = { BLOG_ADMIN_EMAILS: 'owner@realview.com.vn, second@realview.com.vn' };
 
+test('editor quản lý trọn vòng đời bài viết nhưng không quản lý phân quyền', () => {
+  assert.deepEqual(accessCapabilities('editor'), {
+    managePosts: true,
+    publishPosts: true,
+    manageAccess: false
+  });
+  assert.deepEqual(accessCapabilities('admin'), {
+    managePosts: true,
+    publishPosts: true,
+    manageAccess: true
+  });
+});
+
 test('admin cấp quyền động theo thời hạn, cập nhật và hệ thống tự vô hiệu khi hết hạn', () => withRedis(async (redis) => {
   const now = Date.parse('2026-09-17T10:00:00.000Z');
   const entry = await upsertAccessGrant({
@@ -88,6 +102,21 @@ test('thu hồi có hiệu lực ở lần kiểm tra kế tiếp và không cho
   );
 }));
 
+test('admin động có thể thu hồi admin động khác nhưng không thể sửa hoặc thu hồi admin Vercel', () => withRedis(async (redis) => {
+  const dynamicActor = { account: { id: 'dynamic-1', email: 'dynamic-admin@example.com', username: 'dynamic' }, role: 'admin' };
+  await upsertAccessGrant({ email: 'other-admin@example.com', role: 'admin' }, actor, { fetchImpl: redis.fetchImpl, env });
+  const revoked = await revokeAccessGrant('other-admin@example.com', dynamicActor, { fetchImpl: redis.fetchImpl, env });
+  assert.equal(revoked.status, 'revoked');
+  await assert.rejects(
+    upsertAccessGrant({ email: 'second@realview.com.vn', role: 'editor' }, dynamicActor, { fetchImpl: redis.fetchImpl, env }),
+    (error) => error.code === 'BOOTSTRAP_ADMIN_IMMUTABLE'
+  );
+  await assert.rejects(
+    revokeAccessGrant('owner@realview.com.vn', dynamicActor, { fetchImpl: redis.fetchImpl, env }),
+    (error) => error.code === 'BOOTSTRAP_ADMIN_IMMUTABLE'
+  );
+}));
+
 test('role hiệu lực ưu tiên admin gốc rồi mới dùng ACL động', async () => {
   assert.equal(await resolveEffectiveBlogRole({ id: '1', email: 'owner@realview.com.vn' }, {
     env,
@@ -100,16 +129,20 @@ test('role hiệu lực ưu tiên admin gốc rồi mới dùng ACL động', as
 });
 
 test('frontend chỉ render menu quyền truy cập theo capability manageAccess', async () => {
-  const [auth, page, script, vercel] = await Promise.all([
+  const [auth, page, script, blogScript, adminRoute, vercel] = await Promise.all([
     readFile(new URL('../public/auth.js', import.meta.url), 'utf8'),
     readFile(new URL('../public/admin-access.html', import.meta.url), 'utf8'),
     readFile(new URL('../public/admin-access.js', import.meta.url), 'utf8'),
+    readFile(new URL('../public/admin-blog.js', import.meta.url), 'utf8'),
+    readFile(new URL('../src/blog-admin-route.mjs', import.meta.url), 'utf8'),
     readFile(new URL('../vercel.json', import.meta.url), 'utf8')
   ]);
   assert.match(auth, /currentBlogCapabilities\?\.manageAccess/);
   assert.match(auth, /href="\/admin\/access"/);
   assert.match(page, /data-access-list/);
   assert.match(script, /Editor và user không có quyền/);
+  assert.match(blogScript, /const canManagePosts = isAdmin \|\| state\.role === 'editor'/);
+  assert.doesNotMatch(adminRoute, /BLOG_ADMIN_REQUIRED|minimumRole.*\? 'admin'/);
   assert.match(vercel, /"source": "\/api\/admin-access", "destination": "\/api\/blog\.mjs\?route=access-admin"/);
   assert.match(vercel, /"source": "\/admin\/access"/);
 });

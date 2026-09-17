@@ -281,9 +281,6 @@ async function handlePost(request, response, body, actor) {
     return sendAdminJson(response, 200, await discardBlogDraft(id, expectedRevision(body), actor));
   }
   if (['publish', 'unpublish', 'archive'].includes(action)) {
-    if (actor.role !== 'admin') {
-      return sendAdminJson(response, 403, { error: 'Chỉ admin có quyền thay đổi trạng thái xuất bản.', code: 'BLOG_ADMIN_REQUIRED' });
-    }
     const id = idFrom(request, body);
     if (!id) return sendAdminJson(response, 400, { error: 'Thiếu mã bài viết.', code: 'BLOG_POST_ID_REQUIRED' });
     const revision = expectedRevision(body);
@@ -307,8 +304,7 @@ export default async function handler(request, response) {
     if (request.method !== 'GET') assertAdminSameOrigin(request);
     body = request.method === 'GET' ? {} : parseRequestBody(request);
     const requestedAction = request.method === 'DELETE' ? 'archive' : String(body.action || '').toLowerCase();
-    const minimumRole = ['publish', 'unpublish', 'archive'].includes(requestedAction) ? 'admin' : 'editor';
-    const actor = await requireBlogRole(request, minimumRole);
+    const actor = await requireBlogRole(request, 'editor');
     if (request.method === 'GET') return await handleGet(request, response, actor);
     if (request.method === 'DELETE') return await handlePost(request, response, { ...body, action: 'archive' }, actor);
     return await handlePost(request, response, body, actor);

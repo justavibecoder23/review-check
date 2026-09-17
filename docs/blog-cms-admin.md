@@ -12,8 +12,8 @@
 
 CMS dùng chung hệ thống tài khoản hiện tại. Quyền không lấy từ dữ liệu phía trình duyệt mà được xác định lại ở backend bằng allowlist:
 
-- `BLOG_ADMIN_EMAILS` hoặc `BLOG_ADMIN_USER_IDS`: tạo, sửa, xem trước, khôi phục revision, xuất bản, gỡ xuất bản và lưu trữ.
-- `BLOG_EDITOR_EMAILS` hoặc `BLOG_EDITOR_USER_IDS`: tạo, sửa, xem trước và khôi phục revision; không được thay đổi trạng thái xuất bản.
+- `BLOG_ADMIN_EMAILS` hoặc `BLOG_ADMIN_USER_IDS`: toàn bộ vòng đời bài viết và quản lý quyền admin/editor. Admin gốc trong cấu hình Vercel không thể bị sửa hoặc thu hồi từ giao diện.
+- `BLOG_EDITOR_EMAILS` hoặc `BLOG_EDITOR_USER_IDS`: tạo, sửa, xem trước, lưu bản nháp, khôi phục revision, xuất bản, gỡ xuất bản và lưu trữ; không được quản lý quyền.
 
 Các danh sách nhận nhiều giá trị, phân cách bằng dấu phẩy.
 
@@ -33,7 +33,7 @@ Các danh sách nhận nhiều giá trị, phân cách bằng dấu phẩy.
 2. Tạo bài hoặc mở bài hiện có.
 3. Soạn nội dung theo block; ảnh chỉ nhận JPEG, PNG, WebP hoặc AVIF tối đa 3 MB.
 4. Dùng **Xem trước** và sửa các lỗi SEO bắt buộc.
-5. Editor lưu bản nháp; admin xuất bản.
+5. Editor hoặc admin có thể lưu bản nháp và xuất bản. Chỉ admin được quản lý quyền truy cập.
 6. Khi đổi slug của bài đã xuất bản, CMS giữ redirect 308 từ slug cũ.
 7. Khi gỡ xuất bản/lưu trữ, bài bị loại khỏi route public, danh sách blog động, sitemap và RSS.
 
