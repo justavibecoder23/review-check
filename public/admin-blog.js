@@ -69,7 +69,7 @@ function emptyPost() {
 function createBlock(type) {
   const base = { id: uid(), type };
   const values = {
-    paragraph: { text: '' },
+    paragraph: { text: '', textStyle: 'body' },
     heading: { text: '', anchor: '', includeInToc: true },
     subheading: { text: '', anchor: '', includeInToc: false },
     list: { style: 'unordered', items: ['', ''] },
@@ -384,6 +384,59 @@ function addSelect(container, field, options, value) {
   return select;
 }
 
+function applyInlineFormat(textarea, format) {
+  const start = Number.isFinite(textarea.selectionStart) ? textarea.selectionStart : textarea.value.length;
+  const end = Number.isFinite(textarea.selectionEnd) ? textarea.selectionEnd : start;
+  const selected = textarea.value.slice(start, end);
+  const formats = {
+    bold: { prefix: '**', suffix: '**', fallback: 'chữ đậm' },
+    italic: { prefix: '*', suffix: '*', fallback: 'chữ nghiêng' },
+    link: { prefix: '[', suffix: '](https://)', fallback: 'văn bản liên kết' }
+  };
+  const spec = formats[format];
+  if (!spec) return;
+  const content = selected || spec.fallback;
+  const replacement = `${spec.prefix}${content}${spec.suffix}`;
+  textarea.setRangeText(replacement, start, end, 'end');
+  const selectionStart = start + spec.prefix.length;
+  textarea.setSelectionRange(selectionStart, selectionStart + content.length);
+  textarea.focus();
+  textarea.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function addInlineToolbar(container, textarea) {
+  const toolbar = document.createElement('div');
+  toolbar.className = 'admin-inline-toolbar';
+  toolbar.setAttribute('role', 'toolbar');
+  toolbar.setAttribute('aria-label', 'Định dạng nội dung');
+  [
+    ['bold', 'B', 'In đậm'],
+    ['italic', 'I', 'In nghiêng'],
+    ['link', '↗', 'Chèn liên kết']
+  ].forEach(([format, label, title]) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.inlineFormat = format;
+    button.title = title;
+    button.setAttribute('aria-label', title);
+    button.textContent = label;
+    if (format === 'bold') button.classList.add('is-bold');
+    if (format === 'italic') button.classList.add('is-italic');
+    button.addEventListener('click', () => applyInlineFormat(textarea, format));
+    toolbar.append(button);
+  });
+  const hint = document.createElement('span');
+  hint.textContent = 'Preview và bài đã xuất bản dùng cùng định dạng';
+  toolbar.append(hint);
+  container.insertBefore(toolbar, textarea);
+}
+
+function addRichTextField(container, options = {}) {
+  const textarea = addField(container, { tag: 'textarea', ...options });
+  addInlineToolbar(container, textarea);
+  return textarea;
+}
+
 function addTocOption(container, checked) {
   const label = document.createElement('label'); label.className = 'admin-block-option';
   const input = document.createElement('input'); input.type = 'checkbox'; input.dataset.blockField = 'includeInToc'; input.checked = Boolean(checked);
@@ -421,6 +474,32 @@ function renderBlock(block) {
   const element = blockShell(block);
   const fields = $('.admin-block-fields', element);
   switch (block.type) {
+    case 'paragraph': {
+      const textarea = addRichTextField(fields, {
+        field: 'text', value: block.text,
+        placeholder: 'Nhập nội dung… Có thể dùng thanh công cụ để in đậm, in nghiêng và chèn liên kết.', rows: 5
+      });
+      const settings = document.createElement('div');
+      settings.className = 'admin-block-text-settings';
+      const label = document.createElement('label');
+      label.textContent = 'Kích thước đoạn văn';
+      label.htmlFor = `text-style-${block.id}`;
+      const select = addSelect(settings, 'textStyle', [
+        ['body', 'Tiêu chuẩn'],
+        ['lead', 'Mở bài / nổi bật'],
+        ['small', 'Thông tin phụ']
+      ], block.textStyle || 'body');
+      select.id = label.htmlFor;
+      settings.prepend(label);
+      fields.append(settings);
+      textarea.setAttribute('aria-describedby', `${block.id}-format-help`);
+      const help = document.createElement('small');
+      help.id = `${block.id}-format-help`;
+      help.className = 'admin-form-hint';
+      help.textContent = 'Cỡ chữ dùng thang thiết kế cố định để giữ đúng giao diện và responsive của Blog RealView.';
+      fields.append(help);
+      break;
+    }
     case 'heading':
     case 'subheading': {
       addField(fields, { field: 'text', value: block.text, placeholder: block.type === 'heading' ? 'Tiêu đề phần chính' : 'Tiêu đề phần phụ', className: block.type === 'heading' ? 'admin-block-heading-input' : 'admin-block-subheading-input' });
@@ -465,7 +544,7 @@ function renderBlock(block) {
       addField(fields, { tag: 'textarea', field: 'text', value: block.text, placeholder: 'Nội dung CTA', rows: 3 });
       const split = document.createElement('div'); split.className = 'admin-block-fields admin-block-fields--split';
       addField(split, { field: 'label', value: block.label, placeholder: 'Nhãn nút' }); addField(split, { field: 'url', value: block.url, placeholder: 'Liên kết' }); fields.append(split); break;
-    default: addField(fields, { tag: 'textarea', field: 'text', value: block.text, placeholder: 'Nhập nội dung… Hỗ trợ **chữ đậm**, *chữ nghiêng* và [liên kết](https://…).', rows: 5 });
+    default: addField(fields, { tag: 'textarea', field: 'text', value: block.text, placeholder: 'Nhập nội dung…', rows: 5 });
   }
   return element;
 }

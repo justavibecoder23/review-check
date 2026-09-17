@@ -229,6 +229,45 @@ test('chuẩn hóa block có cấu trúc, tạo schema FAQ và escape nội dung
   assert.equal(validateBlogPost(invalidCanonical, { forPublish: true }).errors.some((item) => item.code === 'CANONICAL_MISMATCH'), true);
 });
 
+test('bài mới hỗ trợ định dạng cơ bản nhưng vẫn dùng typography có kiểm soát của blog', async () => {
+  const post = normalizeBlogPost(completePost({
+    blocks: [
+      { id: 'mo-bai', type: 'paragraph', textStyle: 'lead', text: 'Đây là **ý chính**, có *ghi chú* và [nguồn tham khảo](https://example.com).' },
+      { id: 'phan-chinh', type: 'heading', text: 'Phần chính', anchor: 'phan-chinh', includeInToc: true },
+      { id: 'phan-phu', type: 'subheading', text: 'Phần phụ', anchor: 'phan-phu', includeInToc: true },
+      { id: 'ghi-chu', type: 'paragraph', textStyle: 'small', text: 'Thông tin phụ.' }
+    ]
+  }));
+  const html = renderBlogPost({
+    post,
+    meta: { status: 'published', publishedAt: '2026-09-17T00:00:00.000Z', updatedAt: '2026-09-17T00:00:00.000Z' }
+  });
+  assert.equal(post.blocks[0].textStyle, 'lead');
+  assert.match(html, /<p class="article-text article-text--lead">Đây là <strong>ý chính<\/strong>, có <em>ghi chú<\/em> và <a href="https:\/\/example\.com\/" target="_blank" rel="noopener noreferrer">nguồn tham khảo<\/a>\.<\/p>/);
+  assert.match(html, /<h2 id="phan-chinh" data-toc-entry>Phần chính<\/h2>/);
+  assert.match(html, /<h3 id="phan-phu" data-toc-entry>Phần phụ<\/h3>/);
+  assert.match(html, /<p class="article-text article-text--small">Thông tin phụ\.<\/p>/);
+  assert.match(html, /class="article-reading-grid"/);
+  assert.match(html, /class="article-content"/);
+  const previewHtml = renderBlogPreview(post).html;
+  assert.match(previewHtml, /<p class="article-text article-text--lead">Đây là <strong>ý chính<\/strong>/);
+  assert.match(previewHtml, /<h2 id="phan-chinh" data-toc-entry>Phần chính<\/h2>/);
+  assert.match(previewHtml, /<h3 id="phan-phu" data-toc-entry>Phần phụ<\/h3>/);
+
+  const constrained = normalizeBlogPost(completePost({
+    blocks: [{ id: 'khong-hop-le', type: 'paragraph', textStyle: '48px', text: 'Không cho phép cỡ chữ tùy ý.' }]
+  }));
+  assert.equal(constrained.blocks[0].textStyle, 'body');
+  assert.doesNotMatch(renderBlogPost(constrained, { skipValidation: true }), /48px|article-text--body/);
+
+  const adminSource = await readFile(new URL('../public/admin-blog.js', import.meta.url), 'utf8');
+  assert.match(adminSource, /\['bold', 'B', 'In đậm'\]/);
+  assert.match(adminSource, /\['italic', 'I', 'In nghiêng'\]/);
+  assert.match(adminSource, /\['lead', 'Mở bài \/ nổi bật'\]/);
+  assert.match(adminSource, /case 'heading':/);
+  assert.match(adminSource, /case 'subheading':/);
+});
+
 test('CMS giữ revision bất biến, chặn ghi đè cũ và ghi audit khi publish', async () => {
   const previousUrl = process.env.UPSTASH_REDIS_REST_URL;
   const previousToken = process.env.UPSTASH_REDIS_REST_TOKEN;

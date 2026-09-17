@@ -189,6 +189,16 @@ button { color: inherit; }
 .admin-block-actions button[data-remove-block]:hover { background: #f7e5e2; color: var(--admin-red); }
 .admin-block-fields { display: grid; gap: 10px; }
 .admin-block-fields--split { grid-template-columns: minmax(0, 1fr) 160px; }
+.admin-inline-toolbar { margin-bottom: -10px; min-height: 38px; padding: 5px 7px; display: flex; align-items: center; gap: 4px; border: 1px solid var(--admin-line); border-bottom: 0; border-radius: 11px 11px 0 0; background: #f2f0eb; }
+.admin-inline-toolbar + textarea { border-radius: 0 0 11px 11px; }
+.admin-inline-toolbar button { width: 30px; height: 28px; padding: 0; display: grid; place-items: center; border: 1px solid transparent; border-radius: 7px; background: transparent; color: #4e4d48; font-family: inherit; font-size: 12px; cursor: pointer; }
+.admin-inline-toolbar button:hover, .admin-inline-toolbar button:focus-visible { border-color: #d7d3ca; background: #fff; color: var(--admin-orange-dark); outline: 0; }
+.admin-inline-toolbar button.is-bold { font-weight: 900; }
+.admin-inline-toolbar button.is-italic { font-family: Georgia, serif; font-style: italic; }
+.admin-inline-toolbar span { min-width: 0; margin-left: 5px; overflow: hidden; color: #898781; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.admin-block-text-settings { display: grid; grid-template-columns: max-content minmax(170px, 240px); align-items: center; gap: 10px; }
+.admin-block-text-settings label { color: #696862; font-size: 9px; font-weight: 820; }
+.admin-block-text-settings select { min-width: 0; }
 .admin-block-heading-input { font-size: 19px !important; font-weight: 830; letter-spacing: -.45px; }
 .admin-block-subheading-input { font-size: 16px !important; font-weight: 820; }
 .admin-block-option { display: flex; align-items: center; gap: 7px; color: #74736d; font-size: 9px; font-weight: 750; }
@@ -328,6 +338,8 @@ button { color: inherit; }
   .admin-field--wide { grid-column: auto; }
   .admin-block { padding: 15px 13px 15px 43px; }
   .admin-block-fields--split { grid-template-columns: 1fr; }
+  .admin-inline-toolbar span { display: none; }
+  .admin-block-text-settings { grid-template-columns: 1fr; gap: 6px; }
   .admin-block-menu { grid-template-columns: 1fr; max-height: 330px; overflow-y: auto; }
   .admin-media-uploader { grid-template-columns: 1fr; }
   .admin-access-card { padding: 32px 22px; }

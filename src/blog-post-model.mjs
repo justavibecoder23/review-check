@@ -97,7 +97,11 @@ function normalizeBlock(block, index) {
   const base = { id: cleanText(value.id, 100) || `block-${index + 1}`, type };
   switch (type) {
     case 'paragraph':
-      return { ...base, text: cleanText(value.text) };
+      return {
+        ...base,
+        text: cleanText(value.text),
+        textStyle: ['body', 'lead', 'small'].includes(value.textStyle) ? value.textStyle : 'body'
+      };
     case 'heading':
     case 'subheading': {
       const text = cleanText(value.text, 300);

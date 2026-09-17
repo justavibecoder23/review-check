@@ -139,7 +139,9 @@ function relatedTitle(slug, options) {
 function renderBlock(block, options = {}) {
   switch (block.type) {
     case 'paragraph':
-      return `<p>${textHtml(block.text)}</p>`;
+      return block.textStyle && block.textStyle !== 'body'
+        ? `<p class="article-text article-text--${escapeHtml(block.textStyle)}">${textHtml(block.text)}</p>`
+        : `<p>${textHtml(block.text)}</p>`;
     case 'heading':
     case 'subheading': {
       const tag = block.level === 3 || block.type === 'subheading' ? 'h3' : 'h2';
