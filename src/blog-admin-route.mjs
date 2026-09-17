@@ -1,11 +1,11 @@
-import { requireBlogRole } from '../src/blog-admin-auth.mjs';
+import { requireBlogRole } from './blog-admin-auth.mjs';
 import {
   adminErrorPayload,
   assertAdminSameOrigin,
   firstQueryValue,
   parseRequestBody,
   sendAdminJson
-} from '../src/blog-admin-http.mjs';
+} from './blog-admin-http.mjs';
 import {
   archiveBlogPost,
   createBlogPost,
@@ -17,10 +17,10 @@ import {
   restoreBlogRevision,
   unpublishBlogPost,
   updateBlogPost
-} from '../src/blog-cms-store.mjs';
-import { normalizeBlogPost, validateBlogPost } from '../src/blog-post-model.mjs';
-import { renderBlogPreviewDocument } from '../src/blog-admin-preview.mjs';
-import { saveBlogMedia } from '../src/blog-media-store.mjs';
+} from './blog-cms-store.mjs';
+import { normalizeBlogPost, validateBlogPost } from './blog-post-model.mjs';
+import { renderBlogPreviewDocument } from './blog-admin-preview.mjs';
+import { saveBlogMedia } from './blog-media-store.mjs';
 
 function idFrom(request, body = {}) {
   return String(body.id || firstQueryValue(request.query?.id) || '').trim();

@@ -1,7 +1,7 @@
-import { listBlogPosts } from '../src/blog-cms-store.mjs';
-import { LEGACY_BLOG_SUMMARIES, blogPublicBaseUrl } from '../src/blog-public-config.mjs';
-import { publicBlogSummary, summaryToBlogRecord } from '../src/blog-public-data.mjs';
-import { renderRss } from '../src/blog-renderer.mjs';
+import { listBlogPosts } from './blog-cms-store.mjs';
+import { LEGACY_BLOG_SUMMARIES, blogPublicBaseUrl } from './blog-public-config.mjs';
+import { publicBlogSummary, summaryToBlogRecord } from './blog-public-data.mjs';
+import { renderRss } from './blog-renderer.mjs';
 
 export default async function handler(request, response) {
   if (!['GET', 'HEAD'].includes(request.method)) {
