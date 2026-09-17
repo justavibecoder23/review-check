@@ -1,4 +1,5 @@
 import { currentAccount } from '../api/auth.mjs';
+import { accessCapabilities, resolveDynamicAccessRole } from './blog-access-store.mjs';
 
 const ROLE_WEIGHT = Object.freeze({ editor: 1, admin: 2 });
 
@@ -22,6 +23,22 @@ export function resolveBlogRole(account, env = process.env) {
   return null;
 }
 
+export async function resolveEffectiveBlogRole(account, options = {}) {
+  const env = options.env || process.env;
+  const configuredRole = resolveBlogRole(account, env);
+  if (configuredRole === 'admin') return 'admin';
+  let dynamicRole = null;
+  try {
+    dynamicRole = await (options.resolveDynamicAccessRoleImpl || resolveDynamicAccessRole)(account?.email, {
+      ...options,
+      env
+    });
+  } catch (error) {
+    if (!configuredRole) throw error;
+  }
+  return dynamicRole || configuredRole;
+}
+
 export function hasBlogRole(role, minimumRole = 'editor') {
   return Number(ROLE_WEIGHT[role] || 0) >= Number(ROLE_WEIGHT[minimumRole] || 0);
 }
@@ -38,7 +55,7 @@ export async function requireBlogRole(request, minimumRole = 'editor', options =
   if (!account) {
     throw blogAuthorizationError('Vui lòng đăng nhập để quản trị bài viết.', 401, 'AUTH_REQUIRED');
   }
-  const role = resolveBlogRole(account, options.env || process.env);
+  const role = await resolveEffectiveBlogRole(account, options);
   if (!hasBlogRole(role, minimumRole)) {
     throw blogAuthorizationError('Tài khoản không có quyền thực hiện thao tác này.', 403, 'BLOG_ROLE_REQUIRED');
   }
@@ -48,7 +65,8 @@ export async function requireBlogRole(request, minimumRole = 'editor', options =
       username: account.username,
       email: account.email
     },
-    role
+    role,
+    capabilities: accessCapabilities(role)
   };
 }
 

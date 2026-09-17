@@ -92,6 +92,8 @@
 .account-popover .account-admin-link > i { width: 27px; height: 27px; display: grid; place-items: center; border-radius: 8px; background: #fff; font-size: 14px; font-style: normal; }
 .account-popover .account-admin-link > b { min-width: 0; display: grid; gap: 2px; font-size: 12px; }
 .account-popover .account-admin-link small { font-size: 9px; font-weight: 650; }
+.account-popover .account-admin-link--access { border-color: rgba(168,69,4,.2); background: #fff5ed; color: #9b4108; }
+.account-popover .account-admin-link--access:hover { border-color: rgba(168,69,4,.42); background: #ffecde; }
 .account-popover button { width: 100%; min-height: 38px; border: 0; border-radius: 11px; background: #f2f1ed; color: #8a3426; font-weight: 800; cursor: pointer; }
 
 .account-dialog {

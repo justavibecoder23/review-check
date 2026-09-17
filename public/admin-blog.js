@@ -273,6 +273,7 @@ function applyRolePermissions() {
   const isAdmin = state.role === 'admin';
   $('[data-publish-post]').hidden = !isAdmin;
   $('[data-unpublish-post]').hidden = !isAdmin || state.currentPost?.status !== 'published';
+  $('[data-access-management]').hidden = !isAdmin;
 }
 
 function switchEditorTab(name) {
@@ -911,6 +912,7 @@ function initializeEvents() {
   $('[data-create-post]').addEventListener('click', () => openEditor());
   $('[data-view-link="new"]').addEventListener('click', () => openEditor());
   $('[data-view-link="posts"]').addEventListener('click', closeEditor);
+  $('[data-access-management]').addEventListener('click', () => { window.location.href = '/admin/access'; });
   $('[data-close-editor]').addEventListener('click', closeEditor);
   $('[data-save-post]').addEventListener('click', () => savePost());
   $('[data-publish-post]').addEventListener('click', publishPost);

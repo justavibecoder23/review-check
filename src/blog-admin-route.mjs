@@ -78,7 +78,8 @@ async function handleGet(request, response, actor) {
   if (action === 'access') {
     return sendAdminJson(response, 200, {
       authorized: true,
-      role: actor.role
+      role: actor.role,
+      capabilities: actor.capabilities
     });
   }
   if (action === 'list') {

@@ -1,6 +1,7 @@
 let currentUser = null;
 let statusPromise;
 let currentBlogRole = null;
+let currentBlogCapabilities = null;
 let blogAccessPromise;
 let returnFocus;
 let pendingRegistration = null;
@@ -32,7 +33,8 @@ function accountControlsMarkup() {
       </button>
       <div class="account-popover" data-account-popover hidden>
         <div><span>Tài khoản RealView</span><strong>${escapeHtml(currentUser.username)}</strong><small>${escapeHtml(currentUser.email)}</small></div>
-        ${currentBlogRole ? '<a class="account-admin-link" href="/admin/blog"><i aria-hidden="true">✎</i><b>Quản trị bài viết<small>Đăng và chỉnh sửa Blog</small></b></a>' : ''}
+        ${currentBlogCapabilities?.managePosts ? '<a class="account-admin-link" href="/admin/blog"><i aria-hidden="true">✎</i><b>Quản trị bài viết<small>Đăng và chỉnh sửa Blog</small></b></a>' : ''}
+        ${currentBlogCapabilities?.manageAccess ? '<a class="account-admin-link account-admin-link--access" href="/admin/access"><i aria-hidden="true">⌘</i><b>Quyền truy cập<small>Quản lý admin và editor</small></b></a>' : ''}
         <button type="button" data-auth-logout>Đăng xuất</button>
       </div>`;
   }
@@ -50,6 +52,7 @@ function renderAccountControls() {
 async function refreshBlogAccess({ refresh = false } = {}) {
   if (!currentUser) {
     currentBlogRole = null;
+    currentBlogCapabilities = null;
     blogAccessPromise = null;
     renderAccountControls();
     return null;
@@ -63,11 +66,17 @@ async function refreshBlogAccess({ refresh = false } = {}) {
     const payload = await response.json().catch(() => ({}));
     if (currentUser?.id !== accountId) return null;
     currentBlogRole = response.ok && ['admin', 'editor'].includes(payload.role) ? payload.role : null;
+    currentBlogCapabilities = currentBlogRole ? {
+      managePosts: payload.capabilities?.managePosts !== false,
+      publishPosts: payload.capabilities?.publishPosts === true,
+      manageAccess: payload.capabilities?.manageAccess === true
+    } : null;
     renderAccountControls();
     return currentBlogRole;
   }).catch(() => {
     if (currentUser?.id === accountId) {
       currentBlogRole = null;
+      currentBlogCapabilities = null;
       renderAccountControls();
     }
     return null;
@@ -216,6 +225,7 @@ export async function getCurrentUser({ refresh = false } = {}) {
       const payload = await response.json().catch(() => ({}));
       currentUser = response.ok ? payload.user || null : null;
       currentBlogRole = null;
+      currentBlogCapabilities = null;
       renderAccountControls();
       if (currentUser) void refreshBlogAccess({ refresh: true });
       return currentUser;
@@ -223,6 +233,7 @@ export async function getCurrentUser({ refresh = false } = {}) {
     .catch(() => {
       currentUser = null;
       currentBlogRole = null;
+      currentBlogCapabilities = null;
       renderAccountControls();
       return null;
     });
@@ -267,6 +278,7 @@ async function submitAccountForm(form) {
       });
       currentUser = payload.user;
       currentBlogRole = null;
+      currentBlogCapabilities = null;
       pendingRegistration = null;
       statusPromise = Promise.resolve(currentUser);
       renderAccountControls();
@@ -294,6 +306,7 @@ async function submitAccountForm(form) {
     }
     currentUser = payload.user;
     currentBlogRole = null;
+    currentBlogCapabilities = null;
     statusPromise = Promise.resolve(currentUser);
     renderAccountControls();
     void refreshBlogAccess({ refresh: true });
@@ -314,6 +327,7 @@ async function logout() {
   await apiRequest({ action: 'logout' }).catch(() => {});
   currentUser = null;
   currentBlogRole = null;
+  currentBlogCapabilities = null;
   blogAccessPromise = null;
   statusPromise = Promise.resolve(null);
   renderAccountControls();

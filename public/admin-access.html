@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex,nofollow,noarchive,nosnippet" />
+    <meta name="referrer" content="same-origin" />
+    <meta name="theme-color" content="#f4f3ef" />
+    <title>Quyền truy cập | RealView</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-v1-32.png" />
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/auth.css" />
+    <link rel="stylesheet" href="/admin-blog.css" />
+    <link rel="stylesheet" href="/admin-access.css" />
+  </head>
+  <body class="admin-blog-page admin-access-page">
+    <a class="skip-link" href="#access-main">Đi đến nội dung chính</a>
+    <header class="admin-topbar">
+      <a class="admin-brand" href="/" aria-label="RealView - Trang chủ">
+        <img src="/assets/realview-logo-v1.webp" alt="" width="128" height="75" />
+        <span><b>REAL</b>VIEW</span><em>Access Control</em>
+      </a>
+      <div class="admin-topbar-actions">
+        <a class="admin-site-link" href="/admin/blog">Quản trị bài viết <span aria-hidden="true">→</span></a>
+        <div class="header-auth" data-auth-controls></div>
+      </div>
+    </header>
+
+    <main id="access-main" class="access-shell">
+      <section class="admin-access" data-access-state aria-live="polite">
+        <div class="admin-access-card">
+          <span class="admin-access-mark" aria-hidden="true">RV</span>
+          <p class="admin-eyebrow">KHU VỰC ADMIN</p>
+          <h1>Đang kiểm tra quyền truy cập</h1>
+          <p data-access-message>Vui lòng chờ trong giây lát.</p>
+          <button class="admin-primary-button" type="button" data-access-login hidden>Đăng nhập tài khoản admin <span aria-hidden="true">→</span></button>
+        </div>
+      </section>
+
+      <div data-access-content hidden>
+        <section class="access-heading">
+          <div><p class="admin-eyebrow">BẢO MẬT & PHÂN QUYỀN</p><h1>Quyền truy cập</h1><p>Quản lý người có thể biên tập hoặc xuất bản nội dung Blog RealView.</p></div>
+          <button class="admin-primary-button" type="button" data-open-grant>＋ Thêm quyền</button>
+        </section>
+
+        <section class="access-overview" aria-label="Tổng quan quyền truy cập">
+          <article><span>Tổng tài khoản</span><strong data-stat="total">0</strong><small>Bao gồm admin gốc</small></article>
+          <article><span>Admin</span><strong data-stat="admin">0</strong><small>Có quyền xuất bản</small></article>
+          <article><span>Editor</span><strong data-stat="editor">0</strong><small>Chỉnh sửa nội dung</small></article>
+          <article><span>Sắp hết hạn</span><strong data-stat="expiring">0</strong><small>Trong vòng 7 ngày</small></article>
+        </section>
+
+        <div class="access-layout">
+          <section class="access-panel">
+            <div class="access-panel-heading"><div><p class="admin-eyebrow">DANH SÁCH</p><h2>Tài khoản được cấp quyền</h2></div><button class="admin-text-button" type="button" data-refresh>↻ Làm mới</button></div>
+            <div class="access-table-wrap">
+              <table class="access-table">
+                <thead><tr><th>Email</th><th>Vai trò</th><th>Hiệu lực</th><th>Trạng thái</th><th><span class="sr-only">Hành động</span></th></tr></thead>
+                <tbody data-access-list></tbody>
+              </table>
+              <div class="admin-list-loading" data-loading><span></span><p>Đang tải danh sách quyền…</p></div>
+              <div class="admin-empty-state" data-empty hidden><span aria-hidden="true">⌘</span><h2>Chưa có quyền động</h2><p>Admin gốc vẫn được bảo vệ bằng cấu hình Vercel.</p></div>
+            </div>
+          </section>
+
+          <aside class="access-panel access-audit-panel">
+            <div class="access-panel-heading"><div><p class="admin-eyebrow">NHẬT KÝ</p><h2>Thay đổi gần đây</h2></div></div>
+            <div class="access-audit" data-audit-list><p>Chưa có thay đổi phân quyền.</p></div>
+          </aside>
+        </div>
+      </div>
+    </main>
+
+    <dialog class="admin-dialog access-dialog" data-grant-dialog aria-labelledby="grant-title">
+      <form class="admin-dialog-card access-form" data-grant-form>
+        <button class="access-dialog-close" type="button" data-close-grant aria-label="Đóng">×</button>
+        <p class="admin-eyebrow">PHÂN QUYỀN</p><h2 id="grant-title">Thêm quyền truy cập</h2>
+        <p data-grant-description>Cấp quyền bằng email tài khoản RealView. Có thể cấp trước khi người dùng đăng ký.</p>
+        <label class="admin-field"><span>Email <b>*</b></span><input name="email" type="email" maxlength="254" autocomplete="off" required placeholder="editor@example.com" /></label>
+        <div class="access-form-grid">
+          <label class="admin-field"><span>Vai trò</span><select name="role"><option value="editor">Editor</option><option value="admin">Admin</option></select></label>
+          <label class="admin-field"><span>Bắt đầu</span><input name="startsAt" type="datetime-local" /></label>
+        </div>
+        <label class="admin-field"><span>Thời hạn</span><select name="duration"><option value="never">Không thời hạn</option><option value="1">1 ngày</option><option value="7">7 ngày</option><option value="30">30 ngày</option><option value="90">90 ngày</option><option value="custom">Ngày giờ tùy chỉnh</option></select></label>
+        <label class="admin-field" data-custom-expiry hidden><span>Hết hạn vào</span><input name="expiresAt" type="datetime-local" /></label>
+        <p class="access-form-error" data-form-error role="alert" hidden></p>
+        <div class="access-form-actions"><button class="admin-secondary-button" type="button" data-close-grant>Hủy</button><button class="admin-primary-button" type="submit" data-submit-grant>Cấp quyền</button></div>
+      </form>
+    </dialog>
+
+    <dialog class="admin-dialog" data-revoke-dialog aria-labelledby="revoke-title">
+      <form method="dialog" class="admin-dialog-card"><span class="admin-dialog-icon" aria-hidden="true">!</span><h2 id="revoke-title">Thu hồi quyền truy cập?</h2><p data-revoke-message></p><div><button class="admin-secondary-button" value="cancel">Hủy</button><button class="admin-danger-button" value="confirm">Thu hồi quyền</button></div></form>
+    </dialog>
+
+    <div class="admin-toast-region" data-toast-region aria-live="polite" aria-atomic="true"></div>
+    <script type="module" src="/auth.js"></script>
+    <script type="module" src="/admin-access.js"></script>
+  </body>
+</html>

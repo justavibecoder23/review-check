@@ -62,7 +62,8 @@ test('menu tài khoản chỉ hiện lối vào quản trị blog sau khi backen
     readFile(new URL('../vercel.json', import.meta.url), 'utf8')
   ]);
   assert.match(auth, /fetch\('\/api\/admin-blog\?action=access'/);
-  assert.match(auth, /currentBlogRole \? '<a class="account-admin-link" href="\/admin\/blog">/);
+  assert.match(auth, /currentBlogCapabilities\?\.managePosts \? '<a class="account-admin-link" href="\/admin\/blog">/);
+  assert.match(auth, /currentBlogCapabilities\?\.manageAccess \? '<a class="account-admin-link account-admin-link--access" href="\/admin\/access">/);
   assert.match(auth, /\['admin', 'editor'\]\.includes\(payload\.role\)/);
   assert.doesNotMatch(auth, /nhantrietka07@gmail\.com|realviewueh@gmail\.com/);
   assert.match(authCss, /\.account-popover \.account-admin-link/);
