@@ -45,6 +45,10 @@
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
             <span>Viết bài mới</span>
           </button>
+          <button type="button" data-view-link="guide">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 4.5A2.5 2.5 0 0 1 7.5 2H20v17H7.5A2.5 2.5 0 0 0 5 21.5v-17Z"/><path d="M5 21.5A2.5 2.5 0 0 1 7.5 19H20M9 7h7M9 11h7"/></svg>
+            <span>Hướng dẫn</span>
+          </button>
           <button type="button" data-access-management hidden>
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c.5-4 2.3-6 5.5-6s5 2 5.5 6M16 8h5M18.5 5.5v5"/></svg>
             <span>Quyền truy cập</span>
@@ -111,6 +115,118 @@
                 <span aria-hidden="true">✦</span><h2>Chưa tìm thấy bài viết</h2><p>Hãy đổi bộ lọc hoặc bắt đầu một bài viết mới.</p>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section class="admin-view admin-guide-view" data-view="guide" hidden>
+          <div class="admin-page-heading admin-guide-heading">
+            <div>
+              <p class="admin-eyebrow">CẨM NANG BLOG STUDIO</p>
+              <h1>Viết bài đúng ngay từ đầu</h1>
+              <p>Giải thích từng trường nhập bằng ngôn ngữ dễ hiểu, với ví dụ lấy từ các bài đang có trên Blog RealView.</p>
+            </div>
+            <button class="admin-primary-button" type="button" data-guide-new>＋ Viết bài mới</button>
+          </div>
+
+          <div class="admin-guide-layout">
+            <nav class="admin-guide-toc" aria-label="Mục lục hướng dẫn">
+              <strong>Mục lục</strong>
+              <a href="#guide-start">Bắt đầu nhanh</a>
+              <a href="#guide-content"><span>01</span>Nội dung</a>
+              <a href="#guide-seo"><span>02</span>SEO</a>
+              <a href="#guide-media"><span>03</span>Hình ảnh</a>
+              <a href="#guide-settings"><span>04</span>Thiết lập</a>
+              <a href="#guide-revisions"><span>05</span>Phiên bản</a>
+              <a href="#guide-publish">Checklist xuất bản</a>
+            </nav>
+
+            <article class="admin-guide-content">
+              <section id="guide-start" class="admin-guide-hero">
+                <div>
+                  <p class="admin-eyebrow">LUỒNG LÀM VIỆC KHUYẾN NGHỊ</p>
+                  <h2>Soạn nội dung trước, hoàn thiện SEO sau</h2>
+                  <p>Bạn không cần là developer. Hãy đi lần lượt qua năm tab từ trái sang phải, dùng <b>Xem trước</b> để kiểm tra và chỉ nhấn <b>Xuất bản</b> khi checklist đã ổn.</p>
+                </div>
+                <ol class="admin-guide-flow">
+                  <li><b>1</b><span>Viết nội dung</span></li><li><b>2</b><span>Điền SEO</span></li><li><b>3</b><span>Chọn ảnh</span></li><li><b>4</b><span>Thiết lập</span></li><li><b>5</b><span>Xem trước</span></li>
+                </ol>
+                <aside><strong>Ba nút dễ nhầm</strong><p><b>Lưu bản nháp</b> chỉ lưu nội dung cho nhóm biên tập, không thay bài đang public. <b>Cập nhật bài viết</b> mới đưa revision mới lên public. <b>Xem trước</b> không lưu và không tạo revision.</p></aside>
+              </section>
+
+              <section id="guide-content" class="admin-guide-chapter">
+                <header><span>01</span><div><p class="admin-eyebrow">TAB NỘI DUNG</p><h2>Xây cấu trúc bài để người đọc dễ theo dõi</h2></div></header>
+                <div class="admin-guide-grid">
+                  <article class="admin-guide-card admin-guide-card--wide"><h3>Tiêu đề bài viết và đoạn mở đầu</h3><p><b>Tiêu đề bài viết</b> là H1 duy nhất trên trang. Viết đúng câu hỏi hoặc nhu cầu chính, không thêm dấu chấm ở cuối. <b>Đoạn mở đầu</b> nằm ngay dưới H1 và nên trả lời nhanh người đọc sẽ nhận được gì.</p><div class="admin-guide-example"><span>Ví dụ tốt</span><strong>Review sản phẩm có đáng tin không? 7 yếu tố kiểm tra trước khi đặt hàng</strong><p>Không phải review nào cũng phản ánh đúng chất lượng sản phẩm. Bài viết này giúp bạn nhận biết phản hồi có ích trước khi mua.</p></div></article>
+                  <article class="admin-guide-card"><h3>Kích thước đoạn văn</h3><dl><dt>Tiêu chuẩn</dt><dd>Dùng cho phần lớn nội dung giải thích.</dd><dt>Mở bài / nổi bật</dt><dd>Chữ lớn hơn, chỉ dùng cho một đoạn quan trọng hoặc phần dẫn.</dd><dt>Thông tin phụ</dt><dd>Chữ nhỏ hơn cho chú thích, lưu ý phụ; không dùng cho ý chính.</dd></dl><div class="admin-guide-text-demo"><p class="is-lead">Mở bài / nổi bật giúp dẫn người đọc vào vấn đề.</p><p>Tiêu chuẩn dùng để giải thích nội dung chính.</p><p class="is-small">Thông tin phụ không nên chứa kết luận quan trọng.</p></div></article>
+                  <article class="admin-guide-card"><h3>In đậm, in nghiêng và liên kết</h3><p>Bôi đen đoạn chữ rồi nhấn <b>B</b>, <i>I</i> hoặc biểu tượng liên kết. In đậm cho kết luận; in nghiêng cho thuật ngữ; liên kết cho nguồn hoặc bài liên quan.</p><div class="admin-guide-example"><span>Ví dụ nhập</span><code>Ưu tiên **review có mô tả cụ thể** và đọc thêm [tiêu chí lọc](/tieu-chi-loc).</code><span>Kết quả</span><p>Ưu tiên <strong>review có mô tả cụ thể</strong> và đọc thêm <u>tiêu chí lọc</u>.</p></div></article>
+                  <article class="admin-guide-card"><h3>H2, H3, anchor và mục lục</h3><p><b>H2</b> là phần lớn của bài; <b>H3</b> là ý nhỏ nằm trong H2. Anchor là tên định danh không dấu dùng để nhảy tới mục, ví dụ <code>dau-hieu-review-ao</code>. Bật “Hiển thị trong mục lục” khi mục đó hữu ích cho việc điều hướng.</p><div class="admin-guide-outline"><b>H1: Review sản phẩm có đáng tin?</b><span>H2: 7 yếu tố cần kiểm tra</span><i>H3: Nội dung có đủ cụ thể không?</i><i>H3: Người mua có ảnh thực tế không?</i><span>H2: Cách ra quyết định</span></div></article>
+                  <article class="admin-guide-card"><h3>Danh sách và checklist</h3><p><b>Danh sách</b> dùng cho các ý ngang hàng; chọn đánh số nếu thứ tự quan trọng. <b>Checklist</b> dùng khi người đọc cần tự đánh dấu bước đã làm.</p><div class="admin-guide-example"><ul><li>Đọc cả review thấp sao</li><li>Kiểm tra hình ảnh thực tế</li></ul><p>Checklist nhập mỗi dòng bằng <code>[x]</code> hoặc <code>[ ]</code>.</p></div></article>
+                  <article class="admin-guide-card"><h3>Ghi chú, trích dẫn và công thức</h3><p><b>Ghi chú</b> làm nổi bật cảnh báo hoặc kết luận. <b>Trích dẫn</b> phải có nguồn rõ ràng. <b>Công thức</b> dùng cho biểu thức; “cách đọc công thức” giúp trình đọc màn hình hiểu nội dung.</p><div class="admin-guide-callout"><b>Lưu ý</b><p>Số sao cao không tự động chứng minh review đáng tin.</p></div></article>
+                  <article class="admin-guide-card"><h3>Bảng và đường phân cách</h3><p>Bảng phù hợp khi so sánh cùng tiêu chí. Nhập tiêu đề cột bằng dấu <code>|</code>; mỗi dòng textarea là một hàng. Đường phân cách chỉ tạo nhịp nghỉ, không nên dùng thay H2/H3.</p><div class="admin-guide-mini-table"><b>Tín hiệu</b><b>Nên hiểu</b><span>Có ảnh thật</span><span>Tăng ngữ cảnh</span><span>Chỉ nói “tốt”</span><span>Ít thông tin</span></div></article>
+                  <article class="admin-guide-card"><h3>FAQ, nguồn và bài liên quan</h3><p><b>FAQ</b> trả lời câu hỏi thực người dùng thường hỏi. <b>Nguồn tham khảo</b> cần tên nguồn và URL. <b>Bài liên quan</b> dùng slug, ví dụ <code>trustscore-la-gi</code>, để tạo liên kết nội bộ.</p><div class="admin-guide-example"><span>FAQ mẫu</span><strong>Có nên chỉ đọc review 5 sao?</strong><p>Không. Hãy đọc nhiều mức sao và ưu tiên phản hồi mô tả trải nghiệm cụ thể.</p></div></article>
+                  <article class="admin-guide-card"><h3>CTA RealView</h3><p>CTA là lời mời hành động cuối bài. Eyebrow là nhãn nhỏ; title là lời kêu gọi chính; label là chữ trên nút; URL thường là <code>/#trang-chu</code>.</p><div class="admin-guide-cta"><small>KIỂM TRA TRƯỚC KHI MUA</small><strong>Đọc review nhanh hơn cùng RealView</strong><span>Phân tích sản phẩm →</span></div></article>
+                  <article class="admin-guide-card admin-guide-card--wide"><h3>Sắp xếp, nhân bản và xóa khối</h3><p>Dùng mũi tên bên trái để đổi thứ tự; biểu tượng hai ô để nhân bản; dấu × để xóa. Việc sắp xếp trong màn hình chưa làm thay đổi bài public cho tới khi bạn lưu và xuất bản.</p></article>
+                </div>
+              </section>
+
+              <section id="guide-seo" class="admin-guide-chapter">
+                <header><span>02</span><div><p class="admin-eyebrow">TAB SEO</p><h2>Giúp Google hiểu đúng nội dung bài viết</h2></div></header>
+                <div class="admin-guide-grid">
+                  <article class="admin-guide-card"><h3>SEO title</h3><p>Tiêu đề có thể xuất hiện trên Google. Nên mô tả chính xác chủ đề, đặt ý quan trọng sớm và giữ trong khoảng hiển thị mà checklist hướng dẫn.</p><div class="admin-guide-serp"><small>www.realview.com.vn › bai-viet</small><b>Review 5 sao có đáng tin? Cách kiểm tra trước khi mua</b><p>Nhận biết review 5 sao ít thông tin và cách đọc phản hồi thực tế.</p></div></article>
+                  <article class="admin-guide-card"><h3>Meta description</h3><p>Đoạn mô tả ngắn dưới tiêu đề tìm kiếm. Viết như lời hứa rõ ràng về giá trị bài viết; không nhồi từ khóa và không sao chép nguyên tiêu đề.</p><div class="admin-guide-example"><span>Ví dụ</span><p>Tìm hiểu dấu hiệu review 5 sao thiếu thông tin và 5 bước đối chiếu trước khi đặt hàng trên Shopee hoặc TikTok Shop.</p></div></article>
+                  <article class="admin-guide-card"><h3>Slug là gì?</h3><p>Slug là phần cuối của địa chỉ bài viết. Chỉ dùng chữ thường không dấu, số và dấu gạch ngang. Slug nên ngắn, ổn định và mô tả đúng chủ đề.</p><div class="admin-guide-url"><span>https://www.realview.com.vn/bai-viet/</span><b>review-5-sao-co-dang-tin</b></div><p class="admin-guide-warn">Không đổi slug của bài đã có traffic nếu không thật sự cần. Hệ thống có redirect nhưng URL ổn định vẫn tốt hơn.</p></article>
+                  <article class="admin-guide-card"><h3>Từ khóa chính</h3><p>Cụm từ mô tả truy vấn quan trọng nhất mà bài trả lời. Đây là công cụ định hướng cho người viết, không phải nơi nhồi nhiều từ khóa.</p><div class="admin-guide-example"><span>Ví dụ</span><strong>review 5 sao có đáng tin</strong><p>Biến thể tự nhiên có thể là “có nên tin đánh giá 5 sao” hoặc “review 5 sao có thật không”.</p></div></article>
+                  <article class="admin-guide-card"><h3>Search intent</h3><dl><dt>Tìm hiểu thông tin</dt><dd>Người đọc muốn hiểu khái niệm hoặc cách làm.</dd><dt>So sánh/cân nhắc</dt><dd>Người đọc đang chọn giữa các phương án.</dd><dt>Thực hiện hành động</dt><dd>Người đọc muốn dùng công cụ hoặc mua hàng.</dd><dt>Tìm thương hiệu/trang</dt><dd>Người đọc đang tìm đúng RealView hoặc một trang cụ thể.</dd></dl></article>
+                  <article class="admin-guide-card"><h3>Canonical URL là gì?</h3><p>Canonical nói với Google đâu là URL chính thức nếu cùng nội dung có thể xuất hiện ở nhiều địa chỉ. Với bài bình thường, <b>để trống</b> để hệ thống tự tạo từ slug.</p><div class="admin-guide-example"><span>Khi nào điền?</span><p>Chỉ điền khi nội dung này có một URL chuẩn khác đã được quyết định. URL phải là đường dẫn bài trên RealView, không phải link Shopee/TikTok hay trang quản trị.</p></div></article>
+                  <article class="admin-guide-card admin-guide-card--wide"><h3>Open Graph và Twitter Card</h3><p>Đây là tiêu đề, mô tả và ảnh khi link được chia sẻ trên Facebook, Zalo hoặc mạng xã hội. Người viết không cần biết mã kỹ thuật: nhấn <b>Điền từ SEO</b> để sao chép SEO title/meta description; nếu URL ảnh OG để trống, hệ thống dùng ảnh đại diện.</p><div class="admin-guide-social"><img src="/assets/blog/review-5-sao-co-dang-tin-thumbnail.jpg" alt="Ảnh bài Review 5 sao có đáng tin trên Blog RealView" loading="lazy" width="640" height="360"/><div><small>REALVIEW.COM.VN</small><strong>Review 5 sao có đáng tin?</strong><p>Cách kiểm tra review trước khi quyết định mua hàng.</p></div></div></article>
+                  <article class="admin-guide-card admin-guide-card--wide"><h3>Những phần SEO hệ thống tự làm</h3><ul class="admin-guide-checks"><li>Canonical mặc định từ slug</li><li>Open Graph và Twitter Card</li><li>BlogPosting, Breadcrumb và FAQ schema</li><li>Mục lục từ H2/H3</li><li>Sitemap và RSS khi xuất bản</li><li><code>noindex</code> cho bản nháp/xem trước</li></ul><p>Bạn vẫn phải viết tiêu đề, mô tả, nội dung và alt ảnh đúng sự thật; “tự động” không thể thay chất lượng biên tập.</p></article>
+                </div>
+              </section>
+
+              <section id="guide-media" class="admin-guide-chapter">
+                <header><span>03</span><div><p class="admin-eyebrow">TAB HÌNH ẢNH</p><h2>Dùng ảnh đúng ngữ cảnh, nhẹ và dễ hiểu</h2></div></header>
+                <div class="admin-guide-grid">
+                  <article class="admin-guide-card admin-guide-card--wide"><h3>Ảnh đại diện, ảnh trong bài và ảnh OG</h3><p><b>Ảnh đại diện</b> xuất hiện đầu bài và trên thẻ bài ở trang blog. <b>Ảnh trong bài</b> minh họa một ý cụ thể. <b>Ảnh OG</b> dùng khi chia sẻ link; để trống nếu muốn dùng ảnh đại diện.</p><div class="admin-guide-image-row"><figure><img src="/assets/blog/review-san-pham-co-dang-tin-khong.jpg" alt="Ảnh đại diện bài Review sản phẩm có đáng tin không" loading="lazy"/><figcaption>Ảnh đại diện: bao quát chủ đề bài.</figcaption></figure><figure><img src="/assets/blog/seo08-27-image5.jpg" alt="Ảnh review sản phẩm có nội dung và hình thực tế" loading="lazy"/><figcaption>Ảnh nội dung: chứng minh một ý cụ thể.</figcaption></figure></div></article>
+                  <article class="admin-guide-card"><h3>Alt mô tả nội dung ảnh là gì?</h3><p>Alt là câu thay thế ảnh cho người dùng trình đọc màn hình và khi ảnh lỗi. Hãy mô tả điều quan trọng nhìn thấy trong ảnh và mối liên hệ với đoạn văn.</p><div class="admin-guide-example"><span>Alt tốt</span><p>“Review Shopee 5 sao có nội dung giao hàng nhanh và hai ảnh sản phẩm thực tế”</p><span>Alt không tốt</span><p>“ảnh review, review Shopee, review uy tín, mua hàng” — đây là nhồi từ khóa và không mô tả ảnh.</p></div></article>
+                  <article class="admin-guide-card"><h3>Chú thích và nguồn ảnh</h3><p>Chú thích hiển thị cho mọi người đọc; dùng để giải thích ngữ cảnh hoặc ghi nguồn. Alt và chú thích không phải một: alt mô tả cái nhìn thấy, chú thích giải thích vì sao ảnh có mặt.</p><div class="admin-guide-example"><span>Ví dụ từ bài hiện có</span><p>“Hình 3: Kiểm tra sự đồng nhất giữa nội dung, hình ảnh và sản phẩm.”</p></div></article>
+                  <article class="admin-guide-card"><h3>Ảnh rộng, gọn, thu gọn, nhỏ</h3><dl><dt>Ảnh rộng</dt><dd>Biểu đồ, screenshot có nhiều chi tiết.</dd><dt>Ảnh gọn</dt><dd>Minh họa thông thường trong mạch đọc.</dd><dt>Ảnh thu gọn</dt><dd>Ảnh phụ không cần chiếm toàn cột.</dd><dt>Ảnh nhỏ</dt><dd>Icon, ví dụ rất đơn giản.</dd></dl><p>Không chọn “nhỏ” cho ảnh có chữ vì người đọc sẽ khó xem trên mobile.</p></article>
+                  <article class="admin-guide-card"><h3>Kéo thả và tối ưu tự động</h3><p>JPEG, PNG, WebP hoặc AVIF tối đa 3 MB. Hệ thống đổi sang WebP, tạo bản 480/960/1600 px, cấp URL và giúp trình duyệt tải đúng kích thước. Ảnh nhỏ không bị phóng lớn.</p><div class="admin-guide-drop-demo"><b>↓</b><strong>Kéo ảnh vào khối hình ảnh</strong><span>URL được điền tự động sau khi tải xong</span></div></article>
+                  <article class="admin-guide-card"><h3>Quy tắc chọn ảnh</h3><ul><li>Ảnh liên quan trực tiếp đến đoạn viết.</li><li>Ưu tiên ảnh chụp/screenshot/bằng chứng do con người tạo.</li><li>Không tải dữ liệu cá nhân hoặc thông tin nhạy cảm.</li><li>Không dùng ảnh AI làm bằng chứng sản phẩm.</li><li>Kiểm tra quyền sử dụng và ghi nguồn khi cần.</li></ul></article>
+                </div>
+              </section>
+
+              <section id="guide-settings" class="admin-guide-chapter">
+                <header><span>04</span><div><p class="admin-eyebrow">TAB THIẾT LẬP</p><h2>Phân loại, tác giả và quyền hiển thị</h2></div></header>
+                <div class="admin-guide-grid">
+                  <article class="admin-guide-card"><h3>Chuyên mục và nhãn hiển thị</h3><p>Chuyên mục là nhóm nội dung dùng để lọc. Nhãn hiển thị là chữ người đọc thấy. Ví dụ: chuyên mục <code>doc-review</code>, nhãn <b>Đọc review</b>. Chọn nhóm gần nhất, không tạo nhãn mới chỉ vì khác cách viết.</p></article>
+                  <article class="admin-guide-card"><h3>Tác giả, email và URL hồ sơ</h3><p>Tên tác giả xuất hiện công khai. Email dùng nội bộ và không lộ trong dữ liệu public. URL hồ sơ phải là trang công khai giới thiệu tác giả; để trống nếu chưa có, không dùng link trang quản trị hoặc mạng xã hội riêng tư.</p></article>
+                  <article class="admin-guide-card"><h3>Tags</h3><p>Tags giúp quản lý chủ đề nhỏ hơn chuyên mục. Phân cách bằng dấu phẩy, dùng ít nhưng nhất quán.</p><div class="admin-guide-example"><span>Ví dụ</span><code>review 5 sao, Shopee, mua hàng online</code></div></article>
+                  <article class="admin-guide-card"><h3>Ngày xuất bản và cập nhật</h3><p>Hai trường này chỉ để xem. Ngày xuất bản được ghi lần đầu khi public; ngày cập nhật công khai chỉ đổi khi revision mới thực sự được xuất bản, không đổi khi mở bài hoặc lưu nháp.</p></article>
+                  <article class="admin-guide-card"><h3>Bài viết nổi bật</h3><p>Bật để ưu tiên bài ở đầu trang blog. Chỉ nên có một số ít bài chiến lược; nếu bật quá nhiều, “nổi bật” mất ý nghĩa.</p></article>
+                  <article class="admin-guide-card"><h3>FAQ schema</h3><p>Bật khi bài có khối FAQ với câu hỏi/câu trả lời thật sự hiển thị trong bài. Hệ thống tạo dữ liệu có cấu trúc từ chính nội dung đó; không thêm câu hỏi chỉ để thao túng kết quả tìm kiếm.</p></article>
+                  <article class="admin-guide-card"><h3>Cho phép Google lập chỉ mục</h3><p>Bật cho bài public hoàn chỉnh. Tắt nếu nội dung tạm thời không nên xuất hiện trên Google; bài sẽ có <code>noindex</code> và bị loại khỏi sitemap. Bản nháp luôn noindex dù công tắc đang bật.</p></article>
+                  <article class="admin-guide-card"><h3>Bài viết liên quan</h3><p>Chọn các bài bổ sung trực tiếp cho chủ đề hiện tại. Liên kết nội bộ tốt giúp người đọc đi sâu hơn; đừng chọn mọi bài chỉ để tăng số link.</p><div class="admin-guide-example"><span>Ví dụ</span><p>Bài “Review 5 sao có đáng tin?” có thể liên kết “Review sản phẩm là gì?” và “Cách tìm shop uy tín trên Shopee”.</p></div></article>
+                </div>
+              </section>
+
+              <section id="guide-revisions" class="admin-guide-chapter">
+                <header><span>05</span><div><p class="admin-eyebrow">TAB PHIÊN BẢN</p><h2>Hiểu đúng bản nháp, revision và xuất bản</h2></div></header>
+                <div class="admin-guide-grid">
+                  <article class="admin-guide-card"><h3>Revision là gì?</h3><p>Revision là một mốc nội dung đã được chủ động lưu. Chỉ mở bài, chuyển tab, xem trước hoặc quay lại không tạo revision. Revision giúp biết ai đã lưu và có thể khôi phục nội dung cũ.</p></article>
+                  <article class="admin-guide-card"><h3>Lưu bản nháp</h3><p>Tạo revision làm việc dùng chung cho người có quyền biên tập. Nếu bài đã public, lưu nháp <b>không thay đổi</b> bản người đọc đang xem. Các editor/admin khác có thể tiếp tục từ bản nháp này.</p></article>
+                  <article class="admin-guide-card"><h3>Xuất bản / Cập nhật bài viết</h3><p><b>Xuất bản</b> đưa bài mới lên website. Với bài đã public, nút đổi thành <b>Cập nhật bài viết</b> và đưa revision nháp hiện tại lên public. Sitemap, RSS và metadata SEO được đồng bộ lúc này.</p></article>
+                  <article class="admin-guide-card"><h3>Bỏ bản nháp và gỡ xuất bản</h3><p><b>Bỏ bản nháp</b> xóa thay đổi chưa public và quay về revision công khai. <b>Gỡ xuất bản</b> làm bài không còn public; đây là thao tác khác hoàn toàn và cần cân nhắc tác động SEO.</p></article>
+                  <article class="admin-guide-card"><h3>Xem và khôi phục phiên bản</h3><p>“Xem phiên bản” chỉ mở nội dung cũ để đối chiếu. “Khôi phục” sao chép nội dung revision cũ thành một revision mới, không xóa lịch sử đã có; bạn vẫn cần xuất bản nếu muốn public bản khôi phục.</p></article>
+                  <article class="admin-guide-card"><h3>Xung đột chỉnh sửa</h3><p>Nếu người khác đã lưu bản mới hơn, hệ thống chặn ghi đè. Chọn tải phiên bản mới để tiếp tục hoặc lưu nội dung hiện tại thành bản sao riêng. Không cố ghi đè vì có thể mất nội dung của đồng đội.</p></article>
+                </div>
+              </section>
+
+              <section id="guide-publish" class="admin-guide-publish">
+                <p class="admin-eyebrow">TRƯỚC KHI NHẤN XUẤT BẢN</p><h2>Checklist cuối cùng</h2>
+                <ul class="admin-guide-checks"><li>H1 rõ chủ đề và không có dấu chấm cuối</li><li>Đoạn mở đầu trả lời đúng nhu cầu tìm kiếm</li><li>Cấu trúc H2/H3 hợp lý, không nhảy cấp</li><li>Ảnh có alt mô tả và nguồn nếu cần</li><li>SEO title, meta description và slug dễ hiểu</li><li>Canonical để trống nếu không có trường hợp đặc biệt</li><li>FAQ và nguồn tham khảo phản ánh đúng nội dung</li><li>Xem trước trên desktop và mobile</li><li>Không có dữ liệu cá nhân hoặc khẳng định thiếu bằng chứng</li><li>Kiểm tra nút CTA và mọi liên kết</li></ul>
+                <button class="admin-primary-button" type="button" data-guide-new>＋ Bắt đầu viết bài</button>
+              </section>
+            </article>
           </div>
         </section>
 

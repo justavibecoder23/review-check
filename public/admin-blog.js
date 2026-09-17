@@ -186,7 +186,7 @@ function showView(name) {
   $('[data-access-state]').hidden = true;
   $$('[data-view]').forEach((view) => { view.hidden = view.dataset.view !== name; });
   $$('[data-view-link]').forEach((button) => {
-    const active = (name === 'posts' && button.dataset.viewLink === 'posts') || (name === 'editor' && button.dataset.viewLink === 'new' && !state.currentPost?.id);
+    const active = name === button.dataset.viewLink || (name === 'editor' && button.dataset.viewLink === 'new' && !state.currentPost?.id);
     button.classList.toggle('is-active', active);
     if (active) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
   });
@@ -1049,6 +1049,13 @@ function closeEditor() {
   confirmAction('Rời khỏi trình soạn thảo?', 'Bạn đang có thay đổi chưa được lưu. Nếu rời khỏi, các thay đổi này sẽ bị mất.', 'Rời khỏi').then((confirmed) => { if (confirmed) { clearTimeout(state.autosaveTimer); state.dirty = false; showView('posts'); } });
 }
 
+function openGuide() {
+  if (!state.dirty) { showView('guide'); return; }
+  confirmAction('Mở trang hướng dẫn?', 'Bạn đang có thay đổi chưa được lưu. Nếu rời khỏi trình soạn thảo, các thay đổi này sẽ bị mất.', 'Mở hướng dẫn').then((confirmed) => {
+    if (confirmed) { clearTimeout(state.autosaveTimer); state.dirty = false; showView('guide'); }
+  });
+}
+
 function addBlock(type) {
   state.currentPost.blocks = $$('.admin-block', $('[data-block-list]')).map(readBlock);
   const block = createBlock(type); state.currentPost.blocks.push(block); $('[data-block-list]').append(renderBlock(block));
@@ -1061,6 +1068,8 @@ function initializeEvents() {
   $('[data-create-post]').addEventListener('click', () => openEditor());
   $('[data-view-link="new"]').addEventListener('click', () => openEditor());
   $('[data-view-link="posts"]').addEventListener('click', closeEditor);
+  $('[data-view-link="guide"]').addEventListener('click', openGuide);
+  $$('[data-guide-new]').forEach((button) => button.addEventListener('click', () => openEditor()));
   $('[data-access-management]').addEventListener('click', () => { window.location.href = '/admin/access'; });
   $('[data-close-editor]').addEventListener('click', closeEditor);
   $('[data-save-post]').addEventListener('click', () => savePost());
