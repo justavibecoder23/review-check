@@ -54,10 +54,12 @@ test('khách chỉ thấy một nút tài khoản màu cam và nút liên hệ m
 });
 
 test('menu tài khoản chỉ hiện lối vào quản trị blog sau khi backend xác nhận quyền', async () => {
-  const [auth, authCss, adminRoute] = await Promise.all([
+  const [auth, authCss, adminRoute, blogRouter, vercelConfig] = await Promise.all([
     readFile(new URL('../public/auth.js', import.meta.url), 'utf8'),
     readFile(new URL('../public/auth.css', import.meta.url), 'utf8'),
-    readFile(new URL('../src/blog-admin-route.mjs', import.meta.url), 'utf8')
+    readFile(new URL('../src/blog-admin-route.mjs', import.meta.url), 'utf8'),
+    readFile(new URL('../api/blog.mjs', import.meta.url), 'utf8'),
+    readFile(new URL('../vercel.json', import.meta.url), 'utf8')
   ]);
   assert.match(auth, /fetch\('\/api\/admin-blog\?action=access'/);
   assert.match(auth, /currentBlogRole \? '<a class="account-admin-link" href="\/admin\/blog">/);
@@ -66,6 +68,9 @@ test('menu tài khoản chỉ hiện lối vào quản trị blog sau khi backen
   assert.match(authCss, /\.account-popover \.account-admin-link/);
   assert.match(adminRoute, /action === 'access'/);
   assert.match(adminRoute, /authorized: true/);
+  assert.match(blogRouter, /request\.query\?\.route/);
+  assert.match(vercelConfig, /"destination": "\/api\/blog\.mjs\?route=admin"/);
+  assert.doesNotMatch(vercelConfig, /"destination": "\/api\/blog\.mjs\?action=admin"/);
 });
 
 test('mobile luôn có nút liên hệ dạng icon với vùng chạm đạt chuẩn', async () => {

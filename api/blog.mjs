@@ -19,8 +19,10 @@ function firstQueryValue(value) {
 }
 
 export default async function handler(request, response) {
-  const action = String(firstQueryValue(request.query?.action) || '').trim();
-  const routeHandler = handlers.get(action);
+  // `route` selects the top-level blog handler. Keep `action` available for
+  // handler-specific commands such as admin access/list/detail.
+  const route = String(firstQueryValue(request.query?.route) || firstQueryValue(request.query?.action) || '').trim();
+  const routeHandler = handlers.get(route);
   if (!routeHandler) {
     response.statusCode = 404;
     response.setHeader('Content-Type', 'application/json; charset=utf-8');
