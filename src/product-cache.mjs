@@ -9,6 +9,8 @@ export const SHOPEE_TOTAL_SERVED_KEY = 'realview:shopee:total_served';
 const MAX_DATASET_BYTES = 10 * 1024 * 1024;
 const MIN_TIKTOK_FALLBACK_REVIEWS = 20;
 const LATEST_POINTER_PREFIX = 'realview:cache:product:latest:v2:';
+const TIKTOK_PRODUCT_META_PREFIX = 'realview:product-meta:v1:tiktok:';
+const TIKTOK_PRODUCT_META_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 export function isShopeeCacheEligible(platform) {
   return String(platform || '').trim().toLowerCase() === 'shopee';
@@ -24,6 +26,72 @@ export function getTikTokCacheKey(productId) {
   const normalized = String(productId || '').trim();
   if (!/^\d{8,25}$/.test(normalized)) throw new Error('TikTok productId không hợp lệ cho cache.');
   return `realview:cache:product:tiktok:${normalized}`;
+}
+
+export function getTikTokProductMetaKey(productId) {
+  const normalized = String(productId || '').trim();
+  if (!/^\d{8,25}$/.test(normalized)) throw new Error('TikTok productId không hợp lệ cho metadata cache.');
+  return `${TIKTOK_PRODUCT_META_PREFIX}${normalized}`;
+}
+
+function safeProductImage(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    return url.protocol === 'https:' ? url.href : '';
+  } catch {
+    return '';
+  }
+}
+
+export function normalizeTikTokProductMetadata(productId, metadata = {}, options = {}) {
+  const normalizedId = String(productId || '').trim();
+  if (!/^\d{8,25}$/.test(normalizedId)) return null;
+  const title = String(metadata.title || metadata.productName || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  const image = safeProductImage(metadata.image || metadata.productImage || metadata.imageUrl || metadata.thumbnail);
+  if (!title && !image) return null;
+  const price = String(metadata.price || metadata.productPrice || '').trim().slice(0, 80);
+  const rating = Number(metadata.rating || metadata.productRating);
+  return {
+    productId: normalizedId,
+    ...(title ? { title } : {}),
+    ...(image ? { image } : {}),
+    ...(price ? { price } : {}),
+    ...(Number.isFinite(rating) && rating > 0 ? { rating } : {}),
+    source: String(options.source || metadata.metadataSource || 'unknown').trim().slice(0, 40),
+    updatedAt: new Date(options.now || Date.now()).toISOString()
+  };
+}
+
+export async function getTikTokProductMetadata(productId, options = {}) {
+  if (!isRedisConfigured() && !options.redisFetchImpl) return null;
+  const raw = await redisCommand(['GET', getTikTokProductMetaKey(productId)], {
+    fetchImpl: options.redisFetchImpl,
+    timeoutMs: options.redisTimeoutMs || 900
+  }).catch(() => null);
+  if (!raw) return null;
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return normalizeTikTokProductMetadata(productId, parsed, {
+      source: parsed?.source || 'redis-overlay',
+      now: parsed?.updatedAt || Date.now()
+    });
+  } catch {
+    return null;
+  }
+}
+
+export async function setTikTokProductMetadata(productId, metadata, options = {}) {
+  if (!isRedisConfigured() && !options.redisFetchImpl) return { saved: false, reason: 'REDIS_NOT_CONFIGURED' };
+  const normalized = normalizeTikTokProductMetadata(productId, metadata, options);
+  if (!normalized) return { saved: false, reason: 'METADATA_EMPTY' };
+  await redisCommand([
+    'SET', getTikTokProductMetaKey(productId), JSON.stringify(normalized),
+    'EX', String(TIKTOK_PRODUCT_META_TTL_SECONDS)
+  ], {
+    fetchImpl: options.redisFetchImpl,
+    timeoutMs: options.redisTimeoutMs || 1_200
+  });
+  return { saved: true, metadata: normalized };
 }
 
 export function getLatestDatasetPointerKey(platform, productId) {

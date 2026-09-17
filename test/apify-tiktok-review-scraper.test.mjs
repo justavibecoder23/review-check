@@ -127,10 +127,16 @@ test('actor tạm thời dùng URL đầy đủ, đọc schema lồng và gắn 
         status: 200,
         headers: { get: () => 'actor-run-1' },
         async json() {
-          return [{ data: { reviews: [{
-            id: 'nested-1', productId, rating: 4, content: 'Đóng gói tốt và giao đúng mô tả.',
-            createdAt: '2026-09-08T00:00:00.000Z', productName: 'Sản phẩm thử nghiệm'
-          }] } }];
+          return [{ data: {
+            product: {
+              name: 'Sản phẩm thử nghiệm',
+              image: 'https://p16-oec-sg.ibyteimg.com/tos/product-cover.webp'
+            },
+            reviews: [{
+              id: 'nested-1', productId, rating: 4, content: 'Đóng gói tốt và giao đúng mô tả.',
+              createdAt: '2026-09-08T00:00:00.000Z'
+            }]
+          } }];
         }
       };
     }
@@ -144,6 +150,10 @@ test('actor tạm thời dùng URL đầy đủ, đọc schema lồng và gắn 
   assert.equal(result.collection.targetMaximum, 100);
   assert.equal(result.collection.distributionMode, 'observed-sample');
   assert.equal(result.collection.temporaryActor, true);
+  assert.deepEqual(result.productMeta, {
+    title: 'Sản phẩm thử nghiệm',
+    image: 'https://p16-oec-sg.ibyteimg.com/tos/product-cover.webp'
+  });
 });
 
 test('actor tạm thời giữ tối đa 100 review sau khử trùng', async () => {

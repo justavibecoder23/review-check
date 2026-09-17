@@ -8,8 +8,11 @@ import {
   getCachedShopeeDataset,
   getCachedTikTokDataset,
   getFallbackTikTokDataset,
+  getTikTokProductMetadata,
+  normalizeTikTokProductMetadata,
   recordShopeeCacheHit,
-  recordShopeeServed
+  recordShopeeServed,
+  setTikTokProductMetadata
 } from './product-cache.mjs';
 import { assertPlatformReviewEnabled } from './platform-availability.mjs';
 
@@ -49,6 +52,22 @@ function platformFrom(url) {
   if (isShopeeUrl(url)) return 'Shopee';
   if (isTikTokUrl(url)) return 'TikTok Shop';
   throw Object.assign(new Error('Link chưa thuộc Shopee hoặc TikTok Shop.'), { statusCode: 400 });
+}
+
+function productTitleFromUrl(productUrl) {
+  try {
+    const parts = new URL(productUrl).pathname.split('/').filter(Boolean);
+    const pdpIndex = parts.findIndex((part) => part.toLowerCase() === 'pdp');
+    const slug = pdpIndex >= 0 ? parts[pdpIndex + 1] : '';
+    if (!slug || /^product$/i.test(slug)) return '';
+    return decodeURIComponent(slug)
+      .replace(/[-_]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/(^|\s)\p{L}/gu, (character) => character.toUpperCase());
+  } catch {
+    return '';
+  }
 }
 
 export function isTikTokRecentRawCacheEnabled(env = process.env) {
@@ -412,7 +431,10 @@ export async function fetchProductPageMeta(productUrl, options = {}) {
         headers: {
           accept: 'text/html,application/xhtml+xml',
           'accept-language': 'vi-VN,vi;q=0.9,en;q=0.7',
-          'user-agent': 'Twitterbot/1.0'
+          // TikTok now returns a generic social-crawler shell without
+          // og:title/og:image to Twitterbot. Its regular SSR response still
+          // contains verified product metadata and is bounded below.
+          'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36'
         }
       });
       if ([301, 302, 303, 307, 308].includes(response.status)) {
@@ -489,6 +511,64 @@ export function mergeProductMetadata(pageMeta = {}, collectedMeta = {}, platform
   };
   if (image) merged.image = image;
   else delete merged.image;
+  return merged;
+}
+
+async function hydrateTikTokProductMetadata(productId, productUrl, product = {}, options = {}) {
+  let merged = { ...product, ...normaliseProductMeta(product) };
+  let source = merged.title && merged.image ? 'dataset' : '';
+
+  if (!merged.title || !merged.image) {
+    const overlay = await getTikTokProductMetadata(productId, {
+      redisFetchImpl: options.redisFetchImpl
+    }).catch(() => null);
+    if (overlay) {
+      // The overlay has already been normalized and its image URL validated by
+      // product-cache. Merge its explicit `image` field directly: the generic
+      // product normalizer intentionally ignores root-level `image` because a
+      // raw actor review may use that field for buyer-uploaded media.
+      merged = {
+        ...merged,
+        ...(overlay.title ? { title: overlay.title } : {}),
+        ...(overlay.image ? { image: overlay.image } : {}),
+        ...(overlay.price ? { price: overlay.price } : {}),
+        ...(overlay.rating ? { rating: overlay.rating } : {})
+      };
+      source = 'redis-overlay';
+    }
+  }
+
+  if (!merged.title || !merged.image) {
+    const pageMeta = await fetchProductPageMetaCandidates([productUrl], {
+      expectedProductId: productId,
+      signal: options.signal,
+      fetchImpl: options.fetchImpl,
+      timeoutMs: 6_500
+    }).catch(() => ({}));
+    if (pageMeta.title || pageMeta.image) {
+      merged = { ...merged, ...pageMeta };
+      source = 'page';
+    }
+  }
+
+  if (!merged.title) merged.title = productTitleFromUrl(productUrl) || 'Sản phẩm trên TikTok Shop';
+  if (merged.title || merged.image) {
+    await setTikTokProductMetadata(productId, merged, {
+      redisFetchImpl: options.redisFetchImpl,
+      source: source || 'url-fallback'
+    }).catch(() => null);
+  }
+  if (process.env.VERCEL) {
+    console.log(JSON.stringify({
+      level: 'info',
+      event: merged.image ? 'product_metadata_resolved' : 'product_metadata_partial',
+      platform: 'TikTok Shop',
+      productId: String(productId),
+      source: source || 'url-fallback',
+      hasTitle: Boolean(merged.title),
+      hasImage: Boolean(merged.image)
+    }));
+  }
   return merged;
 }
 
@@ -586,7 +666,12 @@ export async function getReviews(url, options = {}) {
     });
     if (cached?.dataset) {
       const cachedReviews = cached.dataset.reviews.slice(0, 200);
-      const cachedProduct = cached.dataset.product || {};
+      const cachedProduct = await hydrateTikTokProductMetadata(
+        tiktokProduct.productId,
+        productUrl,
+        cached.dataset.product || {},
+        options
+      );
       const product = {
         ...cachedProduct,
         platform: 'TikTok Shop',
@@ -720,11 +805,25 @@ export async function getReviews(url, options = {}) {
         });
     const reviews = collected.reviews;
     const pageMeta = await productMetaPromise;
-    const collectedMeta = normaliseProductMeta({
-      ...(collected.productMetaSource || {}),
-      ...(collected.productMeta || {})
-    });
-    const productMeta = mergeProductMetadata(pageMeta, collectedMeta, platform);
+    const reviewLevelMeta = normaliseProductMeta(collected.productMetaSource || {});
+    const actorProductMeta = platform === 'TikTok Shop'
+      ? normalizeTikTokProductMetadata(tiktokProduct.productId, collected.productMeta || {}, {
+          source: 'actor-dataset'
+        }) || {}
+      : normaliseProductMeta(collected.productMeta || {});
+    // `productMetaSource` may be an individual review, so its generic image
+    // fields remain untrusted. `productMeta` is extracted only from explicit
+    // product wrappers by the actor adapter and is URL-normalized above.
+    const collectedMeta = { ...reviewLevelMeta, ...actorProductMeta };
+    let productMeta = mergeProductMetadata(pageMeta, collectedMeta, platform);
+    if (platform === 'TikTok Shop') {
+      productMeta = await hydrateTikTokProductMetadata(
+        tiktokProduct.productId,
+        productUrl,
+        productMeta,
+        options
+      );
+    }
     if (Array.isArray(collected.warnings)) warnings.push(...collected.warnings);
     if (platform === 'Shopee') {
       await recordShopeeServed({ redisFetchImpl: options.redisFetchImpl }).catch(() => null);
@@ -768,7 +867,12 @@ export async function getReviews(url, options = {}) {
       });
       if (fallback?.dataset) {
         const fallbackReviews = fallback.dataset.reviews.slice(0, 200);
-        const cachedProduct = fallback.dataset.product || {};
+        const cachedProduct = await hydrateTikTokProductMetadata(
+          tiktokProduct.productId,
+          productUrl,
+          fallback.dataset.product || {},
+          options
+        );
         warnings.push(`Nguồn trực tiếp tạm thời không khả dụng: ${error.message}`);
         warnings.push('Đã dùng dữ liệu lưu gần nhất của đúng sản phẩm TikTok.');
         const product = {
