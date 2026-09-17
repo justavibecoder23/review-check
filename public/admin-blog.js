@@ -475,6 +475,31 @@ function renderSourceItems(container, items = []) {
   container.append(list, add);
 }
 
+function renderBlockImageUploader(container, block) {
+  const uploader = document.createElement('div');
+  uploader.className = 'admin-block-image-uploader';
+  uploader.dataset.blockImageDropzone = '';
+  uploader.tabIndex = 0;
+  uploader.setAttribute('role', 'button');
+  uploader.setAttribute('aria-label', 'Kéo thả hoặc chọn ảnh cho nội dung');
+  const preview = document.createElement('div');
+  preview.className = 'admin-block-image-preview';
+  preview.dataset.blockImagePreview = '';
+  if (block.url) {
+    const image = new Image(); image.src = block.url; image.alt = block.alt || ''; preview.append(image);
+  } else {
+    const icon = document.createElement('span'); icon.textContent = '▧';
+    const empty = document.createElement('small'); empty.textContent = 'Chưa có ảnh'; preview.append(icon, empty);
+  }
+  const copy = document.createElement('div'); copy.className = 'admin-block-image-copy';
+  const strong = document.createElement('strong'); strong.textContent = 'Kéo ảnh vào đây';
+  const hint = document.createElement('p'); hint.textContent = 'Ảnh được đổi sang WebP và tạo kích thước phù hợp cho mobile, tablet và desktop.';
+  const choose = document.createElement('button'); choose.type = 'button'; choose.className = 'admin-secondary-button'; choose.dataset.chooseBlockImage = ''; choose.textContent = block.url ? 'Thay ảnh' : 'Chọn ảnh';
+  const status = document.createElement('small'); status.className = 'admin-block-image-status'; status.dataset.blockImageStatus = ''; status.setAttribute('aria-live', 'polite');
+  const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/jpeg,image/png,image/webp,image/avif'; input.hidden = true; input.dataset.blockImageFile = '';
+  copy.append(strong, hint, choose, status, input); uploader.append(preview, copy); container.append(uploader);
+}
+
 function renderBlock(block) {
   const element = blockShell(block);
   const fields = $('.admin-block-fields', element);
@@ -517,11 +542,15 @@ function renderBlock(block) {
       addField(fields, { tag: 'textarea', field: 'items', value: (block.items || []).join('\n'), placeholder: 'Mỗi dòng là một mục trong danh sách', rows: 5 }); break;
     case 'checklist':
       addField(fields, { tag: 'textarea', field: 'checklistItems', value: (block.items || []).map((item) => `${item.checked ? '[x]' : '[ ]'} ${item.text || ''}`).join('\n'), placeholder: '[x] Mục đã hoàn thành\n[ ] Mục cần kiểm tra', rows: 5 }); break;
-    case 'image':
-      addField(fields, { field: 'url', value: block.url, placeholder: 'URL hình ảnh' });
+    case 'image': {
+      renderBlockImageUploader(fields, block);
       addField(fields, { field: 'alt', value: block.alt, placeholder: 'Alt mô tả nội dung ảnh' });
       addField(fields, { field: 'caption', value: block.caption, placeholder: 'Chú thích hoặc nguồn ảnh' });
-      addSelect(fields, 'display', [['wide', 'Ảnh rộng'], ['compact', 'Ảnh gọn'], ['reduced', 'Ảnh thu gọn'], ['smaller', 'Ảnh nhỏ']], block.display || 'wide'); break;
+      addSelect(fields, 'display', [['wide', 'Ảnh rộng'], ['compact', 'Ảnh gọn'], ['reduced', 'Ảnh thu gọn'], ['smaller', 'Ảnh nhỏ']], block.display || 'wide');
+      const manual = document.createElement('details'); manual.className = 'admin-block-image-manual';
+      const summary = document.createElement('summary'); summary.textContent = 'Dùng URL ảnh có sẵn'; manual.append(summary);
+      addField(manual, { field: 'url', value: block.url, placeholder: 'https://… hoặc /assets/…' }); fields.append(manual); break;
+    }
     case 'callout':
       addSelect(fields, 'tone', [['info', 'Thông tin'], ['warning', 'Lưu ý'], ['success', 'Gợi ý'], ['neutral', 'Trung lập']], block.tone || 'info');
       addField(fields, { field: 'title', value: block.title, placeholder: 'Tiêu đề ghi chú' });
@@ -584,6 +613,9 @@ function readBlock(element) {
   if (type === 'sources') {
     block.items = $$('[data-source-item]', element).map((item) => ({ label: $('[data-block-field="label"]', item)?.value.trim() || '', href: $('[data-block-field="href"]', item)?.value.trim() || '' }));
   }
+  if (type === 'image' && block.url !== element._originalBlock?.url) {
+    block.width = 0; block.height = 0; block.responsiveSources = [];
+  }
   return block;
 }
 
@@ -592,6 +624,14 @@ function collectPost() {
   const value = (name) => form.elements[name]?.value?.trim?.() || '';
   const checked = (name) => Boolean(form.elements[name]?.checked);
   const title = value('title');
+  const heroUrl = value('heroImageUrl');
+  const heroImage = heroUrl === state.currentPost.heroImage?.url
+    ? { ...state.currentPost.heroImage, url: heroUrl, alt: value('heroImageAlt'), caption: value('heroImageCaption') }
+    : { url: heroUrl, alt: value('heroImageAlt'), caption: value('heroImageCaption'), width: 0, height: 0, responsiveSources: [] };
+  const ogImageUrl = value('ogImageUrl');
+  const ogImage = ogImageUrl === state.currentPost.seo.ogImage?.url
+    ? { ...(state.currentPost.seo.ogImage || {}), url: ogImageUrl, alt: value('heroImageAlt') }
+    : { url: ogImageUrl, alt: value('heroImageAlt'), width: 0, height: 0, responsiveSources: [] };
   return normalizePost({
     ...state.currentPost,
     title, h1: title, deck: value('deck'), slug: value('slug'),
@@ -605,11 +645,11 @@ function collectPost() {
     seo: {
       ...state.currentPost.seo, title: value('seoTitle'), metaDescription: value('metaDescription'), primaryKeyword: value('primaryKeyword'), searchIntent: value('searchIntent'),
       canonicalPath: value('canonicalUrl'), canonicalUrl: value('canonicalUrl'), ogTitle: value('ogTitle'), ogDescription: value('ogDescription'),
-      ogImage: { ...(state.currentPost.seo.ogImage || {}), url: value('ogImageUrl'), alt: value('heroImageAlt') },
-      ogImageUrl: value('ogImageUrl'),
+      ogImage,
+      ogImageUrl,
       robots: checked('allowIndexing') ? 'index,follow,max-image-preview:large' : 'noindex,nofollow'
     },
-    heroImage: { ...state.currentPost.heroImage, url: value('heroImageUrl'), alt: value('heroImageAlt'), caption: value('heroImageCaption') },
+    heroImage,
     blocks: $$('.admin-block', $('[data-block-list]')).map(readBlock),
     relatedSlugs: $$('[data-related-post]:checked').map((input) => input.value),
     settings: { includeFaqSchema: checked('includeFaqSchema'), allowIndexing: checked('allowIndexing') }
@@ -874,27 +914,110 @@ function readFileAsBase64(file) {
   });
 }
 
+function validateMediaFile(file) {
+  if (!file) throw new Error('Chưa chọn file ảnh.');
+  if (!/^image\/(jpeg|png|webp|avif)$/.test(file.type)) throw new Error('Chỉ chấp nhận JPEG, PNG, WebP hoặc AVIF.');
+  if (file.size > 3 * 1024 * 1024) throw new Error('Ảnh không được vượt quá 3 MB.');
+}
+
+function uploadFileName(file, suffix = 'image') {
+  const extension = (file.name.match(/\.[a-z0-9]+$/i)?.[0] || '.jpg').toLowerCase();
+  const postName = slugify($('[name="slug"]')?.value || $('[name="title"]')?.value || 'bai-viet');
+  return `${postName || 'bai-viet'}-${slugify(suffix) || 'image'}${extension}`;
+}
+
+async function uploadMedia(file, { alt = '', suffix = 'image' } = {}) {
+  validateMediaFile(file);
+  const data = await readFileAsBase64(file);
+  const payload = await apiPost({
+    action: 'upload_media',
+    fileName: uploadFileName(file, suffix),
+    contentType: file.type,
+    data,
+    alt
+  });
+  const asset = payload.asset || payload;
+  if (!asset?.url) throw new Error('Máy chủ không trả về URL ảnh.');
+  return asset;
+}
+
+function suggestedBlockAlt(element) {
+  const blocks = $$('.admin-block', $('[data-block-list]'));
+  const index = blocks.indexOf(element);
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    if (['heading', 'subheading'].includes(blocks[cursor].dataset.blockType)) {
+      const heading = $('[data-block-field="text"]', blocks[cursor])?.value.trim();
+      if (heading) return heading.slice(0, 300);
+    }
+  }
+  return ($('[name="title"]')?.value.trim() || 'Hình minh họa bài viết').slice(0, 300);
+}
+
+async function uploadBlockImage(element, file) {
+  const status = $('[data-block-image-status]', element);
+  const preview = $('[data-block-image-preview]', element);
+  const dropzone = $('[data-block-image-dropzone]', element);
+  const urlField = $('[data-block-field="url"]', element);
+  const altField = $('[data-block-field="alt"]', element);
+  const originalUrl = urlField?.value || '';
+  let localUrl = '';
+  try {
+    validateMediaFile(file);
+    localUrl = URL.createObjectURL(file);
+    preview.replaceChildren(); const localImage = new Image(); localImage.src = localUrl; localImage.alt = ''; preview.append(localImage);
+    dropzone.classList.add('is-uploading'); status.textContent = 'Đang tối ưu và tải ảnh…';
+    if (!altField.value.trim()) altField.value = suggestedBlockAlt(element);
+    const asset = await uploadMedia(file, { alt: altField.value.trim(), suffix: element.dataset.blockId || 'noi-dung' });
+    urlField.value = asset.url;
+    element._originalBlock = {
+      ...(element._originalBlock || {}),
+      url: asset.url,
+      width: Number(asset.width || 0),
+      height: Number(asset.height || 0),
+      responsiveSources: asset.responsiveSources || []
+    };
+    const image = new Image(); image.src = asset.url; image.alt = altField.value.trim(); preview.replaceChildren(image);
+    status.textContent = `${asset.responsiveSources?.length || 1} kích thước WebP đã sẵn sàng`;
+    markDirty(); toast('Đã tải và tối ưu ảnh nội dung.');
+  } catch (error) {
+    if (urlField) urlField.value = originalUrl;
+    preview.replaceChildren();
+    if (originalUrl) { const image = new Image(); image.src = originalUrl; image.alt = altField?.value || ''; preview.append(image); }
+    else { const icon = document.createElement('span'); icon.textContent = '▧'; const empty = document.createElement('small'); empty.textContent = 'Chưa có ảnh'; preview.append(icon, empty); }
+    status.textContent = ''; toast(error.message, 'error');
+  } finally {
+    dropzone.classList.remove('is-uploading', 'is-dragging');
+    if (localUrl) URL.revokeObjectURL(localUrl);
+  }
+}
+
 async function uploadHero(file) {
   if (!file) return;
-  if (!/^image\/(jpeg|png|webp|avif)$/.test(file.type)) return toast('Chỉ chấp nhận JPEG, PNG, WebP hoặc AVIF.', 'error');
-  if (file.size > 3 * 1024 * 1024) return toast('Ảnh không được vượt quá 3 MB.', 'error');
-  const localUrl = URL.createObjectURL(file); $('[name="heroImageUrl"]').value = localUrl; renderHeroPreview();
+  const previousUrl = $('[name="heroImageUrl"]').value;
+  let localUrl = '';
   try {
-    const data = await readFileAsBase64(file);
-    const payload = await apiPost({ action: 'upload_media', fileName: file.name, contentType: file.type, data, alt: $('[name="heroImageAlt"]').value.trim() });
-    const url = payload.asset?.url || payload.url;
-    if (!url) throw new Error('Máy chủ không trả về URL ảnh.');
+    validateMediaFile(file);
+    if (!$('[name="heroImageAlt"]').value.trim()) {
+      $('[name="heroImageAlt"]').value = ($('[name="title"]')?.value.trim() || 'Ảnh đại diện bài viết').slice(0, 300);
+    }
+    localUrl = URL.createObjectURL(file); $('[name="heroImageUrl"]').value = localUrl; renderHeroPreview();
+    const asset = await uploadMedia(file, { alt: $('[name="heroImageAlt"]').value.trim(), suffix: 'hero' });
     state.currentPost.heroImage = {
       ...state.currentPost.heroImage,
-      url,
-      width: Number(payload.asset?.width || 0),
-      height: Number(payload.asset?.height || 0),
+      url: asset.url,
+      width: Number(asset.width || 0),
+      height: Number(asset.height || 0),
+      responsiveSources: asset.responsiveSources || [],
       alt: $('[name="heroImageAlt"]').value.trim()
     };
-    $('[name="heroImageUrl"]').value = url; renderHeroPreview(); markDirty(); toast('Đã tải ảnh lên thư viện.');
+    if (!$('[name="ogImageUrl"]').value.trim() || $('[name="ogImageUrl"]').value.trim() === previousUrl) {
+      $('[name="ogImageUrl"]').value = asset.url;
+      state.currentPost.seo.ogImage = { ...state.currentPost.seo.ogImage, ...state.currentPost.heroImage };
+    }
+    $('[name="heroImageUrl"]').value = asset.url; renderHeroPreview(); markDirty(); toast('Đã tải và tối ưu ảnh đại diện.');
   } catch (error) {
-    $('[name="heroImageUrl"]').value = ''; renderHeroPreview(); toast(error.message, 'error');
-  } finally { URL.revokeObjectURL(localUrl); }
+    $('[name="heroImageUrl"]').value = previousUrl; renderHeroPreview(); toast(error.message, 'error');
+  } finally { if (localUrl) URL.revokeObjectURL(localUrl); }
 }
 
 async function loadRevisions() {
@@ -986,6 +1109,8 @@ function initializeEvents() {
 
   $('[data-block-list]').addEventListener('click', (event) => {
     const element = event.target.closest('.admin-block'); if (!element) return;
+    const chooseImage = event.target.closest('[data-choose-block-image]');
+    if (chooseImage) { $('[data-block-image-file]', element)?.click(); return; }
     if (event.target.closest('[data-remove-block]')) { if ($$('.admin-block').length === 1) return toast('Bài viết cần ít nhất một khối nội dung.', 'error'); element.remove(); markDirty(); return; }
     if (event.target.closest('[data-duplicate-block]')) { const block = { ...readBlock(element), id: uid() }; element.insertAdjacentElement('afterend', renderBlock(block)); markDirty(); return; }
     const move = event.target.closest('[data-move-block]');
@@ -996,6 +1121,26 @@ function initializeEvents() {
     if (event.target.closest('[data-remove-faq]')) { const items = $$('[data-faq-item]', element); if (items.length <= 1) return toast('Khối FAQ cần ít nhất một câu hỏi.', 'error'); event.target.closest('[data-faq-item]').remove(); markDirty(); }
     if (event.target.closest('[data-add-source]')) { const list = $('[data-source-items]', element); const row = document.createElement('div'); row.className = 'admin-block-fields admin-block-fields--split'; row.dataset.sourceItem = ''; addField(row, { field: 'label', placeholder: 'Tên tài liệu hoặc tổ chức' }); addField(row, { field: 'href', placeholder: 'https://…' }); const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'admin-text-button'; remove.dataset.removeSource = ''; remove.textContent = 'Xóa nguồn'; row.append(remove); list.append(row); markDirty(); }
     if (event.target.closest('[data-remove-source]')) { const items = $$('[data-source-item]', element); if (items.length <= 1) return toast('Khối nguồn cần ít nhất một mục.', 'error'); event.target.closest('[data-source-item]').remove(); markDirty(); }
+  });
+  $('[data-block-list]').addEventListener('change', (event) => {
+    const input = event.target.closest('[data-block-image-file]');
+    const element = input?.closest('.admin-block');
+    if (input && element) { uploadBlockImage(element, input.files?.[0]); input.value = ''; }
+  });
+  ['dragenter', 'dragover'].forEach((name) => $('[data-block-list]').addEventListener(name, (event) => {
+    const dropzone = event.target.closest('[data-block-image-dropzone]');
+    if (!dropzone) return;
+    event.preventDefault(); dropzone.classList.add('is-dragging');
+  }));
+  ['dragleave', 'drop'].forEach((name) => $('[data-block-list]').addEventListener(name, (event) => {
+    const dropzone = event.target.closest('[data-block-image-dropzone]');
+    if (!dropzone) return;
+    event.preventDefault(); dropzone.classList.remove('is-dragging');
+    if (name === 'drop') uploadBlockImage(dropzone.closest('.admin-block'), event.dataTransfer?.files?.[0]);
+  }));
+  $('[data-block-list]').addEventListener('keydown', (event) => {
+    const dropzone = event.target.closest('[data-block-image-dropzone]');
+    if (dropzone && ['Enter', ' '].includes(event.key)) { event.preventDefault(); $('[data-block-image-file]', dropzone)?.click(); }
   });
 
   $('[data-choose-hero]').addEventListener('click', () => $('[data-hero-file]').click());

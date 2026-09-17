@@ -20,7 +20,8 @@ import {
 } from '../src/blog-cms-store.mjs';
 import blogPostHandler from '../src/blog-post-route.mjs';
 import { blogPostHandlerInternals } from '../src/blog-post-route.mjs';
-import { decodeBlogMedia } from '../src/blog-media-store.mjs';
+import sharp from 'sharp';
+import { decodeBlogMedia, saveBlogMedia } from '../src/blog-media-store.mjs';
 import { normalizeBlogPost, validateBlogPost } from '../src/blog-post-model.mjs';
 import { renderBlogPreview } from '../src/blog-admin-preview.mjs';
 import { publicBlogSummary, summaryToBlogRecord } from '../src/blog-public-data.mjs';
@@ -137,6 +138,61 @@ function completePost(overrides = {}) {
     ...overrides
   };
 }
+
+test('upload ảnh blog tạo WebP responsive và dùng bản lớn làm URL mặc định', async () => {
+  const inputBuffer = await sharp({
+    create: { width: 2000, height: 1200, channels: 3, background: '#fb7a1f' }
+  }).png().toBuffer();
+  const uploads = [];
+  const asset = await saveBlogMedia({
+    fileName: 'Ảnh thử SEO.png',
+    contentType: 'image/png',
+    data: inputBuffer.toString('base64'),
+    alt: 'Ảnh thử responsive'
+  }, { account: { id: 'admin-1', email: 'admin@realview.com.vn' } }, {
+    randomUUIDImpl: () => 'media-1',
+    blobPutImpl: async (pathname, data, options) => {
+      uploads.push({ pathname, size: data.length, options });
+      return { url: `https://cdn.example.com/${pathname}`, pathname };
+    }
+  });
+  assert.deepEqual(asset.responsiveSources.map((source) => source.width), [480, 960, 1600]);
+  assert.equal(asset.url, asset.responsiveSources.at(-1).url);
+  assert.equal(asset.width, 1600);
+  assert.equal(asset.height, 960);
+  assert.equal(uploads.length, 3);
+  assert.ok(uploads.every((upload) => upload.pathname.endsWith('w.webp')));
+  assert.ok(uploads.every((upload) => upload.options.contentType === 'image/webp'));
+});
+
+test('model và renderer giữ nguồn ảnh responsive an toàn, vẫn có src fallback', () => {
+  const post = normalizeBlogPost(completePost({
+    heroImage: {
+      url: 'https://cdn.example.com/hero-1600.webp', alt: 'Ảnh hero', width: 1600, height: 960,
+      responsiveSources: [
+        { url: 'javascript:alert(1)', width: 240 },
+        { url: 'https://cdn.example.com/hero-960.webp', width: 960, height: 576 },
+        { url: 'https://cdn.example.com/hero-480.webp', width: 480, height: 288 }
+      ]
+    },
+    blocks: [
+      ...completePost().blocks,
+      {
+        id: 'anh-responsive', type: 'image', url: 'https://cdn.example.com/content-1600.webp', alt: 'Ảnh nội dung', width: 1600, height: 960,
+        responsiveSources: [
+          { url: 'https://cdn.example.com/content-480.webp', width: 480, height: 288 },
+          { url: 'https://cdn.example.com/content-960.webp', width: 960, height: 576 }
+        ]
+      }
+    ]
+  }));
+  assert.deepEqual(post.heroImage.responsiveSources.map((source) => source.width), [480, 960]);
+  const html = renderBlogPost({ post, meta: { status: 'published', publishedAt: '2026-09-17T00:00:00.000Z' } });
+  assert.match(html, /src="https:\/\/cdn\.example\.com\/hero-1600\.webp"/);
+  assert.match(html, /srcset="https:\/\/cdn\.example\.com\/hero-480\.webp 480w, https:\/\/cdn\.example\.com\/hero-960\.webp 960w"/);
+  assert.match(html, /srcset="https:\/\/cdn\.example\.com\/content-480\.webp 480w, https:\/\/cdn\.example\.com\/content-960\.webp 960w"/);
+  assert.doesNotMatch(html, /javascript:alert/);
+});
 
 test('migration và renderer giữ nguyên format ảnh riêng của bài blog hiện có', async () => {
   const sourcePath = new URL('../public/blog/review-san-pham-co-dang-tin-khong.html', import.meta.url);

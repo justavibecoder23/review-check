@@ -6,6 +6,7 @@ import { slugifyBlogValue } from './blog-post-model.mjs';
 // remains under Vercel's serverless request-body ceiling.
 const MAX_MEDIA_BYTES = 3 * 1024 * 1024;
 const ALLOWED_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/gif']);
+const RESPONSIVE_WIDTHS = [480, 960, 1600];
 
 function mediaError(message, statusCode = 400, code = 'BLOG_MEDIA_ERROR') {
   const error = new Error(message);
@@ -45,39 +46,58 @@ export async function saveBlogMedia(input = {}, actor = {}, options = {}) {
     throw mediaError('Kho ảnh blog chưa được cấu hình.', 503, 'BLOG_MEDIA_STORAGE_UNAVAILABLE');
   }
   const media = decodeBlogMedia(input);
-  let processed;
+  const processedByWidth = new Map();
   try {
-    const pipeline = (options.sharpImpl || sharp)(media.buffer, {
-      failOn: 'error',
-      animated: false,
-      limitInputPixels: 40_000_000
-    })
-      .rotate()
-      .resize({ width: 2400, height: 2400, fit: 'inside', withoutEnlargement: true })
-      .webp({ quality: 84, effort: 4 });
-    processed = await pipeline.toBuffer({ resolveWithObject: true });
+    const sharpFactory = options.sharpImpl || sharp;
+    for (const width of RESPONSIVE_WIDTHS) {
+      const processed = await sharpFactory(media.buffer, {
+        failOn: 'error',
+        animated: false,
+        limitInputPixels: 40_000_000
+      })
+        .rotate()
+        .resize({ width, fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: 84, effort: 4 })
+        .toBuffer({ resolveWithObject: true });
+      const actualWidth = Number(processed.info?.width || 0);
+      if (actualWidth > 0 && !processedByWidth.has(actualWidth)) processedByWidth.set(actualWidth, processed);
+    }
   } catch {
     throw mediaError('Không thể đọc hoặc tối ưu file ảnh này.', 400, 'BLOG_MEDIA_INVALID_IMAGE');
   }
+  if (!processedByWidth.size) throw mediaError('Không thể đọc kích thước file ảnh này.', 400, 'BLOG_MEDIA_INVALID_IMAGE');
   const put = options.blobPutImpl || (await import('@vercel/blob')).put;
   const baseName = slugifyBlogValue(media.fileName.replace(/\.[^.]+$/, '')) || 'blog-image';
   const id = (options.randomUUIDImpl || randomUUID)();
-  const pathname = `blog/assets/${baseName}-${id}.webp`;
-  const result = await put(pathname, processed.data, {
-    access: 'public',
-    addRandomSuffix: false,
-    allowOverwrite: false,
-    contentType: 'image/webp',
-    token
-  });
+  const responsiveSources = [];
+  for (const [width, processed] of [...processedByWidth.entries()].sort((left, right) => left[0] - right[0])) {
+    const pathname = `blog/assets/${baseName}-${id}-${width}w.webp`;
+    const result = await put(pathname, processed.data, {
+      access: 'public',
+      addRandomSuffix: false,
+      allowOverwrite: false,
+      contentType: 'image/webp',
+      token
+    });
+    responsiveSources.push({
+      url: result.url,
+      pathname: result.pathname || pathname,
+      width,
+      height: Number(processed.info?.height || 0),
+      size: Number(processed.info?.size || processed.data.length),
+      contentType: 'image/webp'
+    });
+  }
+  const primary = responsiveSources.at(-1);
   return {
     id,
-    url: result.url,
-    pathname: result.pathname || pathname,
-    width: Number(processed.info?.width || 0),
-    height: Number(processed.info?.height || 0),
-    size: Number(processed.info?.size || processed.data.length),
+    url: primary.url,
+    pathname: primary.pathname,
+    width: primary.width,
+    height: primary.height,
+    size: primary.size,
     contentType: 'image/webp',
+    responsiveSources,
     alt: media.alt,
     uploadedBy: {
       id: String(actor.account?.id || actor.id || ''),
@@ -86,4 +106,4 @@ export async function saveBlogMedia(input = {}, actor = {}, options = {}) {
   };
 }
 
-export const blogMediaInternals = { MAX_MEDIA_BYTES, ALLOWED_MEDIA_TYPES, mediaError };
+export const blogMediaInternals = { MAX_MEDIA_BYTES, ALLOWED_MEDIA_TYPES, RESPONSIVE_WIDTHS, mediaError };

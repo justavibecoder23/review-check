@@ -65,12 +65,22 @@ function normalizedImage(value = {}) {
     'article-figure--reduced',
     'article-figure--smaller'
   ]);
+  const responsiveSources = [...new Map((Array.isArray(value.responsiveSources) ? value.responsiveSources : [])
+    .map((source) => ({
+      url: safeUrl(source?.url, { allowRelative: true, image: true }),
+      width: Math.max(0, Math.min(8_000, Number.parseInt(source?.width, 10) || 0)),
+      height: Math.max(0, Math.min(8_000, Number.parseInt(source?.height, 10) || 0))
+    }))
+    .filter((source) => source.url && source.width)
+    .sort((left, right) => left.width - right.width)
+    .map((source) => [source.width, source])).values()].slice(0, 8);
   return {
     url: safeUrl(value.url, { allowRelative: true, image: true }),
     alt: cleanText(value.alt, 300),
     caption: cleanText(value.caption, 1_000),
     width: Math.max(0, Math.min(8_000, Number.parseInt(value.width, 10) || 0)),
     height: Math.max(0, Math.min(8_000, Number.parseInt(value.height, 10) || 0)),
+    responsiveSources,
     display: ['wide', 'compact', 'reduced', 'smaller'].includes(value.display) ? value.display : 'wide',
     variants: [...new Set((Array.isArray(value.variants) ? value.variants : [])
       .map((item) => cleanText(item, 80))
