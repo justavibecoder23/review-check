@@ -152,6 +152,12 @@ async function readRevisionDocument(postId, revision, options = {}) {
   return { document, pointer };
 }
 
+async function nextRevisionNumber(postId, currentRevision, options = {}) {
+  const latest = await redisCommand(['ZREVRANGE', revisionIndexKey(postId), '0', '0'], redisOptions(options));
+  const latestStored = Number(Array.isArray(latest) ? latest[0] : 0);
+  return Math.max(Number(currentRevision) || 0, Number.isInteger(latestStored) ? latestStored : 0) + 1;
+}
+
 function publishedMetaView(meta = {}) {
   const publishedUpdatedAt = meta.publishedUpdatedAt || meta.publishedSummary?.updatedAt || meta.updatedAt;
   return {
@@ -326,7 +332,7 @@ export async function updateBlogPost(postId, input = {}, expectedRevision, actor
     newSlug = post.slug;
     const validation = validateBlogPost(post);
     if (post.slug !== previous.slug) reservedNewSlug = await reserveSlug(post.slug, postId, options);
-    const revision = Number(previous.revision) + 1;
+    const revision = await nextRevisionNumber(postId, previous.revision, options);
     const at = nowValue(options).toISOString();
     const document = { schemaVersion: '1.0.0', postId, revision, savedAt: at, savedBy: actorValue(actor), post };
     const pointer = await writeRevision(postId, revision, document, options);
@@ -558,7 +564,7 @@ export async function restoreBlogRevision(postId, revisionToRestore, expectedRev
       reservedNewSlug = await reserveSlug(post.slug, postId, options);
       if (reservedNewSlug) reservedSlug = post.slug;
     }
-    const revision = Number(previous.revision) + 1;
+    const revision = await nextRevisionNumber(postId, previous.revision, options);
     const at = nowValue(options).toISOString();
     const document = { schemaVersion: '1.0.0', postId, revision, savedAt: at, savedBy: actorValue(actor), post };
     const pointer = await writeRevision(postId, revision, document, options);
@@ -582,6 +588,54 @@ export async function restoreBlogRevision(postId, revisionToRestore, expectedRev
       if (!current || current.slug !== reservedSlug) await redisCommand(['DEL', slugKey(reservedSlug)], redisOptions(options)).catch(() => null);
     }
     throw error;
+  } finally {
+    await releasePostLock(postId, owner, options);
+  }
+}
+
+export async function discardBlogDraft(postId, expectedRevision, actor = {}, options = {}) {
+  ensureStorage(options);
+  if (!Number.isInteger(Number(expectedRevision)) || Number(expectedRevision) < 1) {
+    throw cmsError('Cần gửi expectedRevision khi bỏ bản nháp.', 428, 'BLOG_REVISION_REQUIRED');
+  }
+  const owner = await acquirePostLock(postId, options);
+  try {
+    const previous = await readMeta(postId, options);
+    if (Number(previous.revision) !== Number(expectedRevision)) {
+      throw cmsError('Bài viết đã thay đổi. Hãy tải lại trước khi bỏ bản nháp.', 409, 'BLOG_REVISION_CONFLICT', {
+        expectedRevision: Number(expectedRevision),
+        currentRevision: Number(previous.revision)
+      });
+    }
+    const publishedRevision = Number(previous.publishedRevision);
+    if (previous.status !== 'published' || !Number.isInteger(publishedRevision) || publishedRevision < 1) {
+      throw cmsError('Bài viết chưa có phiên bản công khai để khôi phục.', 409, 'BLOG_PUBLISHED_REVISION_REQUIRED');
+    }
+    const { document } = await readRevisionDocument(postId, publishedRevision, options);
+    const at = nowValue(options).toISOString();
+    const resetMeta = metaFromPost(postId, document.post, publishedRevision, actor, at, previous);
+    const meta = {
+      ...resetMeta,
+      status: 'published',
+      revision: publishedRevision,
+      publishedRevision,
+      publishedSlug: previous.publishedSlug,
+      publishedSummary: previous.publishedSummary,
+      hasUnpublishedChanges: false,
+      publishedAt: previous.publishedAt,
+      publishedUpdatedAt: previous.publishedUpdatedAt,
+      updatedAt: at,
+      updatedBy: actorValue(actor)
+    };
+    const audit = auditRecord('draft_discarded', postId, publishedRevision, actor, at, {
+      discardedRevision: Number(previous.revision)
+    });
+    await redisTransaction([
+      ['SET', metaKey(postId), JSON.stringify(meta)],
+      ['ZADD', INDEX_KEY, String(Date.parse(at)), postId],
+      ...auditCommands(postId, audit)
+    ], redisOptions(options));
+    return { meta, post: document.post, revision: publishedRevision, validation: validateBlogPost(document.post) };
   } finally {
     await releasePostLock(postId, owner, options);
   }

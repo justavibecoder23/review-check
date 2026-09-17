@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { resolveBlogRole, hasBlogRole } from '../src/blog-admin-auth.mjs';
 import {
   createBlogPost,
+  discardBlogDraft,
   getBlogPost,
   getBlogPostBySlug,
   getPublishedBlogPostBySlug,
@@ -309,6 +310,47 @@ test('CMS giữ revision bất biến, chặn ghi đè cũ và ghi audit khi pub
     assert.equal((await listBlogPosts({ ...options, status: 'published' })).length, 1);
     assert.deepEqual((await listBlogRevisions('post-1', options)).map((item) => item.revision), [2, 1]);
     assert.deepEqual((await listBlogAudit('post-1', options)).map((item) => item.action), ['published', 'saved', 'created']);
+  } finally {
+    if (previousUrl === undefined) delete process.env.UPSTASH_REDIS_REST_URL;
+    else process.env.UPSTASH_REDIS_REST_URL = previousUrl;
+    if (previousToken === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    else process.env.UPSTASH_REDIS_REST_TOKEN = previousToken;
+  }
+});
+
+test('trình biên tập chỉ tạo revision khi người viết chủ động lưu', async () => {
+  const adminSource = await readFile(new URL('../public/admin-blog.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(adminSource, /setTimeout\([\s\S]{0,240}savePost/);
+  assert.match(adminSource, /\[data-save-post\].*addEventListener\('click', \(\) => savePost\(\)\)/);
+  assert.match(adminSource, /apiPost\(\{ action: 'preview', post \}\)/);
+  assert.match(adminSource, /Đang công khai Revision/);
+  assert.match(adminSource, /Có bản nháp chưa xuất bản/);
+});
+
+test('bỏ bản nháp đưa bài về revision công khai và lần lưu sau không ghi đè lịch sử', async () => {
+  const previousUrl = process.env.UPSTASH_REDIS_REST_URL;
+  const previousToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'test-token';
+  const mock = redisMock();
+  const actor = { role: 'admin', account: { id: 'admin-1', username: 'Admin', email: 'admin@realview.com.vn' } };
+  const options = { redisFetchImpl: mock.fetchImpl, randomUUIDImpl: () => 'discard-post', now: () => new Date('2026-09-17T10:00:00.000Z') };
+  try {
+    const created = await createBlogPost(completePost(), actor, options);
+    await publishBlogPost(created.meta.id, 1, actor, options);
+    const draft = await updateBlogPost(created.meta.id, completePost({ title: 'Thay đổi chưa xuất bản' }), 1, actor, options);
+    assert.equal(draft.revision, 2);
+    assert.equal(draft.meta.hasUnpublishedChanges, true);
+
+    const discarded = await discardBlogDraft(created.meta.id, 2, actor, options);
+    assert.equal(discarded.revision, 1);
+    assert.equal(discarded.meta.publishedRevision, 1);
+    assert.equal(discarded.meta.hasUnpublishedChanges, false);
+    assert.equal((await getBlogPost(created.meta.id, options)).post.title, completePost().title);
+
+    const next = await updateBlogPost(created.meta.id, completePost({ title: 'Thay đổi mới hợp lệ' }), 1, actor, options);
+    assert.equal(next.revision, 3);
+    assert.deepEqual((await listBlogRevisions(created.meta.id, options)).map((item) => item.revision), [3, 2, 1]);
   } finally {
     if (previousUrl === undefined) delete process.env.UPSTASH_REDIS_REST_URL;
     else process.env.UPSTASH_REDIS_REST_URL = previousUrl;

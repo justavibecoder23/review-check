@@ -10,6 +10,7 @@ import {
 import {
   archiveBlogPost,
   createBlogPost,
+  discardBlogDraft,
   getBlogPost,
   listBlogAudit,
   listBlogPosts,
@@ -145,6 +146,11 @@ async function handlePost(request, response, body, actor) {
     if (!id) return sendAdminJson(response, 400, { error: 'Thiếu mã bài viết.', code: 'BLOG_POST_ID_REQUIRED' });
     const result = await restoreBlogRevision(id, body.revisionToRestore, expectedRevision(body), actor);
     return sendAdminJson(response, 200, result);
+  }
+  if (action === 'discard_draft') {
+    const id = idFrom(request, body);
+    if (!id) return sendAdminJson(response, 400, { error: 'Thiếu mã bài viết.', code: 'BLOG_POST_ID_REQUIRED' });
+    return sendAdminJson(response, 200, await discardBlogDraft(id, expectedRevision(body), actor));
   }
   if (['publish', 'unpublish', 'archive'].includes(action)) {
     if (actor.role !== 'admin') {

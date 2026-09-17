@@ -1,7 +1,6 @@
 import { getCurrentUser, openAuthDialog } from '/auth.js';
 
 const API_URL = '/api/admin-blog';
-const AUTOSAVE_DELAY = 2200;
 const STATUS_LABELS = {
   draft: 'Bản nháp', published: 'Đã xuất bản', archived: 'Lưu trữ'
 };
@@ -56,7 +55,7 @@ async function apiPost(body) {
 
 function emptyPost() {
   return {
-    id: null, revision: 0, status: 'draft', slug: '', title: '', h1: '', deck: '',
+    id: null, revision: 0, publishedRevision: null, hasUnpublishedChanges: false, status: 'draft', slug: '', title: '', h1: '', deck: '',
     category: 'doc-review', categoryLabel: 'Đọc review', tags: [], authors: [{ name: 'Nhóm RealView', email: '' }],
     featured: false, publishedAt: '', modifiedAt: '',
     seo: { title: '', metaDescription: '', canonicalUrl: '', primaryKeyword: '', searchIntent: 'informational', robots: 'index,follow,max-image-preview:large', ogTitle: '', ogDescription: '', ogImageUrl: '' },
@@ -126,6 +125,8 @@ function normalizeApiPost(payload = {}, fallback = {}) {
       ...fallback, ...payload, ...meta,
       id: meta.id || payload.id || fallback.id,
       revision: meta.revision ?? payload.revision ?? fallback.revision,
+      publishedRevision: meta.publishedRevision ?? payload.publishedRevision ?? fallback.publishedRevision,
+      hasUnpublishedChanges: meta.hasUnpublishedChanges ?? payload.hasUnpublishedChanges ?? fallback.hasUnpublishedChanges,
       status: meta.status || payload.status || fallback.status,
       publishedAt: meta.publishedAt || payload.publishedAt || fallback.publishedAt,
       modifiedAt: meta.publishedUpdatedAt || meta.publishedSummary?.updatedAt || payload.modifiedAt || fallback.modifiedAt
@@ -136,6 +137,8 @@ function normalizeApiPost(payload = {}, fallback = {}) {
     ...payload.post,
     id: payload.id || meta.id || fallback.id,
     revision: payload.revision ?? meta.revision ?? fallback.revision,
+    publishedRevision: meta.publishedRevision ?? payload.post.publishedRevision ?? fallback.publishedRevision,
+    hasUnpublishedChanges: meta.hasUnpublishedChanges ?? payload.post.hasUnpublishedChanges ?? fallback.hasUnpublishedChanges,
     status: meta.status || fallback.status || payload.post.status,
     publishedAt: meta.publishedAt || payload.post.publishedAt || fallback.publishedAt,
     modifiedAt: meta.publishedUpdatedAt || meta.publishedSummary?.updatedAt || payload.post.modifiedAt || fallback.modifiedAt,
@@ -331,6 +334,7 @@ function openEditor(post = emptyPost()) {
   $('[data-editor-kicker]').textContent = state.currentPost.id ? 'CHỈNH SỬA BÀI VIẾT' : 'BÀI VIẾT MỚI';
   $('[data-editor-title]').textContent = state.currentPost.id ? 'Biên tập nội dung' : 'Soạn bài viết';
   $('[data-unpublish-post]').hidden = state.currentPost.status !== 'published';
+  $('[data-discard-draft]').hidden = !state.currentPost.hasUnpublishedChanges;
   $('[data-publish-post]').textContent = state.currentPost.status === 'published' ? 'Cập nhật bài viết →' : 'Xuất bản →';
   applyRolePermissions();
   setSaveState('Chưa có thay đổi');
@@ -682,19 +686,20 @@ function updateChecks() {
 function updateEditorMeta() {
   const post = state.currentPost;
   const status = $('[data-document-status]');
-  status.textContent = STATUS_LABELS[post.status] || 'Bản nháp';
+  status.textContent = post.status === 'published' && post.hasUnpublishedChanges
+    ? 'Có bản nháp chưa xuất bản'
+    : (STATUS_LABELS[post.status] || 'Bản nháp');
   status.className = `status-pill status-${post.status || 'draft'}`;
-  $('[data-revision-label]').textContent = `Revision ${post.revision || 0}`;
+  const publishedRevision = Number(post.publishedRevision || 0);
+  const currentRevision = Number(post.revision || 0);
+  $('[data-revision-label]').textContent = post.status === 'published' && publishedRevision && publishedRevision !== currentRevision
+    ? `Đang công khai Revision ${publishedRevision} · Bản nháp Revision ${currentRevision}`
+    : `Revision ${currentRevision}`;
 }
 
 function markDirty() {
   if (!state.currentPost || state.saving) return;
   state.dirty = true; setSaveState('Có thay đổi chưa lưu'); updateChecks();
-  clearTimeout(state.autosaveTimer);
-  state.autosaveTimer = window.setTimeout(() => {
-    const post = collectPost();
-    if (post.title.trim()) savePost({ quiet: true });
-  }, AUTOSAVE_DELAY);
 }
 
 async function savePost({ quiet = false, forceCopy = false } = {}) {
@@ -718,6 +723,7 @@ async function savePost({ quiet = false, forceCopy = false } = {}) {
     state.currentPost = normalizeApiPost(payload, { ...post, id: payload.id || post.id, revision: payload.revision ?? (post.revision + 1) });
     state.dirty = false; setSaveState(`Đã lưu lúc ${new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`, 'saved');
     updateEditorMeta(); renderRelatedPicker();
+    $('[data-discard-draft]').hidden = !state.currentPost.hasUnpublishedChanges;
     if (!quiet) toast(forceCopy ? 'Đã lưu thành một bài viết mới.' : 'Đã lưu bản nháp.');
     return state.currentPost;
   } catch (error) {
@@ -769,7 +775,7 @@ async function publishPost() {
   try {
     const payload = await apiPost({ action: 'publish', id: post.id, expectedRevision: post.revision });
     state.currentPost = normalizeApiPost(payload, { ...post, status: 'published', revision: payload.revision ?? post.revision });
-    updateEditorMeta(); $('[data-unpublish-post]').hidden = false; $('[data-publish-post]').textContent = 'Cập nhật bài viết →';
+    updateEditorMeta(); $('[data-unpublish-post]').hidden = false; $('[data-discard-draft]').hidden = true; $('[data-publish-post]').textContent = 'Cập nhật bài viết →';
     toast('Bài viết đã được xuất bản.'); await loadPosts();
   } catch (error) {
     if (error.status === 409) { state.conflict = error.payload; $('[data-conflict-dialog]').showModal(); }
@@ -791,6 +797,27 @@ async function unpublishPost(id = state.currentPost?.id, revision = state.curren
   } catch (error) { toast(error.message, 'error'); }
 }
 
+async function discardDraft() {
+  const post = state.currentPost;
+  if (!post?.id || !post.hasUnpublishedChanges) return;
+  const confirmed = await confirmAction(
+    'Bỏ bản nháp chưa xuất bản?',
+    `Nội dung đang chỉnh sửa ở Revision ${post.revision} sẽ được bỏ. Bài viết quay lại Revision ${post.publishedRevision} đang công khai.`,
+    'Bỏ bản nháp'
+  );
+  if (!confirmed) return;
+  try {
+    const payload = await apiPost({ action: 'discard_draft', id: post.id, expectedRevision: post.revision });
+    state.currentPost = normalizeApiPost(payload, post);
+    openEditor(state.currentPost);
+    toast(`Đã quay lại Revision ${state.currentPost.publishedRevision || state.currentPost.revision}.`);
+    await loadPosts();
+  } catch (error) {
+    if (error.status === 409) { state.conflict = error.payload; $('[data-conflict-dialog]').showModal(); }
+    else toast(error.message, 'error');
+  }
+}
+
 async function archivePost(post) {
   const confirmed = await confirmAction('Lưu trữ bài viết?', 'Bài viết sẽ được gỡ khỏi danh sách nội dung đang hoạt động. Lịch sử phiên bản vẫn được giữ lại.', 'Lưu trữ');
   if (!confirmed) return;
@@ -803,9 +830,8 @@ async function archivePost(post) {
 async function previewPost() {
   const popup = window.open('', '_blank');
   try {
-    const post = state.dirty || !state.currentPost.id ? await savePost({ quiet: true }) : state.currentPost;
-    if (!post) { popup?.close(); return; }
-    const payload = await apiGet('preview', { id: post.id, revision: post.revision });
+    const post = collectPost();
+    const payload = await apiPost({ action: 'preview', post });
     if (!payload.preview) throw new Error('Máy chủ chưa tạo được bản xem trước.');
     if (popup) { popup.document.open(); popup.document.write(payload.preview); popup.document.close(); }
     else toast('Trình duyệt đang chặn cửa sổ xem trước.', 'error');
@@ -915,6 +941,7 @@ function initializeEvents() {
   $('[data-access-management]').addEventListener('click', () => { window.location.href = '/admin/access'; });
   $('[data-close-editor]').addEventListener('click', closeEditor);
   $('[data-save-post]').addEventListener('click', () => savePost());
+  $('[data-discard-draft]').addEventListener('click', discardDraft);
   $('[data-publish-post]').addEventListener('click', publishPost);
   $('[data-unpublish-post]').addEventListener('click', () => unpublishPost());
   $('[data-preview-post]').addEventListener('click', previewPost);
