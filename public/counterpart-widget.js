@@ -30,7 +30,7 @@ function ensureStylesheet() {
   stylesheetPromise = new Promise((resolve) => {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = '/counterpart-widget.css?v=14';
+    link.href = '/counterpart-widget.css?v=15';
     link.dataset.counterpartStyles = 'true';
     link.addEventListener('load', resolve, { once: true });
     link.addEventListener('error', resolve, { once: true });

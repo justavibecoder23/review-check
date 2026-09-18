@@ -280,9 +280,10 @@
 .counterpart-analyze-button svg { width: 18px; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 
 .counterpart-toast {
-  position: absolute;
-  right: 12px;
-  bottom: calc(100% + 11px);
+  position: fixed;
+  z-index: 9999;
+  right: 24px;
+  bottom: 120px;
   max-width: min(360px, calc(100vw - 30px));
   padding: 11px 15px 11px 11px;
   display: flex;
@@ -351,7 +352,7 @@
   .counterpart-actions { padding: 14px; flex-direction: column; align-items: stretch; gap: 12px; }
   .counterpart-notice { font-size: 11px; }
   .counterpart-analyze-button { width: 100%; }
-  .counterpart-toast { right: 0; left: 0; max-width: none; }
+  .counterpart-toast { right: 14px; bottom: calc(18px + env(safe-area-inset-bottom)); left: 14px; max-width: none; }
 }
 
 @media (max-width: 430px) {

@@ -228,6 +228,10 @@ test('section đối ứng ẩn mặc định và chỉ có module nền riêng'
   const resultsScript = await readFile(new URL('public/results.js', root), 'utf8');
   const resultsStyles = await readFile(new URL('public/results-v2.css', root), 'utf8');
   assert.match(html, /id="counterpart-section" class="counterpart-section hidden"/);
+  assert.ok(html.indexOf('id="counterpart-toast"') < html.indexOf('id="result-action-bar"'), 'toast phải độc lập và nằm ngoài action bar');
+  assert.match(styles, /\.counterpart-toast \{[^}]*position: fixed;[^}]*z-index: 9999;[^}]*right: 24px;[^}]*bottom: 120px;/);
+  assert.match(styles, /@keyframes counterpart-toast-in \{[\s\S]*from \{ opacity: 0; transform: translateY\(12px\) scale\(\.97\); \}/);
+  assert.match(styles, /@media \(max-width: 760px\)[\s\S]*\.counterpart-toast \{[^}]*bottom: calc\(18px \+ env\(safe-area-inset-bottom\)\);/);
   assert.doesNotMatch(html, /id="counterpart-dock-button"|Xem sản phẩm này trên sàn khác/);
   assert.match(html, /id="counterpart-progress"[^>]+aria-controls="counterpart-section"[^>]+disabled hidden/);
   assert.match(html, /Đang tìm sản phẩm tương tự trên nền tảng khác/);
@@ -240,9 +244,9 @@ test('section đối ứng ẩn mặc định và chỉ có module nền riêng'
   assert.match(script, /removeEventListener\('abort'/);
   assert.match(script, /trustIntroIsOpen/);
   assert.match(loader, /realview:analysis-result/);
-  assert.match(loader, /import\('\.\/counterpart-widget\.js\?v=14'\)/);
-  assert.match(html, /counterpart-loader\.js\?v=14/);
-  assert.match(script, /counterpart-widget\.css\?v=14/);
+  assert.match(loader, /import\('\.\/counterpart-widget\.js\?v=15'\)/);
+  assert.match(html, /counterpart-loader\.js\?v=15/);
+  assert.match(script, /counterpart-widget\.css\?v=15/);
   assert.match(script, /showMetadataUnavailable/);
   assert.match(html, /results-v2\.css\?v=2/);
   assert.match(html, /results\.js\?v=2/);
