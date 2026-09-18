@@ -15,6 +15,18 @@ function mediaError(message, statusCode = 400, code = 'BLOG_MEDIA_ERROR') {
   return error;
 }
 
+function normalizeBlobUploadError(error) {
+  const message = String(error?.message || '');
+  if (/public access on a private store|private store|configured with private access/i.test(message)) {
+    return mediaError(
+      'Kho ảnh Blog Studio đang ở chế độ Private. Hãy cấu hình BLOG_MEDIA_BLOB_TOKEN trỏ tới Blob Store Public.',
+      503,
+      'BLOG_MEDIA_PUBLIC_STORE_REQUIRED'
+    );
+  }
+  return mediaError('Không thể tải ảnh lên kho lưu trữ lúc này.', 502, 'BLOG_MEDIA_UPLOAD_FAILED');
+}
+
 export function decodeBlogMedia(input = {}) {
   const contentType = String(input.contentType || '').trim().toLowerCase();
   if (!ALLOWED_MEDIA_TYPES.has(contentType)) {
@@ -41,7 +53,7 @@ export function decodeBlogMedia(input = {}) {
 }
 
 export async function saveBlogMedia(input = {}, actor = {}, options = {}) {
-  const token = options.blobToken || process.env.BLOB_READ_WRITE_TOKEN;
+  const token = options.blobToken || process.env.BLOG_MEDIA_BLOB_TOKEN || process.env.BLOB_READ_WRITE_TOKEN;
   if (!token && !options.blobPutImpl) {
     throw mediaError('Kho ảnh blog chưa được cấu hình.', 503, 'BLOG_MEDIA_STORAGE_UNAVAILABLE');
   }
@@ -72,13 +84,18 @@ export async function saveBlogMedia(input = {}, actor = {}, options = {}) {
   const responsiveSources = [];
   for (const [width, processed] of [...processedByWidth.entries()].sort((left, right) => left[0] - right[0])) {
     const pathname = `blog/assets/${baseName}-${id}-${width}w.webp`;
-    const result = await put(pathname, processed.data, {
-      access: 'public',
-      addRandomSuffix: false,
-      allowOverwrite: false,
-      contentType: 'image/webp',
-      token
-    });
+    let result;
+    try {
+      result = await put(pathname, processed.data, {
+        access: 'public',
+        addRandomSuffix: false,
+        allowOverwrite: false,
+        contentType: 'image/webp',
+        token
+      });
+    } catch (error) {
+      throw normalizeBlobUploadError(error);
+    }
     responsiveSources.push({
       url: result.url,
       pathname: result.pathname || pathname,
@@ -106,4 +123,10 @@ export async function saveBlogMedia(input = {}, actor = {}, options = {}) {
   };
 }
 
-export const blogMediaInternals = { MAX_MEDIA_BYTES, ALLOWED_MEDIA_TYPES, RESPONSIVE_WIDTHS, mediaError };
+export const blogMediaInternals = {
+  MAX_MEDIA_BYTES,
+  ALLOWED_MEDIA_TYPES,
+  RESPONSIVE_WIDTHS,
+  mediaError,
+  normalizeBlobUploadError
+};

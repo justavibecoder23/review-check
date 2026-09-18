@@ -165,6 +165,75 @@ test('upload ảnh blog tạo WebP responsive và dùng bản lớn làm URL m�
   assert.equal(uploads.length, 3);
   assert.ok(uploads.every((upload) => upload.pathname.endsWith('w.webp')));
   assert.ok(uploads.every((upload) => upload.options.contentType === 'image/webp'));
+  assert.ok(uploads.every((upload) => upload.options.access === 'public'));
+});
+
+test('upload ảnh ưu tiên token riêng cho Blog Media và báo lỗi rõ khi store là Private', async () => {
+  const previousBlogToken = process.env.BLOG_MEDIA_BLOB_TOKEN;
+  const previousFallbackToken = process.env.BLOB_READ_WRITE_TOKEN;
+  process.env.BLOG_MEDIA_BLOB_TOKEN = 'blog-public-token';
+  process.env.BLOB_READ_WRITE_TOKEN = 'legacy-token';
+  const inputBuffer = await sharp({
+    create: { width: 800, height: 450, channels: 3, background: '#fb7a1f' }
+  }).png().toBuffer();
+  const uploads = [];
+  try {
+    await assert.rejects(
+      saveBlogMedia({
+        fileName: 'Ảnh lỗi store.png',
+        contentType: 'image/png',
+        data: inputBuffer.toString('base64'),
+        alt: 'Ảnh lỗi store'
+      }, {}, {
+        blobPutImpl: async (pathname, data, options) => {
+          uploads.push({ pathname, data, options });
+          throw new Error('Cannot use public access on a private store. The store is configured with private access.');
+        }
+      }),
+      (error) => error.code === 'BLOG_MEDIA_PUBLIC_STORE_REQUIRED'
+        && error.statusCode === 503
+        && /BLOG_MEDIA_BLOB_TOKEN/.test(error.message)
+    );
+    assert.equal(uploads.length, 1);
+    assert.equal(uploads[0].options.token, 'blog-public-token');
+    assert.equal(uploads[0].options.access, 'public');
+  } finally {
+    if (previousBlogToken === undefined) delete process.env.BLOG_MEDIA_BLOB_TOKEN;
+    else process.env.BLOG_MEDIA_BLOB_TOKEN = previousBlogToken;
+    if (previousFallbackToken === undefined) delete process.env.BLOB_READ_WRITE_TOKEN;
+    else process.env.BLOB_READ_WRITE_TOKEN = previousFallbackToken;
+  }
+});
+
+test('upload ảnh vẫn fallback về token Blob cũ khi chưa cấu hình token riêng', async () => {
+  const previousBlogToken = process.env.BLOG_MEDIA_BLOB_TOKEN;
+  const previousFallbackToken = process.env.BLOB_READ_WRITE_TOKEN;
+  delete process.env.BLOG_MEDIA_BLOB_TOKEN;
+  process.env.BLOB_READ_WRITE_TOKEN = 'legacy-token';
+  const inputBuffer = await sharp({
+    create: { width: 640, height: 360, channels: 3, background: '#ffffff' }
+  }).png().toBuffer();
+  const tokens = [];
+  try {
+    await saveBlogMedia({
+      fileName: 'Ảnh tương thích.png',
+      contentType: 'image/png',
+      data: inputBuffer.toString('base64'),
+      alt: 'Ảnh tương thích'
+    }, {}, {
+      randomUUIDImpl: () => 'legacy-media-1',
+      blobPutImpl: async (pathname, data, options) => {
+        tokens.push(options.token);
+        return { url: `https://cdn.example.com/${pathname}`, pathname };
+      }
+    });
+    assert.deepEqual(tokens, ['legacy-token', 'legacy-token']);
+  } finally {
+    if (previousBlogToken === undefined) delete process.env.BLOG_MEDIA_BLOB_TOKEN;
+    else process.env.BLOG_MEDIA_BLOB_TOKEN = previousBlogToken;
+    if (previousFallbackToken === undefined) delete process.env.BLOB_READ_WRITE_TOKEN;
+    else process.env.BLOB_READ_WRITE_TOKEN = previousFallbackToken;
+  }
 });
 
 test('model và renderer giữ nguồn ảnh responsive an toàn, vẫn có src fallback', () => {

@@ -21,7 +21,8 @@ Các danh sách nhận nhiều giá trị, phân cách bằng dấu phẩy.
 
 - Redis lưu metadata, index bài, ánh xạ slug, redirect, revision pointer, audit log và khóa chống ghi đồng thời.
 - Vercel Blob private lưu nội dung revision khi có `BLOB_READ_WRITE_TOKEN`; nếu chưa có token, revision được lưu trong Redis để hệ thống vẫn hoạt động.
-- Vercel Blob public lưu ảnh đã được backend kiểm tra và chuyển sang WebP.
+- Vercel Blob public lưu ảnh đã được backend kiểm tra và chuyển sang WebP. Blog Media ưu tiên token riêng `BLOG_MEDIA_BLOB_TOKEN`, sau đó mới fallback về `BLOB_READ_WRITE_TOKEN` để tương thích ngược.
+- `BLOG_MEDIA_BLOB_TOKEN` phải trỏ tới một Blob Store Public. Không thay token private dùng cho revision, dataset hoặc product cache bằng token của store ảnh blog.
 - Mỗi lần lưu tạo revision bất biến mới. Khôi phục một revision cũ cũng tạo revision mới, không ghi đè lịch sử.
 - Khi bài đã xuất bản được sửa tiếp, metadata public giữ một snapshot riêng của revision đã xuất bản. Tiêu đề, slug, ảnh và canonical nháp không xuất hiện trên hub, sitemap hoặc RSS trước khi admin bấm xuất bản lại.
 - Ngày cập nhật public cũng thuộc snapshot đã xuất bản. Lưu nháp không làm thay đổi `dateModified`, ngày hiển thị, sitemap hoặc RSS.
@@ -36,6 +37,12 @@ Các danh sách nhận nhiều giá trị, phân cách bằng dấu phẩy.
 5. Editor hoặc admin có thể lưu bản nháp và xuất bản. Chỉ admin được quản lý quyền truy cập.
 6. Khi đổi slug của bài đã xuất bản, CMS giữ redirect 308 từ slug cũ.
 7. Khi gỡ xuất bản/lưu trữ, bài bị loại khỏi route public, danh sách blog động, sitemap và RSS.
+
+### Cấu hình kho ảnh Blog Studio
+
+Tạo một Vercel Blob Store mới với access **Public**, sau đó gán token của store vào `BLOG_MEDIA_BLOB_TOKEN` ở cả Preview và Production. Store Private không thể nhận request upload có `access: 'public'`; khi cấu hình sai, API trả mã `BLOG_MEDIA_PUBLIC_STORE_REQUIRED` và không lưu dở một asset.
+
+Token `BLOB_READ_WRITE_TOKEN` hiện hữu vẫn được giữ cho các Blob private khác. Sau khi cập nhật biến môi trường, cần redeploy môi trường tương ứng để function nhận token mới. Ảnh đã lưu ở URL public cũ không cần thay đổi; chỉ các URL private mới cần migrate sang store public.
 
 Khi xuất bản, mọi bài liên quan được chọn trong metadata hoặc block **Bài viết liên quan** phải tồn tại và đang public. Backend từ chối liên kết đến bài nháp, bài đã gỡ, slug sai hoặc chính bài đang chỉnh sửa. Các slug HTML legacy vẫn được chấp nhận trong giai đoạn migration.
 
