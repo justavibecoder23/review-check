@@ -1,5 +1,6 @@
 const STORAGE_KEY = 'realview:last-analysis';
 const SESSION_PREFIX = 'realview:counterpart:v3:';
+const READY_TOAST_DURATION_MS = 5_000;
 const section = document.querySelector('#counterpart-section');
 const comparison = document.querySelector('#counterpart-comparison');
 const targetHeading = document.querySelector('#counterpart-target-heading');
@@ -377,7 +378,7 @@ function showReadyToast(platform) {
   toastTimer = window.setTimeout(() => {
     toast.classList.add('hidden');
     toast.hidden = true;
-  }, 7_500);
+  }, READY_TOAST_DURATION_MS);
 }
 
 function showStatusToast(result) {

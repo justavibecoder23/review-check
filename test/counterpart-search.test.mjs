@@ -244,9 +244,14 @@ test('section đối ứng ẩn mặc định và chỉ có module nền riêng'
   assert.match(script, /removeEventListener\('abort'/);
   assert.match(script, /trustIntroIsOpen/);
   assert.match(loader, /realview:analysis-result/);
-  assert.match(loader, /import\('\.\/counterpart-widget\.js\?v=15'\)/);
-  assert.match(html, /counterpart-loader\.js\?v=15/);
+  assert.match(loader, /import\('\.\/counterpart-widget\.js\?v=16'\)/);
+  assert.match(html, /counterpart-loader\.js\?v=16/);
   assert.match(script, /counterpart-widget\.css\?v=15/);
+  const readyToastSource = script.slice(script.indexOf('function showReadyToast'), script.indexOf('function showStatusToast'));
+  const statusToastSource = script.slice(script.indexOf('function showStatusToast'), script.indexOf('function announceWhenVisible'));
+  assert.match(script, /const READY_TOAST_DURATION_MS = 5_000;/);
+  assert.match(readyToastSource, /}, READY_TOAST_DURATION_MS\);/);
+  assert.match(statusToastSource, /}, 7_500\);/);
   assert.match(script, /showMetadataUnavailable/);
   assert.match(html, /results-v2\.css\?v=2/);
   assert.match(html, /results\.js\?v=2/);
