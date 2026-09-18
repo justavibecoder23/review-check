@@ -209,6 +209,11 @@ test('chatbot diễn giải result nhưng không cho citation ngoài context', (
 
 test('chatbot lịch sử hỗ trợ cân nhắc mua dựa trên TrustScore và ưu nhược điểm', async () => {
   const context = buildResultChatContext(sampleResult, { resultId: 'history:item-1' });
+  context.trust.pros.push(
+    { label: 'Đóng gói tốt', detail: 'Mô tả dài không được đưa vào câu trả lời' },
+    { label: 'Ưu điểm thứ ba không hiển thị', detail: null }
+  );
+  context.trust.cons[0].detail = 'Mô tả nhược điểm dài không được đưa vào câu trả lời';
   const response = await answerWebsiteQuestion([{ role: 'user', content: 'Tôi có nên mua sản phẩm này hay không?' }], {
     resultContext: context,
     resultContexts: [context],
@@ -218,11 +223,16 @@ test('chatbot lịch sử hỗ trợ cân nhắc mua dựa trên TrustScore và 
 
   assert.equal(response.engine, 'rules');
   assert.equal(response.contextType, 'history-item');
-  assert.match(response.answer, /TrustScore 83\/100/);
+  assert.match(response.answer, /TrustScore: 83\/100/);
   assert.match(response.answer, /Vị dễ ăn/);
+  assert.match(response.answer, /Đóng gói tốt/);
   assert.match(response.answer, /Một số gói quá cay/);
-  assert.match(response.answer, /không phải điểm chất lượng của sản phẩm/i);
+  assert.doesNotMatch(response.answer, /Mô tả dài/);
+  assert.doesNotMatch(response.answer, /Ưu điểm thứ ba/);
+  assert.doesNotMatch(response.answer, /Tập review có độ tin cậy cao/);
   assert.doesNotMatch(response.answer, /chưa có thông tin này trong kho dữ liệu/i);
+  assert.equal(response.answer.split('\n').length, 4);
+  assert.equal(response.answer.split('\n').every((line) => line.startsWith('• ')), true);
 });
 
 test('quy tắc cân nhắc mua không áp dụng cho kết quả đang xem', () => withContextEnv(async () => {
@@ -258,7 +268,8 @@ test('chatbot lịch sử không bịa quyết định mua khi báo cáo thiếu
   });
 
   assert.equal(response.engine, 'rules');
-  assert.match(response.answer, /chưa có đủ TrustScore/i);
+  assert.match(response.answer, /TrustScore: Chưa có đủ dữ liệu để xác định/i);
+  assert.equal(response.answer.split('\n').length, 4);
   assert.doesNotMatch(response.answer, /bạn nên mua/i);
 });
 
