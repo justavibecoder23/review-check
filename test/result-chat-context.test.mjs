@@ -12,7 +12,7 @@ import {
   saveResultChatContext,
   verifyResultAccessToken
 } from '../src/result-chat-context.mjs';
-import { answerWebsiteQuestion } from '../src/site-chatbot.mjs';
+import { answerWebsiteQuestion, OUT_OF_SCOPE_REPLY } from '../src/site-chatbot.mjs';
 import {
   CHATBOT_GEMINI_HEALTH_KEY,
   CHATBOT_GEMINI_POOL_KEY
@@ -206,6 +206,61 @@ test('chatbot diễn giải result nhưng không cho citation ngoài context', (
   assert.equal(response.contextType, 'result');
   assert.deepEqual(response.citations, ['R002']);
 }));
+
+test('chatbot lịch sử hỗ trợ cân nhắc mua dựa trên TrustScore và ưu nhược điểm', async () => {
+  const context = buildResultChatContext(sampleResult, { resultId: 'history:item-1' });
+  const response = await answerWebsiteQuestion([{ role: 'user', content: 'Tôi có nên mua sản phẩm này hay không?' }], {
+    resultContext: context,
+    resultContexts: [context],
+    chatContextType: 'history_item',
+    fetchImpl: async () => { throw new Error('Không được gọi Gemini cho câu trả lời có quy tắc.'); }
+  });
+
+  assert.equal(response.engine, 'rules');
+  assert.equal(response.contextType, 'history-item');
+  assert.match(response.answer, /TrustScore 83\/100/);
+  assert.match(response.answer, /Vị dễ ăn/);
+  assert.match(response.answer, /Một số gói quá cay/);
+  assert.match(response.answer, /không phải điểm chất lượng của sản phẩm/i);
+  assert.doesNotMatch(response.answer, /chưa có thông tin này trong kho dữ liệu/i);
+});
+
+test('quy tắc cân nhắc mua không áp dụng cho kết quả đang xem', () => withContextEnv(async () => {
+  const context = buildResultChatContext(sampleResult, { resultId: 'current-result-1' });
+  let providerCalled = false;
+  const response = await answerWebsiteQuestion([{ role: 'user', content: 'Sản phẩm này có đáng mua không?' }], {
+    resultContext: context,
+    resultContexts: [context],
+    chatContextType: 'current_result',
+    redisFetchImpl: async (_url, init) => {
+      const command = JSON.parse(init.body);
+      if (command[0] === 'HMGET') return new Response(JSON.stringify({ result: command.slice(2).map(() => null) }));
+      if (command[0] === 'EVAL') return new Response(JSON.stringify({ result: JSON.stringify({ ok: true, state: {} }) }));
+      throw new Error(`Redis command không mong đợi: ${command[0]}`);
+    },
+    fetchImpl: async () => {
+      providerCalled = true;
+      return new Response(JSON.stringify({
+        candidates: [{ content: { parts: [{ text: JSON.stringify({ supported: false, answer: '' }) }] } }]
+      }));
+    }
+  });
+
+  assert.equal(providerCalled, true);
+  assert.equal(response.engine, 'gemini');
+  assert.equal(response.answer, OUT_OF_SCOPE_REPLY);
+}));
+
+test('chatbot lịch sử không bịa quyết định mua khi báo cáo thiếu dữ liệu', async () => {
+  const response = await answerWebsiteQuestion([{ role: 'user', content: 'Có nên chốt đơn không?' }], {
+    resultContext: { product: { title: 'Sản phẩm thử nghiệm' }, trust: { score: null, pros: [], cons: [] } },
+    chatContextType: 'history_item'
+  });
+
+  assert.equal(response.engine, 'rules');
+  assert.match(response.answer, /chưa có đủ TrustScore/i);
+  assert.doesNotMatch(response.answer, /bạn nên mua/i);
+});
 
 test('pool và health chatbot tách khỏi Layer 1/2', () => {
   assert.notEqual(CHATBOT_GEMINI_POOL_KEY, GEMINI_POOL_KEY);

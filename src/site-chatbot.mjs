@@ -192,6 +192,63 @@ function isClearlyProductAdvice(question) {
   return /\bnen mua\b.*\bnao\b|\bmua\b.*\bnao\b|\btu van\b.*\bsan pham\b|\bso sanh\b.*\bvoi\b|\bsan pham nao tot\b/.test(text);
 }
 
+function isPurchaseDecisionQuestion(question) {
+  const text = normalizeText(question);
+  return /\b(?:co nen|nen) mua\b/.test(text)
+    || /\b(?:co )?dang mua\b/.test(text)
+    || /\b(?:co nen|nen) (?:chot|dat)(?: don)?\b/.test(text)
+    || /\bmua san pham (?:nay|do) (?:duoc khong|hay khong)\b/.test(text);
+}
+
+function summaryItemText(item) {
+  if (typeof item === 'string') return item.trim().replace(/[.!?;:]+$/, '');
+  const label = String(item?.label || item?.title || '').trim();
+  const detail = String(item?.detail || item?.text || '').trim();
+  if (label && detail && normalizeText(label) !== normalizeText(detail)) return `${label}: ${detail}`.replace(/[.!?;:]+$/, '');
+  return (label || detail).replace(/[.!?;:]+$/, '');
+}
+
+function historyPurchaseDecisionAnswer(context) {
+  if (!context) return null;
+  const rawScore = context.trust?.score;
+  const score = Number(rawScore);
+  const hasScore = rawScore !== null && rawScore !== undefined && rawScore !== '' && Number.isFinite(score);
+  const scoreLabel = String(context.trust?.label || '').trim();
+  const summary = String(context.trust?.summary || '').trim().replace(/[.!?]+$/, '');
+  const pros = (Array.isArray(context.trust?.pros) ? context.trust.pros : [])
+    .map(summaryItemText).filter(Boolean).slice(0, 2);
+  const cons = (Array.isArray(context.trust?.cons) ? context.trust.cons : [])
+    .map(summaryItemText).filter(Boolean).slice(0, 2);
+
+  if (!hasScore && !pros.length && !cons.length) {
+    return {
+      answer: 'Báo cáo này chưa có đủ TrustScore và phần tổng hợp ưu/nhược điểm để mình hỗ trợ bạn cân nhắc việc mua sản phẩm.',
+      citations: []
+    };
+  }
+
+  const opening = hasScore
+    ? `Dựa trên TrustScore ${score}/100${scoreLabel ? ` — ${scoreLabel}` : ''}. ${summary || 'Bạn có thể dùng tập review này làm một nguồn tham khảo'}.`
+    : 'Báo cáo chưa có TrustScore hoàn chỉnh, nên mình chỉ có thể dựa trên phần ưu/nhược điểm đã được tổng hợp.';
+  const strengths = pros.length
+    ? `Ưu điểm nổi bật: ${pros.join('; ')}.`
+    : 'Báo cáo chưa ghi nhận ưu điểm nổi bật.';
+  const cautions = cons.length
+    ? `Điểm cần cân nhắc: ${cons.join('; ')}.`
+    : 'Báo cáo chưa ghi nhận nhược điểm nổi bật.';
+  const guidance = cons.length
+    ? 'Bạn có thể cân nhắc mua nếu các ưu điểm phù hợp với nhu cầu và bạn chấp nhận được những hạn chế trên; nếu các hạn chế ảnh hưởng trực tiếp đến nhu cầu sử dụng, nên thận trọng và đọc thêm các review liên quan trước khi quyết định.'
+    : 'Bạn có thể cân nhắc mua nếu các ưu điểm phù hợp với nhu cầu, nhưng vẫn nên đọc thêm các review liên quan trước khi quyết định.';
+  const evidence = [...(context.trust?.pros || []), ...(context.trust?.cons || [])]
+    .flatMap((item) => Array.isArray(item?.evidenceIds) ? item.evidenceIds : [])
+    .map(String).filter(Boolean);
+
+  return {
+    answer: `${opening} Lưu ý: TrustScore phản ánh độ tin cậy của tập review, không phải điểm chất lượng của sản phẩm. ${strengths} ${cautions} ${guidance}`.slice(0, 1200),
+    citations: [...new Set(evidence)].slice(0, 8)
+  };
+}
+
 const responseSchema = {
   type: 'object',
   properties: {
@@ -303,6 +360,16 @@ export async function answerWebsiteQuestion(messages, options = {}) {
   const resultContexts = Array.isArray(options.resultContexts) && options.resultContexts.length
     ? options.resultContexts
     : (resultContext ? [resultContext] : []);
+  if (options.chatContextType === 'history_item' && isPurchaseDecisionQuestion(latestQuestion)) {
+    const guidance = historyPurchaseDecisionAnswer(resultContext);
+    if (guidance) {
+      return {
+        ...guidance,
+        engine: 'rules',
+        contextType: 'history-item'
+      };
+    }
+  }
   if (!resultContext && isClearlyProductAdvice(latestQuestion)) return { answer: OUT_OF_SCOPE_REPLY, engine: 'rules', contextType: 'website' };
   const resultScopedQuestion = Boolean(resultContext && /\b(san pham|ket qua|tap review|review (?:nay|do)|cai nay|mat hang)\b/.test(normalizeText(latestQuestion)));
   const direct = resultScopedQuestion ? null : directKnowledgeAnswer(latestQuestion);

@@ -96,7 +96,13 @@ export default async function handler(request, response) {
       question: latestQuestion,
       createdAt: startedAt
     });
-    const result = await answerWebsiteQuestion(body.messages, { resultContext, resultContexts });
+    const chatContextType = body.context?.type
+      || (body.resultId ? 'current_result' : null);
+    const result = await answerWebsiteQuestion(body.messages, {
+      resultContext,
+      resultContexts,
+      chatContextType
+    });
     await persistChatGeneration({
       id: generationId,
       status: 'complete',
