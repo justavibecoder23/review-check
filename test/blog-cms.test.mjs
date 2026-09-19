@@ -481,9 +481,10 @@ test('bài mới hỗ trợ định dạng cơ bản nhưng vẫn dùng typograp
   assert.match(html, /<h3 id="phan-phu" data-toc-entry>Phần phụ<\/h3>/);
   assert.match(html, /<p class="article-text article-text--small">Thông tin phụ\.<\/p>/);
   assert.match(html, /class="article-reading-grid"/);
-  assert.match(html, /<h1 class="article-title">[\s\S]*?<p class="article-deck">Hướng dẫn thực tế giúp người mua đánh giá review dễ dàng hơn\.<\/p>[\s\S]*?<div class="article-body-column">/);
+  assert.match(html, /<h1 class="article-title">[\s\S]*?<div class="article-body-column"><img[^>]*><p class="article-deck">Hướng dẫn thực tế giúp người mua đánh giá review dễ dàng hơn\.<\/p><div class="article-content">/);
   assert.match(html, /class="article-content"/);
   const previewHtml = renderBlogPreview(post).html;
+  assert.match(previewHtml, /<h1 class="article-title">[\s\S]*?<figure class="article-lead-image">[\s\S]*?<p class="article-deck">Hướng dẫn thực tế giúp người mua đánh giá review dễ dàng hơn\.<\/p><div class="article-content">/);
   assert.match(previewHtml, /<p class="article-text article-text--lead">Đây là <strong>ý chính<\/strong>/);
   assert.match(previewHtml, /<h2 id="phan-chinh" data-toc-entry>Phần chính<\/h2>/);
   assert.match(previewHtml, /<h3 id="phan-phu" data-toc-entry>Phần phụ<\/h3>/);
