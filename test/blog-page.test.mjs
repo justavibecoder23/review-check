@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { renderSitemap } from '../src/blog-renderer.mjs';
+import { LEGACY_BLOG_SUMMARIES, STATIC_SITEMAP_ENTRIES } from '../src/blog-public-config.mjs';
+import { summaryToBlogRecord } from '../src/blog-public-data.mjs';
 
 const blogHtml = await readFile(new URL('../public/blog.html', import.meta.url), 'utf8');
 const trustScoreArticleHtml = await readFile(new URL('../public/blog/trustscore-la-gi.html', import.meta.url), 'utf8');
@@ -16,7 +19,9 @@ const blogStyles = await readFile(new URL('../public/blog.css', import.meta.url)
 const blogPostJs = await readFile(new URL('../public/blog-post.js', import.meta.url), 'utf8');
 const navJs = await readFile(new URL('../public/nav.js', import.meta.url), 'utf8');
 const robotsTxt = await readFile(new URL('../public/robots.txt', import.meta.url), 'utf8');
-const sitemapXml = await readFile(new URL('../public/sitemap.xml', import.meta.url), 'utf8');
+const vercelConfig = JSON.parse(await readFile(new URL('../vercel.json', import.meta.url), 'utf8'));
+const publicFiles = await readdir(new URL('../public/', import.meta.url));
+const sitemapXml = renderSitemap(LEGACY_BLOG_SUMMARIES.map(summaryToBlogRecord), STATIC_SITEMAP_ENTRIES);
 const articleDirectory = new URL('../public/blog/', import.meta.url);
 const articleFiles = (await readdir(articleDirectory)).filter((name) => name.endsWith('.html')).sort();
 const allArticlePages = await Promise.all(articleFiles.map(async (name) => ({
@@ -456,7 +461,12 @@ test('shared navigation exposes the Blog route', () => {
   assert.doesNotMatch(navJs, /Blog <small>Sắp ra mắt<\/small>/);
 });
 
-test('sitemap and robots expose all nine published Blog articles', () => {
+test('sitemap động không bị file tĩnh che và robots khai báo đúng URL', () => {
+  assert.equal(publicFiles.includes('sitemap.xml'), false);
+  assert.deepEqual(
+    vercelConfig.rewrites.find((rule) => rule.source === '/sitemap.xml'),
+    { source: '/sitemap.xml', destination: '/api/blog.mjs?route=sitemap' }
+  );
   assert.match(robotsTxt, /Sitemap: https:\/\/www\.realview\.com\.vn\/sitemap\.xml/);
   assert.match(sitemapXml, /https:\/\/www\.realview\.com\.vn\/bai-viet/);
   assert.match(sitemapXml, /https:\/\/www\.realview\.com\.vn\/bai-viet\/trustscore-la-gi/);
