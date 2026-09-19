@@ -113,11 +113,16 @@ test('article pages use an asymmetric reading grid with responsive metadata and 
     assert.match(html, /class="article-content"/, `${name} must use the shared Blog Post structure`);
   }
   assert.match(blogStyles, /\.article-shell \{[^}]*width: min\(1322px, calc\(100% - 48px\)\);[^}]*max-width: 1322px;[^}]*padding: 64px 80px;/);
-  assert.match(blogStyles, /\.article-reading-grid \{[^}]*grid-template-columns: 280px minmax\(0, 800px\);[^}]*column-gap: 80px;/);
-  assert.match(blogStyles, /\.article-sidebar \{[^}]*position: sticky;[^}]*top: 100px;[^}]*align-self: start;/);
+  assert.match(blogStyles, /\.article-reading-grid \{[^}]*grid-template-columns: 280px minmax\(0, 800px\);[^}]*grid-template-rows: auto auto auto;[^}]*column-gap: 80px;/);
+  assert.match(blogStyles, /\.article-deck \{[^}]*grid-column: 2;[^}]*grid-row: 2;[^}]*max-width: 800px;/);
+  assert.match(blogStyles, /\.article-sidebar \{[^}]*grid-row: 1 \/ span 3;[^}]*position: sticky;[^}]*top: 100px;[^}]*align-self: start;/);
+  assert.match(blogStyles, /\.article-body-column \{[^}]*grid-column: 2;[^}]*grid-row: 3;/);
   assert.match(blogStyles, /\.article-title \{[^}]*font-size: clamp\(48px, 4\.4vw, 56px\);[^}]*font-weight: 800;[^}]*line-height: 1\.2;/);
   assert.match(blogStyles, /\.article-content \{[^}]*max-width: 800px;[^}]*color: #374151;[^}]*font-size: 18px;[^}]*line-height: 1\.8;/);
-  assert.match(blogStyles, /@media \(max-width: 1024px\) \{[\s\S]*?\.article-reading-grid \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*grid-template-rows: auto auto auto;/);
+  assert.match(blogStyles, /@media \(max-width: 1024px\) \{[\s\S]*?\.article-reading-grid \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*grid-template-rows: auto auto auto auto;/);
+  assert.match(blogStyles, /@media \(max-width: 1024px\) \{[\s\S]*?\.article-deck \{[^}]*grid-column: 1;[^}]*grid-row: 2;/);
+  assert.match(blogStyles, /@media \(max-width: 1024px\) \{[\s\S]*?\.article-sidebar \{[^}]*grid-column: 1;[^}]*grid-row: 3;/);
+  assert.match(blogStyles, /@media \(max-width: 1024px\) \{[\s\S]*?\.article-body-column \{[^}]*grid-column: 1;[^}]*grid-row: 4;/);
   assert.match(blogStyles, /\.article-toc-links a\.is-active \{[^}]*border-left-color: #fc781f;[^}]*color: #fc781f;[^}]*font-weight: 600;/);
   assert.match(blogStyles, /\.article-toc-links \{[^}]*max-height: min\(52vh, 480px\);[^}]*overflow-y: auto;[^}]*scrollbar-width: none;[^}]*-webkit-mask-image: linear-gradient\(to bottom, transparent 0%, black 5%, black 95%, transparent 100%\);[^}]*mask-image: linear-gradient\(to bottom, transparent 0%, black 5%, black 95%, transparent 100%\);/);
   assert.match(blogStyles, /\.article-toc-links::\-webkit-scrollbar \{[^}]*display: none;/);
