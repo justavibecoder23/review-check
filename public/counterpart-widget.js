@@ -31,7 +31,7 @@ function ensureStylesheet() {
   stylesheetPromise = new Promise((resolve) => {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = '/counterpart-widget.css?v=15';
+    link.href = '/counterpart-widget.css?v=16';
     link.dataset.counterpartStyles = 'true';
     link.addEventListener('load', resolve, { once: true });
     link.addEventListener('error', resolve, { once: true });
@@ -62,6 +62,10 @@ function platformName(value) {
 
 function targetPlatformName(sourcePlatform) {
   return platformName(sourcePlatform) === 'Shopee' ? 'TikTok Shop' : 'Shopee';
+}
+
+function setProgressPlatformTone(platform) {
+  progressButton?.classList.toggle('counterpart-progress--tiktok', platformName(platform) === 'TikTok Shop');
 }
 
 function titleFromProductUrl(value) {
@@ -141,7 +145,7 @@ function resetWidget() {
     progressButton.hidden = true;
     progressButton.disabled = true;
     progressButton.classList.add('hidden');
-    progressButton.classList.remove('is-searching', 'is-ready', 'is-unavailable');
+    progressButton.classList.remove('is-searching', 'is-ready', 'is-unavailable', 'counterpart-progress--tiktok');
   }
   if (progressBar) progressBar.style.width = '0%';
   toast?.classList.add('hidden');
@@ -186,6 +190,7 @@ async function showSearchProgress(platform) {
 
 function completeProgress(platform) {
   if (!progressButton) return;
+  setProgressPlatformTone(platform);
   window.clearInterval(progressTimer);
   window.clearTimeout(progressReadyTimer);
   progressButton.hidden = false;

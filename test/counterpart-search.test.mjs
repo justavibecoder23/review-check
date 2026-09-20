@@ -244,9 +244,13 @@ test('section đối ứng ẩn mặc định và chỉ có module nền riêng'
   assert.match(script, /removeEventListener\('abort'/);
   assert.match(script, /trustIntroIsOpen/);
   assert.match(loader, /realview:analysis-result/);
-  assert.match(loader, /import\('\.\/counterpart-widget\.js\?v=16'\)/);
-  assert.match(html, /counterpart-loader\.js\?v=16/);
-  assert.match(script, /counterpart-widget\.css\?v=15/);
+  assert.match(loader, /import\('\.\/counterpart-widget\.js\?v=17'\)/);
+  assert.match(html, /counterpart-loader\.js\?v=17/);
+  assert.match(script, /counterpart-widget\.css\?v=16/);
+  assert.match(script, /classList\.toggle\('counterpart-progress--tiktok', platformName\(platform\) === 'TikTok Shop'\)/);
+  assert.match(script, /classList\.remove\([^\n]*'counterpart-progress--tiktok'/);
+  assert.match(styles, /\.counterpart-progress\.counterpart-progress--tiktok\.is-ready \{[\s\S]*linear-gradient\(90deg, #25F4EE 0%, #161616 52%, #FE2C55 100%\) border-box;/);
+  assert.match(styles, /\.counterpart-progress\.counterpart-progress--tiktok\.is-ready \.counterpart-progress-mark \{[\s\S]*background: #111;[\s\S]*color: white;/);
   const readyToastSource = script.slice(script.indexOf('function showReadyToast'), script.indexOf('function showStatusToast'));
   const statusToastSource = script.slice(script.indexOf('function showStatusToast'), script.indexOf('function announceWhenVisible'));
   assert.match(script, /const READY_TOAST_DURATION_MS = 5_000;/);
