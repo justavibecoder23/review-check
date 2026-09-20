@@ -209,6 +209,7 @@ function normalizeBlock(block, index) {
     case 'faq':
       return {
         ...base,
+        description: cleanText(value.description, 8_000),
         items: (Array.isArray(value.items) ? value.items : [])
           .map((item) => ({
             question: cleanText(item?.question, 500),

@@ -79,7 +79,7 @@ function createBlock(type) {
     quote: { text: '', cite: '' },
     formula: { text: '', ariaLabel: '' },
     table: { caption: '', headers: ['Tiêu chí', 'Thông tin'], rows: [['', '']] },
-    faq: { items: [{ question: '', answer: '' }] },
+    faq: { description: '', items: [{ question: '', answer: '' }] },
     sources: { items: [{ label: '', href: '' }] },
     relatedPosts: { slugs: [] },
     divider: {},
@@ -88,11 +88,36 @@ function createBlock(type) {
   return { ...base, ...(values[type] || values.paragraph) };
 }
 
+function foldLegacyFaqBlocks(inputBlocks) {
+  const output = [];
+  for (let index = 0; index < inputBlocks.length; index += 1) {
+    const block = inputBlocks[index];
+    const faqHeading = ['heading', 'subheading'].includes(block.type)
+      && ['faq', 'cau-hoi-thuong-gap', 'faq-cau-hoi-thuong-gap'].includes(slugify(block.text));
+    if (faqHeading) {
+      let faqIndex = index + 1;
+      while (inputBlocks[faqIndex]?.type === 'paragraph') faqIndex += 1;
+      const faq = inputBlocks[faqIndex];
+      if (faq?.type === 'faq') {
+        const descriptions = [
+          ...inputBlocks.slice(index + 1, faqIndex).map((item) => item.text),
+          faq.description
+        ].filter(Boolean);
+        output.push({ ...faq, description: [...new Set(descriptions)].join('\n\n') });
+        index = faqIndex;
+        continue;
+      }
+    }
+    output.push(block);
+  }
+  return output;
+}
+
 function normalizePost(raw = {}) {
   const source = raw.post || raw;
   const author = source.authors?.[0] || source.author || {};
   const seo = source.seo || {};
-  const blocks = Array.isArray(source.blocks) && source.blocks.length
+  const normalizedBlocks = Array.isArray(source.blocks) && source.blocks.length
     ? source.blocks.map((value) => {
         const block = { ...value, id: value.id || uid() };
         if (block.type === 'heading' && Number(block.level) === 3) block.type = 'subheading';
@@ -105,6 +130,7 @@ function normalizePost(raw = {}) {
         return block;
       })
     : [createBlock('paragraph')];
+  const blocks = foldLegacyFaqBlocks(normalizedBlocks);
   return {
     ...emptyPost(), ...source,
     id: source.id || source.postId || null,
@@ -129,7 +155,10 @@ function normalizePost(raw = {}) {
         level: Number(entry.level) === 3 ? 3 : 2
       })).filter((entry) => entry.anchor && entry.label) : []
     },
-    relatedSlugs: source.relatedSlugs || source.relatedPostIds || [],
+    relatedSlugs: [...new Set([
+      ...(source.relatedSlugs || source.relatedPostIds || []),
+      ...blocks.filter((block) => block.type === 'relatedPosts').flatMap((block) => block.slugs || [])
+    ])],
     settings: { ...emptyPost().settings, ...(source.settings || {}) }
   };
 }
@@ -600,10 +629,12 @@ function renderBlock(block) {
       addField(fields, { field: 'caption', value: block.caption, placeholder: 'Tên hoặc mô tả bảng' });
       addField(fields, { field: 'headers', value: (block.headers || []).join(' | '), placeholder: 'Tiêu đề cột 1 | Tiêu đề cột 2' });
       addField(fields, { tag: 'textarea', field: 'rows', value: (block.rows || []).map((row) => row.join(' | ')).join('\n'), placeholder: 'Mỗi dòng là một hàng; phân cách cột bằng dấu |', rows: 6 }); break;
-    case 'faq': renderFaqItems(fields, block.items || []); break;
+    case 'faq':
+      addField(fields, { tag: 'textarea', field: 'description', value: block.description, placeholder: 'Đoạn mô tả hiển thị dưới tiêu đề FAQ và trước các câu hỏi', rows: 4 });
+      renderFaqItems(fields, block.items || []); break;
     case 'sources': renderSourceItems(fields, block.items || []); break;
     case 'relatedPosts':
-      addField(fields, { tag: 'textarea', field: 'slugs', value: (block.slugs || []).join('\n'), placeholder: 'Mỗi dòng là một slug bài viết liên quan', rows: 4 }); break;
+      { const note = document.createElement('p'); note.className = 'admin-form-hint'; note.textContent = 'Danh sách này được quản lý bằng các ô chọn trong phần “Bài viết liên quan”.'; fields.append(note); break; }
     case 'divider': {
       const note = document.createElement('p'); note.className = 'admin-form-hint'; note.textContent = 'Đường phân cách không cần thêm nội dung.'; fields.append(note); break;
     }
@@ -656,8 +687,8 @@ function tocTargetsFromBlocks(blocks, relatedSlugs = []) {
         automatic: block.includeInToc !== false
       });
     } else if (block.type === 'faq' && block.items?.some((item) => item.question || item.answer)) {
-      targets.push({ anchor: slugify(block.id === 'block-1' ? 'cau-hoi-thuong-gap' : block.id) || 'cau-hoi-thuong-gap', label: 'Câu hỏi thường gặp', level: 2, automatic: true });
-    } else if (block.type === 'relatedPosts' && block.slugs?.length) {
+      targets.push({ anchor: slugify(block.id === 'block-1' ? 'cau-hoi-thuong-gap' : block.id) || 'cau-hoi-thuong-gap', label: 'FAQ - Câu hỏi thường gặp', level: 2, automatic: true });
+    } else if (block.type === 'relatedPosts' && (block.slugs?.length || relatedSlugs.length)) {
       targets.push({ anchor: 'bai-viet-lien-quan', label: 'Bài viết liên quan', level: 2, automatic: true });
     }
   });
@@ -794,6 +825,10 @@ function collectPost() {
   const ogImage = ogImageUrl === state.currentPost.seo.ogImage?.url
     ? { ...(state.currentPost.seo.ogImage || {}), url: ogImageUrl, alt: value('heroImageAlt') }
     : { url: ogImageUrl, alt: value('heroImageAlt'), width: 0, height: 0, responsiveSources: [] };
+  const relatedSlugs = $$('[data-related-post]:checked').map((input) => input.value);
+  const blocks = $$('.admin-block', $('[data-block-list]')).map(readBlock).map((block) => (
+    block.type === 'relatedPosts' ? { ...block, slugs: relatedSlugs } : block
+  ));
   return normalizePost({
     ...state.currentPost,
     title, h1: title, deck: value('deck'), slug: value('slug'),
@@ -809,9 +844,9 @@ function collectPost() {
       robots: checked('allowIndexing') ? 'index,follow,max-image-preview:large' : 'noindex,nofollow'
     },
     heroImage,
-    blocks: $$('.admin-block', $('[data-block-list]')).map(readBlock),
+    blocks,
     toc: readTocEditor(),
-    relatedSlugs: $$('[data-related-post]:checked').map((input) => input.value),
+    relatedSlugs,
     settings: { includeFaqSchema: checked('includeFaqSchema'), allowIndexing: checked('allowIndexing') }
   });
 }
@@ -822,7 +857,7 @@ function textFromBlocks(blocks) {
     if (block.type === 'checklist') return (block.items || []).map((item) => item.text);
     if (block.type === 'relatedPosts') return block.slugs || [];
     if (block.type === 'table') return [...(block.headers || []), ...(block.rows || []).flat()];
-    if (block.type === 'faq') return (block.items || []).flatMap((item) => [item.question, item.answer]);
+    if (block.type === 'faq') return [block.description, ...(block.items || []).flatMap((item) => [item.question, item.answer])];
     return [block.text, block.title, block.caption].filter(Boolean);
   }).join(' ');
 }

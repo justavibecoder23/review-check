@@ -518,8 +518,32 @@ test('mục lục CMS tự động tương thích bài cũ và được render s
   });
   assert.match(html, /<summary>Mục lục<\/summary>/);
   assert.match(html, /<ol><li data-toc-level="2"><a href="#vi-sao-can-doc-review">Vì sao cần đọc review\?<\/a><\/li>/);
-  assert.match(html, /<a href="#faq">Câu hỏi thường gặp<\/a>/);
+  assert.match(html, /<a href="#faq">FAQ - Câu hỏi thường gặp<\/a>/);
   assert.match(html, /<a href="#bai-viet-lien-quan">Bài viết liên quan<\/a>/);
+});
+
+test('FAQ, bài liên quan và nút lên đầu trang được render đúng từ dữ liệu Studio', async () => {
+  const post = normalizeBlogPost(completePost({
+    blocks: [
+      { id: 'faq-heading', type: 'heading', text: 'FAQ - Câu hỏi thường gặp', anchor: 'faq-heading' },
+      { id: 'faq-intro', type: 'paragraph', text: 'Đoạn mô tả trước khi vào câu hỏi.' },
+      {
+        id: 'faq',
+        type: 'faq',
+        items: [{ question: 'Câu hỏi 1', answer: 'Câu trả lời 1' }]
+      }
+    ],
+    relatedSlugs: ['trustscore-la-gi']
+  }));
+  const html = renderBlogPost(
+    { post, meta: { status: 'published', publishedAt: '2026-09-17T00:00:00.000Z' } },
+    { relatedPosts: { 'trustscore-la-gi': { title: 'TrustScore là gì? Cách đọc điểm tin cậy của review' } } }
+  );
+  assert.equal((html.match(/FAQ - Câu hỏi thường gặp/g) || []).length, 2);
+  assert.doesNotMatch(html, /id="faq-heading"/);
+  assert.match(html, /class="article-faq-description">Đoạn mô tả trước khi vào câu hỏi\.<\/p>/);
+  assert.match(html, />TrustScore là gì\? Cách đọc điểm tin cậy của review<\/a>/);
+  assert.match(html, /class="back-to-top"[\s\S]*?<svg viewBox="0 0 24 24"/);
 });
 
 test('mục lục tạo tự động có thể đổi nhãn và thứ tự bằng tay mà không đổi heading', async () => {

@@ -160,14 +160,42 @@ function faqAnchor(block) {
   return slugifyBlogValue(block.id === 'block-1' ? 'cau-hoi-thuong-gap' : block.id) || 'cau-hoi-thuong-gap';
 }
 
+function isFaqHeading(block) {
+  if (!['heading', 'subheading'].includes(block?.type)) return false;
+  return ['faq', 'cau-hoi-thuong-gap', 'faq-cau-hoi-thuong-gap'].includes(slugifyBlogValue(block.text));
+}
+
+function visibleBlocks(post) {
+  const output = [];
+  for (let index = 0; index < post.blocks.length; index += 1) {
+    const block = post.blocks[index];
+    if (isFaqHeading(block)) {
+      let faqIndex = index + 1;
+      while (post.blocks[faqIndex]?.type === 'paragraph') faqIndex += 1;
+      const faq = post.blocks[faqIndex];
+      if (faq?.type === 'faq') {
+        const descriptions = [
+          ...post.blocks.slice(index + 1, faqIndex).map((item) => item.text),
+          faq.description
+        ].filter(Boolean);
+        output.push({ ...faq, description: [...new Set(descriptions)].join('\n\n') });
+        index = faqIndex;
+        continue;
+      }
+    }
+    output.push(block);
+  }
+  return output;
+}
+
 export function getBlogTocTargets(value, options = {}) {
   const { post } = recordParts(value, options);
   const targets = [];
-  post.blocks.forEach((block) => {
+  visibleBlocks(post).forEach((block) => {
     if (['heading', 'subheading'].includes(block.type) && block.anchor && block.text) {
       targets.push({ anchor: block.anchor, label: block.text, level: block.level, automatic: block.includeInToc !== false });
     } else if (block.type === 'faq' && block.items.length) {
-      targets.push({ anchor: faqAnchor(block), label: 'Câu hỏi thường gặp', level: 2, automatic: true });
+      targets.push({ anchor: faqAnchor(block), label: 'FAQ - Câu hỏi thường gặp', level: 2, automatic: true });
     } else if (block.type === 'relatedPosts' && block.slugs.length) {
       targets.push({ anchor: 'bai-viet-lien-quan', label: 'Bài viết liên quan', level: 2, automatic: true });
     }
@@ -230,7 +258,7 @@ function renderBlock(block, options = {}) {
       return `<aside class="article-source-cta">${block.eyebrow ? `<span>${escapeHtml(block.eyebrow)}</span>` : ''}${block.title ? `<h2>${escapeHtml(block.title)}</h2>` : ''}${block.text ? `<p>${textHtml(block.text)}</p>` : ''}<a href="${escapeHtml(block.href)}">${escapeHtml(block.label)} <span aria-hidden="true">→</span></a></aside>`;
     case 'faq': {
       const id = faqAnchor(block);
-      return `<section class="article-faq" aria-labelledby="${escapeHtml(id)}"><h2 id="${escapeHtml(id)}" data-toc-entry>Câu hỏi thường gặp</h2>${block.items.map((item, index) => `<h3 id="${escapeHtml(`${id}-${index + 1}-${slugifyBlogValue(item.question)}`)}">${escapeHtml(item.question)}</h3><p>${textHtml(item.answer)}</p>`).join('')}</section>`;
+      return `<section class="article-faq" aria-labelledby="${escapeHtml(id)}"><h2 id="${escapeHtml(id)}" data-toc-entry>FAQ - Câu hỏi thường gặp</h2>${block.description ? `<p class="article-faq-description">${textHtml(block.description)}</p>` : ''}${block.items.map((item, index) => `<h3 id="${escapeHtml(`${id}-${index + 1}-${slugifyBlogValue(item.question)}`)}">${escapeHtml(item.question)}</h3><p>${textHtml(item.answer)}</p>`).join('')}</section>`;
     }
     case 'relatedPosts': {
       const id = 'bai-viet-lien-quan';
@@ -247,7 +275,7 @@ function renderBlock(block, options = {}) {
 
 export function renderBlogBody(value, options = {}) {
   const { post } = recordParts(value, options);
-  return post.blocks.map((block) => renderBlock(block, options)).join('\n');
+  return visibleBlocks(post).map((block) => renderBlock(block, options)).join('\n');
 }
 
 export function createBlogSchemas(value, options = {}) {
@@ -317,7 +345,7 @@ export function renderBlogPreview(value, options = {}) {
   const hero = post.heroImage.url
     ? `<figure class="article-lead-image"><img${attrs({ ...responsiveImageAttrs(post.heroImage, '(max-width: 760px) calc(100vw - 48px), 900px'), decoding: 'async' })}>${post.heroImage.caption ? `<figcaption>${textHtml(post.heroImage.caption)}</figcaption>` : ''}</figure>`
     : '';
-  const html = `<article class="container article-shell" data-blog-preview><header><h1 class="article-title">${escapeHtml(post.h1)}</h1></header>${hero}${post.deck ? `<p class="article-deck">${textHtml(post.deck)}</p>` : ''}<div class="article-content">${post.blocks.map((block) => renderBlock(block, options)).join('')}</div></article>`;
+  const html = `<article class="container article-shell" data-blog-preview><header><h1 class="article-title">${escapeHtml(post.h1)}</h1></header>${hero}${post.deck ? `<p class="article-deck">${textHtml(post.deck)}</p>` : ''}<div class="article-content">${visibleBlocks(post).map((block) => renderBlock(block, options)).join('')}</div></article>`;
   return { html, toc, schemas };
 }
 
@@ -330,7 +358,7 @@ function renderSharedFooter() {
 }
 
 function renderScripts({ article = false, blog = false } = {}) {
-  return `<button class="back-to-top" type="button" aria-label="Về đầu trang"></button><script src="/nav.js" defer></script>${article ? '<script src="/blog-post.js" defer></script>' : ''}${blog ? '<script src="/blog.js" defer></script>' : ''}<script type="module" src="/auth.js"></script><script type="module" src="/history-ui.js"></script><script type="module" src="/app.js"></script><script src="/chatbot.js" defer></script>`;
+  return `<button class="back-to-top" type="button" aria-label="Về đầu trang"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg></button><script src="/nav.js" defer></script>${article ? '<script src="/blog-post.js" defer></script>' : ''}${blog ? '<script src="/blog.js" defer></script>' : ''}<script type="module" src="/auth.js"></script><script type="module" src="/history-ui.js"></script><script type="module" src="/app.js"></script><script src="/chatbot.js" defer></script>`;
 }
 
 function imageMimeType(url = '') {
@@ -371,7 +399,7 @@ export function renderBlogPost(value, options = {}) {
     ? formatVietnameseDate(meta.updatedAt)
     : '';
   const hero = post.heroImage;
-  const bodyBlocks = post.blocks.map((block) => renderBlock(block, options)).join('\n');
+  const bodyBlocks = visibleBlocks(post).map((block) => renderBlock(block, options)).join('\n');
   const hasRelatedBlock = post.blocks.some((block) => block.type === 'relatedPosts');
   const related = !hasRelatedBlock && post.relatedSlugs.length
     ? renderBlock({ type: 'relatedPosts', slugs: post.relatedSlugs }, options)

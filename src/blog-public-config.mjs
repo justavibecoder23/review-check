@@ -56,21 +56,21 @@ export const LEGACY_BLOG_SUMMARIES = Object.freeze([
   },
   {
     slug: 'cach-tim-shop-uy-tin-tren-shopee',
-    title: 'Cách tìm shop uy tín trên Shopee trước khi mua hàng',
+    title: 'Cách tìm shop uy tín trên Shopee trước khi mua hàng để tránh "tiền mất tật mang"',
     excerpt: 'Checklist kiểm tra lịch sử, rating, review Shopee và các dấu hiệu cần chú ý trước khi mua hàng.',
     category: 'doc-review', categoryLabel: 'Hướng dẫn', publishedAt: '2026-09-14T00:00:00.000Z', updatedAt: '2026-09-15T00:00:00.000Z', readingMinutes: 14,
     heroImage: { url: '/assets/blog/cach-tim-shop-uy-tin-tren-shopee.jpg', alt: 'Minh họa cách kiểm tra shop uy tín trên Shopee' }
   },
   {
     slug: 'kiem-tra-do-tin-cay-review-truoc-khi-mua-hang',
-    title: 'Review 5 sao có đáng tin không?',
+    title: 'Review 5 sao có đáng tin không? Cách kiểm tra độ tin cậy review',
     excerpt: 'Cách kiểm tra độ tin cậy của review và nhận biết những tín hiệu cần chú ý trước khi mua hàng online.',
     category: 'doc-review', categoryLabel: 'Đọc review', publishedAt: '2026-09-11T00:00:00.000Z', updatedAt: '2026-09-15T00:00:00.000Z', readingMinutes: 18,
     heroImage: { url: '/assets/blog/review-5-sao-co-dang-tin-thumbnail.jpg', alt: 'Review 5 sao có đáng tin không và cách kiểm tra độ tin cậy review' }
   },
   {
     slug: 'trustscore-la-gi',
-    title: 'TrustScore là gì? Cách đọc điểm tin cậy',
+    title: 'TrustScore là gì? Cách đọc điểm tin cậy của review',
     excerpt: 'Hiểu cách RealView đo độ tin cậy của tập review và vì sao đây không phải điểm chất lượng sản phẩm.',
     category: 'realview', categoryLabel: 'RealView', publishedAt: '2026-09-11T00:00:00.000Z', updatedAt: '2026-09-14T00:00:00.000Z', readingMinutes: 17,
     heroImage: { url: '/assets/blog/trustscore-thumbnail.jpg', alt: 'TrustScore là gì và cách đọc điểm tin cậy của review' }

@@ -6,7 +6,7 @@ import {
   slugifyBlogValue,
   validateBlogPost
 } from './blog-post-model.mjs';
-import { LEGACY_BLOG_SLUGS } from './blog-public-config.mjs';
+import { LEGACY_BLOG_SLUGS, LEGACY_BLOG_SUMMARIES } from './blog-public-config.mjs';
 import { createPublicBlogSummarySnapshot } from './blog-public-data.mjs';
 
 const PREFIX = 'realview:blog:cms:v1';
@@ -252,6 +252,26 @@ function relatedSlugs(post = {}) {
       .filter((block) => block?.type === 'relatedPosts')
       .flatMap((block) => Array.isArray(block.slugs) ? block.slugs : [])
   ].map(slugifyBlogValue).filter(Boolean))];
+}
+
+export async function resolveRelatedBlogPostTitles(post, options = {}) {
+  ensureStorage(options);
+  const slugs = relatedSlugs(post);
+  if (!slugs.length) return {};
+  const legacyTitles = new Map(LEGACY_BLOG_SUMMARIES.map((summary) => [summary.slug, summary.title]));
+  const owners = await redisCommand(['MGET', ...slugs.map(slugKey)], redisOptions(options));
+  const ownerIds = [...new Set((Array.isArray(owners) ? owners : []).filter(Boolean))];
+  const serialized = ownerIds.length
+    ? await redisCommand(['MGET', ...ownerIds.map(metaKey)], redisOptions(options))
+    : [];
+  const metasById = new Map(ownerIds.map((id, index) => [id, parseJson(serialized?.[index])]));
+  return Object.fromEntries(slugs.flatMap((slug, index) => {
+    const meta = metasById.get(owners?.[index]);
+    const title = meta?.status === 'published' && meta?.publishedSlug === slug
+      ? meta.title
+      : legacyTitles.get(slug);
+    return title ? [[slug, { title }]] : [];
+  }));
 }
 
 async function assertRelatedPostsPublishable(post, postId, options = {}) {

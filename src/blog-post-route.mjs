@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { resolvePublishedBlogRoute } from './blog-cms-store.mjs';
+import { resolvePublishedBlogRoute, resolveRelatedBlogPostTitles } from './blog-cms-store.mjs';
 import { LEGACY_BLOG_SLUGS, blogPublicBaseUrl } from './blog-public-config.mjs';
 import { renderBlogPost } from './blog-renderer.mjs';
 import { migrateStaticBlogHtml, restoreStaticBlogPresentation } from './blog-static-migration.mjs';
@@ -69,7 +69,8 @@ export default async function handler(request, response) {
     const presentedRoute = legacyHtml
       ? restoreStaticBlogPresentation(route, legacyHtml, { sourcePath: `public/blog/${slug}.html` })
       : route;
-    const html = renderBlogPost(presentedRoute, { baseUrl: blogPublicBaseUrl(), forPublish: true });
+    const relatedPosts = await resolveRelatedBlogPostTitles(presentedRoute.post, { redisTimeoutMs: 1_200 });
+    const html = renderBlogPost(presentedRoute, { baseUrl: blogPublicBaseUrl(), forPublish: true, relatedPosts });
     if (request.method === 'HEAD') {
       response.statusCode = 200;
       response.setHeader('Content-Type', 'text/html; charset=utf-8');

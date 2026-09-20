@@ -17,6 +17,7 @@ import {
   listBlogPosts,
   listBlogRevisions,
   publishBlogPost,
+  resolveRelatedBlogPostTitles,
   restoreBlogRevision,
   unpublishBlogPost,
   updateBlogPost
@@ -181,9 +182,11 @@ async function previewStored(request) {
     throw error;
   }
   const value = await withLegacyPresentation(await getBlogPost(id, { revision: revisionFrom(request) }));
+  const relatedPosts = await resolveRelatedBlogPostTitles(value.post);
   const preview = renderBlogPreviewDocument(value.post, {
     publishedAt: value.meta.publishedAt,
-    updatedAt: value.meta.updatedAt
+    updatedAt: value.meta.updatedAt,
+    relatedPosts
   });
   return {
     ...value,
@@ -257,7 +260,8 @@ async function handlePost(request, response, body, actor) {
     const presentedPost = (await withLegacyPresentation(body.post || {}))?.post || body.post || {};
     const post = normalizeBlogPost(presentedPost, { fallbackSlug: 'ban-nhap-xem-truoc' });
     const validation = validateBlogPost(post, { forPublish: false });
-    const preview = renderBlogPreviewDocument(post);
+    const relatedPosts = await resolveRelatedBlogPostTitles(post);
+    const preview = renderBlogPreviewDocument(post, { relatedPosts });
     return sendAdminJson(response, 200, {
       post,
       validation,
