@@ -481,6 +481,7 @@ test('bài mới hỗ trợ định dạng cơ bản nhưng vẫn dùng typograp
   assert.match(html, /<h3 id="phan-phu" data-toc-entry>Phần phụ<\/h3>/);
   assert.match(html, /<p class="article-text article-text--small">Thông tin phụ\.<\/p>/);
   assert.match(html, /class="article-reading-grid"/);
+  assert.match(html, /class="header-contact"[\s\S]*?<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">[\s\S]*?<path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z"/);
   assert.match(html, /<h1 class="article-title">[\s\S]*?<div class="article-body-column"><img[^>]*><p class="article-deck">Hướng dẫn thực tế giúp người mua đánh giá review dễ dàng hơn\.<\/p><div class="article-content">/);
   assert.match(html, /class="article-content"/);
   const previewHtml = renderBlogPreview(post).html;
