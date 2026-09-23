@@ -3,6 +3,9 @@ import {
   deleteHistoryItem,
   formatRelativeTime,
   getHistory,
+  getHistoryTotal,
+  hasMoreHistory,
+  loadMoreHistory,
   resetHistoryCache,
   restoreHistoryItem
 } from './history-manager.js';
@@ -58,6 +61,7 @@ function ensureDrawer() {
         </header>
         <div class="history-drawer-toolbar"><span data-history-summary></span><button type="button" data-history-clear>Xóa tất cả</button></div>
         <div class="history-drawer-list" data-history-drawer-list></div>
+        <button class="history-load-more" type="button" data-history-load-more hidden>Xem thêm lịch sử</button>
         <p class="history-privacy-note">Chỉ bạn mới xem được lịch sử gắn với tài khoản này.</p>
       </aside>
     </div>`);
@@ -68,7 +72,7 @@ async function renderHistory({ force = false } = {}) {
   const user = await getCurrentUser();
   const history = user ? await getHistory({ force }).catch(() => []) : [];
   document.querySelectorAll('[data-history-count]').forEach((badge) => {
-    badge.textContent = String(history.length);
+    badge.textContent = String(getHistoryTotal());
     badge.hidden = history.length === 0;
   });
 
@@ -86,7 +90,8 @@ async function renderHistory({ force = false } = {}) {
       : '<div class="history-empty"><strong>Chưa có báo cáo nào</strong><span>Kết quả mới sẽ xuất hiện tại đây sau khi bạn phân tích sản phẩm.</span></div>';
   }
   const summary = document.querySelector('[data-history-summary]');
-  if (summary) summary.textContent = history.length ? `${history.length} báo cáo gần nhất` : 'Chưa có lịch sử';
+  if (summary) summary.textContent = history.length ? `${history.length}/${getHistoryTotal()} báo cáo đã tải` : 'Chưa có lịch sử';
+  document.querySelectorAll('[data-history-load-more]').forEach((button) => { button.hidden = !hasMoreHistory(); });
   document.querySelectorAll('[data-history-clear]').forEach((button) => { button.hidden = history.length === 0; });
   document.querySelectorAll('[data-history-image]').forEach((image) => {
     image.addEventListener('error', () => {
@@ -166,6 +171,9 @@ function initialize() {
       return;
     }
     if (event.target.closest('[data-history-clear]')) confirmClear();
+    if (event.target.closest('[data-history-load-more]')) {
+      void loadMoreHistory().then(() => renderHistory()).catch(() => {});
+    }
   });
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') closeDrawer();

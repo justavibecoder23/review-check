@@ -1,6 +1,6 @@
 export const HISTORY_STORAGE_KEY = 'realview:analysis-history-v1';
 export const LAST_ANALYSIS_KEY = 'realview:last-analysis';
-export const HISTORY_MAX_ITEMS = 10;
+export const HISTORY_MAX_ITEMS = 50;
 
 const VALID_TONES = new Set(['green', 'yellow', 'orange', 'red', 'neutral']);
 
@@ -137,9 +137,11 @@ function normalizeHistoryItem(item) {
 
 let historyCache = [];
 let historyLoaded = false;
+let nextHistoryPage = null;
+let historyTotal = 0;
 
-async function historyRequest(method = 'GET', body) {
-  const response = await fetch('/api/history', {
+async function historyRequest(method = 'GET', body, page = 1) {
+  const response = await fetch(method === 'GET' ? `/api/history?page=${page}` : '/api/history', {
     method,
     credentials: 'same-origin',
     headers: body ? { 'content-type': 'application/json' } : undefined,
@@ -154,17 +156,41 @@ async function historyRequest(method = 'GET', body) {
 
 export async function getHistory({ force = false } = {}) {
   if (historyLoaded && !force) return historyCache;
-  const payload = await historyRequest();
+  const payload = await historyRequest('GET', undefined, 1);
   historyLoaded = true;
+  nextHistoryPage = payload?.nextPage || null;
+  historyTotal = Number(payload?.total) || 0;
   historyCache = Array.isArray(payload?.items)
     ? payload.items.map(normalizeHistoryItem).filter((item) => item?.id).slice(0, HISTORY_MAX_ITEMS)
     : [];
   return historyCache;
 }
 
+export function hasMoreHistory() {
+  return nextHistoryPage !== null;
+}
+
+export function getHistoryTotal() {
+  return historyTotal || historyCache.length;
+}
+
+export async function loadMoreHistory() {
+  if (!historyLoaded) await getHistory();
+  if (!nextHistoryPage) return historyCache;
+  const payload = await historyRequest('GET', undefined, nextHistoryPage);
+  nextHistoryPage = payload?.nextPage || null;
+  historyTotal = Number(payload?.total) || historyTotal;
+  const existing = new Set(historyCache.map((item) => item.id));
+  historyCache.push(...(payload?.items || []).map(normalizeHistoryItem).filter((item) => item?.id && !existing.has(item.id)));
+  historyCache = historyCache.slice(0, HISTORY_MAX_ITEMS);
+  return historyCache;
+}
+
 export function resetHistoryCache() {
   historyCache = [];
   historyLoaded = false;
+  nextHistoryPage = null;
+  historyTotal = 0;
 }
 
 export async function saveToHistory(resultData, { now = () => new Date() } = {}) {
@@ -198,6 +224,7 @@ export async function saveToHistory(resultData, { now = () => new Date() } = {})
     normalizeHistoryItem(payload.item),
     ...historyCache.filter((entry) => entry.id !== item.id)
   ].filter(Boolean).slice(0, HISTORY_MAX_ITEMS);
+  historyTotal = Math.min(HISTORY_MAX_ITEMS, Math.max(historyTotal, historyCache.length));
   historyLoaded = true;
   return historyCache[0];
 }
@@ -226,6 +253,9 @@ export function restoreHistoryItem(id, { session, navigate } = {}) {
 export async function deleteHistoryItem(id) {
   await historyRequest('DELETE', { id: String(id) });
   historyCache = historyCache.filter((item) => item.id !== String(id));
+  historyLoaded = false;
+  nextHistoryPage = null;
+  historyTotal = 0;
   return historyCache;
 }
 
@@ -233,6 +263,8 @@ export async function clearHistory() {
   await historyRequest('DELETE', { clear: true });
   historyCache = [];
   historyLoaded = true;
+  nextHistoryPage = null;
+  historyTotal = 0;
 }
 
 export function formatRelativeTime(isoString, now = new Date()) {

@@ -14,7 +14,7 @@ const USERNAME_PATTERN = /^[a-zA-Z0-9._]{3,30}$/;
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30;
 const PASSWORD_RESET_TTL_SECONDS = 10 * 60;
 const PASSWORD_RESET_MAX_ATTEMPTS = 5;
-const HISTORY_LIMIT = 10;
+const HISTORY_LIMIT = 50;
 const MAX_HISTORY_BYTES = 700_000;
 const PREFIX = 'realview:account:v1';
 
@@ -330,7 +330,9 @@ export async function saveAccountHistory(userId, item, options = {}) {
 
 export async function listAccountHistory(userId, options = {}) {
   ensureStorage();
-  const ids = await redisCommand(['ZREVRANGE', historyIndexKey(userId), '0', String(HISTORY_LIMIT - 1)], options) || [];
+  const offset = Math.max(0, Math.min(HISTORY_LIMIT - 1, Number(options.offset) || 0));
+  const limit = Math.max(1, Math.min(10, Number(options.limit) || 10));
+  const ids = await redisCommand(['ZREVRANGE', historyIndexKey(userId), String(offset), String(Math.min(HISTORY_LIMIT - 1, offset + limit - 1))], options) || [];
   if (!ids.length) return [];
   const values = await redisCommand(['MGET', ...ids.map((id) => historyItemKey(userId, id))], options) || [];
   return values.flatMap((value) => {
@@ -340,6 +342,11 @@ export async function listAccountHistory(userId, options = {}) {
       return [];
     }
   });
+}
+
+export async function countAccountHistory(userId, options = {}) {
+  ensureStorage();
+  return Math.min(HISTORY_LIMIT, Number(await redisCommand(['ZCARD', historyIndexKey(userId)], options)) || 0);
 }
 
 export async function getAccountHistoryItem(userId, itemId, options = {}) {

@@ -85,7 +85,7 @@ test('lịch sử khử trùng sản phẩm và đưa lần phân tích mới nh
   assert.equal(history[0].analyzedAt, secondTime.toISOString());
 }));
 
-test('lịch sử chỉ giữ tối đa mười báo cáo mới nhất', () => withHistoryBackend(async () => {
+test('lịch sử chỉ giữ tối đa số báo cáo cấu hình', () => withHistoryBackend(async () => {
   for (let index = 0; index < HISTORY_MAX_ITEMS + 3; index += 1) {
     await saveToHistory(report(String(index)), { now: () => new Date(2026, 8, 8, 10, index) });
   }

@@ -12,6 +12,7 @@ import { createHash } from 'node:crypto';
 import { redisCommand } from '../src/redis-rest.mjs';
 import { sendWelcomeEmail } from '../src/welcome-email.mjs';
 import { sendPasswordResetEmail } from '../src/password-reset-email.mjs';
+import { claimGuestHistory, discardGuestHistory } from '../src/guest-analysis-quota.mjs';
 import {
   createEmailVerification,
   deleteEmailVerification,
@@ -194,12 +195,23 @@ export default async function handler(request, response) {
       : await authenticateAccount(body);
     const session = await createAccountSession(user);
     response.setHeader('Set-Cookie', sessionCookie(request, session.token, session.expiresIn));
+    const claimedGuestHistory = isRegistration && body.claimGuestHistory === 'on'
+      ? await claimGuestHistory(request, response, user.id).catch((error) => {
+        console.error('[auth] Guest history transfer failed:', error?.message);
+        return 0;
+      })
+      : 0;
+    if (isRegistration && body.claimGuestHistory !== 'on') {
+      await discardGuestHistory(request).catch((error) => {
+        console.error('[auth] Unable to discard unclaimed guest history:', error?.message);
+      });
+    }
     const welcomeEmail = isRegistration
       ? await sendWelcomeEmail(user).catch(() => ({ delivered: false, reason: 'delivery_failed' }))
       : null;
     return send(response, isRegistration ? 201 : 200, {
       user,
-      ...(isRegistration ? { welcomeEmailDelivered: welcomeEmail.delivered } : {})
+      ...(isRegistration ? { welcomeEmailDelivered: welcomeEmail.delivered, claimedGuestHistory } : {})
     });
   } catch (error) {
     return send(response, error?.statusCode || 500, {

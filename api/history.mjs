@@ -1,6 +1,7 @@
 import { currentAccount } from './auth.mjs';
 import {
   clearAccountHistory,
+  countAccountHistory,
   deleteAccountHistory,
   listAccountHistory,
   saveAccountHistory
@@ -22,7 +23,13 @@ export default async function handler(request, response) {
     if (!user) return send(response, 401, { error: 'Vui lòng đăng nhập để sử dụng lịch sử phân tích.', code: 'AUTH_REQUIRED' });
 
     if (request.method === 'GET') {
-      return send(response, 200, { items: await listAccountHistory(user.id) });
+      const page = Math.max(1, Math.min(5, Number(request.query?.page || new URL(request.url, 'http://localhost').searchParams.get('page')) || 1));
+      const offset = (page - 1) * 10;
+      const [items, total] = await Promise.all([
+        listAccountHistory(user.id, { offset, limit: 10 }),
+        countAccountHistory(user.id)
+      ]);
+      return send(response, 200, { items, total, nextPage: offset + items.length < total ? page + 1 : null });
     }
     if (request.method === 'POST') {
       const item = await saveAccountHistory(user.id, bodyOf(request).item);

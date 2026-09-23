@@ -154,6 +154,8 @@
 .history-drawer-header > button { width: 42px; height: 42px; border: 1px solid rgba(22,22,22,.12); border-radius: 50%; background: white; font-size: 25px; cursor: pointer; }
 .history-drawer-toolbar { margin: 24px 0 14px; padding-bottom: 14px; border-bottom: 1px solid rgba(22,22,22,.1); color: #73736d; font-size: 11px; }
 .history-drawer-list { display: grid; gap: 11px; }
+.history-load-more { display: block; width: 100%; margin: 16px 0; padding: 12px; border: 1px solid rgba(22,22,22,.15); border-radius: 12px; background: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.history-load-more[hidden] { display: none; }
 .history-card--compact .history-card-open { grid-template-columns: 72px minmax(0,1fr) auto; gap: 11px; }
 .history-card--compact .history-card-visual { width: 72px; height: 66px; }
 .history-card--compact .history-score { width: 52px; height: 52px; }

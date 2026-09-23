@@ -733,8 +733,9 @@ async function readAnalysisStream(url) {
   });
   if (!response.ok || !(response.headers.get('content-type') || '').includes('text/event-stream')) {
     let message = 'Không thể mở luồng phân tích.';
-    try { message = (await response.json()).error || message; } catch { /* Non-JSON upstream response. */ }
-    throw new Error(message);
+    let payload = {};
+    try { payload = await response.json(); message = payload.error || message; } catch { /* Non-JSON upstream response. */ }
+    throw Object.assign(new Error(message), { code: payload.code || '', statusCode: payload.statusCode || response.status });
   }
   if (!response.body) throw new Error('Trình duyệt không hỗ trợ nhận tiến trình trực tiếp.');
 
@@ -751,6 +752,12 @@ async function readAnalysisStream(url) {
     }
     if (!dataLines.length) return;
     const payload = JSON.parse(dataLines.join('\n'));
+    if (eventName === 'ready') {
+      const quota = document.querySelector('#analysis-guest-quota');
+      if (quota) quota.textContent = payload.remainingGuestQuota === null
+        ? 'Đã đăng nhập · phân tích không giới hạn số lượt'
+        : `Còn ${payload.remainingGuestQuota}/${payload.guestQuotaLimit || 3} lượt dùng thử sau yêu cầu này`;
+    }
     if (eventName === 'progress') handleProgressEvent(payload);
     if (eventName === 'product_meta') renderProgressProduct(payload);
     if (eventName === 'reviews_sample') renderProgressSample(payload);
@@ -811,6 +818,9 @@ async function startProgressiveAnalysis(url) {
   emptyState.classList.add('hidden');
   progressPanel?.classList.remove('hidden');
   progressError?.classList.add('hidden');
+  if (retryButton) retryButton.hidden = false;
+  const signup = document.querySelector('#analysis-signup');
+  if (signup) signup.hidden = true;
   if (progressErrorTitle) progressErrorTitle.textContent = 'Chưa thể hoàn tất phân tích';
   slowNote?.classList.add('hidden');
   analysisSteps.forEach((step, index) => {
@@ -863,8 +873,14 @@ async function startProgressiveAnalysis(url) {
       : 'Tiến trình đã dừng trước khi có kết quả.';
     if (progressErrorTitle) progressErrorTitle.textContent = error?.code === 'PLATFORM_MAINTENANCE'
       ? `Hệ thống ${error?.details?.platform || 'lấy review'} đang bảo trì`
+      : ['GUEST_QUOTA_EXHAUSTED', 'GUEST_IP_DEVICE_LIMIT'].includes(error?.code)
+        ? 'Đã hết lượt dùng thử'
       : 'Chưa thể hoàn tất phân tích';
     if (progressErrorMessage) progressErrorMessage.textContent = error?.message || 'Có lỗi khi phân tích sản phẩm.';
+    const quotaBlocked = ['GUEST_QUOTA_EXHAUSTED', 'GUEST_IP_DEVICE_LIMIT'].includes(error?.code);
+    const signup = document.querySelector('#analysis-signup');
+    if (signup) signup.hidden = !quotaBlocked;
+    if (retryButton) retryButton.hidden = quotaBlocked;
     progressError?.classList.remove('hidden');
   } finally {
     clearInterval(elapsedTimer);
@@ -873,6 +889,17 @@ async function startProgressiveAnalysis(url) {
 
 if (hasBrowserWindow) retryButton?.addEventListener('click', () => {
   if (activeAnalysisUrl) startProgressiveAnalysis(activeAnalysisUrl);
+});
+if (hasBrowserWindow) document.querySelector('#analysis-signup')?.addEventListener('click', () => {
+  void import('./auth.js').then(({ openAuthDialog }) => openAuthDialog({
+    mode: 'register',
+    message: 'Đăng ký hoặc đăng nhập để tiếp tục phân tích không giới hạn số lượt.'
+  }));
+});
+if (hasBrowserWindow) window.addEventListener('realview:auth-changed', (event) => {
+  if (event.detail?.user && document.querySelector('#analysis-signup')?.hidden === false && activeAnalysisUrl) {
+    startProgressiveAnalysis(activeAnalysisUrl);
+  }
 });
 if (hasBrowserWindow) window.addEventListener('pagehide', () => analysisController?.abort(), { once: true });
 

@@ -202,6 +202,9 @@
   font: inherit;
   font-size: 16px;
 }
+.account-form .account-claim-history { display: flex; align-items: flex-start; gap: 10px; }
+.account-form .account-claim-history input { width: 18px; height: 18px; min-height: 18px; padding: 0; margin: 1px 0 0; accent-color: #fc781f; flex: none; }
+.account-form .account-claim-history span { font-size: 12px; font-weight: 600; line-height: 1.4; }
 .account-form input:focus { border-color: var(--orange); outline: 3px solid rgba(252,120,31,.16); }
 .account-code-input { letter-spacing: .45em; text-align: center; font-size: 22px !important; font-weight: 850; }
 .account-form-help { margin: -2px 0 0; color: #777770; font-size: 11px; line-height: 1.5; }

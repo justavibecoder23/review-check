@@ -1370,3 +1370,5 @@ main .contact-note { font-size: 13px; }
   .hero-copy { padding-top: 16px; }
   .url-form { border-radius: 19px; }
 }
+.guest-quota-status { margin: 9px 0 0; color: #63635f; font-size: 13px; font-weight: 650; }
+.guest-quota-status:empty { display: none; }

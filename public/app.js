@@ -4,6 +4,27 @@ const form = document.querySelector('#analyze-form');
 const input = document.querySelector('#product-url');
 const errorBox = document.querySelector('#form-error');
 const backToTop = document.querySelector('.back-to-top');
+const quotaStatus = document.querySelector('#guest-quota-status');
+let remainingGuestQuota = null;
+let quotaRequestGeneration = 0;
+
+async function refreshGuestQuota() {
+  if (!quotaStatus) return;
+  const generation = ++quotaRequestGeneration;
+  try {
+    const response = await fetch('/api/analyze', { credentials: 'same-origin', cache: 'no-store' });
+    if (!response.ok) return;
+    const quota = await response.json();
+    if (generation !== quotaRequestGeneration) return;
+    remainingGuestQuota = quota.remainingGuestQuota;
+    quotaStatus.textContent = remainingGuestQuota === null
+      ? 'Đã đăng nhập · phân tích không giới hạn số lượt'
+      : `Còn ${remainingGuestQuota}/${quota.guestQuotaLimit || 3} lượt dùng thử`;
+  } catch { /* The server remains authoritative if the status request fails. */ }
+}
+
+void refreshGuestQuota();
+window.addEventListener('realview:auth-changed', () => { void refreshGuestQuota(); });
 
 function showInputError(message, { focus = false } = {}) {
   if (!form || !input || !errorBox) return;
@@ -173,5 +194,10 @@ if (form) form.addEventListener('submit', (event) => {
   event.preventDefault();
   const validation = validateCurrentInput({ focus: true });
   if (!validation) return;
+  if (remainingGuestQuota === 0) {
+    showInputError('Bạn đã dùng hết 3 lượt thử. Hãy đăng ký hoặc đăng nhập để tiếp tục.');
+    void import('./auth.js').then(({ openAuthDialog }) => openAuthDialog({ mode: 'register' }));
+    return;
+  }
   window.location.assign(`/ket-qua?url=${encodeURIComponent(validation.url)}`);
 });

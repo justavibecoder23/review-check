@@ -125,6 +125,7 @@ function dialogMarkup() {
           <label><span>Email</span><input name="email" type="email" autocomplete="email" maxlength="254" required placeholder="ban@example.com" /></label>
           <label><span>Tên đăng nhập</span><input name="username" type="text" autocomplete="username" minlength="3" maxlength="30" pattern="[A-Za-z0-9._]{3,30}" required placeholder="3–30 ký tự" /></label>
           <label><span>Mật khẩu</span><input name="password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required placeholder="Tối thiểu 8 ký tự" /></label>
+          <label class="account-claim-history"><input name="claimGuestHistory" type="checkbox" checked /><span>Đưa các kết quả dùng thử trên thiết bị này vào lịch sử tài khoản</span></label>
           <p class="account-form-help">Email được lưu trong hồ sơ tài khoản để RealView có thể gửi thông báo trong tương lai.</p>
           <p class="account-form-error" data-auth-error role="alert" hidden></p>
           <button class="account-submit" type="submit">Gửi mã xác minh <span aria-hidden="true">→</span></button>
