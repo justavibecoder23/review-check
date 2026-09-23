@@ -1,12 +1,8 @@
 import { createEmailTransport } from './email-transport.mjs';
+import { emailBrandingUrls, emailLayoutStart, emailSocialFooter } from './email-branding.mjs';
 
 const CONTACT_ACKNOWLEDGEMENT_SUBJECT = '[Tự động] Xác nhận yêu cầu liên hệ – RealView';
-const REALVIEW_WEBSITE_URL = 'https://realview.com.vn/';
-const REALVIEW_HOME_URL = 'https://www.realview.com.vn/';
-const REALVIEW_FACEBOOK_URL = 'https://www.facebook.com/profile.php?id=61594093477895';
-const REALVIEW_TIKTOK_URL = 'https://www.tiktok.com/@realviewueh';
-const FACEBOOK_LOGO_URL = 'https://img.icons8.com/color/48/facebook-new.png';
-const TIKTOK_LOGO_URL = 'https://img.icons8.com/color/48/tiktok--v1.png';
+const REALVIEW_HOME_URL = emailBrandingUrls.home;
 
 function escapeHtml(value) {
   return String(value || '')
@@ -29,7 +25,7 @@ function contactAcknowledgementEmailContent(record = {}) {
     '',
     'Cảm ơn bạn đã quan tâm và gửi email cho RealView. Hệ thống của chúng tôi xin xác nhận đã nhận được yêu cầu liên hệ của bạn.',
     '',
-    'Đội ngũ phát triển đang tiến hành xem xét nội dung và sẽ nỗ lực phản hồi đến bạn trong thời gian sớm nhất.',
+    'Đội ngũ RealView đã nhận được nội dung và sẽ xem xét để phản hồi bạn sớm nhất có thể. Nếu cần bổ sung thông tin, bạn có thể trả lời trực tiếp email này.',
     '',
     'Trong lúc chờ đợi, bạn có thể trải nghiệm các tính năng hoặc tìm hiểu thêm về dự án thông qua các kênh thông tin chính thức bên dưới.',
     '',
@@ -46,81 +42,36 @@ function contactAcknowledgementEmailContent(record = {}) {
     '🌐 Website: realview.com.vn',
     '📧 Email: realviewueh@gmail.com',
     '📞 Hotline: 037 712 0633',
-    '📘 Facebook: RealView - Tổng hợp và đánh giá reviews',
-    '🎵 TikTok: @realviewueh'
+    `Facebook: ${emailBrandingUrls.facebook}`,
+    `TikTok: ${emailBrandingUrls.tiktok}`,
+    `Threads: ${emailBrandingUrls.threads}`
   ].join('\n');
 
-  const html = `<!doctype html>
-<html lang="vi">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="light">
-    <meta name="supported-color-schemes" content="light">
-    <title>${CONTACT_ACKNOWLEDGEMENT_SUBJECT}</title>
-  </head>
-  <body bgcolor="#f4f3ef" style="margin:0;padding:0;background:#f4f3ef;color:#171717;font-family:Arial,Helvetica,sans-serif;-webkit-text-size-adjust:100%;text-size-adjust:100%;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#f4f3ef" style="width:100%;background:#f4f3ef;border-collapse:collapse;">
-      <tr>
-        <td align="center" bgcolor="#f4f3ef" style="padding:28px 12px;background:#f4f3ef;">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#ffffff" style="width:100%;max-width:600px;background:#ffffff;border:1px solid #e4e1da;border-radius:24px;border-collapse:separate;overflow:hidden;">
-            <tr>
-              <td style="padding:25px 32px;background:#171717;color:#ffffff;font-size:22px;line-height:1.25;font-weight:800;letter-spacing:.2px;">
-                <span style="color:#ff7a1a;">REAL</span>VIEW
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:38px 32px 34px;">
-                <p style="margin:0 0 22px;font-size:16px;line-height:1.65;color:#171717;font-weight:400;">Chào <strong style="color:#171717;font-weight:700;">${escapedDisplayName}</strong>,</p>
-                <p style="margin:0 0 18px;font-size:16px;line-height:1.65;color:#171717;font-weight:400;">Cảm ơn bạn đã quan tâm và gửi email cho RealView. Hệ thống của chúng tôi xin xác nhận đã nhận được yêu cầu liên hệ của bạn.</p>
-                <p style="margin:0 0 18px;font-size:16px;line-height:1.65;color:#171717;font-weight:400;">Đội ngũ phát triển đang tiến hành xem xét nội dung và sẽ nỗ lực phản hồi đến bạn trong thời gian sớm nhất.</p>
-                <p style="margin:0 0 18px;font-size:16px;line-height:1.65;color:#171717;font-weight:400;">Trong lúc chờ đợi, bạn có thể trải nghiệm các tính năng hoặc tìm hiểu thêm về dự án thông qua các kênh thông tin chính thức bên dưới.</p>
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin:0 0 24px;border-collapse:collapse;">
-                  <tr>
-                    <td align="center">
-                      <a href="${REALVIEW_HOME_URL}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 24px;border-radius:999px;background:#ff7a1a;color:#171717;font-size:15px;line-height:1.2;font-weight:800;text-decoration:none;">Khám phá RealView</a>
-                    </td>
-                  </tr>
-                </table>
-                <p style="margin:0 0 24px;font-size:16px;line-height:1.65;color:#171717;font-weight:400;">Chúc bạn một ngày tốt lành!</p>
-                <p style="margin:0;font-size:16px;line-height:1.65;color:#171717;font-weight:400;">Trân trọng,</p>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:26px 32px 30px;background:#faf9f6;border-top:1px solid #e0e0e0;">
-                <p style="margin:0 0 6px;color:#171717;font-size:15px;line-height:1.5;font-weight:800;">ĐỘI NGŨ REALVIEW</p>
-                <p style="margin:0 0 5px;color:#4f4f4a;font-size:14px;line-height:1.6;">RealView - Một dự án tích hợp AI, hỗ trợ người dùng trong quyết định mua sắm online.</p>
-                <p style="margin:0 0 22px;color:#686862;font-size:13px;line-height:1.6;font-style:italic;">Dự án thuộc khuôn khổ môn học Digital Marketing - Nhóm Sinh viên Đại học Kinh tế TP.HCM (UEH)</p>
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;border-collapse:collapse;">
-                  <tr>
-                    <td width="26" valign="middle" style="width:26px;padding:0 0 9px;text-align:center;vertical-align:middle;"><span style="display:inline-block;width:18px;height:18px;font-size:16px;line-height:18px;text-align:center;vertical-align:middle;">🌐</span></td>
-                    <td valign="middle" style="padding:0 0 9px 8px;color:#4f4f4a;font-size:14px;line-height:1.55;vertical-align:middle;overflow-wrap:anywhere;word-break:break-word;"><strong style="color:#171717;">Website:</strong> <a href="${REALVIEW_WEBSITE_URL}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:4px 0;color:#a84400;text-decoration:none;">realview.com.vn</a></td>
-                  </tr>
-                  <tr>
-                    <td width="26" valign="middle" style="width:26px;padding:0 0 9px;text-align:center;vertical-align:middle;"><span style="display:inline-block;width:18px;height:18px;font-size:16px;line-height:18px;text-align:center;vertical-align:middle;">📧</span></td>
-                    <td valign="middle" style="padding:0 0 9px 8px;color:#4f4f4a;font-size:14px;line-height:1.55;vertical-align:middle;overflow-wrap:anywhere;word-break:break-word;"><strong style="color:#171717;">Email:</strong> <a href="mailto:realviewueh@gmail.com" style="display:inline-block;padding:4px 0;color:#a84400;text-decoration:none;">realviewueh@gmail.com</a></td>
-                  </tr>
-                  <tr>
-                    <td width="26" valign="middle" style="width:26px;padding:0 0 9px;text-align:center;vertical-align:middle;"><span style="display:inline-block;width:18px;height:18px;font-size:16px;line-height:18px;text-align:center;vertical-align:middle;">📞</span></td>
-                    <td valign="middle" style="padding:0 0 9px 8px;color:#4f4f4a;font-size:14px;line-height:1.55;vertical-align:middle;overflow-wrap:anywhere;word-break:break-word;"><strong style="color:#171717;">Hotline:</strong> <a href="tel:+84377120633" style="display:inline-block;padding:4px 0;color:#a84400;text-decoration:none;">037 712 0633</a></td>
-                  </tr>
-                  <tr>
-                    <td width="26" valign="middle" style="width:26px;padding:0 0 9px;text-align:center;vertical-align:middle;"><img src="${FACEBOOK_LOGO_URL}" alt="" width="18" height="18" style="display:inline-block;width:18px;height:18px;margin:0;border:0;outline:none;vertical-align:middle;"></td>
-                    <td valign="middle" style="padding:0 0 9px 8px;color:#4f4f4a;font-size:14px;line-height:1.55;vertical-align:middle;overflow-wrap:anywhere;word-break:break-word;"><strong style="color:#171717;">Facebook:</strong> <a href="${REALVIEW_FACEBOOK_URL}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:4px 0;color:#a84400;text-decoration:none;">RealView - Tổng hợp và đánh giá reviews</a></td>
-                  </tr>
-                  <tr>
-                    <td width="26" valign="middle" style="width:26px;padding:0;text-align:center;vertical-align:middle;"><img src="${TIKTOK_LOGO_URL}" alt="" width="18" height="18" style="display:inline-block;width:18px;height:18px;margin:0;border:0;outline:none;vertical-align:middle;"></td>
-                    <td valign="middle" style="padding:0 0 0 8px;color:#4f4f4a;font-size:14px;line-height:1.55;vertical-align:middle;overflow-wrap:anywhere;word-break:break-word;"><strong style="color:#171717;">TikTok:</strong> <a href="${REALVIEW_TIKTOK_URL}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:4px 0;color:#a84400;text-decoration:none;">@realviewueh</a></td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>`;
+  const html = `${emailLayoutStart('RealView đã nhận được yêu cầu liên hệ của bạn và sẽ phản hồi sớm nhất có thể.', 600)}
+          <tr><td style="padding:22px 24px 8px;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#eeeeec" style="width:100%;border-radius:18px;background:#eeeeec;border-collapse:separate;">
+              <tr>
+                <td class="email-hero-mascot" width="132" align="center" valign="bottom" style="width:132px;padding:10px 0 0 10px;vertical-align:bottom;"><img src="${emailBrandingUrls.mascotWelcome}" width="112" height="142" alt="Mascot RealView xác nhận đã nhận được yêu cầu" style="display:block;width:112px;height:auto;max-width:100%;border:0;"></td>
+                <td class="email-hero-copy" valign="middle" style="padding:18px 16px 18px 10px;vertical-align:middle;">
+                  <span style="display:inline-block;margin:0 0 10px;padding:7px 11px;border-radius:999px;background:#fff0e5;color:#a84400;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.3;font-weight:700;letter-spacing:0;">Đã nhận được yêu cầu</span>
+                  <h1 style="margin:0 0 8px;color:#171717;font-size:22px;line-height:1.2;">Cảm ơn bạn đã liên hệ!</h1>
+                  <p style="margin:0;color:#55554f;font-size:13px;line-height:1.5;">Yêu cầu của bạn đã đến đúng nơi.</p>
+                </td>
+              </tr>
+            </table>
+          </td></tr>
+          <tr><td class="email-content" style="padding:17px 28px 26px;">
+            <p style="margin:0 0 15px;color:#30302d;font-size:15px;line-height:1.65;">Chào <strong>${escapedDisplayName}</strong>, cảm ơn bạn đã quan tâm và gửi lời nhắn đến RealView. Hệ thống đã ghi nhận yêu cầu liên hệ của bạn.</p>
+            <p style="margin:0 0 15px;color:#30302d;font-size:15px;line-height:1.65;">Đội ngũ đang xem xét nội dung và sẽ phản hồi sớm nhất có thể. Nếu bạn cần bổ sung chi tiết, chỉ cần trả lời trực tiếp email này.</p>
+            <p style="margin:0 0 21px;padding:13px 15px;border-left:3px solid #f05b16;background:#fff8f2;color:#55554f;font-size:14px;line-height:1.6;">Trong lúc chờ phản hồi, bạn có thể khám phá cách RealView tổng hợp review và hỗ trợ người mua cân nhắc sản phẩm.</p>
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 auto 20px;"><tr><td align="center" bgcolor="#f05b16" style="border-radius:999px;background:#f05b16;"><a href="${REALVIEW_HOME_URL}" target="_blank" style="display:inline-block;padding:13px 23px;border-radius:999px;color:#ffffff;font-size:14px;line-height:1.2;font-weight:800;text-decoration:none;">Khám phá RealView&nbsp; →</a></td></tr></table>
+            <p style="margin:0;color:#4f4f4a;font-size:14px;line-height:1.6;">Chúc bạn một ngày tốt lành!<br><strong style="color:#171717;">Đội ngũ RealView</strong></p>
+          </td></tr>
+          <tr><td bgcolor="#f3f5fc" style="padding:20px 27px;background:#f3f5fc;border-top:1px solid #dfe4ef;">
+            <p style="margin:0 0 5px;color:#171717;font-size:14px;line-height:1.5;font-weight:800;">VỀ REALVIEW</p>
+            <p style="margin:0 0 13px;color:#686862;font-size:12px;line-height:1.6;">Một dự án tích hợp AI, hỗ trợ người dùng trong quyết định mua sắm online.</p>
+          </td></tr>
+          ${emailSocialFooter()}`;
 
   return { subject: CONTACT_ACKNOWLEDGEMENT_SUBJECT, text, html };
 }
@@ -142,14 +93,9 @@ export async function sendContactAcknowledgementEmail(record, options = {}) {
 
 export const contactAcknowledgementEmailInternals = {
   CONTACT_ACKNOWLEDGEMENT_SUBJECT,
-  REALVIEW_WEBSITE_URL,
   REALVIEW_HOME_URL,
-  REALVIEW_FACEBOOK_URL,
-  REALVIEW_TIKTOK_URL,
-  FACEBOOK_LOGO_URL,
-  TIKTOK_LOGO_URL,
+  emailBrandingUrls,
   escapeHtml,
   safeDisplayName,
   contactAcknowledgementEmailContent
 };
-

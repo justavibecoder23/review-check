@@ -6,7 +6,7 @@ import {
   sendContactAcknowledgementEmail
 } from '../src/contact-acknowledgement-email.mjs';
 
-test('email xác nhận liên hệ giữ nguyên chủ đề, nội dung, icon và liên kết RealView', () => {
+test.skip('kiểm tra giao diện cũ của email xác nhận liên hệ (được thay bằng thiết kế mới)', () => {
   const content = contactAcknowledgementEmailInternals.contactAcknowledgementEmailContent({
     name: 'Nguyễn Văn A'
   });
@@ -148,6 +148,21 @@ test('email xác nhận liên hệ giữ nguyên chủ đề, nội dung, icon v
   }
 });
 
+test('email xác nhận liên hệ có logo, lời xác nhận, CTA và footer liên hệ mới', () => {
+  const content = contactAcknowledgementEmailInternals.contactAcknowledgementEmailContent({ name: 'Nguyễn Văn A' });
+  assert.equal(content.subject, '[Tự động] Xác nhận yêu cầu liên hệ – RealView');
+  assert.match(content.text, /Chào Nguyễn Văn A,/);
+  assert.match(content.text, /Đội ngũ RealView đã nhận được nội dung/);
+  assert.match(content.html, /assets\/realview-logo-v1\.webp/);
+  assert.match(content.html, /assets\/email\/mascot-welcome-contact\.png/);
+  assert.match(content.html, /Khám phá RealView/);
+  assert.match(content.html, /THÔNG TIN &amp; KẾT NỐI/);
+  for (const value of ['realview.com.vn', 'realviewueh@gmail.com', '037 712 0633', 'Facebook:', 'TikTok:', 'Threads:']) {
+    assert.ok(content.html.includes(value));
+  }
+  assert.doesNotMatch(content.html, /instagram/i);
+});
+
 test('tên khách hàng được làm sạch và thoát an toàn trong lời chào', () => {
   const content = contactAcknowledgementEmailInternals.contactAcknowledgementEmailContent({
     name: '<Khách & hàng>\r\nRealView'
@@ -206,7 +221,7 @@ test('email xác nhận liên hệ được gửi đúng người nhận qua Gma
     assert.equal(message.to, 'buyer@example.com');
     assert.equal(message.subject, '[Tự động] Xác nhận yêu cầu liên hệ – RealView');
     assert.match(message.text, /^Chào Nguyễn Văn A,/);
-    assert.match(message.html, />Chào <strong[^>]*>Nguyễn Văn A<\/strong>,<\/p>/);
+    assert.match(message.html, /Chào <strong[^>]*>Nguyễn Văn A<\/strong>,/);
     assert.deepEqual(result, { delivered: true, messageId: 'contact-acknowledgement-id' });
   } finally {
     if (previousUser === undefined) delete process.env.GMAIL_SMTP_USER;
