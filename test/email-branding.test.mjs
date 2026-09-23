@@ -25,6 +25,7 @@ test('các mẫu email dùng logo RealView, mascot và chỉ liên kết Faceboo
     assert.ok(html.includes(emailBrandingUrls.threads));
     assert.doesNotMatch(html, /instagram/i);
     assert.match(html, /<span style="color:#f05b16;font-family:Arial,Helvetica,sans-serif;">REAL<\/span><span style="color:#171717;font-family:Arial,Helvetica,sans-serif;">VIEW<\/span>/);
+    assert.match(html, /<img src="https:\/\/www\.realview\.com\.vn\/assets\/realview-logo-v1\.webp" width="58" height="35" alt="" style="display:block;width:58px;height:35px;object-fit:contain;border:0;">/);
     assert.match(html, /font-family:Arial,Helvetica,sans-serif !important/);
     assert.match(html, /email-hero-mascot/);
     assert.match(html, /@media only screen and \(max-width:480px\)/);

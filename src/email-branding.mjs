@@ -51,8 +51,8 @@ export function emailLayoutStart(preheader, maxWidth = 620) {
           <tr>
             <td bgcolor="#ffffff" style="padding:17px 24px;border-bottom:1px solid #e5e7ed;background:#ffffff;font-family:Arial,Helvetica,sans-serif;">
               <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
-                <td valign="middle" style="padding:0 11px 0 0;vertical-align:middle;"><span style="display:block;padding:3px;border-radius:11px;background:#ffffff;"><img src="${emailBrandingUrls.logo}" width="42" height="40" alt="" style="display:block;width:42px;height:40px;object-fit:contain;border:0;"></span></td>
-                <td valign="middle" style="vertical-align:middle;color:#171717;font-family:Arial,Helvetica,sans-serif;font-size:21px;line-height:1;font-weight:900;letter-spacing:-.6px;"><span style="color:#f05b16;font-family:Arial,Helvetica,sans-serif;">REAL</span><span style="color:#171717;font-family:Arial,Helvetica,sans-serif;">VIEW</span><br><span style="display:inline-block;margin-top:6px;color:#687080;font-family:Arial,Helvetica,sans-serif;font-size:9px;line-height:1.2;font-weight:700;letter-spacing:1.2px;">GÓC NHÌN THẬT&nbsp; · &nbsp;LỰA CHỌN ĐÚNG</span></td>
+                <td valign="middle" style="padding:0 10px 0 0;vertical-align:middle;"><img src="${emailBrandingUrls.logo}" width="58" height="35" alt="" style="display:block;width:58px;height:35px;object-fit:contain;border:0;"></td>
+                <td valign="middle" style="vertical-align:middle;color:#171717;font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:1;font-weight:900;letter-spacing:-.6px;"><span style="color:#f05b16;font-family:Arial,Helvetica,sans-serif;">REAL</span><span style="color:#171717;font-family:Arial,Helvetica,sans-serif;">VIEW</span><br><span style="display:inline-block;margin-top:6px;color:#687080;font-family:Arial,Helvetica,sans-serif;font-size:9px;line-height:1.2;font-weight:700;letter-spacing:1.2px;">GÓC NHÌN THẬT&nbsp; · &nbsp;LỰA CHỌN ĐÚNG</span></td>
               </tr></table>
             </td>
           </tr>`;
