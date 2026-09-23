@@ -38,7 +38,9 @@ function safeImageUrl(value) {
   return url && /^https:/i.test(url) ? url : '';
 }
 
-const PRODUCT_IMAGE_TIMEOUT_MS = 4_000;
+// The illustration is visible immediately when no image has loaded. Keep the
+// network request alive longer so a slow public Blob can still replace it.
+const PRODUCT_IMAGE_TIMEOUT_MS = 20_000;
 const PRODUCT_MEDIA_POLL_TIMEOUT_MS = 120_000;
 let productImageLoadSequence = 0;
 let productMediaRequestId = '';
@@ -49,39 +51,53 @@ function loadProductImage({ image, fallback, url, alt = '', skeletonTarget = nul
   const safe = safeImageUrl(url);
   const sequence = String(++productImageLoadSequence);
   image.dataset.loadSequence = sequence;
-  image.classList.add('hidden');
-  fallback.classList.remove('hidden');
-  skeletonTarget?.classList.add('is-skeleton');
   if (!safe) {
+    image.classList.add('hidden');
+    fallback.classList.remove('hidden');
+    skeletonTarget?.classList.add('is-skeleton');
     image.removeAttribute('src');
     return;
   }
+  if (!image.classList.contains('hidden') && image.src === safe && image.naturalWidth > 0) {
+    image.alt = alt;
+    return;
+  }
+  const hadVisibleImage = !image.classList.contains('hidden') && image.naturalWidth > 0;
+  if (!hadVisibleImage) {
+    image.classList.add('hidden');
+    fallback.classList.remove('hidden');
+    skeletonTarget?.classList.add('is-skeleton');
+  }
+  // Load the replacement separately. A slower or broken Actor/Blob URL must
+  // never remove an image that was already shown successfully.
+  const candidate = new Image();
+  candidate.referrerPolicy = image.referrerPolicy || 'no-referrer';
   let settled = false;
   const finish = (loaded) => {
     if (settled || image.dataset.loadSequence !== sequence) return;
     settled = true;
     window.clearTimeout(timeout);
     if (loaded) {
+      image.src = safe;
+      image.alt = alt;
       image.classList.remove('hidden');
       fallback.classList.add('hidden');
       skeletonTarget?.classList.remove('is-skeleton');
-    } else {
+    } else if (!hadVisibleImage) {
       image.classList.add('hidden');
       fallback.classList.remove('hidden');
       skeletonTarget?.classList.add('is-skeleton');
     }
   };
-  image.onload = () => finish(true);
-  image.onerror = () => finish(false);
-  image.alt = alt;
-  image.src = safe;
+  candidate.onload = () => finish(true);
+  candidate.onerror = () => finish(false);
   const timeout = window.setTimeout(() => {
     finish(false);
-    // Dừng request CDN đang treo; ảnh Blob ổn định sẽ được gắn lại bởi tiến
-    // trình nền mà không làm thay đổi kích thước khung hiện tại.
-    if (image.dataset.loadSequence === sequence) image.removeAttribute('src');
+    // Stop only the pending replacement; the displayed image stays in place.
+    candidate.src = '';
   }, PRODUCT_IMAGE_TIMEOUT_MS);
-  if (image.complete && image.naturalWidth > 0) finish(true);
+  candidate.src = safe;
+  if (candidate.complete && candidate.naturalWidth > 0) finish(true);
 }
 
 function requestProductMedia(product = {}) {
