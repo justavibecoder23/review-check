@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import nodemailer from 'nodemailer';
+import { createEmailTransport } from './email-transport.mjs';
 import { isRedisConfigured, redisTransaction } from './redis-rest.mjs';
 
 const CONTACT_INBOX_KEY = 'realview:contact:v1:messages';
@@ -36,28 +36,13 @@ export async function saveContactMessage(input = {}, options = {}) {
 }
 
 export async function sendContactNotification(record, options = {}) {
-  const smtpUser = String(process.env.GMAIL_SMTP_USER || '').trim().toLowerCase();
-  const appPassword = String(process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '');
-  if (!smtpUser || !appPassword) return { delivered: false, reason: 'not_configured' };
-
   const recipient = 'realviewueh@gmail.com';
-  const createTransport = options.createTransportImpl || nodemailer.createTransport;
-  const transporter = createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    connectionTimeout: 6_000,
-    greetingTimeout: 6_000,
-    socketTimeout: 10_000,
-    auth: {
-      user: smtpUser,
-      pass: appPassword
-    },
-  });
+  const emailTransport = createEmailTransport(options);
+  if (!emailTransport) return { delivered: false, reason: 'not_configured' };
 
   const safeName = String(record.name || '').replace(/[\r\n]+/g, ' ').trim();
-  const info = await transporter.sendMail({
-    from: `RealView <${smtpUser}>`,
+  const info = await emailTransport.transporter.sendMail({
+    from: emailTransport.from,
     to: recipient,
     replyTo: record.email,
     subject: `Liên hệ mới từ ${safeName} qua RealView`,
@@ -68,4 +53,5 @@ export async function sendContactNotification(record, options = {}) {
 }
 
 export const contactStoreInternals = { CONTACT_INBOX_KEY, CONTACT_EMAILS_KEY, validateContact };
+
 
