@@ -88,21 +88,71 @@
 .analysis-elapsed small { margin-top: 2px; color: #77736d; font-size: 11px; font-weight: 750; }
 
 .analysis-progress-track {
+  --analysis-progress: 4%;
+  position: relative;
   height: 8px;
-  margin: 28px 0;
-  overflow: hidden;
+  margin: 72px 0 28px;
+  overflow: visible;
   border-radius: 999px;
   background: #ebe9e3;
 }
 
-.analysis-progress-track span {
+.analysis-progress-track > #analysis-progress-bar {
   width: 4%;
   height: 100%;
   display: block;
+  overflow: hidden;
   border-radius: inherit;
   background: linear-gradient(90deg, #e65200, var(--orange), #ffae76);
   box-shadow: 0 0 18px rgba(252, 120, 31, .35);
   transition: width .65s cubic-bezier(.22, 1, .36, 1);
+}
+
+.analysis-progress-mascot {
+  position: absolute;
+  z-index: 2;
+  bottom: 12px;
+  left: clamp(0px, calc(var(--analysis-progress) - 38px), calc(100% - 76px));
+  width: 76px;
+  height: 86px;
+  display: block;
+  pointer-events: none;
+  transition: left .65s cubic-bezier(.22, 1, .36, 1);
+}
+.analysis-progress-mascot-front,
+.analysis-progress-mascot-run {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  transition: opacity .1s linear;
+}
+.analysis-progress-mascot-front { opacity: 1; }
+.analysis-progress-mascot-front .realviewee-sprite { width: 100%; }
+.analysis-progress-mascot-run { height: 67px; opacity: 0; }
+.analysis-progress-mascot-run img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 10px rgba(35,25,18,.13));
+}
+.analysis-progress-mascot-step-b { opacity: 0; }
+.analysis-progress-mascot.is-moving .analysis-progress-mascot-front { opacity: 0; }
+.analysis-progress-mascot.is-moving .analysis-progress-mascot-run { opacity: 1; animation: realviewee-run-bob .42s ease-in-out infinite alternate; }
+.analysis-progress-mascot.is-moving .analysis-progress-mascot-step-a { animation: analysis-mascot-leg-cycle-a .65s steps(1, end) infinite; }
+.analysis-progress-mascot.is-moving .analysis-progress-mascot-step-b { animation: analysis-mascot-leg-cycle .65s steps(1, end) infinite; }
+
+@keyframes analysis-mascot-leg-cycle-a {
+  0%, 32.99%, 66%, 100% { opacity: 1; }
+  33%, 65.99% { opacity: 0; }
+}
+
+@keyframes analysis-mascot-leg-cycle {
+  0%, 32.99%, 66%, 100% { opacity: 0; }
+  33%, 65.99% { opacity: 1; }
 }
 
 .analysis-workspace {
@@ -253,6 +303,9 @@
   .analysis-progress-head { display: grid; gap: 16px; }
   .analysis-progress-head h1 { font-size: 30px; letter-spacing: -1.2px; }
   .analysis-elapsed { width: max-content; min-width: 94px; grid-auto-flow: column; gap: 7px; align-items: baseline; justify-items: start; }
+  .analysis-progress-track { margin-top: 60px; }
+  .analysis-progress-mascot { bottom: 10px; left: clamp(0px, calc(var(--analysis-progress) - 30px), calc(100% - 60px)); width: 60px; height: 68px; }
+  .analysis-progress-mascot-run { height: 53px; }
   .analysis-product-preview { grid-template-columns: 90px minmax(0, 1fr); gap: 15px; min-height: 138px; padding: 14px; }
   .analysis-product-visual { width: 90px; border-radius: 15px; }
   .analysis-product-copy h2 { font-size: 20px; }
@@ -265,8 +318,12 @@
 @media (prefers-reduced-motion: reduce) {
   .analysis-product-visual.is-skeleton,
   .skeleton-line::after,
-  .analysis-stepper li.is-active > span { animation: none; }
-  .analysis-progress-track span,
+  .analysis-stepper li.is-active > span,
+  .analysis-progress-mascot-run,
+  .analysis-progress-mascot-step-a,
+  .analysis-progress-mascot-step-b { animation: none !important; }
+  .analysis-progress-track > #analysis-progress-bar,
+  .analysis-progress-mascot,
   .analysis-star-bars i,
   .analysis-stepper li { transition: none; }
 }

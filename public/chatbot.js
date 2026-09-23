@@ -15,7 +15,7 @@
   trigger.setAttribute('aria-expanded', 'false');
   trigger.setAttribute('aria-controls', 'realview-chatbot');
   trigger.setAttribute('aria-label', 'Mở Trợ lý RealView');
-  trigger.innerHTML = '<img class="chatbot-logo" src="/assets/realview-logo-v1.webp" alt="" width="128" height="75" aria-hidden="true"><span>Trợ lý</span><i aria-hidden="true"></i>';
+  trigger.innerHTML = '<span class="chatbot-trigger-mascot" aria-hidden="true"><span class="realviewee-sprite" data-mascot-state="happy"></span></span><span>Trợ lý</span><i aria-hidden="true"></i>';
   headerActions.append(trigger, contactButton);
 
   const panel = document.createElement('section');
@@ -71,6 +71,8 @@
   let resultReadiness = { resultId: '', state: 'idle', timer: null };
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const allowedMascotStates = new Set(['default', 'happy', 'curious', 'surprised', 'confident', 'excited', 'concerned', 'running']);
+  const mascotPatrolDuration = 15_600;
+  const mascotPatrolSteps = [[0, 'running'], [3_120, 'default'], [6_864, 'running'], [9_984, 'default'], [13_728, 'running']];
   let mascotTimers = [];
   let mascotBubbleTimer;
 
@@ -98,9 +100,14 @@
       return;
     }
     companion.classList.add('is-patrolling');
-    const steps = [[0, 'running'], [4300, 'default'], [6100, 'default'], [8400, 'default'], [10600, 'running'], [14200, 'default']];
-    steps.forEach(([delay, state]) => mascotTimers.push(window.setTimeout(() => setHomeMascotState(homeMascot, state), delay)));
-    mascotTimers.push(window.setTimeout(() => queueMascotCycle(homeMascot), 16800));
+    const patrolAnimation = companion.getAnimations?.().find((animation) => animation.animationName === 'realviewee-patrol');
+    const phase = Math.max(0, Number(patrolAnimation?.currentTime) || 0) % mascotPatrolDuration;
+    const activeStep = [...mascotPatrolSteps].reverse().find(([at]) => at <= phase) || mascotPatrolSteps[0];
+    setHomeMascotState(homeMascot, activeStep[1]);
+    mascotPatrolSteps.filter(([at]) => at > phase).forEach(([at, state]) => {
+      mascotTimers.push(window.setTimeout(() => setHomeMascotState(homeMascot, state), at - phase));
+    });
+    mascotTimers.push(window.setTimeout(() => queueMascotCycle(homeMascot), mascotPatrolDuration - phase + 20));
   }
 
   function createHomepageMascot() {
@@ -139,7 +146,7 @@
       queueMascotCycle(homeMascot);
     };
 
-    character.addEventListener('pointerenter', () => pauseForInteraction('default'));
+    character.addEventListener('pointerenter', () => pauseForInteraction(trigger.getAttribute('aria-expanded') === 'true' ? 'happy' : 'default'));
     character.addEventListener('pointermove', (event) => {
       const bounds = character.getBoundingClientRect();
       const ratio = bounds.width ? (event.clientX - bounds.left) / bounds.width : .5;
@@ -149,12 +156,17 @@
       if (speech.classList.contains('is-visible') || panel.classList.contains('is-open')) return;
       resumePatrol();
     });
-    character.addEventListener('focus', () => pauseForInteraction('default'));
+    character.addEventListener('focus', () => pauseForInteraction(trigger.getAttribute('aria-expanded') === 'true' ? 'happy' : 'default'));
     character.addEventListener('blur', () => {
       if (!panel.classList.contains('is-open')) resumePatrol();
     });
     character.addEventListener('click', () => {
       window.clearTimeout(mascotBubbleTimer);
+      if (trigger.getAttribute('aria-expanded') === 'true') {
+        speech.classList.remove('is-visible');
+        setOpen(false, false);
+        return;
+      }
       pauseForInteraction('happy');
       speech.classList.add('is-visible');
       mascotBubbleTimer = window.setTimeout(() => {
@@ -174,7 +186,7 @@
     button.type = 'button';
     button.setAttribute('aria-label', `${label}. Mở Chat with RealViewee`);
     button.innerHTML = `<span class="realviewee-sprite" data-mascot-state="${state}" aria-hidden="true"></span>`;
-    button.addEventListener('click', () => setOpen(true, false));
+    button.addEventListener('click', () => setOpen(trigger.getAttribute('aria-expanded') !== 'true', false));
     if (before) host.insertBefore(button, before);
     else host.append(button);
     return button;
@@ -183,11 +195,8 @@
   function createResultMascots() {
     if (!document.body.classList.contains('results-page')) return [];
     const mascots = [];
-    const progressHead = document.querySelector('.analysis-progress-head');
-    mascots.push(createStaticMascot(progressHead, 'curious', 'loading', 'RealViewee đang xem xét sản phẩm'));
-
-    const trustPanel = document.querySelector('#trust-card .trust-score-panel');
-    mascots.push(createStaticMascot(trustPanel, 'confident', 'trust', 'RealViewee tự tin với kết quả TrustScore'));
+    const trustCopy = document.querySelector('#trust-card .trust-copy');
+    mascots.push(createStaticMascot(trustCopy, 'confident', 'trust', 'RealViewee tự tin với kết quả TrustScore', trustCopy?.querySelector('.trust-explanation-card')));
 
     const keptSummary = document.querySelector('#danh-gia-giu-lai > summary');
     mascots.push(createStaticMascot(keptSummary, 'surprised', 'kept', 'RealViewee bất ngờ với các đánh giá đáng tham khảo', keptSummary?.querySelector('.accordion-count')));
@@ -308,6 +317,7 @@
       document.body.classList.add('chatbot-open');
       if (mascot?.companion) {
         clearMascotCycle();
+        mascot.stage.classList.add('is-chat-open');
         mascot.companion.classList.add('is-chat-open');
         mascot.speech.classList.remove('is-visible');
         setHomeMascotState(mascot, 'happy');
@@ -319,9 +329,15 @@
       trigger.setAttribute('aria-label', 'Mở Trợ lý RealView');
       document.body.classList.remove('chatbot-open');
       if (mascot?.companion) {
+        clearMascotCycle();
+        mascot.stage.classList.remove('is-chat-open');
         mascot.companion.classList.remove('is-chat-open');
+        mascot.companion.classList.add('is-interacting');
         setHomeMascotState(mascot, 'default');
-        queueMascotCycle(mascot);
+        mascotTimers.push(window.setTimeout(() => {
+          mascot.companion.classList.remove('is-interacting');
+          queueMascotCycle(mascot);
+        }, 240));
       }
       window.setTimeout(() => {
         if (!panel.classList.contains('is-open')) panel.hidden = true;

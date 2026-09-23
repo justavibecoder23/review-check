@@ -1322,10 +1322,16 @@ main .contact-note { font-size: 13px; }
   .results-empty h1 { font-size: 40px; }
 }
 
+.guest-quota-status { margin: 18px 0 0; color: #63635f; font-size: 13px; font-weight: 650; }
+.guest-quota-status:empty { display: none; }
+.hero-copy > .guest-quota-status:not(:empty) ~ .supported { margin-top: 18px; }
+
 /* Mobile refinements must follow the later readability rules above. */
 @media (max-width: 700px) {
   main .hero-description { font-size: 15px; line-height: 1.58; }
   main .supported { font-size: clamp(10px, 2.8vw, 11px); }
+  .guest-quota-status { margin-top: 14px; }
+  .hero-copy > .guest-quota-status:not(:empty) ~ .supported { margin-top: 14px; }
   .main-nav { top: calc(100% + 6px); right: 0; left: 0; border-radius: 16px; }
   .main-nav a,
   .main-nav .nav-link,
@@ -1370,5 +1376,3 @@ main .contact-note { font-size: 13px; }
   .hero-copy { padding-top: 16px; }
   .url-form { border-radius: 19px; }
 }
-.guest-quota-status { margin: 9px 0 0; color: #63635f; font-size: 13px; font-weight: 650; }
-.guest-quota-status:empty { display: none; }

@@ -597,6 +597,7 @@ function renderResult(data) {
 const progressPanel = document.querySelector('#analysis-progress');
 const progressTrack = progressPanel?.querySelector('.analysis-progress-track');
 const progressBar = document.querySelector('#analysis-progress-bar');
+const progressMascot = progressTrack?.querySelector('.analysis-progress-mascot');
 const progressMessage = document.querySelector('#analysis-progress-message');
 const elapsedTime = document.querySelector('#analysis-elapsed-time');
 const slowNote = document.querySelector('#analysis-slow-note');
@@ -616,10 +617,30 @@ let productMetaReceived = false;
 let progressProduct = {};
 let progressImageUrl = '';
 let analysisGeneration = 0;
+let progressMascotStopTimer;
+
+function stopProgressMascot() {
+  window.clearTimeout(progressMascotStopTimer);
+  progressMascot?.classList.remove('is-moving');
+}
+
+progressMascot?.addEventListener('transitionend', (event) => {
+  if (event.propertyName === 'left') stopProgressMascot();
+});
 
 function setProgress(percent) {
   const value = clamp(percent, 0, 100);
+  const previous = Number(progressTrack?.dataset.progressValue ?? progressTrack?.getAttribute('aria-valuenow') ?? value);
+  if (progressMascot && Math.abs(value - previous) > .01) {
+    progressMascot.classList.add('is-moving');
+    window.clearTimeout(progressMascotStopTimer);
+    progressMascotStopTimer = window.setTimeout(stopProgressMascot, 760);
+  }
   if (progressBar) progressBar.style.width = `${value}%`;
+  if (progressTrack) {
+    progressTrack.dataset.progressValue = String(value);
+    progressTrack.style.setProperty('--analysis-progress', `${value}%`);
+  }
   progressTrack?.setAttribute('aria-valuenow', String(Math.round(value)));
 }
 
@@ -752,12 +773,6 @@ async function readAnalysisStream(url) {
     }
     if (!dataLines.length) return;
     const payload = JSON.parse(dataLines.join('\n'));
-    if (eventName === 'ready') {
-      const quota = document.querySelector('#analysis-guest-quota');
-      if (quota) quota.textContent = payload.remainingGuestQuota === null
-        ? 'Đã đăng nhập · phân tích không giới hạn số lượt'
-        : `Còn ${payload.remainingGuestQuota}/${payload.guestQuotaLimit || 3} lượt dùng thử sau yêu cầu này`;
-    }
     if (eventName === 'progress') handleProgressEvent(payload);
     if (eventName === 'product_meta') renderProgressProduct(payload);
     if (eventName === 'reviews_sample') renderProgressSample(payload);
