@@ -34,6 +34,17 @@ test('cửa sổ tài khoản chỉ đóng bằng nút X', async () => {
   assert.match(auth, /data-auth-close/);
 });
 
+test('form đăng ký có lựa chọn email marketing riêng và thông báo không làm gián đoạn trạng thái đăng nhập', async () => {
+  const auth = await readFile(new URL('../public/auth.js', import.meta.url), 'utf8');
+  const css = await readFile(new URL('../public/auth.css', import.meta.url), 'utf8');
+  assert.match(auth, /name="emailMarketingConsent" type="checkbox"/);
+  assert.match(auth, /Đồng ý nhận email marketing từ RealView \(không bắt buộc\)/);
+  assert.match(auth, /if \(action === 'login'\) showOfflineConsentNotice\(currentUser\)/);
+  assert.match(auth, /try \{\s*if \(sessionStorage\.getItem\('realview-offline-consent-notice'\)\) return;\s*sessionStorage\.setItem\('realview-offline-consent-notice', 'shown'\);\s*\} catch \{\s*return;\s*\}/);
+  assert.match(css, /\.account-consent-option/);
+  assert.match(css, /\.account-consent-toast/);
+});
+
 test('các nút tiện ích trên header desktop có cùng kích thước', async () => {
   const css = await readFile(new URL('../public/auth.css', import.meta.url), 'utf8');
   assert.match(css, /\.header-utilities \.header-actions \.chatbot-trigger/);

@@ -131,6 +131,45 @@ test('đăng ký lưu email riêng, mật khẩu băm và đăng nhập bằng u
   }
 });
 
+test('lựa chọn email marketing được lưu riêng và tài khoản cũ dùng trạng thái đã đồng ý ngoại tuyến', async () => {
+  const previousUrl = process.env.UPSTASH_REDIS_REST_URL;
+  const previousToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'test-token';
+  const mock = redisMock();
+  try {
+    const optedIn = await registerAccount({
+      email: 'opted-in@example.com', username: 'OptedIn_01', password: 'mat-khau-an-toan', emailMarketingConsent: true
+    }, { fetchImpl: mock.fetchImpl });
+    assert.equal(optedIn.emailMarketingConsent.status, 'subscribed');
+    assert.equal(optedIn.emailMarketingConsent.source, 'registration_form');
+    assert.ok(optedIn.emailMarketingConsent.consentedAt);
+
+    const optedOut = await registerAccount({
+      email: 'opted-out@example.com', username: 'OptedOut_01', password: 'mat-khau-an-toan'
+    }, { fetchImpl: mock.fetchImpl });
+    assert.deepEqual(optedOut.emailMarketingConsent, {
+      status: 'not_subscribed', source: 'registration_form', consentedAt: null
+    });
+
+    const userKey = `realview:account:v1:user:${optedOut.id}`;
+    const legacyRecord = JSON.parse(mock.strings.get(userKey));
+    delete legacyRecord.emailMarketingConsent;
+    mock.strings.set(userKey, JSON.stringify(legacyRecord));
+    const session = await createAccountSession(optedOut, { fetchImpl: mock.fetchImpl });
+    const legacy = await getAccountFromSession(session.token, { fetchImpl: mock.fetchImpl });
+    assert.deepEqual(legacy.emailMarketingConsent, {
+      status: 'subscribed', source: 'offline', consentedAt: null
+    });
+    assert.deepEqual(JSON.parse(mock.strings.get(userKey)).emailMarketingConsent, legacy.emailMarketingConsent);
+  } finally {
+    if (previousUrl === undefined) delete process.env.UPSTASH_REDIS_REST_URL;
+    else process.env.UPSTASH_REDIS_REST_URL = previousUrl;
+    if (previousToken === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    else process.env.UPSTASH_REDIS_REST_TOKEN = previousToken;
+  }
+});
+
 test('mã xác minh đặt lại mật khẩu chỉ dùng một lần và mật khẩu mới vẫn được băm', async () => {
   const previousUrl = process.env.UPSTASH_REDIS_REST_URL;
   const previousToken = process.env.UPSTASH_REDIS_REST_TOKEN;

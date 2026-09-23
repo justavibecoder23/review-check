@@ -86,6 +86,9 @@
 .account-popover span { color: #8a8a82; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; }
 .account-popover strong { font-size: 15px; }
 .account-popover small { overflow: hidden; color: #686862; font-size: 11px; text-overflow: ellipsis; }
+.account-email-preference { margin: -3px 0 12px; padding: 10px; display: grid; gap: 4px; border-radius: 11px; background: #fff3e9; }
+.account-email-preference strong { font-size: 11px; }
+.account-email-preference span { color: #775037; font-size: 11px; }
 .account-popover .account-admin-link { min-height: 48px; margin-bottom: 7px; padding: 8px 10px; display: grid; grid-template-columns: 27px minmax(0, 1fr); align-items: center; gap: 9px; border: 1px solid rgba(31,143,96,.2); border-radius: 11px; background: #edf8f2; color: #176f4b; text-decoration: none; }
 .account-popover .account-admin-link:hover { border-color: rgba(31,143,96,.42); background: #e4f5ec; }
 .account-popover .account-admin-link:focus-visible { outline: 3px solid rgba(31,143,96,.25); outline-offset: 2px; }
@@ -208,6 +211,15 @@
 .account-form input:focus { border-color: var(--orange); outline: 3px solid rgba(252,120,31,.16); }
 .account-code-input { letter-spacing: .45em; text-align: center; font-size: 22px !important; font-weight: 850; }
 .account-form-help { margin: -2px 0 0; color: #777770; font-size: 11px; line-height: 1.5; }
+.account-form .account-consent-option { grid-template-columns: 18px minmax(0, 1fr); align-items: start; gap: 10px; padding: 12px; border: 1px solid rgba(168,69,4,.2); border-radius: 13px; background: #fff7f0; cursor: pointer; }
+.account-consent-option > input { width: 17px; height: 17px; min-height: 17px; margin: 2px 0 0; padding: 0; accent-color: var(--orange-dark); }
+.account-consent-option > span { display: grid; gap: 5px; }
+.account-consent-option strong { font-size: 12px; line-height: 1.35; }
+.account-consent-option small { color: #777770; font-size: 11px; font-weight: 450; line-height: 1.45; }
+.account-consent-toast { position: fixed; right: 22px; bottom: 22px; z-index: 1000; width: min(420px, calc(100vw - 32px)); padding: 16px 48px 16px 17px; border: 1px solid rgba(168,69,4,.25); border-left: 4px solid var(--orange); border-radius: 16px; background: #fffaf5; color: var(--ink); box-shadow: 0 18px 48px rgba(22,22,22,.2); }
+.account-consent-toast strong { display: block; font-size: 13px; }
+.account-consent-toast p { margin: 5px 0 0; color: #686862; font-size: 12px; line-height: 1.45; }
+.account-consent-toast button { position: absolute; top: 8px; right: 10px; width: 30px; height: 30px; border: 0; border-radius: 50%; background: transparent; color: #686862; font-size: 21px; cursor: pointer; }
 .account-form-error { margin: 0; padding: 10px 12px; border-radius: 10px; background: #fae3df; color: #982f25; font-size: 12px; line-height: 1.45; }
 .account-form-error[hidden] { display: none; }
 .account-submit {
