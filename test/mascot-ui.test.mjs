@@ -69,6 +69,9 @@ test('chỉ triển khai các biểu cảm đã duyệt và khung chạy, không
   assert.doesNotMatch(styles, /thinking/i);
   assert.match(styles, /data-mascot-state="default"[^}]*sprite-v1\.png/);
   assert.match(chatbot, /trustCopy, 'confident', 'trust'/);
+  assert.match(styles, /\.trust-copy \{ position: relative; \}/);
+  assert.doesNotMatch(styles, /\.trust-copy \{[^}]*padding-right:/);
+  assert.match(styles, /\.realviewee-static--trust \{ --static-mascot-width: 100px; position: absolute; top: 18px; right: 0; \}/);
   assert.match(chatbot, /keptSummary, 'surprised', 'kept'/);
   assert.match(chatbot, /excludedSummary, 'concerned', 'excluded'/);
   assert.match(chatbot, /counterpartHeading, 'excited', 'counterpart'/);

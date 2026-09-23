@@ -169,8 +169,8 @@
 }
 .realviewee-static:hover { transform: translateY(-3px); filter: drop-shadow(0 13px 15px rgba(252,120,31,.2)); }
 .realviewee-static:focus-visible { outline: 3px solid rgba(252,120,31,.42); outline-offset: 3px; }
-.trust-copy { position: relative; padding-right: 128px; }
-.realviewee-static--trust { --static-mascot-width: 112px; position: absolute; top: 18px; right: 0; }
+.trust-copy { position: relative; }
+.realviewee-static--trust { --static-mascot-width: 100px; position: absolute; top: 18px; right: 0; }
 #danh-gia-giu-lai > summary,
 #danh-gia-da-loai > summary { grid-template-columns: 54px minmax(0, 1fr) 82px auto 42px; }
 .realviewee-static--kept,
@@ -294,8 +294,7 @@
 }
 
 @media (max-width: 760px) {
-  .trust-copy { padding-right: 0; }
-  .realviewee-static--trust { --static-mascot-width: 84px; position: static; margin: 14px auto 0; }
+  .realviewee-static--trust { --static-mascot-width: 78px; position: static; margin: 14px auto 0; }
   #danh-gia-giu-lai > summary,
   #danh-gia-da-loai > summary { grid-template-columns: 48px minmax(0, 1fr) 68px 34px; }
   .realviewee-static--kept,
@@ -326,7 +325,7 @@
   }
   .realviewee-stage--home { height: 136px; margin-top: 16px; }
   .realviewee-speech { bottom: calc(100% - 14px); left: -14px; max-width: 168px; padding: 8px 10px; font-size: 11px; }
-  .realviewee-static--trust { --static-mascot-width: 76px; }
+  .realviewee-static--trust { --static-mascot-width: 70px; }
   #danh-gia-giu-lai > summary,
   #danh-gia-da-loai > summary { grid-template-columns: 42px minmax(0, 1fr) 58px 32px; gap: 9px; }
   .realviewee-static--kept,
