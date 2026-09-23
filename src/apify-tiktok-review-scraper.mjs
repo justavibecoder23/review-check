@@ -9,9 +9,12 @@ import {
   TIKTOK_DEFAULT_REVIEW_LIMIT
 } from './apify-tiktok-runtime.mjs';
 import { assertTikTokCircuitClosed, recordTikTokActorHealth } from './apify-tiktok-health.mjs';
+import { MINIMUM_REVIEWS_FOR_ANALYSIS } from './analysis-eligibility.mjs';
 
 const STAR_FILTERS = Object.freeze(['5_star', '4_star', '3_star', '2_star', '1_star']);
 const REVIEWS_PER_STAR = TIKTOK_DEFAULT_REVIEW_LIMIT / STAR_FILTERS.length;
+const APIFY_TERMINAL_RUN_STATUSES = new Set(['SUCCEEDED', 'FAILED', 'TIMED-OUT', 'ABORTED']);
+const DEFAULT_PROGRESSIVE_POLL_INTERVAL_MS = 850;
 
 function actorPath(actorId) {
   return encodeURIComponent(String(actorId).trim().replace('/', '~'));
@@ -79,7 +82,60 @@ function retryAfterMs(response) {
   return Number.isFinite(timestamp) ? Math.max(1_000, timestamp - Date.now()) : 60_000;
 }
 
-async function runActor({ productId, productUrl, reviewLimit, reviewFilter, credential, fetchImpl, runtime, timeoutMs, signal }) {
+function apifyRunData(body) {
+  return body?.data && typeof body.data === 'object' ? body.data : body;
+}
+
+function mergeProductMeta(current = {}, next = {}) {
+  return {
+    ...current,
+    ...(!current.title && next.title ? { title: next.title } : {}),
+    ...(!current.image && next.image ? { image: next.image } : {}),
+    ...(!current.price && next.price ? { price: next.price } : {}),
+    ...(!current.rating && next.rating ? { rating: next.rating } : {})
+  };
+}
+
+function logTikTokCollection(event, payload = {}) {
+  if (!process.env.VERCEL) return;
+  console.log(JSON.stringify({ level: 'info', event, ...payload }));
+}
+
+function delay(ms, signal) {
+  if (!ms) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const cleanup = () => signal?.removeEventListener?.('abort', abort);
+    const timer = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+    const abort = () => {
+      clearTimeout(timer);
+      cleanup();
+      reject(Object.assign(new Error('Đã dừng chờ Actor TikTok.'), { name: 'AbortError' }));
+    };
+    if (signal?.aborted) return abort();
+    signal?.addEventListener?.('abort', abort, { once: true });
+  });
+}
+
+async function apifyRequest(fetchImpl, url, init, deadline, signal) {
+  const remaining = Math.max(1, deadline - Date.now());
+  const response = await fetchImpl(url, {
+    ...init,
+    signal: timeoutAbortSignal(remaining, signal)
+  });
+  if (!response.ok) {
+    const detail = compactErrorDetail(await response.text());
+    throw Object.assign(new Error(`Apify trả về HTTP ${response.status}${detail ? `: ${detail}` : ''}`), {
+      statusCode: response.status,
+      retryAfterMs: retryAfterMs(response)
+    });
+  }
+  return response;
+}
+
+async function runActorSync({ productId, productUrl, reviewLimit, reviewFilter, credential, fetchImpl, runtime, timeoutMs, signal }) {
   const startedAt = performance.now();
   const adapter = tikTokActorAdapter(runtime);
   const endpoint = `https://api.apify.com/v2/acts/${actorPath(runtime.actorId)}/run-sync-get-dataset-items`;
@@ -148,6 +204,240 @@ async function runActor({ productId, productUrl, reviewLimit, reviewFilter, cred
   }
 }
 
+async function runActorProgressive({
+  productId,
+  productUrl,
+  reviewLimit,
+  reviewFilter,
+  credential,
+  fetchImpl,
+  runtime,
+  timeoutMs,
+  signal,
+  progress,
+  pollIntervalMs = DEFAULT_PROGRESSIVE_POLL_INTERVAL_MS,
+  sleepImpl = delay
+}) {
+  const startedAt = performance.now();
+  const wallStartedAt = Date.now();
+  const deadline = wallStartedAt + timeoutMs;
+  const adapter = tikTokActorAdapter(runtime);
+  const actorEndpoint = `https://api.apify.com/v2/acts/${actorPath(runtime.actorId)}`;
+  let actorRunId = null;
+  let datasetId = null;
+  let statusCode = null;
+  let runStatus = 'READY';
+  let datasetPollCount = 0;
+  let rawDatasetItemCount = 0;
+  let productMeta = {};
+  let firstReviewAt = null;
+  let targetReachedAt = null;
+  let completionReason = null;
+  let cacheable = false;
+  let lastReportedCount = -1;
+  const seen = new Map();
+
+  const readDataset = async () => {
+    if (!datasetId) return;
+    const datasetResponse = await apifyRequest(fetchImpl,
+      `https://api.apify.com/v2/datasets/${encodeURIComponent(datasetId)}/items?clean=true&limit=250000`,
+      { headers: { authorization: `Bearer ${credential.token}` } }, deadline, signal);
+    const datasetItems = await datasetResponse.json();
+    if (!Array.isArray(datasetItems)) throw new Error('Apify không trả về dataset TikTok hợp lệ.');
+    datasetPollCount += 1;
+    rawDatasetItemCount = Math.max(rawDatasetItemCount, datasetItems.length);
+    productMeta = mergeProductMeta(productMeta, adapter.extractProductMeta(datasetItems));
+    for (const item of adapter.extractItems(datasetItems, productId)) {
+      seen.set(reviewKey(item), item);
+    }
+    if (seen.size && firstReviewAt === null) {
+      firstReviewAt = Date.now();
+      logTikTokCollection('tiktok_dataset_first_item', {
+        productId: String(productId), actorRunId, timeToFirstReviewMs: firstReviewAt - wallStartedAt
+      });
+    }
+    if (seen.size !== lastReportedCount) {
+      lastReportedCount = seen.size;
+      const percent = 14 + Math.min(44, Math.round((seen.size / Math.max(1, reviewLimit)) * 44));
+      progress?.('collecting', percent, `Đã nhận ${Math.min(seen.size, reviewLimit)}/${reviewLimit} review TikTok...`);
+      logTikTokCollection('tiktok_dataset_progress', {
+        productId: String(productId), actorRunId, datasetPollCount,
+        rawDatasetItemCount, uniqueReviewCount: seen.size,
+        elapsedMs: Date.now() - wallStartedAt
+      });
+    }
+  };
+
+  try {
+    const startResponse = await apifyRequest(fetchImpl, `${actorEndpoint}/runs?waitForFinish=0`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${credential.token}`,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify(adapter.buildInput({ productId, productUrl, reviewLimit, reviewFilter, runtime }))
+    }, deadline, signal);
+    statusCode = startResponse.status || 201;
+    let run = apifyRunData(await startResponse.json());
+    actorRunId = String(run?.id || '') || null;
+    datasetId = String(run?.defaultDatasetId || '') || null;
+    runStatus = String(run?.status || 'READY').toUpperCase();
+    if (!actorRunId) throw new Error('Apify không trả về mã run TikTok để theo dõi tiến độ.');
+    logTikTokCollection('tiktok_actor_started', {
+      productId: String(productId), actorRunId, datasetId, requested: reviewLimit
+    });
+
+    while (Date.now() < deadline) {
+      await readDataset();
+      if (seen.size >= reviewLimit) {
+        targetReachedAt = Date.now();
+        completionReason = 'target-reached';
+        cacheable = true;
+        break;
+      }
+
+      const statusResponse = await apifyRequest(fetchImpl,
+        `https://api.apify.com/v2/actor-runs/${encodeURIComponent(actorRunId)}`,
+        { headers: { authorization: `Bearer ${credential.token}` } }, deadline, signal);
+      run = apifyRunData(await statusResponse.json());
+      runStatus = String(run?.status || runStatus).toUpperCase();
+      datasetId = String(run?.defaultDatasetId || datasetId || '') || null;
+      if (APIFY_TERMINAL_RUN_STATUSES.has(runStatus)) {
+        // The run status and dataset storage are separate writes. Re-read once
+        // after the terminal status so the last review page is not missed.
+        await readDataset();
+        completionReason = runStatus === 'SUCCEEDED' ? 'actor-succeeded' : `actor-${runStatus.toLowerCase()}`;
+        cacheable = runStatus === 'SUCCEEDED';
+        break;
+      }
+      await sleepImpl(Math.max(0, Number(pollIntervalMs) || 0), signal);
+    }
+
+    if (!completionReason) {
+      completionReason = 'timeout-partial';
+      runStatus = 'TIMED-OUT';
+      cacheable = false;
+    }
+
+    const items = [...seen.values()];
+    const expectedRating = ratingFromFilter(reviewFilter);
+    const matching = expectedRating === null
+      ? items
+      : items.filter((item) => Number(item?.review_rating) === expectedRating);
+    const writtenCount = matching.filter((item) => String(item?.review_text || '').trim()).length;
+    const partialUsable = writtenCount >= MINIMUM_REVIEWS_FOR_ANALYSIS;
+    const successful = completionReason === 'target-reached' || runStatus === 'SUCCEEDED' || partialUsable;
+    cacheable = cacheable && writtenCount >= MINIMUM_REVIEWS_FOR_ANALYSIS;
+    logTikTokCollection('tiktok_collection_complete', {
+      productId: String(productId), actorRunId, runStatus, completionReason,
+      requested: reviewLimit, rawDatasetItemCount, uniqueReviewCount: items.length,
+      writtenReviewCount: writtenCount, datasetPollCount, cacheable,
+      timeToFirstReviewMs: firstReviewAt ? firstReviewAt - wallStartedAt : null,
+      timeToTargetMs: targetReachedAt ? targetReachedAt - wallStartedAt : null,
+      durationMs: Date.now() - wallStartedAt
+    });
+    if (!successful) {
+      throw Object.assign(new Error(`Apify run TikTok kết thúc với trạng thái ${runStatus}.`), {
+        statusCode: 502,
+        failureClass: runStatus === 'TIMED-OUT' ? 'timeout' : 'actor_run_failed'
+      });
+    }
+    return {
+      ok: true,
+      credentialId: credential.id,
+      credentialLabel: credential.label,
+      runCount: credential.runCount ?? null,
+      filter: reviewFilter,
+      requested: reviewLimit,
+      billedReviewCount: items.length,
+      droppedWrongRating: items.length - matching.length,
+      reviewCount: writtenCount,
+      latencyMs: Math.round(performance.now() - startedAt),
+      actorRunId,
+      actorStarted: true,
+      statusCode,
+      failureClass: null,
+      productMeta,
+      runStatus,
+      completionReason,
+      cacheable,
+      datasetPollCount,
+      rawDatasetItemCount,
+      timeToFirstReviewMs: firstReviewAt ? firstReviewAt - wallStartedAt : null,
+      timeToTargetMs: targetReachedAt ? targetReachedAt - wallStartedAt : null,
+      items: matching
+    };
+  } catch (error) {
+    const items = [...seen.values()];
+    const expectedRating = ratingFromFilter(reviewFilter);
+    const matching = expectedRating === null
+      ? items
+      : items.filter((item) => Number(item?.review_rating) === expectedRating);
+    const writtenCount = matching.filter((item) => String(item?.review_text || '').trim()).length;
+    if (writtenCount >= MINIMUM_REVIEWS_FOR_ANALYSIS) {
+      completionReason = completionReason || 'request-failed-partial';
+      logTikTokCollection('tiktok_collection_complete', {
+        productId: String(productId), actorRunId, runStatus, completionReason,
+        requested: reviewLimit, rawDatasetItemCount, uniqueReviewCount: items.length,
+        writtenReviewCount: writtenCount, datasetPollCount, cacheable: false,
+        timeToFirstReviewMs: firstReviewAt ? firstReviewAt - wallStartedAt : null,
+        timeToTargetMs: null,
+        durationMs: Date.now() - wallStartedAt,
+        partialError: compactErrorDetail(error?.message)
+      });
+      return {
+        ok: true,
+        credentialId: credential.id,
+        credentialLabel: credential.label,
+        runCount: credential.runCount ?? null,
+        filter: reviewFilter,
+        requested: reviewLimit,
+        billedReviewCount: items.length,
+        droppedWrongRating: items.length - matching.length,
+        reviewCount: writtenCount,
+        latencyMs: Math.round(performance.now() - startedAt),
+        actorRunId,
+        actorStarted: Boolean(actorRunId),
+        statusCode: error?.statusCode || statusCode,
+        failureClass: null,
+        productMeta,
+        runStatus,
+        completionReason,
+        cacheable: false,
+        datasetPollCount,
+        rawDatasetItemCount,
+        timeToFirstReviewMs: firstReviewAt ? firstReviewAt - wallStartedAt : null,
+        timeToTargetMs: null,
+        items: matching
+      };
+    }
+    return {
+      ok: false,
+      credentialId: credential.id,
+      credentialLabel: credential.label,
+      runCount: credential.runCount ?? null,
+      filter: reviewFilter,
+      requested: reviewLimit,
+      billedReviewCount: items.length,
+      reviewCount: writtenCount,
+      latencyMs: Math.round(performance.now() - startedAt),
+      statusCode: error?.statusCode || statusCode,
+      failureClass: error?.failureClass || classifyApifyFailure(error?.statusCode, error),
+      retryAfterMs: error?.retryAfterMs || 60_000,
+      actorRunId,
+      actorStarted: Boolean(actorRunId),
+      error: error?.message || 'Không lấy được reviews TikTok.',
+      productMeta,
+      runStatus,
+      completionReason: completionReason || 'request-failed',
+      cacheable: false,
+      datasetPollCount,
+      rawDatasetItemCount,
+      items: []
+    };
+  }
+}
+
 async function allocate(runtime, options) {
   if (options.allocation) return {
     allocation: options.allocation,
@@ -198,20 +488,26 @@ export async function collectTikTokReviews(productId, options = {}) {
     ? TIKTOK_DEFAULT_REVIEW_LIMIT
     : runtime.reviewLimit;
   const startedAt = performance.now();
-  const runs = await Promise.all(allocation.credentials.map((credential, index) => runActor({
-    productId,
-    productUrl: options.productUrl,
-    reviewLimit: Math.min(
-      credential.plannedReviews || (strategy === 'parallel-star-filters' ? REVIEWS_PER_STAR : targetMaximum),
-      targetMaximum
-    ),
-    reviewFilter: strategy === 'parallel-star-filters' ? STAR_FILTERS[index] : 'all',
-    credential,
-    fetchImpl,
-    runtime,
-    timeoutMs,
-    signal: options.signal
-  })));
+  const runs = await Promise.all(allocation.credentials.map((credential, index) => {
+    const runner = runtime.temporary ? runActorProgressive : runActorSync;
+    return runner({
+      productId,
+      productUrl: options.productUrl,
+      reviewLimit: Math.min(
+        credential.plannedReviews || (strategy === 'parallel-star-filters' ? REVIEWS_PER_STAR : targetMaximum),
+        targetMaximum
+      ),
+      reviewFilter: strategy === 'parallel-star-filters' ? STAR_FILTERS[index] : 'all',
+      credential,
+      fetchImpl,
+      runtime,
+      timeoutMs,
+      signal: options.signal,
+      progress,
+      pollIntervalMs: options.pollIntervalMs,
+      sleepImpl: options.sleepImpl
+    });
+  }));
   const hasInfrastructureFailure = runs.some((run) => ['timeout', 'upstream_service_error', 'unknown_error'].includes(run.failureClass));
   const healthOutcome = runs.some((run) => run.ok) ? 'success' : hasInfrastructureFailure ? 'failure' : 'neutral';
   await (options.recordHealthImpl || recordTikTokActorHealth)(runtime.actorId, healthOutcome, { fetchImpl: options.redisFetchImpl });
@@ -331,6 +627,8 @@ export async function collectTikTokReviews(productId, options = {}) {
       perStarLimit: strategy === 'parallel-star-filters' ? REVIEWS_PER_STAR : null,
       targetMaximum,
       returned: deduplicated.length,
+      cacheable: successful.every((run) => run.cacheable !== false),
+      completionReason: successful.length === 1 ? successful[0].completionReason || 'sync-complete' : 'parallel-sync-complete',
       duplicateCount,
       emptyCommentCount,
       wrongRatingCount,

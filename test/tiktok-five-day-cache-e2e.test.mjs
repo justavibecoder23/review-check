@@ -100,7 +100,7 @@ function createRedisFake(initial = {}) {
   };
 }
 
-function createHarness(initialRedis = {}, initialBlobs = {}) {
+function createHarness(initialRedis = {}, initialBlobs = {}, options = {}) {
   const redis = createRedisFake(initialRedis);
   const blobs = new Map(Object.entries(initialBlobs));
   let actorCalls = 0;
@@ -119,6 +119,7 @@ function createHarness(initialRedis = {}, initialBlobs = {}) {
         strategy: 'single-unfiltered',
         targetMaximum: 100,
         returned: items.length,
+        ...(options.cacheable === undefined ? {} : { cacheable: options.cacheable }),
         ratingStrataRequired: false
       }
     };
@@ -360,4 +361,36 @@ test('mô phỏng 10 lượt từ link TikTok đến kết quả với cache nă
   });
 
   assert.equal(totalActorCalls, 4);
+});
+
+test('partial TikTok không tạo active cache 5 ngày dù dataset lịch sử vẫn được lưu', async (context) => {
+  const previous = {
+    vercel: process.env.VERCEL,
+    blob: process.env.BLOB_READ_WRITE_TOKEN,
+    redisUrl: process.env.UPSTASH_REDIS_REST_URL,
+    redisToken: process.env.UPSTASH_REDIS_REST_TOKEN
+  };
+  process.env.VERCEL = '1';
+  process.env.BLOB_READ_WRITE_TOKEN = 'blob-token';
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'redis-token';
+  context.after(() => {
+    for (const [key, value] of Object.entries({
+      VERCEL: previous.vercel,
+      BLOB_READ_WRITE_TOKEN: previous.blob,
+      UPSTASH_REDIS_REST_URL: previous.redisUrl,
+      UPSTASH_REDIS_REST_TOKEN: previous.redisToken
+    })) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+
+  const harness = createHarness({}, {}, { cacheable: false });
+  const result = await analyze(harness, { runId: 'partial-not-cacheable' });
+  assert.equal(result.source.type, 'live');
+  assert.equal(harness.actorCalls, 1);
+  assert.equal(harness.blobPutCalls, 1);
+  assert.equal(harness.redis.values.has(getTikTokCacheKey(PRODUCT_ID)), false);
+  assert.ok(result.warnings.some((warning) => warning.includes('không được dùng để tạo cache 5 ngày')));
 });

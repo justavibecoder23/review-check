@@ -237,12 +237,17 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
     if (!cached.saved) warnings.push(`Dataset Shopee đã lưu nhưng chưa tạo được cache index: ${cached.reason}.`);
   }
   if (product.platform === 'TikTok Shop' && source?.type === 'live'
+    && source?.collection?.cacheable !== false
     && dataset.saved && dataset.provider === 'vercel-blob-private') {
     const cached = await setCachedTikTokDataset(product.productId, dataset, dataset.rawDataset, {
       redisFetchImpl: options.redisFetchImpl,
       now: options.now
     }).catch((error) => ({ saved: false, reason: error?.message || 'UNKNOWN_CACHE_ERROR' }));
     if (!cached.saved) warnings.push(`Dataset TikTok đã lưu nhưng chưa tạo được cache index: ${cached.reason}.`);
+  }
+  if (product.platform === 'TikTok Shop' && source?.type === 'live'
+    && source?.collection?.cacheable === false) {
+    warnings.push('Lượt thu thập TikTok chưa kết thúc đầy đủ nên không được dùng để tạo cache 5 ngày.');
   }
   warnings.push(...labeling.warnings);
   progress('scoring', 91, 'Đang hoàn thiện kết quả...');
