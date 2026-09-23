@@ -98,8 +98,10 @@ test('metadata actor giữ category path để xác định ngành hàng', () =>
 test('TikTok dùng metadata cấp sản phẩm từ Actor khi trang sản phẩm bị chặn', async () => {
   const productId = '1732344645376247746';
   const actorImage = 'https://p16-oec-sg.ibyteimg.com/tos/product-cover.webp';
+  const metadataEvents = [];
   const result = await getReviews(`https://shop.tiktok.com/vn/pdp/op-lung-iphone-tpu/${productId}`, {
     env: { TIKTOK_RECENT_RAW_CACHE: 'false' },
+    onProductMeta: (metadata) => metadataEvents.push(metadata),
     fetchImpl: async () => ({
       ok: false,
       status: 403,
@@ -122,4 +124,8 @@ test('TikTok dùng metadata cấp sản phẩm từ Actor khi trang sản phẩm
 
   assert.equal(result.product.title, 'Ốp lưng iPhone TPU từ Actor');
   assert.equal(result.product.image, actorImage);
+  assert.ok(metadataEvents.length >= 2);
+  assert.equal(metadataEvents.at(0).image, undefined);
+  assert.equal(metadataEvents.at(-1).image, actorImage);
+  assert.equal(metadataEvents.at(-1).productId, productId);
 });

@@ -639,9 +639,18 @@ export async function getReviews(url, options = {}) {
   const productUrl = shopeeProduct?.canonicalUrl || tiktokProduct?.productUrl || parsed.href;
   const perStarLimit = platform === 'Shopee' ? getShopeeReviewsPerStar() : null;
   const reviewLimit = 100;
-  const emitProductMeta = (product) => {
+  const emitProductMeta = (product, stage = 'initial') => {
     if (typeof options.onProductMeta !== 'function') return;
     try { options.onProductMeta(product); } catch { /* UI progress must not break collection. */ }
+    if (process.env.VERCEL) console.log(JSON.stringify({
+      level: 'info',
+      event: 'product_meta_emitted',
+      platform,
+      productId: product?.productId || product?.itemId || null,
+      stage,
+      hasTitle: Boolean(product?.title),
+      hasImage: Boolean(product?.image)
+    }));
   };
 
   if (shopeeProduct?.wasShortened) {
@@ -823,6 +832,22 @@ export async function getReviews(url, options = {}) {
         options
       );
     }
+    const product = {
+      platform,
+      url: productUrl,
+      originalUrl: parsed.href,
+      ...productMeta,
+      ...(shopeeProduct ? {
+        shopId: shopeeProduct.shopId,
+        itemId: shopeeProduct.itemId,
+        resolvedFromShortLink: shopeeProduct.wasShortened
+      } : {}),
+      ...(tiktokProduct ? {
+        productId: tiktokProduct.productId,
+        resolvedFromShortLink: tiktokProduct.wasShortened
+      } : {})
+    };
+    emitProductMeta(product, 'collected');
     if (Array.isArray(collected.warnings)) warnings.push(...collected.warnings);
     if (platform === 'Shopee') {
       await recordShopeeServed({ redisFetchImpl: options.redisFetchImpl }).catch(() => null);
@@ -837,21 +862,7 @@ export async function getReviews(url, options = {}) {
         credential: collected.credential,
         usage: collected.usage
       },
-      product: {
-        platform,
-        url: productUrl,
-        originalUrl: parsed.href,
-        ...productMeta,
-        ...(shopeeProduct ? {
-          shopId: shopeeProduct.shopId,
-          itemId: shopeeProduct.itemId,
-          resolvedFromShortLink: shopeeProduct.wasShortened
-        } : {}),
-        ...(tiktokProduct ? {
-          productId: tiktokProduct.productId,
-          resolvedFromShortLink: tiktokProduct.wasShortened
-        } : {})
-      },
+      product,
       warnings
     };
   } catch (error) {

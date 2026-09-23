@@ -41,6 +41,8 @@ function safeImageUrl(value) {
 const PRODUCT_IMAGE_TIMEOUT_MS = 4_000;
 const PRODUCT_MEDIA_POLL_TIMEOUT_MS = 120_000;
 let productImageLoadSequence = 0;
+let productMediaRequestId = '';
+let productMediaRequest = null;
 
 function loadProductImage({ image, fallback, url, alt = '', skeletonTarget = null }) {
   if (!image || !fallback) return;
@@ -82,9 +84,20 @@ function loadProductImage({ image, fallback, url, alt = '', skeletonTarget = nul
   if (image.complete && image.naturalWidth > 0) finish(true);
 }
 
-async function refreshProductMediaInBackground(resultData, initialHistorySave) {
-  const product = resultData?.product || {};
+function requestProductMedia(product = {}) {
   if (!String(product.platform || '').toLowerCase().includes('tiktok') || !/^\d{8,25}$/.test(String(product.productId || ''))) return;
+  const productId = String(product.productId);
+  if (productMediaRequestId === productId && productMediaRequest) return productMediaRequest;
+  productMediaRequestId = productId;
+  productMediaRequest = pollProductMedia(product).then((mirrored) => {
+    // A later Actor update may contain a different, usable product image.
+    if (!mirrored && productMediaRequestId === productId) productMediaRequest = null;
+    return mirrored;
+  });
+  return productMediaRequest;
+}
+
+async function pollProductMedia(product) {
   const startedAt = Date.now();
   let response;
   try {
@@ -107,8 +120,13 @@ async function refreshProductMediaInBackground(resultData, initialHistorySave) {
     }
   }
   const mirrored = payload?.status === 'ready' ? payload.product : null;
+  return safeImageUrl(mirrored?.image) ? mirrored : null;
+}
+
+async function refreshProductMediaInBackground(resultData, initialHistorySave) {
+  const mirrored = await requestProductMedia(resultData?.product || {});
   const imageUrl = safeImageUrl(mirrored?.image);
-  if (!mirrored || !imageUrl) return;
+  if (!imageUrl) return;
   resultData.product = {
     ...resultData.product,
     ...(mirrored.title ? { title: mirrored.title } : {}),
@@ -579,6 +597,9 @@ let elapsedTimer;
 let analysisStartedAt;
 let analysisController;
 let productMetaReceived = false;
+let progressProduct = {};
+let progressImageUrl = '';
+let analysisGeneration = 0;
 
 function setProgress(percent) {
   const value = clamp(percent, 0, 100);
@@ -605,7 +626,13 @@ function updateElapsed() {
   if (seconds >= 45 && progressMessage) progressMessage.textContent = 'Vẫn đang xử lý những đánh giá cuối cùng. Bạn có thể giữ trang này mở.';
 }
 
-function renderProgressProduct(product = {}) {
+function renderProgressProduct(update = {}, { startMediaMirror = true } = {}) {
+  // Metadata from the page can be incomplete; Actor and Blob updates must not
+  // erase a title or image that a previous SSE event already supplied.
+  progressProduct = { ...progressProduct, ...Object.fromEntries(
+    Object.entries(update).filter(([, value]) => value !== '' && value !== null && value !== undefined)
+  ) };
+  const product = progressProduct;
   const title = String(product.title || '').trim();
   const platform = String(product.platform || '').trim();
   document.querySelector('#analysis-platform').textContent = platform || 'Đã nhận diện sản phẩm';
@@ -615,16 +642,31 @@ function renderProgressProduct(product = {}) {
   titleElement.classList.remove('skeleton-line', 'skeleton-line--title');
   const meta = [product.price, product.rating ? `${product.rating} sao trên sàn` : ''].filter(Boolean).join(' · ');
   document.querySelector('#analysis-product-meta').textContent = meta || 'Đã xác nhận đúng sản phẩm. Đang thu thập các đánh giá công khai.';
-  loadProductImage({
-    image: document.querySelector('#analysis-product-image'),
-    fallback: document.querySelector('#analysis-product-illustration'),
-    skeletonTarget: document.querySelector('#analysis-product-visual'),
-    url: product.image || product.imageUrl || product.thumbnail,
-    alt: `Ảnh ${title || 'sản phẩm đang phân tích'}`
-  });
+  const imageUrl = safeImageUrl(product.image || product.imageUrl || product.thumbnail);
+  const imageChanged = Boolean(imageUrl && imageUrl !== progressImageUrl);
+  if (imageChanged) {
+    progressImageUrl = imageUrl;
+    loadProductImage({
+      image: document.querySelector('#analysis-product-image'),
+      fallback: document.querySelector('#analysis-product-illustration'),
+      skeletonTarget: document.querySelector('#analysis-product-visual'),
+      url: imageUrl,
+      alt: `Ảnh ${title || 'sản phẩm đang phân tích'}`
+    });
+  }
+  if (startMediaMirror && imageChanged && !/\.public\.blob\.vercel-storage\.com(?:\/|$)/i.test(imageUrl)) {
+    const generation = analysisGeneration;
+    void Promise.resolve(requestProductMedia(product)).then((mirrored) => {
+      if (generation === analysisGeneration && mirrored?.image) {
+        renderProgressProduct(mirrored, { startMediaMirror: false });
+      }
+    }).catch(() => {});
+  }
   productMetaReceived = true;
-  setAnalysisStep(1);
-  setProgress(28);
+  if (activeStepIndex < 2) {
+    setAnalysisStep(1);
+    setProgress(28);
+  }
 }
 
 function renderProgressSample(sample = {}) {
@@ -735,11 +777,20 @@ async function readAnalysisStream(url) {
 }
 
 async function startProgressiveAnalysis(url) {
+  analysisGeneration += 1;
   const marketplace = window.realviewMarketplaceFromUrl?.(url) || 'unknown';
   window.realviewTrackEvent?.('analysis_start', { marketplace });
   activeAnalysisUrl = url;
   activeStepIndex = 0;
   productMetaReceived = false;
+  progressProduct = {};
+  progressImageUrl = '';
+  loadProductImage({
+    image: document.querySelector('#analysis-product-image'),
+    fallback: document.querySelector('#analysis-product-illustration'),
+    skeletonTarget: document.querySelector('#analysis-product-visual'),
+    url: ''
+  });
   content.classList.add('hidden');
   emptyState.classList.add('hidden');
   progressPanel?.classList.remove('hidden');
