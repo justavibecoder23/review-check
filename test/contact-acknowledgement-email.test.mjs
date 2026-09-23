@@ -153,7 +153,7 @@ test('email xác nhận liên hệ có logo, lời xác nhận, CTA và footer l
   assert.equal(content.subject, '[Tự động] Xác nhận yêu cầu liên hệ – RealView');
   assert.match(content.text, /Chào Nguyễn Văn A,/);
   assert.match(content.text, /Đội ngũ RealView đã nhận được nội dung/);
-  assert.match(content.html, /assets\/realview-logo-v1\.webp/);
+  assert.match(content.html, /assets\/email\/realview-logo-mark\.png/);
   assert.match(content.html, /assets\/email\/mascot-welcome-contact\.png/);
   assert.match(content.html, /Khám phá RealView/);
   assert.match(content.html, /THÔNG TIN &amp; KẾT NỐI/);

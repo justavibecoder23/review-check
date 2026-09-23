@@ -9,7 +9,7 @@ export const emailBrandingUrls = {
   facebook: 'https://www.facebook.com/profile.php?id=61594093477895',
   tiktok: 'https://www.tiktok.com/@realviewueh',
   threads: 'https://www.threads.com/@real.viewueh',
-  logo: `${REALVIEW_URL}/assets/realview-logo-v1.webp`,
+  logo: `${EMAIL_ASSET_URL}/realview-logo-mark.png`,
   mascotWelcome: `${EMAIL_ASSET_URL}/mascot-welcome-contact.png`,
   mascotVerification: `${EMAIL_ASSET_URL}/mascot-verification.png`
 };
