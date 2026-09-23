@@ -100,7 +100,12 @@ function publicUser(user) {
     id: user.id,
     username: user.username,
     email: user.email,
-    createdAt: user.createdAt
+    createdAt: user.createdAt,
+    emailMarketingConsent: user.emailMarketingConsent || {
+      status: 'subscribed',
+      source: 'offline',
+      consentedAt: null
+    }
   };
 }
 
@@ -123,7 +128,16 @@ async function readUser(userId, options = {}) {
   const serialized = await redisCommand(['GET', userKey(userId)], options);
   if (!serialized) return null;
   try {
-    return JSON.parse(serialized);
+    const user = JSON.parse(serialized);
+    if (!user.emailMarketingConsent) {
+      user.emailMarketingConsent = {
+        status: 'subscribed',
+        source: 'offline',
+        consentedAt: null
+      };
+      await redisCommand(['SET', userKey(userId), JSON.stringify(user)], options);
+    }
+    return user;
   } catch {
     return null;
   }
@@ -148,7 +162,10 @@ export async function registerAccount(input = {}, options = {}) {
     usernameNormalized: normalizedUsername,
     email: normalizedEmail,
     passwordHash: await hashPassword(password),
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    emailMarketingConsent: input.emailMarketingConsent === true
+      ? { status: 'subscribed', source: 'registration_form', consentedAt: new Date().toISOString() }
+      : { status: 'not_subscribed', source: 'registration_form', consentedAt: null }
   };
 
   try {

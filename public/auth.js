@@ -33,6 +33,7 @@ function accountControlsMarkup() {
       </button>
       <div class="account-popover" data-account-popover hidden>
         <div><span>Tài khoản RealView</span><strong>${escapeHtml(currentUser.username)}</strong><small>${escapeHtml(currentUser.email)}</small></div>
+        <p class="account-email-preference"><strong>Email cập nhật RealView</strong><span>${currentUser.emailMarketingConsent?.status === 'subscribed' ? 'Đã đồng ý nhận' : 'Chưa đăng ký nhận'}</span></p>
         ${currentBlogCapabilities?.managePosts ? '<a class="account-admin-link" href="/admin/blog"><i aria-hidden="true">✎</i><b>Quản trị bài viết<small>Đăng và chỉnh sửa Blog</small></b></a>' : ''}
         ${currentBlogCapabilities?.manageAccess ? '<a class="account-admin-link account-admin-link--access" href="/admin/access"><i aria-hidden="true">⌘</i><b>Quyền truy cập<small>Quản lý admin và editor</small></b></a>' : ''}
         <button type="button" data-auth-logout>Đăng xuất</button>
@@ -126,7 +127,11 @@ function dialogMarkup() {
           <label><span>Tên đăng nhập</span><input name="username" type="text" autocomplete="username" minlength="3" maxlength="30" pattern="[A-Za-z0-9._]{3,30}" required placeholder="3–30 ký tự" /></label>
           <label><span>Mật khẩu</span><input name="password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required placeholder="Tối thiểu 8 ký tự" /></label>
           <label class="account-claim-history"><input name="claimGuestHistory" type="checkbox" checked /><span>Đưa các kết quả dùng thử trên thiết bị này vào lịch sử tài khoản</span></label>
-          <p class="account-form-help">Email được lưu trong hồ sơ tài khoản để RealView có thể gửi thông báo trong tương lai.</p>
+          <p class="account-form-help">Email này dùng cho hồ sơ tài khoản và thông báo dịch vụ như thư chào mừng hoặc khôi phục mật khẩu.</p>
+          <label class="account-consent-option">
+            <input name="emailMarketingConsent" type="checkbox" value="true" />
+            <span><strong>Đồng ý nhận email marketing từ RealView (không bắt buộc)</strong><small>Tin hướng dẫn đọc review, cập nhật tính năng và nội dung hữu ích. Lựa chọn này không ảnh hưởng việc tạo tài khoản.</small></span>
+          </label>
           <p class="account-form-error" data-auth-error role="alert" hidden></p>
           <button class="account-submit" type="submit">Gửi mã xác minh <span aria-hidden="true">→</span></button>
           <p class="account-switch">Đã có tài khoản? <button type="button" data-auth-tab="login">Đăng nhập</button></p>
@@ -170,6 +175,22 @@ function ensureDialog() {
     returnFocus?.focus?.();
   });
   return dialog;
+}
+
+function showOfflineConsentNotice(user) {
+  if (!user || user.emailMarketingConsent?.source !== 'offline') return;
+  try {
+    if (sessionStorage.getItem('realview-offline-consent-notice')) return;
+    sessionStorage.setItem('realview-offline-consent-notice', 'shown');
+  } catch {
+    return;
+  }
+  const notice = document.createElement('aside');
+  notice.className = 'account-consent-toast';
+  notice.setAttribute('role', 'status');
+  notice.innerHTML = '<strong>Bạn đã đăng ký nhận email RealView</strong><p>Chúng tôi đã ghi nhận lựa chọn đồng ý nhận email mà bạn xác nhận trước đây. Email dịch vụ của tài khoản được gửi riêng.</p><button type="button" aria-label="Đóng thông báo">×</button>';
+  notice.querySelector('button').addEventListener('click', () => notice.remove());
+  document.body.append(notice);
 }
 
 function setMode(mode = 'login') {
@@ -228,6 +249,7 @@ export async function getCurrentUser({ refresh = false } = {}) {
       currentBlogRole = null;
       currentBlogCapabilities = null;
       renderAccountControls();
+      if (currentUser) showOfflineConsentNotice(currentUser);
       if (currentUser) void refreshBlogAccess({ refresh: true });
       return currentUser;
     })
@@ -259,6 +281,7 @@ async function submitAccountForm(form) {
   try {
     const values = Object.fromEntries(new FormData(form));
     if (action === 'register') {
+      values.emailMarketingConsent = form.elements.emailMarketingConsent.checked;
       pendingRegistration = values;
       const payload = await apiRequest({ action: 'request_registration_verification', ...values });
       const verificationForm = ensureDialog().querySelector('[data-auth-form="verify_registration"]');
@@ -310,6 +333,7 @@ async function submitAccountForm(form) {
     currentBlogCapabilities = null;
     statusPromise = Promise.resolve(currentUser);
     renderAccountControls();
+    if (action === 'login') showOfflineConsentNotice(currentUser);
     void refreshBlogAccess({ refresh: true });
     closeAuthDialog();
     const eventName = action === 'register' ? 'sign_up' : action === 'reset_password' ? 'password_reset' : 'login';

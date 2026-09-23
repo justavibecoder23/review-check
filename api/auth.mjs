@@ -182,6 +182,7 @@ export default async function handler(request, response) {
     const isRegistration = body.action === 'register';
     if (isRegistration) {
       const registration = await assertRegistrationAvailable(body);
+      body.emailMarketingConsent = body.emailMarketingConsent === true;
       await verifyEmailCode({
         requestId: body.verificationId,
         code: body.code,
