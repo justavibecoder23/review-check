@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import { createEmailTransport } from './email-transport.mjs';
 
 function verificationEmailContent(codeValue, purposeValue) {
   const code = String(codeValue || '').trim();
@@ -21,24 +21,13 @@ function verificationEmailContent(codeValue, purposeValue) {
 }
 
 export async function sendEmailVerificationCode(recipientValue, code, purpose, options = {}) {
-  const smtpUser = String(process.env.GMAIL_SMTP_USER || '').trim().toLowerCase();
-  const appPassword = String(process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '');
   const recipient = String(recipientValue || '').trim().toLowerCase();
-  if (!smtpUser || !appPassword) return { delivered: false, reason: 'not_configured' };
   if (!recipient) return { delivered: false, reason: 'missing_recipient' };
 
-  const createTransport = options.createTransportImpl || nodemailer.createTransport;
-  const transporter = createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    connectionTimeout: 6_000,
-    greetingTimeout: 6_000,
-    socketTimeout: 10_000,
-    auth: { user: smtpUser, pass: appPassword }
-  });
-  const info = await transporter.sendMail({
-    from: `RealView <${smtpUser}>`,
+  const emailTransport = createEmailTransport(options);
+  if (!emailTransport) return { delivered: false, reason: 'not_configured' };
+  const info = await emailTransport.transporter.sendMail({
+    from: emailTransport.from,
     to: recipient,
     ...verificationEmailContent(code, purpose)
   });
@@ -46,3 +35,4 @@ export async function sendEmailVerificationCode(recipientValue, code, purpose, o
 }
 
 export const emailVerificationMailInternals = { verificationEmailContent };
+
