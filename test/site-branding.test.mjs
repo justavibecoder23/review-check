@@ -30,11 +30,12 @@ test('các trang dùng logo RV thay cho biểu tượng tai nghe', async () => {
   }
 });
 
-test('nút và avatar trợ lý dùng cùng logo RV', async () => {
+test('nút trợ lý giữ logo RV và avatar dùng mascot RealViewee', async () => {
   const chatbot = await readFile(new URL('../public/chatbot.js', import.meta.url), 'utf8');
   const chatbotStyles = await readFile(new URL('../public/chatbot.css', import.meta.url), 'utf8');
   assert.match(chatbot, /class="chatbot-logo" src="\/assets\/realview-logo-v1\.webp"/);
-  assert.match(chatbot, /class="chatbot-avatar"[\s\S]*?<img src="\/assets\/realview-logo-v1\.webp"/);
+  assert.match(chatbot, /class="chatbot-avatar"[\s\S]*?class="realviewee-sprite" data-mascot-state="happy"/);
+  assert.match(chatbotStyles, /\.realviewee-sprite \{[\s\S]*?background-image: url\('\/assets\/mascot\/realviewee-sprite-v2\.png'\)/);
   assert.doesNotMatch(chatbot, /M12 3a8 8 0 0 0-8 8v5/);
   assert.match(chatbotStyles, /\.chatbot-trigger \.chatbot-logo \{ order: 1;/);
   assert.match(chatbotStyles, /\.chatbot-trigger i \{ order: 2; width: 5px; height: 5px; flex: 0 0 5px; border: 0;/);

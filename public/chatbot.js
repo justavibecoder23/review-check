@@ -27,19 +27,17 @@
   panel.setAttribute('aria-labelledby', 'chatbot-title');
   panel.innerHTML = `
     <header class="chatbot-header">
-      <span class="chatbot-avatar" aria-hidden="true">
-        <img src="/assets/realview-logo-v1.webp" alt="" width="128" height="75" />
-      </span>
-      <div><h2 id="chatbot-title">Trợ lý RealView</h2><p><i aria-hidden="true"></i> Hỗ trợ thông tin về website</p></div>
-      <button class="chatbot-close" type="button" aria-label="Đóng Trợ lý RealView">
+      <span class="chatbot-avatar" aria-hidden="true"><span class="realviewee-sprite" data-mascot-state="happy"></span></span>
+      <div><h2 id="chatbot-title">Chat with RealViewee</h2><p><i aria-hidden="true"></i> Your AI shopping &amp; review assistant</p></div>
+      <button class="chatbot-close" type="button" aria-label="Đóng trợ lý RealViewee">
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
       </button>
     </header>
     <div class="chatbot-context" data-chatbot-context hidden><span></span><button type="button" aria-label="Bỏ chọn sản phẩm">×</button></div>
     <div class="chatbot-messages" role="log" aria-live="polite" aria-relevant="additions">
       <article class="chatbot-message chatbot-message--assistant">
-        <span class="chatbot-message-avatar" aria-hidden="true">R</span>
-        <div><p>Xin chào! Mình có thể giải thích cách dùng RealView, ý nghĩa của TrustScore và tiêu chí lọc review.</p><time>Trợ lý RealView</time></div>
+        <span class="chatbot-message-avatar chatbot-message-avatar--realviewee" aria-hidden="true"><span class="realviewee-sprite" data-mascot-state="happy"></span></span>
+        <div><p>Xin chào! Mình có thể giải thích cách dùng RealView, ý nghĩa của TrustScore và tiêu chí lọc review.</p><time>RealViewee</time></div>
       </article>
       <div class="chatbot-suggestions" aria-label="Câu hỏi gợi ý">
         <button type="button">RealView hoạt động thế nào?</button>
@@ -48,7 +46,7 @@
       </div>
     </div>
     <form class="chatbot-form">
-      <label class="sr-only" for="chatbot-input">Câu hỏi dành cho Trợ lý RealView</label>
+      <label class="sr-only" for="chatbot-input">Câu hỏi dành cho RealViewee</label>
       <div class="chatbot-input-shell">
         <textarea id="chatbot-input" rows="1" maxlength="500" placeholder="Hỏi về RealView..." required></textarea>
         <button type="submit" aria-label="Gửi câu hỏi">
@@ -71,6 +69,139 @@
   let isSending = false;
   let selectedHistoryContext = null;
   let resultReadiness = { resultId: '', state: 'idle', timer: null };
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const allowedMascotStates = new Set(['default', 'happy', 'curious', 'surprised', 'confident', 'excited', 'concerned', 'running']);
+  let mascotTimers = [];
+  let mascotBubbleTimer;
+
+  function safeMascotState(state, fallback = 'default') {
+    return allowedMascotStates.has(state) ? state : fallback;
+  }
+
+  function setHomeMascotState(homeMascot, state) {
+    if (!homeMascot?.sprite) return;
+    homeMascot.sprite.dataset.mascotState = safeMascotState(state);
+  }
+
+  function clearMascotCycle() {
+    mascotTimers.forEach((timer) => window.clearTimeout(timer));
+    mascotTimers = [];
+  }
+
+  function queueMascotCycle(homeMascot) {
+    clearMascotCycle();
+    const companion = homeMascot?.companion;
+    if (!companion || companion.classList.contains('is-interacting') || companion.classList.contains('is-chat-open')) return;
+    if (reducedMotion.matches) {
+      companion.classList.remove('is-patrolling');
+      setHomeMascotState(homeMascot, 'default');
+      return;
+    }
+    companion.classList.add('is-patrolling');
+    const steps = [[0, 'running'], [4300, 'default'], [6100, 'default'], [8400, 'default'], [10600, 'running'], [14200, 'default']];
+    steps.forEach(([delay, state]) => mascotTimers.push(window.setTimeout(() => setHomeMascotState(homeMascot, state), delay)));
+    mascotTimers.push(window.setTimeout(() => queueMascotCycle(homeMascot), 16800));
+  }
+
+  function createHomepageMascot() {
+    const homeHost = document.querySelector('.hero-copy');
+    const isHome = Boolean(homeHost && document.querySelector('#analyze-form'));
+    if (!isHome) return null;
+
+    const stage = document.createElement('aside');
+    stage.className = 'realviewee-stage realviewee-stage--home';
+    stage.setAttribute('aria-label', 'Trợ lý mua sắm RealViewee');
+    stage.innerHTML = `
+      <div class="realviewee-companion is-patrolling">
+        <span class="realviewee-speech" role="status" aria-live="polite">Mình giúp bạn check review nhé?</span>
+        <button class="realviewee-character" type="button" aria-label="Mở Chat with RealViewee">
+          <span class="realviewee-sprite" data-mascot-state="running" aria-hidden="true"></span>
+        </button>
+      </div>`;
+
+    homeHost.classList.add('has-realviewee-stage');
+    homeHost.append(stage);
+
+    const companion = stage.querySelector('.realviewee-companion');
+    const character = stage.querySelector('.realviewee-character');
+    const speech = stage.querySelector('.realviewee-speech');
+    const sprite = stage.querySelector('.realviewee-sprite');
+    const homeMascot = { stage, companion, character, speech, sprite };
+
+    const pauseForInteraction = (state = 'default') => {
+      clearMascotCycle();
+      companion.classList.add('is-interacting');
+      setHomeMascotState(homeMascot, state);
+    };
+    const resumePatrol = () => {
+      companion.classList.remove('is-interacting');
+      companion.style.removeProperty('--mascot-lean');
+      queueMascotCycle(homeMascot);
+    };
+
+    character.addEventListener('pointerenter', () => pauseForInteraction('default'));
+    character.addEventListener('pointermove', (event) => {
+      const bounds = character.getBoundingClientRect();
+      const ratio = bounds.width ? (event.clientX - bounds.left) / bounds.width : .5;
+      companion.style.setProperty('--mascot-lean', `${Math.max(-5, Math.min(5, (ratio - .5) * 10))}deg`);
+    });
+    character.addEventListener('pointerleave', () => {
+      if (speech.classList.contains('is-visible') || panel.classList.contains('is-open')) return;
+      resumePatrol();
+    });
+    character.addEventListener('focus', () => pauseForInteraction('default'));
+    character.addEventListener('blur', () => {
+      if (!panel.classList.contains('is-open')) resumePatrol();
+    });
+    character.addEventListener('click', () => {
+      window.clearTimeout(mascotBubbleTimer);
+      pauseForInteraction('happy');
+      speech.classList.add('is-visible');
+      mascotBubbleTimer = window.setTimeout(() => {
+        speech.classList.remove('is-visible');
+        setOpen(true, false);
+      }, 650);
+    });
+
+    queueMascotCycle(homeMascot);
+    return homeMascot;
+  }
+
+  function createStaticMascot(host, state, placement, label, before = null) {
+    if (!host || !allowedMascotStates.has(state)) return null;
+    const button = document.createElement('button');
+    button.className = `realviewee-static realviewee-static--${placement}`;
+    button.type = 'button';
+    button.setAttribute('aria-label', `${label}. Mở Chat with RealViewee`);
+    button.innerHTML = `<span class="realviewee-sprite" data-mascot-state="${state}" aria-hidden="true"></span>`;
+    button.addEventListener('click', () => setOpen(true, false));
+    if (before) host.insertBefore(button, before);
+    else host.append(button);
+    return button;
+  }
+
+  function createResultMascots() {
+    if (!document.body.classList.contains('results-page')) return [];
+    const mascots = [];
+    const progressHead = document.querySelector('.analysis-progress-head');
+    mascots.push(createStaticMascot(progressHead, 'curious', 'loading', 'RealViewee đang xem xét sản phẩm'));
+
+    const trustPanel = document.querySelector('#trust-card .trust-score-panel');
+    mascots.push(createStaticMascot(trustPanel, 'confident', 'trust', 'RealViewee tự tin với kết quả TrustScore'));
+
+    const keptSummary = document.querySelector('#danh-gia-giu-lai > summary');
+    mascots.push(createStaticMascot(keptSummary, 'surprised', 'kept', 'RealViewee bất ngờ với các đánh giá đáng tham khảo', keptSummary?.querySelector('.accordion-count')));
+
+    const excludedSummary = document.querySelector('#danh-gia-da-loai > summary');
+    mascots.push(createStaticMascot(excludedSummary, 'concerned', 'excluded', 'RealViewee lưu ý các đánh giá đã bị loại', excludedSummary?.querySelector('.accordion-count')));
+
+    const counterpartHeading = document.querySelector('#counterpart-section .counterpart-heading');
+    mascots.push(createStaticMascot(counterpartHeading, 'excited', 'counterpart', 'RealViewee hào hứng với sản phẩm đối chiếu'));
+    return mascots.filter(Boolean);
+  }
+
+  const mascot = createHomepageMascot();
+  createResultMascots();
 
   function currentResultAccess() {
     if (!/(?:\/results\.html|\/ket-qua)$/i.test(window.location.pathname)) return null;
@@ -99,9 +230,7 @@
       && resultReadiness.state === 'unavailable';
     const activeContext = selectedHistoryContext || (currentUnavailable ? null : currentContext);
     const hasResult = Boolean(activeContext);
-    const subtitle = panel.querySelector('.chatbot-header p');
     const helper = form.querySelector(':scope > p');
-    if (subtitle) subtitle.innerHTML = `<i aria-hidden="true"></i> ${hasResult ? 'Có thể giải thích kết quả đang xem' : 'Hỗ trợ thông tin về website'}`;
     input.placeholder = hasResult ? 'Hỏi thêm về kết quả này...' : 'Hỏi về RealView...';
     if (helper) helper.textContent = hasResult
       ? 'Câu trả lời chỉ dựa trên kết quả và review đã phân tích.'
@@ -177,12 +306,23 @@
       trigger.setAttribute('aria-expanded', 'true');
       trigger.setAttribute('aria-label', 'Đóng Trợ lý RealView');
       document.body.classList.add('chatbot-open');
+      if (mascot?.companion) {
+        clearMascotCycle();
+        mascot.companion.classList.add('is-chat-open');
+        mascot.speech.classList.remove('is-visible');
+        setHomeMascotState(mascot, 'happy');
+      }
       window.setTimeout(() => input.focus(), 180);
     } else {
       panel.classList.remove('is-open');
       trigger.setAttribute('aria-expanded', 'false');
       trigger.setAttribute('aria-label', 'Mở Trợ lý RealView');
       document.body.classList.remove('chatbot-open');
+      if (mascot?.companion) {
+        mascot.companion.classList.remove('is-chat-open');
+        setHomeMascotState(mascot, 'default');
+        queueMascotCycle(mascot);
+      }
       window.setTimeout(() => {
         if (!panel.classList.contains('is-open')) panel.hidden = true;
       }, 180);
@@ -199,9 +339,9 @@
     message.className = `chatbot-message chatbot-message--${role}`;
     if (role === 'assistant') {
       const avatar = document.createElement('span');
-      avatar.className = 'chatbot-message-avatar';
+      avatar.className = 'chatbot-message-avatar chatbot-message-avatar--realviewee';
       avatar.setAttribute('aria-hidden', 'true');
-      avatar.textContent = 'R';
+      avatar.innerHTML = '<span class="realviewee-sprite" data-mascot-state="happy"></span>';
       message.append(avatar);
     }
     const body = document.createElement('div');
@@ -216,7 +356,7 @@
         body.append(evidence);
       }
       const label = document.createElement('time');
-      label.textContent = engine === 'knowledge-base' ? 'Kho dữ liệu RealView' : 'Trợ lý RealView';
+      label.textContent = engine === 'knowledge-base' ? 'Kho dữ liệu RealView' : 'RealViewee';
       body.append(label);
     }
     message.append(body);
