@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import { createEmailTransport } from './email-transport.mjs';
 
 const REALVIEW_HOME_URL = 'https://www.realview.com.vn/';
 
@@ -40,7 +40,6 @@ function welcomeEmailContent(user) {
   const html = `<!doctype html>
 <html lang="vi">
   <body style="margin:0;padding:0;background:#f4f3ef;color:#171717;font-family:Arial,Helvetica,sans-serif;">
-    <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Tài khoản của bạn đã được tạo thành công.</div>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f3ef;padding:28px 12px;">
       <tr>
         <td align="center">
@@ -79,29 +78,14 @@ function welcomeEmailContent(user) {
 }
 
 export async function sendWelcomeEmail(user, options = {}) {
-  const smtpUser = String(process.env.GMAIL_SMTP_USER || '').trim().toLowerCase();
-  const appPassword = String(process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '');
-  if (!smtpUser || !appPassword) return { delivered: false, reason: 'not_configured' };
-
   const recipient = String(user?.email || '').trim().toLowerCase();
   if (!recipient) return { delivered: false, reason: 'missing_recipient' };
 
-  const createTransport = options.createTransportImpl || nodemailer.createTransport;
-  const transporter = createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    connectionTimeout: 6_000,
-    greetingTimeout: 6_000,
-    socketTimeout: 10_000,
-    auth: {
-      user: smtpUser,
-      pass: appPassword
-    }
-  });
+  const emailTransport = createEmailTransport(options);
+  if (!emailTransport) return { delivered: false, reason: 'not_configured' };
   const content = welcomeEmailContent(user);
-  const info = await transporter.sendMail({
-    from: `RealView <${smtpUser}>`,
+  const info = await emailTransport.transporter.sendMail({
+    from: emailTransport.from,
     to: recipient,
     ...content
   });
@@ -110,4 +94,5 @@ export async function sendWelcomeEmail(user, options = {}) {
 }
 
 export const welcomeEmailInternals = { REALVIEW_HOME_URL, escapeHtml, welcomeEmailContent };
+
 

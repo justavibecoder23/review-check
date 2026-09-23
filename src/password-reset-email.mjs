@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import { createEmailTransport } from './email-transport.mjs';
 
 function safeCode(value) {
   const code = String(value || '').trim();
@@ -23,7 +23,6 @@ function passwordResetEmailContent(codeValue) {
     html: `<!doctype html>
 <html lang="vi">
   <body style="margin:0;padding:0;background:#f4f3ef;color:#171717;font-family:Arial,Helvetica,sans-serif;">
-    <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Mã xác minh RealView có hiệu lực trong 10 phút.</div>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f3ef;padding:28px 12px;">
       <tr><td align="center">
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#fff;border:1px solid #e4e1da;border-radius:24px;overflow:hidden;">
@@ -46,24 +45,13 @@ function passwordResetEmailContent(codeValue) {
 }
 
 export async function sendPasswordResetEmail(user, code, options = {}) {
-  const smtpUser = String(process.env.GMAIL_SMTP_USER || '').trim().toLowerCase();
-  const appPassword = String(process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '');
   const recipient = String(user?.email || '').trim().toLowerCase();
-  if (!smtpUser || !appPassword) return { delivered: false, reason: 'not_configured' };
   if (!recipient) return { delivered: false, reason: 'missing_recipient' };
 
-  const createTransport = options.createTransportImpl || nodemailer.createTransport;
-  const transporter = createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    connectionTimeout: 6_000,
-    greetingTimeout: 6_000,
-    socketTimeout: 10_000,
-    auth: { user: smtpUser, pass: appPassword }
-  });
-  const info = await transporter.sendMail({
-    from: `RealView <${smtpUser}>`,
+  const emailTransport = createEmailTransport(options);
+  if (!emailTransport) return { delivered: false, reason: 'not_configured' };
+  const info = await emailTransport.transporter.sendMail({
+    from: emailTransport.from,
     to: recipient,
     ...passwordResetEmailContent(code)
   });
@@ -71,4 +59,5 @@ export async function sendPasswordResetEmail(user, code, options = {}) {
 }
 
 export const passwordResetEmailInternals = { safeCode, passwordResetEmailContent };
+
 

@@ -49,6 +49,7 @@ test('email chào mừng dùng Gmail SMTP và gửi đúng người vừa đăng
     assert.match(message.text, /trải nghiệm thật tuyệt vời/);
     assert.match(message.text, /quyết định mua sắm đúng đắn nhất/);
     assert.match(message.html, /Khám phá RealView/);
+    assert.doesNotMatch(message.html, /display\s*:\s*none|visibility\s*:\s*hidden/i);
     assert.doesNotMatch(message.text, /không thực hiện đăng ký/i);
     assert.doesNotMatch(message.html, /mật khẩu/i);
     assert.deepEqual(result, { delivered: true, messageId: 'welcome-message-id' });
@@ -69,4 +70,5 @@ test('đăng ký gọi email chào mừng nhưng đăng nhập thì không', asy
   assert.match(authApi, /isRegistration\s*\? await sendWelcomeEmail\(user\)/);
   assert.match(authApi, /welcomeEmailDelivered/);
 });
+
 

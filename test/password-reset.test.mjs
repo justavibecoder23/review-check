@@ -26,6 +26,7 @@ test('email đặt lại mật khẩu chỉ gửi mã 6 số qua Gmail SMTP', as
     assert.equal(message.to, 'buyer@example.com');
     assert.match(message.text, /483920/);
     assert.match(message.html, /10 phút/);
+    assert.doesNotMatch(message.html, /display\s*:\s*none|visibility\s*:\s*hidden/i);
     assert.doesNotMatch(message.text, /mật khẩu mới của bạn/i);
   } finally {
     if (previousUser === undefined) delete process.env.GMAIL_SMTP_USER;
@@ -51,4 +52,5 @@ test('API không trả mã xác minh về trình duyệt và giao diện có đ�
 test('nội dung email từ chối mã sai định dạng', () => {
   assert.throws(() => passwordResetEmailInternals.passwordResetEmailContent('123'), /không hợp lệ/);
 });
+
 
