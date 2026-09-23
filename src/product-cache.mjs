@@ -12,6 +12,15 @@ const LATEST_POINTER_PREFIX = 'realview:cache:product:latest:v2:';
 const TIKTOK_PRODUCT_META_PREFIX = 'realview:product-meta:v1:tiktok:';
 const TIKTOK_PRODUCT_META_TTL_SECONDS = 30 * 24 * 60 * 60;
 
+export function isMirroredProductImage(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    return url.protocol === 'https:' && /\.public\.blob\.vercel-storage\.com$/i.test(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 export function isShopeeCacheEligible(platform) {
   return String(platform || '').trim().toLowerCase() === 'shopee';
 }

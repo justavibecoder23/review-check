@@ -164,7 +164,7 @@ function setProgress(value) {
   progressButton?.setAttribute('aria-valuenow', String(Math.round(progressValue)));
 }
 
-async function showSearchProgress(platform) {
+async function showSearchProgress(platform, options = {}) {
   if (!progressButton) return;
   await ensureStylesheet();
   if (currentMatch) return;
@@ -179,7 +179,9 @@ async function showSearchProgress(platform) {
   progressButton.setAttribute('aria-valuemax', '100');
   progressButton.setAttribute('aria-label', `Đang tìm sản phẩm tương tự trên ${platform}`);
   if (progressTitle) progressTitle.textContent = 'Đang tìm sản phẩm tương tự trên nền tảng khác';
-  if (progressCopy) progressCopy.textContent = `Đang đối chiếu hình ảnh và thông tin trên ${platform}`;
+  if (progressCopy) progressCopy.textContent = options.metadataOnly
+    ? `Đang tìm theo tên và thông tin sản phẩm trên ${platform}`
+    : `Đang đối chiếu hình ảnh và thông tin trên ${platform}`;
   setProgress(7);
   progressTimer = window.setInterval(() => {
     const remaining = 88 - progressValue;
@@ -500,13 +502,13 @@ function beginForResult(result) {
   activeSourceKey = key;
   currentSource = source;
   resetWidget();
-  if (!source.title || !source.image) {
+  if (!source.title) {
     void showMetadataUnavailable(targetPlatformName(source.platform));
     return;
   }
   const stored = readStoredMatch(key);
   if (stored) announceReady(stored);
-  else void showSearchProgress(targetPlatformName(source.platform));
+  else void showSearchProgress(targetPlatformName(source.platform), { metadataOnly: !source.image });
   deferWork(() => {
     if (activeSourceKey !== key) return;
     requestController = new AbortController();

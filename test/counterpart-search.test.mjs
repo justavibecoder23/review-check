@@ -10,6 +10,7 @@ import {
   findCounterpart,
   normalizeActorCandidates,
   parseMarketplaceCount,
+  rankActorCandidatesByMetadata,
   selectBestCandidate,
   targetPlatformFor
 } from '../src/counterpart-search.mjs';
@@ -203,6 +204,78 @@ test('Lens đủ 20 review không tiêu một lượt actor fallback', async () 
   assert.equal(result.candidate.reviewCount, 25);
 });
 
+test('thiếu ảnh bỏ qua Lens và dùng Actor fallback theo metadata ngay', async () => {
+  let lensCalls = 0;
+  let actorCalls = 0;
+  const actorCandidate = {
+    title: 'Kẹo me cay sấy muối 500g',
+    url: 'https://shopee.vn/product/1/22',
+    image: 'https://down-vn.img.susercontent.com/file/match',
+    images: ['https://down-vn.img.susercontent.com/file/match'],
+    reviewCount: 35,
+    searchRank: 1,
+    discoveryMethod: 'actor-search'
+  };
+  const result = await findCounterpart({
+    platform: 'TikTok Shop',
+    title: 'Kẹo me cay sấy muối 500g',
+    url: 'https://shop.tiktok.com/view/product/1731846286968456663'
+  }, {
+    env: { COUNTERPART_SEARCH_ENABLED: 'true', GOOGLE_LENS_SERPAPI_KEY: 'configured' },
+    searchGoogleLensImpl: async () => { lensCalls += 1; return []; },
+    runSearchActorImpl: async () => { actorCalls += 1; return [actorCandidate]; },
+    fetchImpl: async () => new Response('', { status: 503 })
+  });
+  assert.equal(lensCalls, 0);
+  assert.equal(actorCalls, 1);
+  assert.equal(result.status, 'ready');
+  assert.equal(result.discovery.provider, 'actor-fallback');
+  assert.equal(result.candidate.matchMethod, 'actor-metadata-fallback');
+});
+
+test('xếp hạng Actor metadata không giả lập điểm giống ảnh', () => {
+  const match = rankActorCandidatesByMetadata({ title: 'Serum Lucenbase Niacinamide 30ml' }, [{
+    title: 'Serum Lucenbase Niacinamide 30ml chính hãng',
+    url: 'https://shopee.vn/product/1/2',
+    image: 'https://down-vn.img.susercontent.com/file/match',
+    images: ['https://down-vn.img.susercontent.com/file/match'],
+    reviewCount: 28,
+    searchRank: 1
+  }]);
+  assert.equal(match.imageScore, null);
+  assert.equal(match.hasEnoughReviews, true);
+  assert.equal(match.matchMethod, 'actor-metadata-fallback');
+});
+
+test('URL ảnh bị treo vẫn dùng kết quả Actor metadata sau khi chấm ảnh thất bại', async () => {
+  let actorCalls = 0;
+  const actorCandidate = {
+    title: 'Kẹo me cay sấy muối 500g',
+    url: 'https://shopee.vn/product/1/23',
+    image: 'https://down-vn.img.susercontent.com/file/match',
+    images: ['https://down-vn.img.susercontent.com/file/match'],
+    reviewCount: 42,
+    searchRank: 1,
+    discoveryMethod: 'actor-search'
+  };
+  const result = await findCounterpart({
+    platform: 'TikTok Shop',
+    title: 'Kẹo me cay sấy muối 500g',
+    url: 'https://shop.tiktok.com/view/product/1731846286968456663',
+    image: 'https://p16-oec-sg.ibyteimg.com/stale.webp'
+  }, {
+    env: { COUNTERPART_SEARCH_ENABLED: 'true', GOOGLE_LENS_SERPAPI_KEY: 'configured' },
+    searchGoogleLensImpl: async () => { throw new DOMException('Timed out', 'TimeoutError'); },
+    runSearchActorImpl: async () => { actorCalls += 1; return [actorCandidate]; },
+    rankCandidatesImpl: async () => null,
+    fetchImpl: async () => new Response('', { status: 503 })
+  });
+  assert.equal(actorCalls, 1);
+  assert.equal(result.status, 'ready');
+  assert.equal(result.discovery.provider, 'actor-fallback');
+  assert.equal(result.candidate.matchMethod, 'actor-metadata-fallback');
+});
+
 test('job id ổn định theo sản phẩm và budget không lấn phần dự trữ Shopee', () => {
   const source = { platform: 'Shopee', title: 'A', url: 'https://shopee.vn/product/1/2', itemId: '2' };
   assert.equal(counterpartJobId(source), counterpartJobId({ ...source, title: 'Tên mới' }));
@@ -244,8 +317,8 @@ test('section đối ứng ẩn mặc định và chỉ có module nền riêng'
   assert.match(script, /removeEventListener\('abort'/);
   assert.match(script, /trustIntroIsOpen/);
   assert.match(loader, /realview:analysis-result/);
-  assert.match(loader, /import\('\.\/counterpart-widget\.js\?v=17'\)/);
-  assert.match(html, /counterpart-loader\.js\?v=17/);
+  assert.match(loader, /import\('\.\/counterpart-widget\.js\?v=18'\)/);
+  assert.match(html, /counterpart-loader\.js\?v=18/);
   assert.match(script, /counterpart-widget\.css\?v=16/);
   assert.match(script, /classList\.toggle\('counterpart-progress--tiktok', platformName\(platform\) === 'TikTok Shop'\)/);
   assert.match(script, /classList\.remove\([^\n]*'counterpart-progress--tiktok'/);
@@ -257,8 +330,13 @@ test('section đối ứng ẩn mặc định và chỉ có module nền riêng'
   assert.match(readyToastSource, /}, READY_TOAST_DURATION_MS\);/);
   assert.match(statusToastSource, /}, 7_500\);/);
   assert.match(script, /showMetadataUnavailable/);
-  assert.match(html, /results-v2\.css\?v=2/);
-  assert.match(html, /results\.js\?v=2/);
+  assert.match(html, /results-v2\.css\?v=3/);
+  assert.match(html, /results\.js\?v=3/);
+  assert.match(html, /id="analysis-product-illustration"/);
+  assert.match(resultsScript, /const PRODUCT_IMAGE_TIMEOUT_MS = 4_000;/);
+  assert.match(resultsScript, /PRODUCT_MEDIA_POLL_TIMEOUT_MS = 120_000/);
+  assert.match(resultsScript, /refreshProductMediaInBackground/);
+  assert.match(resultsScript, /image\.removeAttribute\('src'\)/);
   assert.match(script, /showSearchProgress/);
   assert.match(script, /completeProgress/);
   assert.match(script, /function revealSection\(\)/);

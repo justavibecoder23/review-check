@@ -332,7 +332,8 @@ async function runSearchActor(platform, queries, options = {}) {
 function safeImageUrl(value) {
   try {
     const url = new URL(String(value || ''));
-    return url.protocol === 'https:' && MARKETPLACE_IMAGE_HOST.test(url.hostname) ? url.href : '';
+    const trustedBlob = /\.public\.blob\.vercel-storage\.com$/i.test(url.hostname);
+    return url.protocol === 'https:' && (MARKETPLACE_IMAGE_HOST.test(url.hostname) || trustedBlob) ? url.href : '';
   } catch {
     return '';
   }
@@ -529,6 +530,37 @@ export async function rankCandidatesBySimilarity(source, candidates, options = {
   return selectBestCandidate(ranked, sourceTitle);
 }
 
+export function rankActorCandidatesByMetadata(source, candidates) {
+  const ranked = candidates.map((candidate) => {
+    const textScore = tokenSimilarity(source.title, candidate.title);
+    const searchRankScore = 1 - Math.min(1, (candidate.searchRank - 1) / 30);
+    const matchScore = clamp((textScore * 0.92) + (searchRankScore * 0.08));
+    const matchClass = textScore >= 0.62 ? 'exact' : textScore >= 0.34 ? 'variant' : 'unverified';
+    return {
+      ...candidate,
+      textScore,
+      imageScore: null,
+      matchScore,
+      matchClass,
+      matchEngine: 'actor-metadata'
+    };
+  })
+    .filter((candidate) => ['exact', 'variant'].includes(candidate.matchClass) && candidate.matchScore >= 0.36)
+    .sort((left, right) => right.matchScore - left.matchScore);
+  if (!ranked.length) return null;
+  const closest = ranked[0];
+  const eligible = ranked.filter((candidate) => candidate.reviewCount >= MIN_REVIEW_COUNT && candidate.matchScore >= closest.matchScore - 0.10);
+  const selected = eligible[0] || closest;
+  return {
+    ...selected,
+    hasEnoughReviews: selected.reviewCount >= MIN_REVIEW_COUNT,
+    minimumReviewCount: MIN_REVIEW_COUNT,
+    similarityPercent: Math.round(clamp(selected.matchScore) * 100),
+    matchMethod: 'actor-metadata-fallback',
+    sourceTitle: String(source.title || '').slice(0, 240)
+  };
+}
+
 function sourceIdentity(source) {
   const platform = normalizePlatform(source.platform);
   const stable = source.itemId || source.productId || source.url || `${source.title}|${source.image}`;
@@ -645,7 +677,7 @@ export async function findCounterpart(rawSource, options = {}) {
   if (!envEnabled(env)) return { status: 'disabled' };
   const source = sanitizeSource(rawSource);
   const targetPlatform = targetPlatformFor(source.platform);
-  if (!source.platform || !targetPlatform || !source.title || !source.url || !source.image) {
+  if (!source.platform || !targetPlatform || !source.title || !source.url) {
     return { status: 'unavailable', reason: 'invalid_source' };
   }
   const cached = await readCache(source, scopedOptions);
@@ -656,7 +688,7 @@ export async function findCounterpart(rawSource, options = {}) {
 
   const stage = async (name, detail = {}) => options.onStage?.(name, detail);
   let lensCandidates = [];
-  if (isGoogleLensConfigured(env)) {
+  if (source.image && isGoogleLensConfigured(env)) {
     await stage('lens_searching');
     try {
       const lensSearch = options.searchGoogleLensImpl || searchGoogleLens;
@@ -676,7 +708,12 @@ export async function findCounterpart(rawSource, options = {}) {
     try {
       const actorSearch = options.runSearchActorImpl || runSearchActor;
       actorCandidates = await actorSearch(targetPlatform, queries, scopedOptions);
-      candidate = await (options.rankCandidatesImpl || rankCandidatesBySimilarity)(source, mergeCandidates(lensCandidates, actorCandidates), scopedOptions);
+      candidate = source.image
+        ? await (options.rankCandidatesImpl || rankCandidatesBySimilarity)(source, mergeCandidates(lensCandidates, actorCandidates), scopedOptions)
+        : (options.rankActorCandidatesImpl || rankActorCandidatesByMetadata)(source, actorCandidates);
+      if (!candidate && actorCandidates.length) {
+        candidate = (options.rankActorCandidatesImpl || rankActorCandidatesByMetadata)(source, actorCandidates);
+      }
     } catch (error) {
       await stage('actor_unavailable', { code: error?.code || '', error: String(error?.message || '').slice(0, 160) });
     }

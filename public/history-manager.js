@@ -211,7 +211,10 @@ export function restoreHistoryItem(id, { session, navigate } = {}) {
   if (!item) return false;
   try {
     const sessionTarget = session || window.sessionStorage;
-    sessionTarget.setItem(LAST_ANALYSIS_KEY, JSON.stringify(item.fullReport));
+    sessionTarget.setItem(LAST_ANALYSIS_KEY, JSON.stringify({
+      ...item.fullReport,
+      _historyAnalyzedAt: item.analyzedAt
+    }));
     if (typeof navigate === 'function') navigate('/ket-qua');
     else window.location.assign('/ket-qua');
     return true;

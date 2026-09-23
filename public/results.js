@@ -38,6 +38,101 @@ function safeImageUrl(value) {
   return url && /^https:/i.test(url) ? url : '';
 }
 
+const PRODUCT_IMAGE_TIMEOUT_MS = 4_000;
+const PRODUCT_MEDIA_POLL_TIMEOUT_MS = 120_000;
+let productImageLoadSequence = 0;
+
+function loadProductImage({ image, fallback, url, alt = '', skeletonTarget = null }) {
+  if (!image || !fallback) return;
+  const safe = safeImageUrl(url);
+  const sequence = String(++productImageLoadSequence);
+  image.dataset.loadSequence = sequence;
+  image.classList.add('hidden');
+  fallback.classList.remove('hidden');
+  skeletonTarget?.classList.add('is-skeleton');
+  if (!safe) {
+    image.removeAttribute('src');
+    return;
+  }
+  let settled = false;
+  const finish = (loaded) => {
+    if (settled || image.dataset.loadSequence !== sequence) return;
+    settled = true;
+    window.clearTimeout(timeout);
+    if (loaded) {
+      image.classList.remove('hidden');
+      fallback.classList.add('hidden');
+      skeletonTarget?.classList.remove('is-skeleton');
+    } else {
+      image.classList.add('hidden');
+      fallback.classList.remove('hidden');
+      skeletonTarget?.classList.add('is-skeleton');
+    }
+  };
+  image.onload = () => finish(true);
+  image.onerror = () => finish(false);
+  image.alt = alt;
+  image.src = safe;
+  const timeout = window.setTimeout(() => {
+    finish(false);
+    // Dừng request CDN đang treo; ảnh Blob ổn định sẽ được gắn lại bởi tiến
+    // trình nền mà không làm thay đổi kích thước khung hiện tại.
+    if (image.dataset.loadSequence === sequence) image.removeAttribute('src');
+  }, PRODUCT_IMAGE_TIMEOUT_MS);
+  if (image.complete && image.naturalWidth > 0) finish(true);
+}
+
+async function refreshProductMediaInBackground(resultData, initialHistorySave) {
+  const product = resultData?.product || {};
+  if (!String(product.platform || '').toLowerCase().includes('tiktok') || !/^\d{8,25}$/.test(String(product.productId || ''))) return;
+  const startedAt = Date.now();
+  let response;
+  try {
+    response = await fetch('/api/match-counterpart?operation=product-media', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ product })
+    });
+  } catch {
+    return;
+  }
+  let payload = await response.json().catch(() => null);
+  while (payload?.status === 'pending' && Date.now() - startedAt < PRODUCT_MEDIA_POLL_TIMEOUT_MS) {
+    await new Promise((resolve) => window.setTimeout(resolve, Math.max(1_500, Number(payload.retryAfterMs) || 2_000)));
+    try {
+      const poll = await fetch(`/api/match-counterpart?operation=product-media&productId=${encodeURIComponent(product.productId)}`, { cache: 'no-store' });
+      payload = await poll.json().catch(() => null);
+    } catch {
+      return;
+    }
+  }
+  const mirrored = payload?.status === 'ready' ? payload.product : null;
+  const imageUrl = safeImageUrl(mirrored?.image);
+  if (!mirrored || !imageUrl) return;
+  resultData.product = {
+    ...resultData.product,
+    ...(mirrored.title ? { title: mirrored.title } : {}),
+    image: imageUrl
+  };
+  try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(resultData)); } catch { /* Giao diện vẫn được cập nhật. */ }
+  document.querySelector('#results-title').textContent = resultData.product.title || document.querySelector('#results-title').textContent;
+  loadProductImage({
+    image: document.querySelector('#product-image'),
+    fallback: document.querySelector('#product-illustration'),
+    url: imageUrl,
+    alt: `Ảnh ${resultData.product.title || 'sản phẩm'}`
+  });
+  // Ghi đè đúng bản ghi lịch sử hiện có, giữ nguyên thời điểm phân tích.
+  void Promise.resolve(initialHistorySave).then(async (saved) => {
+    if (!saved?.analyzedAt) return;
+    const historyModulePath = './history-manager.js';
+    const { saveToHistory } = await import(historyModulePath);
+    const analyzedAt = saved?.analyzedAt ? new Date(saved.analyzedAt) : new Date();
+    await saveToHistory(resultData, { now: () => analyzedAt });
+    window.dispatchEvent(new CustomEvent('realview:history-changed'));
+  }).catch(() => {});
+}
+
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, Number(value) || 0));
 }
@@ -383,19 +478,12 @@ function renderResult(data) {
   for (const selector of ['#open-product', '#product-inline-link']) document.querySelector(selector).href = productUrl;
   document.querySelector('#open-product span').textContent = `Xem sản phẩm trên ${platform}`;
 
-  const imageUrl = safeImageUrl(product.image || product.imageUrl || product.thumbnail);
-  if (imageUrl) {
-    const image = document.querySelector('#product-image');
-    const illustration = document.querySelector('#product-illustration');
-    image.src = imageUrl;
-    image.alt = `Ảnh ${productTitle}`;
-    image.classList.remove('hidden');
-    illustration.classList.add('hidden');
-    image.addEventListener('error', () => {
-      image.classList.add('hidden');
-      illustration.classList.remove('hidden');
-    }, { once: true });
-  }
+  loadProductImage({
+    image: document.querySelector('#product-image'),
+    fallback: document.querySelector('#product-illustration'),
+    url: product.image || product.imageUrl || product.thumbnail,
+    alt: `Ảnh ${productTitle}`
+  });
 
   document.querySelector('#trust-card').dataset.tone = tone.id;
   document.querySelector('#trust-gauge').style.setProperty('--score', score);
@@ -520,7 +608,6 @@ function updateElapsed() {
 function renderProgressProduct(product = {}) {
   const title = String(product.title || '').trim();
   const platform = String(product.platform || '').trim();
-  const imageUrl = safeImageUrl(product.image || product.imageUrl || product.thumbnail);
   document.querySelector('#analysis-platform').textContent = platform || 'Đã nhận diện sản phẩm';
   const titleElement = document.querySelector('#analysis-product-title');
   titleElement.textContent = title || `Sản phẩm trên ${platform || 'sàn thương mại điện tử'}`;
@@ -528,18 +615,13 @@ function renderProgressProduct(product = {}) {
   titleElement.classList.remove('skeleton-line', 'skeleton-line--title');
   const meta = [product.price, product.rating ? `${product.rating} sao trên sàn` : ''].filter(Boolean).join(' · ');
   document.querySelector('#analysis-product-meta').textContent = meta || 'Đã xác nhận đúng sản phẩm. Đang thu thập các đánh giá công khai.';
-  if (imageUrl) {
-    const image = document.querySelector('#analysis-product-image');
-    const visual = document.querySelector('#analysis-product-visual');
-    image.src = imageUrl;
-    image.alt = `Ảnh ${title || 'sản phẩm đang phân tích'}`;
-    image.classList.remove('hidden');
-    visual.classList.remove('is-skeleton');
-    image.addEventListener('error', () => {
-      image.classList.add('hidden');
-      visual.classList.add('is-skeleton');
-    }, { once: true });
-  }
+  loadProductImage({
+    image: document.querySelector('#analysis-product-image'),
+    fallback: document.querySelector('#analysis-product-illustration'),
+    skeletonTarget: document.querySelector('#analysis-product-visual'),
+    url: product.image || product.imageUrl || product.thumbnail,
+    alt: `Ảnh ${title || 'sản phẩm đang phân tích'}`
+  });
   productMetaReceived = true;
   setAnalysisStep(1);
   setProgress(28);
@@ -695,12 +777,14 @@ async function startProgressiveAnalysis(url) {
     progressPanel?.classList.add('hidden');
     // Đồng bộ lịch sử là tính năng bổ sung: thực hiện sau khi kết quả đã hiển
     // thị để Redis hoặc mạng chậm không giữ người dùng ở bước hoàn thiện.
-    void import('./history-manager.js')
+    const historySave = import('./history-manager.js')
       .then(({ saveToHistory }) => saveToHistory(resultData))
       .then((savedHistoryItem) => {
         if (savedHistoryItem) window.dispatchEvent(new CustomEvent('realview:history-changed'));
+        return savedHistoryItem;
       })
       .catch(() => {});
+    void refreshProductMediaInBackground(resultData, historySave);
   } catch (error) {
     if (error?.name === 'AbortError') return;
     window.realviewTrackEvent?.('analysis_error', {
@@ -734,7 +818,13 @@ if (hasBrowserWindow && requestedUrl) {
   } catch {
     data = null;
   }
-  if (data?.reviews && data?.product) renderResult(data);
+  if (data?.reviews && data?.product) {
+    renderResult(data);
+    const preservedHistory = data._historyAnalyzedAt
+      ? Promise.resolve({ analyzedAt: data._historyAnalyzedAt })
+      : Promise.resolve(null);
+    void refreshProductMediaInBackground(data, preservedHistory);
+  }
   else emptyState.classList.remove('hidden');
 }
 

@@ -9,6 +9,7 @@ import {
   getCachedTikTokDataset,
   getFallbackTikTokDataset,
   getTikTokProductMetadata,
+  isMirroredProductImage,
   normalizeTikTokProductMetadata,
   recordShopeeCacheHit,
   recordShopeeServed,
@@ -518,11 +519,10 @@ async function hydrateTikTokProductMetadata(productId, productUrl, product = {},
   let merged = { ...product, ...normaliseProductMeta(product) };
   let source = merged.title && merged.image ? 'dataset' : '';
 
-  if (!merged.title || !merged.image) {
-    const overlay = await getTikTokProductMetadata(productId, {
-      redisFetchImpl: options.redisFetchImpl
-    }).catch(() => null);
-    if (overlay) {
+  const overlay = await getTikTokProductMetadata(productId, {
+    redisFetchImpl: options.redisFetchImpl
+  }).catch(() => null);
+  if (overlay && (!merged.title || !merged.image || isMirroredProductImage(overlay.image))) {
       // The overlay has already been normalized and its image URL validated by
       // product-cache. Merge its explicit `image` field directly: the generic
       // product normalizer intentionally ignores root-level `image` because a
@@ -534,8 +534,7 @@ async function hydrateTikTokProductMetadata(productId, productUrl, product = {},
         ...(overlay.price ? { price: overlay.price } : {}),
         ...(overlay.rating ? { rating: overlay.rating } : {})
       };
-      source = 'redis-overlay';
-    }
+    source = isMirroredProductImage(overlay.image) ? 'blob-mirror' : 'redis-overlay';
   }
 
   if (!merged.title || !merged.image) {

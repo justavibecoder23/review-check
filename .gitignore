@@ -11,3 +11,4 @@ config/apify-pool*.local.json
 config/gemini-pool*.local.json
 config/*gemini-pool*.local.json
 .env*
+.vercel

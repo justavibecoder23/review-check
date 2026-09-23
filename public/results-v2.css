@@ -133,9 +133,12 @@
   overflow: hidden;
   border-radius: 20px;
   background: #e9e6df;
+  display: grid;
+  place-items: center;
 }
 
 .analysis-product-visual img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.analysis-product-visual .analysis-product-illustration { width: 88%; height: 88%; object-fit: contain; }
 .analysis-product-visual.is-skeleton { animation: analysis-shimmer 1.7s ease-in-out infinite; }
 .analysis-product-copy { min-width: 0; }
 .analysis-platform { color: var(--orange-dark); font-size: 11px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; }
