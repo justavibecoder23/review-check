@@ -244,7 +244,7 @@ function showView(name) {
   window.scrollTo({ top: 0, behavior: 'instant' });
 }
 
-function toast(message, type = 'success') {
+function toast(message, type = 'success', action = null) {
   const item = document.createElement('div');
   item.className = `admin-toast${type === 'error' ? ' is-error' : ''}`;
   const icon = document.createElement('span');
@@ -252,8 +252,20 @@ function toast(message, type = 'success') {
   const text = document.createElement('div');
   text.textContent = message;
   item.append(icon, text);
+  if (action?.label && typeof action.onClick === 'function') {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'admin-toast-action';
+    button.textContent = action.label;
+    button.addEventListener('click', () => { item.remove(); action.onClick(); }, { once: true });
+    item.append(button);
+  }
   $('[data-toast-region]').append(item);
-  window.setTimeout(() => item.remove(), 4200);
+  window.setTimeout(() => item.remove(), action ? 15000 : 4200);
+}
+
+function canRetryMediaUpload(error) {
+  return ['BLOG_MEDIA_RETRY', 'BLOG_MEDIA_UPLOAD_FAILED'].includes(error?.payload?.code);
 }
 
 function setSaveState(label, kind = '') {
@@ -1179,7 +1191,9 @@ async function uploadBlockImage(element, file) {
     preview.replaceChildren();
     if (originalUrl) { const image = new Image(); image.src = originalUrl; image.alt = altField?.value || ''; preview.append(image); }
     else { const icon = document.createElement('span'); icon.textContent = '▧'; const empty = document.createElement('small'); empty.textContent = 'Chưa có ảnh'; preview.append(icon, empty); }
-    status.textContent = ''; toast(error.message, 'error');
+    status.textContent = '';
+    toast(error.message, 'error', canRetryMediaUpload(error)
+      ? { label: 'Thử lại', onClick: () => uploadBlockImage(element, file) } : null);
   } finally {
     dropzone.classList.remove('is-uploading', 'is-dragging');
     if (localUrl) URL.revokeObjectURL(localUrl);
@@ -1211,7 +1225,9 @@ async function uploadHero(file) {
     }
     $('[name="heroImageUrl"]').value = asset.url; renderHeroPreview(); markDirty(); toast('Đã tải và tối ưu ảnh đại diện.');
   } catch (error) {
-    $('[name="heroImageUrl"]').value = previousUrl; renderHeroPreview(); toast(error.message, 'error');
+    $('[name="heroImageUrl"]').value = previousUrl; renderHeroPreview();
+    toast(error.message, 'error', canRetryMediaUpload(error)
+      ? { label: 'Thử lại', onClick: () => uploadHero(file) } : null);
   } finally { if (localUrl) URL.revokeObjectURL(localUrl); }
 }
 

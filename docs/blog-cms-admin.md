@@ -44,6 +44,17 @@ Tạo một Vercel Blob Store mới với access **Public**, sau đó gán token
 
 Token `BLOB_READ_WRITE_TOKEN` hiện hữu vẫn được giữ cho các Blob private khác. Sau khi cập nhật biến môi trường, cần redeploy môi trường tương ứng để function nhận token mới. Ảnh đã lưu ở URL public cũ không cần thay đổi; chỉ các URL private mới cần migrate sang store public.
 
+### Dedup ảnh và kiểm soát Advanced Operations
+
+- Ảnh mới được nhận dạng bằng SHA-256 của bytes nguồn cùng phiên bản quy tắc xử lý/profile kích thước. Khi upload lại cùng ảnh, Redis trả lại URL WebP đã có; alt text và người upload vẫn lấy từ lượt dùng hiện tại. Ảnh cũ và revision cũ không bị đổi URL.
+- Trên Vercel, upload sẽ từ chối nếu chưa cấu hình Redis thay vì âm thầm bỏ dedup và phát sinh Put không kiểm soát. Chế độ local thiếu Redis vẫn giữ đường upload cũ để phát triển/test.
+- Ba key `blog-media:dedup:v1:{hash}`, `blog-media:lock:v1:{hash}` và `blog-media:fence:v1:{hash}` dùng chung Redis hash tag. Script Lua cấp lock, gia hạn, công bố mapping và nhả lock theo owner/fence; mapping và nhả lock nằm trong cùng script nguyên tử. Thời gian chờ lock của yêu cầu thứ hai là 15 giây; hết hạn trả `BLOG_MEDIA_RETRY` với nút **Thử lại**, không tự upload lần hai.
+- **Không đặt TTL hoặc dọn key fence.** Sau khi restore Redis từ backup cũ, phải tạm dừng upload và đổi namespace/rule-version sau khi kiểm tra, không tái dùng counter có thể đã lùi. Redis và Blob không có transaction chung: Put cũ hoàn tất sau khi mất lock có thể để lại object mồ côi, nhưng không được công bố mapping bởi chủ cũ.
+- Pathname Blob mới cố định theo hash/profile/width và `allowOverwrite: false`. Nếu phản hồi Put không rõ, backend kiểm tra đúng pathname bằng `head()` (Simple Operation) rồi mới quyết định; không tự động Put lại với tên khác. Lượt đầu không HEAD phủ đầu. Nếu một lượt trước bỏ dở, lượt retry chỉ HEAD các pathname đã định để tái dùng biến thể đã lưu, rồi mới Put phần thiếu.
+- Audit theo ngày tại `blog-media:audit:v1:YYYY-MM-DD`, lưu 30 ngày và tối đa 20.000 sự kiện/ngày, gồm `requestId`, hash, `put_attempted`, `put_confirmed`, `put_failed`, dedup hit và kết quả upload. Không ghi token hay bytes ảnh. Nếu audit sau Put bị lỗi, hệ thống ghi cảnh báo có cấu trúc vào function log; mapping đầy đủ vẫn là nguồn xác nhận cuối cùng.
+- `BLOG_MEDIA_WIDTH_PROFILE=legacy` là mặc định (480/960/1600); `two` chỉ tạo 800/1600 cho upload mới. Chỉ bật `two` sau khi có baseline trên mobile 1×/2× và desktop, so screenshot từng viewport/DPR, đo KB/ảnh, tổng KB và LCP p75. Ngưỡng LCP: `LCP_mới − LCP_baseline ≤ min(10% × LCP_baseline, 200ms)`. Đổi lại `legacy` là rollback cho ảnh upload sau đó; URL cũ vẫn nguyên.
+- Báo cáo orphan là thao tác **thủ công, chỉ đọc**: `node tools/report-blog-media-orphans.mjs --acknowledge-list-cost`. Nó quét toàn bộ bài và mọi revision, sau đó `list()` prefix ảnh v1, chỉ liệt kê object không còn được tham chiếu và đã trên 30 ngày. `list()` tốn Advanced Operations; báo cáo không xóa gì. Phải duyệt thủ công trước mọi thao tác dọn dẹp.
+
 Khi xuất bản, mọi bài liên quan được chọn trong metadata hoặc block **Bài viết liên quan** phải tồn tại và đang public. Backend từ chối liên kết đến bài nháp, bài đã gỡ, slug sai hoặc chính bài đang chỉnh sửa. Các slug HTML legacy vẫn được chấp nhận trong giai đoạn migration.
 
 ## Cách hub và SEO được sinh
