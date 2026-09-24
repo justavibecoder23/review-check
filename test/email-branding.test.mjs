@@ -74,3 +74,19 @@ test('các mẫu mới thay placeholder động và loại bỏ script khỏi HT
     assert.doesNotMatch(html, /\{\{(?:USER_NAME|PURPOSE|VERIFICATION_CODE)\}\}|<script\b/i);
   }
 });
+
+test('footer có thể xuống dòng trên mobile và mã xác minh đủ lớn để dễ đọc', () => {
+  const verification = emailVerificationMailInternals.verificationEmailContent('123456', 'registration').html;
+  const reset = passwordResetEmailInternals.passwordResetEmailContent('654321').html;
+  const welcome = welcomeEmailInternals.welcomeEmailContent({ username: 'Minh Anh' }).html;
+  const contact = contactAcknowledgementEmailInternals.contactAcknowledgementEmailContent({ name: 'Minh Anh' }).html;
+
+  for (const html of [welcome, contact, verification, reset]) {
+    assert.match(html, /display:inline-block;max-width:100%;white-space:normal;overflow-wrap:anywhere;word-break:break-word/);
+    assert.doesNotMatch(html, /border-radius:999px;white-space:nowrap;max-width:100%/);
+  }
+  for (const html of [verification, reset]) {
+    assert.match(html, /font-size:32px;letter-spacing:0\.08em;line-height:38px/);
+    assert.match(html, /font-size:32px">(?:123456|654321)/);
+  }
+});
