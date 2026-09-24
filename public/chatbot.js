@@ -71,8 +71,8 @@
   let resultReadiness = { resultId: '', state: 'idle', timer: null };
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const allowedMascotStates = new Set(['default', 'happy', 'curious', 'surprised', 'confident', 'excited', 'concerned', 'running']);
-  const mascotPatrolDuration = 15_600;
-  const mascotPatrolSteps = [[0, 'running'], [3_120, 'default'], [6_864, 'running'], [9_984, 'default'], [13_728, 'running']];
+  const mascotPatrolDuration = 24_000;
+  const mascotPatrolSteps = [[0, 'running'], [5_000, 'default'], [9_000, 'running'], [14_000, 'default'], [18_000, 'running'], [23_000, 'default']];
   let mascotTimers = [];
   let mascotBubbleTimer;
 
@@ -179,13 +179,13 @@
     return homeMascot;
   }
 
-  function createStaticMascot(host, state, placement, label, before = null) {
+  function createStaticMascot(host, state, placement, label, speech, before = null) {
     if (!host || !allowedMascotStates.has(state)) return null;
     const button = document.createElement('button');
     button.className = `realviewee-static realviewee-static--${placement}`;
     button.type = 'button';
     button.setAttribute('aria-label', `${label}. Mở Chat with RealViewee`);
-    button.innerHTML = `<span class="realviewee-sprite" data-mascot-state="${state}" aria-hidden="true"></span>`;
+    button.innerHTML = `<span class="realviewee-static-speech" aria-hidden="true">${speech}</span><span class="realviewee-sprite" data-mascot-state="${state}" aria-hidden="true"></span>`;
     button.addEventListener('click', () => setOpen(trigger.getAttribute('aria-expanded') !== 'true', false));
     if (before) host.insertBefore(button, before);
     else host.append(button);
@@ -196,16 +196,16 @@
     if (!document.body.classList.contains('results-page')) return [];
     const mascots = [];
     const trustCopy = document.querySelector('#trust-card .trust-copy');
-    mascots.push(createStaticMascot(trustCopy, 'confident', 'trust', 'RealViewee tự tin với kết quả TrustScore', trustCopy?.querySelector('.trust-explanation-card')));
+    mascots.push(createStaticMascot(trustCopy, 'confident', 'trust', 'RealViewee tự tin với kết quả TrustScore', 'Xem chi tiết điểm nha!', trustCopy?.querySelector('.trust-explanation-card')));
 
     const keptSummary = document.querySelector('#danh-gia-giu-lai > summary');
-    mascots.push(createStaticMascot(keptSummary, 'surprised', 'kept', 'RealViewee bất ngờ với các đánh giá đáng tham khảo', keptSummary?.querySelector('.accordion-count')));
+    mascots.push(createStaticMascot(keptSummary, 'surprised', 'kept', 'RealViewee bất ngờ với các đánh giá đáng tham khảo', 'Góc review chân thực!', keptSummary?.querySelector('.accordion-count')));
 
     const excludedSummary = document.querySelector('#danh-gia-da-loai > summary');
-    mascots.push(createStaticMascot(excludedSummary, 'concerned', 'excluded', 'RealViewee lưu ý các đánh giá đã bị loại', excludedSummary?.querySelector('.accordion-count')));
+    mascots.push(createStaticMascot(excludedSummary, 'concerned', 'excluded', 'RealViewee lưu ý các đánh giá đã bị loại', 'Review này hơi ảo!', excludedSummary?.querySelector('.accordion-count')));
 
     const counterpartHeading = document.querySelector('#counterpart-section .counterpart-heading');
-    mascots.push(createStaticMascot(counterpartHeading, 'excited', 'counterpart', 'RealViewee hào hứng với sản phẩm đối chiếu'));
+    mascots.push(createStaticMascot(counterpartHeading, 'excited', 'counterpart', 'RealViewee hào hứng với sản phẩm đối chiếu', 'Bắt đúng sản phẩm!'));
     return mascots.filter(Boolean);
   }
 

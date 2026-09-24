@@ -60,9 +60,14 @@ test('hero illustration has no square dot decoration and keeps a responsive rati
 
 test('desktop hero artwork is reduced around its existing center', () => {
   assert.match(styles, /\.orange-blob \{[^}]*transform: rotate\(-4deg\) scale\(\.94\); transform-origin: center center;/);
-  assert.match(styles, /\.orange-blob::after \{[^}]*top: 9%; right: -5%; width: 34%;[^}]*aspect-ratio: 1;/);
   assert.match(styles, /\.hero-visual > \.hero-illustration \{[^}]*transform: translateX\(-12px\) rotate\(-2deg\) scale\(\.97\); transform-origin: center center;/);
   assert.match(styles, /@media \(max-width: 700px\) \{[\s\S]*?\.hero-visual > \.hero-illustration \{[^}]*transform: rotate\(-1\.2deg\) scale\(1\.02\);/);
+});
+
+test('desktop hero artwork moves as one unit and keeps the decorative overlay ring', () => {
+  assert.match(styles, /\.hero-visual \{[^}]*transform:\s*translateY\(clamp\(-48px, -3vw, -28px\)\)/);
+  assert.match(styles, /\.orange-blob::after \{[^}]*top: 9%; right: -5%; width: 34%;[^}]*aspect-ratio: 1;/);
+  assert.match(styles, /@media \(max-width: 1024px\)[\s\S]*?\.hero-visual \{[^}]*transform:\s*none;/);
 });
 
 test('about decoration stays clear of copy across responsive layouts', () => {

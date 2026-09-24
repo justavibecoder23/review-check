@@ -12,7 +12,7 @@ const [chatbot, styles, home, results, resultsScript, resultsStyles, sprite, pro
   readFile(new URL('../public/assets/mascot/realviewee-sprite-v2.png', import.meta.url)),
   readFile(new URL('../public/assets/mascot/realviewee-running-curious-v1.png', import.meta.url)),
   readFile(new URL('../public/assets/mascot/realviewee-running-curious-step-b-v1.png', import.meta.url)),
-  readFile(new URL('../public/assets/mascot/realviewee-running-default-step-b-v1.png', import.meta.url)),
+  readFile(new URL('../public/assets/mascot/realviewee-running-default-step-b-v2.png', import.meta.url)),
 ]);
 
 test('sprite RealViewee giữ nền trong suốt và đúng lưới tám trạng thái', () => {
@@ -41,6 +41,12 @@ test('mascot Curious trên thanh tiến trình là ảnh ngang độc lập, tro
   assert.match(resultsStyles, /\.analysis-progress-mascot \{[\s\S]*?pointer-events:\s*none;/);
   assert.match(resultsStyles, /left:\s*clamp\(0px, calc\(var\(--analysis-progress\) - 38px\), calc\(100% - 76px\)\)/);
   assert.match(resultsStyles, /\.analysis-progress-mascot\.is-moving \.analysis-progress-mascot-front \{ opacity: 0; \}/);
+  assert.match(results, /Đợi mình chút nhé/);
+  assert.match(results, /<small>Thời gian đã xử lý<\/small>/);
+  assert.match(resultsStyles, /\.analysis-elapsed \{[\s\S]*?min-width:\s*138px/);
+  assert.match(resultsStyles, /\.analysis-progress-track \{[\s\S]*?margin:\s*126px 0 28px/);
+  assert.match(resultsStyles, /\.analysis-progress-mascot\.is-moving \.analysis-progress-mascot-bubble \{ opacity:\s*0/);
+  assert.match(resultsStyles, /\.analysis-progress-mascot\.is-moving \.analysis-progress-mascot-step-b \{ transform:\s*scale\(\.92\)/);
   assert.match(resultsStyles, /@keyframes analysis-mascot-leg-cycle-a[\s\S]*?0%, 32\.99%, 66%, 100% \{ opacity: 1; \}[\s\S]*?33%, 65\.99% \{ opacity: 0; \}/);
   assert.match(resultsStyles, /@keyframes analysis-mascot-leg-cycle[\s\S]*?0%, 32\.99%, 66%, 100% \{ opacity: 0; \}[\s\S]*?33%, 65\.99% \{ opacity: 1; \}/);
   assert.doesNotMatch(results, /id="analysis-guest-quota"/);
@@ -71,15 +77,21 @@ test('chỉ triển khai các biểu cảm đã duyệt và khung chạy, không
   assert.match(chatbot, /trustCopy, 'confident', 'trust'/);
   assert.match(styles, /\.trust-copy \{ position: relative; \}/);
   assert.doesNotMatch(styles, /\.trust-copy \{[^}]*padding-right:/);
-  assert.match(styles, /\.realviewee-static--trust \{ --static-mascot-width: 100px; position: absolute; top: 18px; right: 0; \}/);
+  assert.match(styles, /\.realviewee-static--trust \{ --static-mascot-width: 88px; position: absolute; top: 18px; right: 0; \}/);
   assert.match(chatbot, /keptSummary, 'surprised', 'kept'/);
   assert.match(chatbot, /excludedSummary, 'concerned', 'excluded'/);
   assert.match(chatbot, /counterpartHeading, 'excited', 'counterpart'/);
+  for (const speech of ['Xem chi tiết điểm nha!', 'Góc review chân thực!', 'Review này hơi ảo!', 'Bắt đúng sản phẩm!']) {
+    assert.match(chatbot, new RegExp(speech.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+  assert.match(styles, /\.trust-copy > h2,[\s\S]*?\.trust-copy > p \{ max-width:\s*calc\(100% - 98px\); \}/);
+  assert.match(styles, /\.realviewee-static--kept \.realviewee-static-speech,[\s\S]*?right:\s*calc\(100% \+ 5px\)/);
+  assert.match(styles, /\.realviewee-static--counterpart \.realviewee-static-speech \{[\s\S]*?right:\s*calc\(100% - 22px\);[\s\S]*?bottom:\s*calc\(100% - 8px\)/);
 });
 
 test('chỉ mascot homepage chuyển động; mascot result đứng yên và responsive', () => {
   assert.match(styles, /@keyframes realviewee-patrol/);
-  assert.match(styles, /realviewee-running-default-step-b-v1\.png/);
+  assert.match(styles, /realviewee-running-default-step-b-v2\.png/);
   assert.match(styles, /@keyframes realviewee-leg-cycle-a[\s\S]*?0%, 32\.99%, 66%, 100% \{ opacity: 1; \}[\s\S]*?33%, 65\.99% \{ opacity: 0; \}/);
   assert.match(styles, /@keyframes realviewee-leg-cycle[\s\S]*?0%, 32\.99%, 66%, 100% \{ opacity: 0; \}[\s\S]*?33%, 65\.99% \{ opacity: 1; \}/);
   assert.match(styles, /\.realviewee-companion\.is-interacting,[\s\S]*animation-play-state:\s*paused/);
@@ -91,11 +103,14 @@ test('chỉ mascot homepage chuyển động; mascot result đứng yên và res
   assert.match(styles, /\.realviewee-stage--home \{[\s\S]*?height:\s*169px;[\s\S]*?margin:\s*30px auto 0;[\s\S]*?background:\s*transparent;/);
   assert.match(styles, /@media \(max-width: 520px\)[\s\S]*?\.realviewee-stage--home \{ height:\s*136px; margin-top:\s*16px; \}/);
   assert.match(styles, /\.realviewee-stage \{[\s\S]*?overflow:\s*visible;/);
-  assert.doesNotMatch(styles, /realviewee-static[^}]*animation:/);
+  assert.doesNotMatch(styles, /\.realviewee-static\s*\{[^}]*animation:/);
   assert.match(styles, /@media \(max-width: 520px\)[\s\S]*?\.realviewee-static--counterpart \{ --static-mascot-width:\s*82px; \}/);
-  assert.match(chatbot, /const mascotPatrolDuration = 15_600/);
-  assert.match(chatbot, /\[3_120, 'default'\][\s\S]*?\[6_864, 'running'\][\s\S]*?\[9_984, 'default'\][\s\S]*?\[13_728, 'running'\]/);
-  assert.match(styles, /20%, 44% \{ left: 31%; opacity: 1; \}[\s\S]*?64%, 88% \{ left: 61%; opacity: 1; \}/);
+  assert.match(chatbot, /const mascotPatrolDuration = 24_000/);
+  assert.match(chatbot, /\[5_000, 'default'\][\s\S]*?\[9_000, 'running'\][\s\S]*?\[14_000, 'default'\][\s\S]*?\[18_000, 'running'\][\s\S]*?\[23_000, 'default'\]/);
+  assert.match(styles, /20\.833%, 37\.5% \{ left: 31%; opacity: 1; \}[\s\S]*?58\.333%, 75% \{ left: 61%; opacity: 1; \}/);
+  assert.match(styles, /realviewee-running-default-step-b-v2\.png'\) center bottom \/ 126% 99% no-repeat/);
+  assert.doesNotMatch(styles, /realviewee-sprite\[data-mascot-state="running"\]::after\s*\{[^}]*filter:/s);
+  assert.match(styles, /animation:\s*realviewee-leg-cycle-a 5s/);
   assert.doesNotMatch(styles, /is-chat-open[^}]*left:/);
   assert.match(styles, /\.realviewee-stage--home\.is-chat-open \{ z-index: 95; pointer-events: none; \}/);
   assert.match(styles, /\.realviewee-stage--home\.is-chat-open \.realviewee-character \{ pointer-events: auto; \}/);

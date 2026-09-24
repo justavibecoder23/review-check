@@ -17,7 +17,7 @@
 .realviewee-sprite[data-mascot-state="confident"] { background-position: 0 100%; }
 .realviewee-sprite[data-mascot-state="excited"] { background-position: 33.333% 100%; }
 .realviewee-sprite[data-mascot-state="concerned"] { background-position: 66.667% 100%; }
-.realviewee-sprite[data-mascot-state="running"] { position: relative; background-image: none; animation: realviewee-run-bob .42s ease-in-out infinite alternate; }
+.realviewee-sprite[data-mascot-state="running"] { position: relative; background-image: none; animation: realviewee-run-bob .65s ease-in-out infinite alternate; }
 .realviewee-sprite[data-mascot-state="running"]::before,
 .realviewee-sprite[data-mascot-state="running"]::after {
   position: absolute;
@@ -26,12 +26,12 @@
 }
 .realviewee-sprite[data-mascot-state="running"]::before {
   background: url('/assets/mascot/realviewee-sprite-v2.png') 100% 100% / 400% 200% no-repeat;
-  animation: realviewee-leg-cycle-a 3.12s steps(1, end) infinite;
+  animation: realviewee-leg-cycle-a 5s steps(1, end) infinite;
 }
 .realviewee-sprite[data-mascot-state="running"]::after {
   opacity: 0;
-  background: url('/assets/mascot/realviewee-running-default-step-b-v1.png') center / contain no-repeat;
-  animation: realviewee-leg-cycle 3.12s steps(1, end) infinite;
+  background: url('/assets/mascot/realviewee-running-default-step-b-v2.png') center bottom / 126% 99% no-repeat;
+  animation: realviewee-leg-cycle 5s steps(1, end) infinite;
 }
 
 @keyframes realviewee-leg-cycle-a {
@@ -88,7 +88,7 @@
   width: var(--mascot-width);
   will-change: left;
 }
-.realviewee-companion.is-patrolling { animation: realviewee-patrol 15.6s linear infinite; }
+.realviewee-companion.is-patrolling { animation: realviewee-patrol 24s linear infinite; }
 .realviewee-companion.is-interacting,
 .realviewee-companion.is-chat-open { animation-play-state: paused; }
 .realviewee-character {
@@ -147,15 +147,16 @@
 
 @keyframes realviewee-patrol {
   0% { left: 24px; opacity: 0; }
-  3% { left: 24px; opacity: 1; }
-  20%, 44% { left: 31%; opacity: 1; }
-  64%, 88% { left: 61%; opacity: 1; }
-  97% { left: calc(100% - var(--mascot-end-gap)); opacity: 1; }
+  2% { left: 24px; opacity: 1; }
+  20.833%, 37.5% { left: 31%; opacity: 1; }
+  58.333%, 75% { left: 61%; opacity: 1; }
+  95.833% { left: calc(100% - var(--mascot-end-gap)); opacity: 1; }
   100% { left: calc(100% - var(--mascot-end-gap)); opacity: 0; }
 }
 
 .realviewee-static {
   --static-mascot-width: 96px;
+  position: relative;
   width: var(--static-mascot-width);
   padding: 0;
   display: block;
@@ -170,12 +171,77 @@
 .realviewee-static:hover { transform: translateY(-3px); filter: drop-shadow(0 13px 15px rgba(252,120,31,.2)); }
 .realviewee-static:focus-visible { outline: 3px solid rgba(252,120,31,.42); outline-offset: 3px; }
 .trust-copy { position: relative; }
-.realviewee-static--trust { --static-mascot-width: 100px; position: absolute; top: 18px; right: 0; }
+.trust-copy > h2,
+.trust-copy > p { max-width: calc(100% - 98px); }
+.realviewee-static--trust { --static-mascot-width: 88px; position: absolute; top: 18px; right: 0; }
 #danh-gia-giu-lai > summary,
 #danh-gia-da-loai > summary { grid-template-columns: 54px minmax(0, 1fr) 82px auto 42px; }
 .realviewee-static--kept,
 .realviewee-static--excluded { --static-mascot-width: 78px; align-self: center; }
 .realviewee-static--counterpart { --static-mascot-width: 116px; align-self: center; }
+
+.realviewee-static-speech {
+  position: absolute;
+  z-index: 3;
+  width: max-content;
+  max-width: 176px;
+  padding: 6px 12px;
+  border: 1px solid rgba(252,120,31,.3);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--orange-dark);
+  box-shadow: 0 4px 12px rgba(0,0,0,.1);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: realviewee-speech-float 2.8s ease-in-out infinite alternate;
+}
+.realviewee-static-speech::after {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  content: "";
+  border-right: 1px solid rgba(252,120,31,.3);
+  border-bottom: 1px solid rgba(252,120,31,.3);
+  background: #fff;
+}
+.realviewee-static--trust .realviewee-static-speech {
+  right: 12px;
+  bottom: calc(100% - 5px);
+}
+.realviewee-static--trust .realviewee-static-speech::after {
+  right: 20px;
+  bottom: -6px;
+  transform: rotate(45deg);
+}
+.realviewee-static--kept .realviewee-static-speech,
+.realviewee-static--excluded .realviewee-static-speech {
+  top: 50%;
+  right: calc(100% + 5px);
+  transform: translateY(-50%);
+}
+.realviewee-static--kept .realviewee-static-speech::after,
+.realviewee-static--excluded .realviewee-static-speech::after {
+  top: calc(50% - 5px);
+  right: -6px;
+  transform: rotate(-45deg);
+}
+.realviewee-static--counterpart .realviewee-static-speech {
+  right: calc(100% - 22px);
+  bottom: calc(100% - 8px);
+}
+.realviewee-static--counterpart .realviewee-static-speech::after {
+  right: 18px;
+  bottom: -6px;
+  transform: rotate(45deg);
+}
+
+@keyframes realviewee-speech-float {
+  from { margin-top: 0; }
+  to { margin-top: -3px; }
+}
 
 .chatbot-trigger {
   position: relative;
@@ -294,7 +360,9 @@
 }
 
 @media (max-width: 760px) {
-  .realviewee-static--trust { --static-mascot-width: 78px; position: static; margin: 14px auto 0; }
+  .trust-copy > h2,
+  .trust-copy > p { max-width: none; }
+  .realviewee-static--trust { --static-mascot-width: 72px; position: static; margin: 14px auto 0; }
   #danh-gia-giu-lai > summary,
   #danh-gia-da-loai > summary { grid-template-columns: 48px minmax(0, 1fr) 68px 34px; }
   .realviewee-static--kept,
@@ -325,7 +393,7 @@
   }
   .realviewee-stage--home { height: 136px; margin-top: 16px; }
   .realviewee-speech { bottom: calc(100% - 14px); left: -14px; max-width: 168px; padding: 8px 10px; font-size: 11px; }
-  .realviewee-static--trust { --static-mascot-width: 70px; }
+  .realviewee-static--trust { --static-mascot-width: 66px; }
   #danh-gia-giu-lai > summary,
   #danh-gia-da-loai > summary { grid-template-columns: 42px minmax(0, 1fr) 58px 32px; gap: 9px; }
   .realviewee-static--kept,
@@ -349,7 +417,8 @@
   .realviewee-companion.is-patrolling { left: 24px; animation: none; opacity: 1; }
   .realviewee-sprite[data-mascot-state="running"],
   .realviewee-sprite[data-mascot-state="running"]::before,
-  .realviewee-sprite[data-mascot-state="running"]::after { animation: none; }
+  .realviewee-sprite[data-mascot-state="running"]::after,
+  .realviewee-static-speech { animation: none; }
   .realviewee-character, .realviewee-speech, .realviewee-static { transition: none; }
 }
 
