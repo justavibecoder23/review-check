@@ -82,7 +82,10 @@ test('footer có thể xuống dòng trên mobile và mã xác minh đủ lớn 
   const contact = contactAcknowledgementEmailInternals.contactAcknowledgementEmailContent({ name: 'Minh Anh' }).html;
 
   for (const html of [welcome, contact, verification, reset]) {
-    assert.match(html, /display:inline-block;max-width:100%;white-space:normal;overflow-wrap:anywhere;word-break:break-word/);
+    assert.match(html, /class="ecw" style="width:100%;max-width:600px;min-width:0;/);
+    assert.doesNotMatch(html, /class="ecw" style="[^\"]*min-width:600px|class="ecw"[^>]*width="600"/);
+    assert.match(html, /border-radius:999px;white-space:normal;overflow-wrap:anywhere;word-break:break-word/);
+    assert.doesNotMatch(html, /border-radius:999px;display:inline-block;max-width:100%/);
     assert.doesNotMatch(html, /border-radius:999px;white-space:nowrap;max-width:100%/);
   }
   for (const html of [verification, reset]) {
