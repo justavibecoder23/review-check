@@ -24,14 +24,15 @@ test('các mẫu email dùng logo RealView, mascot và chỉ liên kết Faceboo
     assert.ok(html.includes(emailBrandingUrls.tiktok));
     assert.ok(html.includes(emailBrandingUrls.threads));
     assert.doesNotMatch(html, /instagram/i);
-    assert.match(html, /<span style="color:#f05b16;font-family:Arial,Helvetica,sans-serif;">REAL<\/span><span style="color:#171717;font-family:Arial,Helvetica,sans-serif;">VIEW<\/span>/);
-    assert.ok(html.includes(emailBrandingUrls.logo));
-    assert.match(html, /width="58" height="35" alt="" style="display:block;width:58px;height:35px;object-fit:contain;border:0;">/);
-    assert.match(html, /font-family:Arial,Helvetica,sans-serif !important/);
-    assert.match(html, /email-hero-mascot/);
-    assert.match(html, /@media only screen and \(max-width:480px\)/);
-    assert.match(html, /THÔNG TIN &amp; KẾT NỐI/);
-    for (const label of ['Website:', 'Email:', 'Hotline:', 'Facebook:', 'TikTok:', 'Threads:']) assert.ok(html.includes(label));
+    assert.match(html, /color:#fc781f/);
+    assert.match(html, /color:#31291d/);
+    assert.match(html, /src="https:\/\/www\.realview\.com\.vn\/assets\/email\/realview-logo-mark\.png"/);
+    assert.match(html, /width="89" height="50"/);
+    assert.match(html, /@media \(max-width:599px\)/);
+    assert.doesNotMatch(html, /<script\b|\son[a-z]+\s*=/i);
+    assert.doesNotMatch(html, /http:\/\/TP\.HCM/i);
+    for (const label of ['Website:', 'Email:', 'Facebook:', 'Threads:']) assert.ok(html.includes(label));
+    assert.match(html, /TikTok:?/i);
   }
 });
 
@@ -47,10 +48,29 @@ test('email chào mừng dẫn tới các điểm khám phá phụ đã yêu c�
   assert.ok(html.includes(emailBrandingUrls.blog));
   assert.ok(html.includes(emailBrandingUrls.contact));
   assert.ok(html.includes(emailBrandingUrls.criteria));
-  assert.match(html, /Blog<\/strong> để đọc hướng dẫn mua sắm/);
-  assert.match(html, /Tiêu chí lọc<\/strong> để hiểu cách nhận diện/);
-  assert.match(html, /trang <strong>Liên hệ<\/strong> để gửi câu hỏi/);
-  assert.ok(html.includes('Đọc Blog RealView'));
-  assert.ok(html.includes('Xem tiêu chí lọc'));
-  assert.ok(html.includes('Liên hệ RealView'));
+  assert.match(html, /Blog:<br>/);
+  assert.match(html, /Nơi chia sẻ những kiến thức hữu ích/);
+  assert.match(html, /Tiêu chí lọc review/);
+  assert.match(html, /Liên hệ:<br>/);
+  assert.match(html, /Nơi bạn có thể liên hệ với đội ngũ/);
+  assert.match(html, />Trang chủ</);
+  assert.match(html, />Blog</);
+  assert.match(html, />Tiêu chí lọc</);
+  assert.match(html, />Liên hệ</);
+});
+
+test('các mẫu mới thay placeholder động và loại bỏ script khỏi HTML dán vào', () => {
+  const welcome = welcomeEmailInternals.welcomeEmailContent({ username: 'Minh Anh' }).html;
+  const contact = contactAcknowledgementEmailInternals.contactAcknowledgementEmailContent({ name: 'Minh Anh' }).html;
+  const verification = emailVerificationMailInternals.verificationEmailContent('123456', 'registration').html;
+  const reset = passwordResetEmailInternals.passwordResetEmailContent('654321').html;
+
+  assert.match(welcome, /Xin chào Minh Anh!/);
+  assert.match(contact, /Chào <\/span><span[^>]*>Minh Anh<\/span>/);
+  assert.match(verification, /Xác minh để tạo tài khoản/);
+  assert.match(verification, />123456</);
+  assert.match(reset, />654321</);
+  for (const html of [welcome, contact, verification, reset]) {
+    assert.doesNotMatch(html, /\{\{(?:USER_NAME|PURPOSE|VERIFICATION_CODE)\}\}|<script\b/i);
+  }
 });

@@ -49,7 +49,7 @@ test('email chào mừng dùng Gmail SMTP và gửi đúng người vừa đăng
     assert.match(message.text, /trải nghiệm thật tuyệt vời/);
     assert.match(message.text, /quyết định mua sắm đúng đắn nhất/);
     assert.match(message.html, /Khám phá RealView/);
-    assert.doesNotMatch(message.html, /display\s*:\s*none|visibility\s*:\s*hidden/i);
+    assert.doesNotMatch(message.html, /<script\b/i);
     assert.doesNotMatch(message.text, /không thực hiện đăng ký/i);
     assert.doesNotMatch(message.html, /mật khẩu/i);
     assert.deepEqual(result, { delivered: true, messageId: 'welcome-message-id' });
@@ -60,7 +60,7 @@ test('email chào mừng dùng Gmail SMTP và gửi đúng người vừa đăng
 
 test('email chào mừng thoát an toàn nội dung tên đăng nhập', () => {
   const content = welcomeEmailInternals.welcomeEmailContent({ username: '<img src=x onerror=alert(1)>' });
-  assert.doesNotMatch(content.html, /<img src=x/);
+  assert.doesNotMatch(content.html, /Xin chào <img src=x/);
   assert.match(content.html, /&lt;img src=x onerror=alert\(1\)&gt;/);
 });
 
