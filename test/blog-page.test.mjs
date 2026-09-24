@@ -461,6 +461,17 @@ test('shared navigation exposes the Blog route', () => {
   assert.doesNotMatch(navJs, /Blog <small>Sắp ra mắt<\/small>/);
 });
 
+test('URL bài hướng dẫn cũ chuyển hướng vĩnh viễn tới bài cùng chủ đề', () => {
+  assert.deepEqual(
+    vercelConfig.redirects.find((rule) => rule.source === '/blog/cach-doc-review-thong-minh.html'),
+    {
+      source: '/blog/cach-doc-review-thong-minh.html',
+      destination: '/bai-viet/review-san-pham-la-gi',
+      permanent: true
+    }
+  );
+});
+
 test('sitemap động không bị file tĩnh che và robots khai báo đúng URL', () => {
   assert.equal(publicFiles.includes('sitemap.xml'), false);
   assert.deepEqual(

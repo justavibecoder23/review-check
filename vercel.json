@@ -101,6 +101,7 @@
     { "source": "/criteria.html", "destination": "/tieu-chi-loc", "permanent": true },
     { "source": "/contact.html", "destination": "/lien-he", "permanent": true },
     { "source": "/blog.html", "destination": "/bai-viet", "permanent": true },
+    { "source": "/blog/cach-doc-review-thong-minh.html", "destination": "/bai-viet/review-san-pham-la-gi", "permanent": true },
     { "source": "/blog/trustscore-la-gi.html", "destination": "/bai-viet/trustscore-la-gi", "permanent": true },
     { "source": "/blog/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html", "destination": "/bai-viet/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang", "permanent": true },
     { "source": "/blog/shopee-hay-tiktok-shop-mua-hang-o-dau-tot-hon.html", "destination": "/bai-viet/shopee-hay-tiktok-shop-mua-hang-o-dau-tot-hon", "permanent": true },
