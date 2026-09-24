@@ -46,21 +46,21 @@ test('mascot Curious trên thanh tiến trình là ảnh ngang độc lập, tro
   assert.match(resultsStyles, /\.analysis-elapsed \{[\s\S]*?min-width:\s*138px/);
   assert.match(resultsStyles, /\.analysis-progress-track \{[\s\S]*?margin:\s*126px 0 28px/);
   assert.match(resultsStyles, /\.analysis-progress-mascot\.is-moving \.analysis-progress-mascot-bubble \{ opacity:\s*0/);
-  assert.match(resultsStyles, /\.analysis-progress-mascot-bubble \{[\s\S]*?bottom:\s*calc\(100% \+ 9px\);[\s\S]*?border:\s*1px solid rgba\(252,120,31,\.3\);[\s\S]*?color:\s*var\(--orange-dark\);/);
+  assert.match(resultsStyles, /\.analysis-progress-mascot-bubble \{[\s\S]*?bottom:\s*calc\(100% \+ 3px\);[\s\S]*?border:\s*1px solid rgba\(252,120,31,\.3\);[\s\S]*?color:\s*var\(--orange-dark\);/);
   assert.match(resultsStyles, /\.analysis-progress-mascot\.is-moving \.analysis-progress-mascot-step-b \{ transform:\s*scale\(\.92\)/);
   assert.match(resultsStyles, /@keyframes analysis-mascot-leg-cycle-a[\s\S]*?0%, 32\.99%, 66%, 100% \{ opacity: 1; \}[\s\S]*?33%, 65\.99% \{ opacity: 0; \}/);
   assert.match(resultsStyles, /@keyframes analysis-mascot-leg-cycle[\s\S]*?0%, 32\.99%, 66%, 100% \{ opacity: 0; \}[\s\S]*?33%, 65\.99% \{ opacity: 1; \}/);
   assert.doesNotMatch(results, /id="analysis-guest-quota"/);
 });
 
-test('mascot homepage và các mascot ngữ cảnh result cùng mở chatbot hiện có', () => {
+test('mascot homepage mở chatbot còn mascot result chỉ hiển thị và hover', () => {
   assert.match(home, /<script src="\/chatbot\.js" defer><\/script>/);
   assert.match(results, /<script src="\/chatbot\.js" defer><\/script>/);
   assert.match(chatbot, /createHomepageMascot/);
   assert.match(chatbot, /createResultMascots/);
   assert.match(chatbot, /Mình giúp bạn check review nhé\?/);
   assert.match(chatbot, /setOpen\(true, false\)/);
-  assert.match(chatbot, /setOpen\(trigger\.getAttribute\('aria-expanded'\) !== 'true', false\)/);
+  assert.doesNotMatch(chatbot, /staticMascot\.addEventListener\('click'/);
   assert.match(chatbot, /Chat with RealViewee/);
   assert.match(chatbot, /Your AI shopping &amp; review assistant/);
 });
@@ -82,13 +82,17 @@ test('chỉ triển khai các biểu cảm đã duyệt và khung chạy, không
   assert.match(chatbot, /keptSummary, 'surprised', 'kept'/);
   assert.match(chatbot, /excludedSummary, 'concerned', 'excluded'/);
   assert.match(chatbot, /counterpartHeading, 'excited', 'counterpart'/);
+  assert.match(chatbot, /const staticMascot = document\.createElement\('div'\)/);
+  assert.match(chatbot, /staticMascot\.setAttribute\('role', 'img'\)/);
+  assert.doesNotMatch(chatbot, /staticMascot\.addEventListener\('click'/);
+  assert.match(styles, /\.realviewee-static \{[\s\S]*?cursor:\s*default;/);
   for (const speech of ['Xem chi tiết điểm nha!', 'Góc review chân thực!', 'Review này hơi ảo!', 'Bắt đúng sản phẩm!']) {
     assert.match(chatbot, new RegExp(speech.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
   assert.match(styles, /\.trust-copy > h2,[\s\S]*?\.trust-copy > p \{ max-width:\s*calc\(100% - 98px\); \}/);
   assert.match(styles, /\.realviewee-static--kept \.realviewee-static-speech,[\s\S]*?right:\s*calc\(100% \+ 5px\)/);
   assert.match(styles, /\.realviewee-static--counterpart \.realviewee-static-speech \{[\s\S]*?right:\s*calc\(100% - 22px\);[\s\S]*?bottom:\s*calc\(100% - 8px\)/);
-  assert.match(styles, /\.realviewee-static--trust \.realviewee-static-speech \{[\s\S]*?bottom:\s*calc\(100% \+ 10px\)/);
+  assert.match(styles, /\.realviewee-static--trust \.realviewee-static-speech \{[\s\S]*?bottom:\s*calc\(100% \+ 4px\)/);
   assert.match(styles, /\.realviewee-speech \{[\s\S]*?bottom:\s*calc\(100% \+ 10px\);[\s\S]*?border-radius:\s*12px;[\s\S]*?color:\s*var\(--orange-dark\);/);
 });
 

@@ -181,15 +181,14 @@
 
   function createStaticMascot(host, state, placement, label, speech, before = null) {
     if (!host || !allowedMascotStates.has(state)) return null;
-    const button = document.createElement('button');
-    button.className = `realviewee-static realviewee-static--${placement}`;
-    button.type = 'button';
-    button.setAttribute('aria-label', `${label}. Mở Chat with RealViewee`);
-    button.innerHTML = `<span class="realviewee-static-speech" aria-hidden="true">${speech}</span><span class="realviewee-sprite" data-mascot-state="${state}" aria-hidden="true"></span>`;
-    button.addEventListener('click', () => setOpen(trigger.getAttribute('aria-expanded') !== 'true', false));
-    if (before) host.insertBefore(button, before);
-    else host.append(button);
-    return button;
+    const staticMascot = document.createElement('div');
+    staticMascot.className = `realviewee-static realviewee-static--${placement}`;
+    staticMascot.setAttribute('role', 'img');
+    staticMascot.setAttribute('aria-label', label);
+    staticMascot.innerHTML = `<span class="realviewee-static-speech" aria-hidden="true">${speech}</span><span class="realviewee-sprite" data-mascot-state="${state}" aria-hidden="true"></span>`;
+    if (before) host.insertBefore(staticMascot, before);
+    else host.append(staticMascot);
+    return staticMascot;
   }
 
   function createResultMascots() {

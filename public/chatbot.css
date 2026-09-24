@@ -194,7 +194,7 @@
   border: 0;
   border-radius: 24px;
   background: transparent;
-  cursor: pointer;
+  cursor: default;
   isolation: isolate;
   transition: transform .18s ease;
 }
@@ -239,7 +239,7 @@
 }
 .realviewee-static--trust .realviewee-static-speech {
   right: 12px;
-  bottom: calc(100% + 10px);
+  bottom: calc(100% + 4px);
 }
 .realviewee-static--trust .realviewee-static-speech::after {
   right: 20px;

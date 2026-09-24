@@ -124,7 +124,7 @@
   position: absolute;
   z-index: 4;
   right: -78px;
-  bottom: calc(100% + 9px);
+  bottom: calc(100% + 3px);
   width: max-content;
   max-width: 176px;
   padding: 6px 12px;
