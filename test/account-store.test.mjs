@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   authenticateAccount,
+  claimOfflineConsentNotice,
   createPasswordReset,
   createAccountSession,
   getAccountFromSession,
@@ -162,6 +163,9 @@ test('lựa chọn email marketing được lưu riêng và tài khoản cũ dù
       status: 'subscribed', source: 'offline', consentedAt: null
     });
     assert.deepEqual(JSON.parse(mock.strings.get(userKey)).emailMarketingConsent, legacy.emailMarketingConsent);
+    assert.equal(await claimOfflineConsentNotice(legacy, { fetchImpl: mock.fetchImpl }), true);
+    assert.equal(await claimOfflineConsentNotice(legacy, { fetchImpl: mock.fetchImpl }), false);
+    assert.equal(await claimOfflineConsentNotice(optedIn, { fetchImpl: mock.fetchImpl }), false);
   } finally {
     if (previousUrl === undefined) delete process.env.UPSTASH_REDIS_REST_URL;
     else process.env.UPSTASH_REDIS_REST_URL = previousUrl;

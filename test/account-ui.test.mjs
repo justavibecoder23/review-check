@@ -35,12 +35,17 @@ test('cửa sổ tài khoản chỉ đóng bằng nút X', async () => {
 });
 
 test('form đăng ký có lựa chọn email marketing riêng và thông báo không làm gián đoạn trạng thái đăng nhập', async () => {
-  const auth = await readFile(new URL('../public/auth.js', import.meta.url), 'utf8');
-  const css = await readFile(new URL('../public/auth.css', import.meta.url), 'utf8');
+  const [auth, css, authApi] = await Promise.all([
+    readFile(new URL('../public/auth.js', import.meta.url), 'utf8'),
+    readFile(new URL('../public/auth.css', import.meta.url), 'utf8'),
+    readFile(new URL('../api/auth.mjs', import.meta.url), 'utf8')
+  ]);
   assert.match(auth, /name="emailMarketingConsent" type="checkbox"/);
   assert.match(auth, /Đồng ý nhận email marketing từ RealView \(không bắt buộc\)/);
-  assert.match(auth, /if \(action === 'login'\) showOfflineConsentNotice\(currentUser\)/);
-  assert.match(auth, /try \{\s*if \(sessionStorage\.getItem\('realview-offline-consent-notice'\)\) return;\s*sessionStorage\.setItem\('realview-offline-consent-notice', 'shown'\);\s*\} catch \{\s*return;\s*\}/);
+  assert.match(auth, /if \(action === 'login' && payload\.showOfflineConsentNotice\) showOfflineConsentNotice\(currentUser\)/);
+  assert.doesNotMatch(auth, /realview-offline-consent-notice|sessionStorage/);
+  assert.match(authApi, /claimOfflineConsentNotice\(user\)/);
+  assert.match(authApi, /showOfflineConsentNotice/);
   assert.match(css, /\.account-consent-option/);
   assert.match(css, /\.account-consent-toast/);
 });

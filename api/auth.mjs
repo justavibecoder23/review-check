@@ -1,6 +1,7 @@
 import {
   authenticateAccount,
   assertRegistrationAvailable,
+  claimOfflineConsentNotice,
   createAccountSession,
   createPasswordReset,
   deleteAccountSession,
@@ -195,6 +196,9 @@ export default async function handler(request, response) {
       ? await registerAccount(body)
       : await authenticateAccount(body);
     const session = await createAccountSession(user);
+    const showOfflineConsentNotice = !isRegistration
+      ? await claimOfflineConsentNotice(user)
+      : false;
     response.setHeader('Set-Cookie', sessionCookie(request, session.token, session.expiresIn));
     const claimedGuestHistory = isRegistration && body.claimGuestHistory === 'on'
       ? await claimGuestHistory(request, response, user.id).catch((error) => {
@@ -212,6 +216,7 @@ export default async function handler(request, response) {
       : null;
     return send(response, isRegistration ? 201 : 200, {
       user,
+      ...(!isRegistration ? { showOfflineConsentNotice } : {}),
       ...(isRegistration ? { welcomeEmailDelivered: welcomeEmail.delivered, claimedGuestHistory } : {})
     });
   } catch (error) {

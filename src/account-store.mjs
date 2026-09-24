@@ -87,6 +87,10 @@ function passwordResetKey(requestId) {
   return `${PREFIX}:password-reset:${requestId}`;
 }
 
+function offlineConsentNoticeKey(userId) {
+  return `${PREFIX}:notice:offline-consent:${userId}`;
+}
+
 function historyIndexKey(userId) {
   return `${PREFIX}:history:${userId}:index`;
 }
@@ -210,6 +214,18 @@ export async function getAccountFromSession(token, options = {}) {
   const userId = await redisCommand(['GET', sessionKey(token)], options);
   const user = await readUser(userId, options);
   return user ? publicUser(user) : null;
+}
+
+export async function claimOfflineConsentNotice(user, options = {}) {
+  ensureStorage();
+  if (!user?.id || user.emailMarketingConsent?.source !== 'offline') return false;
+  const claimed = await redisCommand([
+    'SET',
+    offlineConsentNoticeKey(user.id),
+    new Date().toISOString(),
+    'NX'
+  ], options);
+  return claimed === 'OK';
 }
 
 export async function deleteAccountSession(token, options = {}) {
@@ -408,6 +424,7 @@ export const accountStoreInternals = {
   emailKey,
   userKey,
   sessionKey,
-  passwordResetKey
+  passwordResetKey,
+  offlineConsentNoticeKey
 };
 

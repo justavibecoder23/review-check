@@ -179,12 +179,6 @@ function ensureDialog() {
 
 function showOfflineConsentNotice(user) {
   if (!user || user.emailMarketingConsent?.source !== 'offline') return;
-  try {
-    if (sessionStorage.getItem('realview-offline-consent-notice')) return;
-    sessionStorage.setItem('realview-offline-consent-notice', 'shown');
-  } catch {
-    return;
-  }
   const notice = document.createElement('aside');
   notice.className = 'account-consent-toast';
   notice.setAttribute('role', 'status');
@@ -249,7 +243,6 @@ export async function getCurrentUser({ refresh = false } = {}) {
       currentBlogRole = null;
       currentBlogCapabilities = null;
       renderAccountControls();
-      if (currentUser) showOfflineConsentNotice(currentUser);
       if (currentUser) void refreshBlogAccess({ refresh: true });
       return currentUser;
     })
@@ -333,7 +326,7 @@ async function submitAccountForm(form) {
     currentBlogCapabilities = null;
     statusPromise = Promise.resolve(currentUser);
     renderAccountControls();
-    if (action === 'login') showOfflineConsentNotice(currentUser);
+    if (action === 'login' && payload.showOfflineConsentNotice) showOfflineConsentNotice(currentUser);
     void refreshBlogAccess({ refresh: true });
     closeAuthDialog();
     const eventName = action === 'register' ? 'sign_up' : action === 'reset_password' ? 'password_reset' : 'login';
