@@ -90,10 +90,24 @@ export default async function handler(request, response) {
         'public, s-maxage=300, stale-while-revalidate=3600'
       );
     }
-    const status = Number(error?.statusCode) || 500;
-    const message = status === 404 ? 'Không tìm thấy bài viết.' : 'Bài viết tạm thời chưa thể hiển thị.';
-    response.setHeader('X-Robots-Tag', 'noindex, nofollow');
-    return sendHtml(response, status, message, 'private, no-store');
+    const notFound = Number(error?.statusCode) === 404;
+    if (notFound) response.setHeader('X-Robots-Tag', 'noindex, nofollow');
+    else {
+      // A missing private Blob revision is a temporary storage outage, not a
+      // deleted article. Keep its URL indexable and ask crawlers to retry.
+      response.setHeader('Retry-After', '120');
+      console.error('blog_post_unavailable', {
+        slug,
+        code: String(error?.code || 'BLOG_STORAGE_ERROR'),
+        statusCode: Number(error?.statusCode) || 500
+      });
+    }
+    return sendHtml(
+      response,
+      notFound ? 404 : 503,
+      request.method === 'HEAD' ? '' : (notFound ? 'Không tìm thấy bài viết.' : 'Bài viết tạm thời chưa thể hiển thị.'),
+      'private, no-store'
+    );
   }
 }
 

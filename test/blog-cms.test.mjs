@@ -888,6 +888,30 @@ test('route bài legacy luôn fallback về HTML tĩnh khi CMS chưa cấu hình
   }
 });
 
+test('route bài chỉ có trong CMS trả 503 có Retry-After khi kho revision tạm lỗi', async () => {
+  const previousUrl = process.env.UPSTASH_REDIS_REST_URL;
+  const previousToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+  delete process.env.UPSTASH_REDIS_REST_URL;
+  delete process.env.UPSTASH_REDIS_REST_TOKEN;
+  const previousError = console.error;
+  console.error = () => {};
+  try {
+    const response = htmlResponseMock();
+    await blogPostHandler({ method: 'GET', query: { slug: 'bai-chi-co-trong-cms' } }, response);
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.getHeader('retry-after'), '120');
+    assert.equal(response.getHeader('x-robots-tag'), undefined);
+    assert.equal(response.getHeader('cache-control'), 'private, no-store');
+    assert.match(response.body, /tạm thời/);
+  } finally {
+    console.error = previousError;
+    if (previousUrl === undefined) delete process.env.UPSTASH_REDIS_REST_URL;
+    else process.env.UPSTASH_REDIS_REST_URL = previousUrl;
+    if (previousToken === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    else process.env.UPSTASH_REDIS_REST_TOKEN = previousToken;
+  }
+});
+
 test('migration nội bộ có thể nhận slug legacy nhưng thao tác admin thông thường vẫn bị chặn', async () => {
   const previousUrl = process.env.UPSTASH_REDIS_REST_URL;
   const previousToken = process.env.UPSTASH_REDIS_REST_TOKEN;
