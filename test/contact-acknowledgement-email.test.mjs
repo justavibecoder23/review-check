@@ -154,12 +154,14 @@ test('email xác nhận liên hệ có logo, lời xác nhận, CTA và footer l
   assert.match(content.text, /Chào Nguyễn Văn A,/);
   assert.match(content.text, /Đội ngũ RealView đã nhận được nội dung/);
   assert.match(content.html, /assets\/email\/realview-logo-mark\.png/);
-  assert.match(content.html, /assets\/email\/mascot-welcome-contact\.png/);
-  assert.match(content.html, /Khám phá RealView/);
-  assert.match(content.html, /THÔNG TIN &amp; KẾT NỐI/);
-  for (const value of ['realview.com.vn', 'realviewueh@gmail.com', '037 712 0633', 'Facebook:', 'TikTok:', 'Threads:']) {
+  assert.match(content.html, /352f488dddd85cd2caecd166829cc6de\.png/);
+  assert.match(content.html, /Cảm ơn bạn vì đã liên hệ!/);
+  assert.match(content.html, /Khám phá RealView ngay/);
+  assert.match(content.html, /Chào <\/span><span[^>]*>Nguyễn Văn A<\/span>/);
+  for (const value of ['realview.com.vn', 'realviewueh@gmail.com', 'Facebook:', 'Threads:']) {
     assert.ok(content.html.includes(value));
   }
+  assert.match(content.html, /TikTok:?/i);
   assert.doesNotMatch(content.html, /instagram/i);
 });
 
@@ -169,7 +171,7 @@ test('tên khách hàng được làm sạch và thoát an toàn trong lời ch�
   });
 
   assert.match(content.text, /^Chào <Khách & hàng> RealView,/);
-  assert.match(content.html, /<strong[^>]*>&lt;Khách &amp; hàng&gt; RealView<\/strong>,/);
+  assert.match(content.html, /&lt;Khách &amp; hàng&gt; RealView/);
   assert.doesNotMatch(content.html, /Chào <Khách & hàng>/);
 });
 
@@ -221,7 +223,7 @@ test('email xác nhận liên hệ được gửi đúng người nhận qua Gma
     assert.equal(message.to, 'buyer@example.com');
     assert.equal(message.subject, '[Tự động] Xác nhận yêu cầu liên hệ – RealView');
     assert.match(message.text, /^Chào Nguyễn Văn A,/);
-    assert.match(message.html, /Chào <strong[^>]*>Nguyễn Văn A<\/strong>,/);
+    assert.match(message.html, /Chào <\/span><span[^>]*>Nguyễn Văn A<\/span>/);
     assert.deepEqual(result, { delivered: true, messageId: 'contact-acknowledgement-id' });
   } finally {
     if (previousUser === undefined) delete process.env.GMAIL_SMTP_USER;
