@@ -322,7 +322,7 @@ test('review reliability figures 7 and 8 use the toolbar-free JPG assets', () =>
 
 test('selected tall article figures are compact and toolbar screenshots use the clean TrustScore image', () => {
   assert.match(blogStyles, /\.article-figure--compact img \{[^}]*width: auto;[^}]*max-width: 100%;[^}]*max-height: 720px;[^}]*margin: 0 auto;[^}]*object-fit: contain;/);
-  assert.match(blogStyles, /@media \(max-width: 760px\) \{[\s\S]*?\.article-figure--compact img \{[^}]*max-height: 68vh;/);
+  assert.match(blogStyles, /@media \(max-width: 760px\) \{[\s\S]*?\.article-figure--compact img \{[^}]*max-height: min\(58svh, 480px\);/);
 
   for (const [html, sources] of [
     [shopeeMallArticleHtml, ['seo04-6-1.jpg', 'seo04-51-1.jpg']],
@@ -340,9 +340,10 @@ test('selected tall article figures are compact and toolbar screenshots use the 
   assert.doesNotMatch(trustedShopeeShopArticleHtml, /seo06-45-1\.jpg/);
 });
 
-test('selected review examples and the Shopee seeding example use the reduced figure treatment', () => {
-  assert.match(blogStyles, /\.article-figure--reduced img \{[^}]*width: 88%;[^}]*max-width: 680px;[^}]*margin-right: auto;[^}]*margin-left: auto;[^}]*object-fit: contain;/);
-  assert.match(blogStyles, /@media \(max-width: 760px\) \{[\s\S]*?\.article-figure--reduced img \{[^}]*width: 92%;/);
+test('selected review examples and the Shopee seeding example use centered, height-limited figures', () => {
+  assert.match(blogStyles, /\.article-figure img \{[^}]*margin-inline: auto;/);
+  assert.match(blogStyles, /\.article-figure--reduced img \{[^}]*width: auto;[^}]*max-width: min\(88%, 680px\);[^}]*max-height: 720px;[^}]*object-fit: contain;/);
+  assert.match(blogStyles, /@media \(max-width: 760px\) \{[\s\S]*?\.article-figure--reduced img \{[^}]*max-width: 92%;[^}]*max-height: min\(58svh, 480px\);/);
 
   for (const source of [
     'review-5-sao-it-thong-tin.jpg',
@@ -353,8 +354,8 @@ test('selected review examples and the Shopee seeding example use the reduced fi
   }
 
   assert.match(trustedShopeeShopArticleHtml, /class="article-figure article-figure--compact article-figure--reduced article-figure--smaller"><img src="\/assets\/blog\/seo06-55-1\.jpg"/);
-  assert.match(blogStyles, /\.article-figure--smaller img \{[^}]*width: 80%;[^}]*max-width: 620px;/);
-  assert.match(blogStyles, /@media \(max-width: 760px\) \{[\s\S]*?\.article-figure--smaller img \{[^}]*width: 86%;/);
+  assert.match(blogStyles, /\.article-figure--smaller img \{[^}]*width: auto;[^}]*max-width: min\(80%, 620px\);[^}]*max-height: 720px;[^}]*object-fit: contain;/);
+  assert.match(blogStyles, /@media \(max-width: 760px\) \{[\s\S]*?\.article-figure--smaller img \{[^}]*max-width: 76%;[^}]*max-height: min\(50svh, 400px\);/);
 });
 
 test('TikTok review reliability CTA is centered and has no square brackets', () => {
