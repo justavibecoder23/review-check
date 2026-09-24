@@ -103,28 +103,58 @@
   cursor: pointer;
   transform: rotate(var(--mascot-lean, 0deg));
   transform-origin: center bottom;
-  filter: drop-shadow(0 12px 13px rgba(35,25,18,.14));
-  transition: transform .2s ease, filter .2s ease;
+  isolation: isolate;
+  transition: transform .2s ease;
 }
-.realviewee-character:hover,
-.realviewee-character:focus-visible { filter: drop-shadow(0 15px 17px rgba(252,120,31,.22)); }
+.realviewee-character::before,
+.realviewee-static::before {
+  position: absolute;
+  z-index: 0;
+  right: 8%;
+  bottom: 7%;
+  left: 8%;
+  height: 68%;
+  content: "";
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(252,120,31,.28) 0%, rgba(252,120,31,.13) 46%, rgba(252,120,31,0) 76%);
+  filter: blur(12px);
+  opacity: 0;
+  transform: scale(.84);
+  pointer-events: none;
+  transition: opacity .2s ease, transform .24s ease;
+}
+.realviewee-character:hover::before,
+.realviewee-character:focus-visible::before,
+.realviewee-static:hover::before,
+.realviewee-static:focus-visible::before { opacity: 1; transform: scale(1); }
+.realviewee-character > .realviewee-sprite,
+.realviewee-static > .realviewee-sprite {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 10px 12px rgba(35,25,18,.13));
+  transition: filter .2s ease;
+}
+.realviewee-character:hover > .realviewee-sprite,
+.realviewee-character:focus-visible > .realviewee-sprite,
+.realviewee-static:hover > .realviewee-sprite,
+.realviewee-static:focus-visible > .realviewee-sprite { filter: drop-shadow(0 12px 14px rgba(252,120,31,.18)); }
 .realviewee-character:focus-visible { border-radius: 24px; box-shadow: 0 0 0 3px var(--orange); }
 .realviewee-speech {
   position: absolute;
   z-index: 10;
-  bottom: calc(100% - 18px);
-  left: -20px;
+  bottom: calc(100% + 10px);
+  left: -17px;
   width: max-content;
-  max-width: 190px;
-  padding: 9px 12px;
-  border: 1px solid rgba(252,120,31,.4);
-  border-radius: 16px 16px 16px 5px;
-  background: white;
-  color: var(--ink);
-  box-shadow: 0 12px 28px rgba(31,22,16,.13);
+  max-width: 176px;
+  padding: 6px 12px;
+  border: 1px solid rgba(252,120,31,.3);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--orange-dark);
+  box-shadow: 0 4px 12px rgba(0,0,0,.1);
   font-size: 12px;
-  font-weight: 780;
-  line-height: 1.35;
+  font-weight: 700;
+  line-height: 1.3;
   opacity: 0;
   transform: translateY(8px) scale(.96);
   transform-origin: bottom left;
@@ -133,17 +163,17 @@
 }
 .realviewee-speech::after {
   position: absolute;
-  bottom: -7px;
+  bottom: -6px;
   left: 32px;
-  width: 13px;
-  height: 13px;
+  width: 10px;
+  height: 10px;
   content: "";
-  border-right: 1px solid rgba(252,120,31,.4);
-  border-bottom: 1px solid rgba(252,120,31,.4);
-  background: white;
+  border-right: 1px solid rgba(252,120,31,.3);
+  border-bottom: 1px solid rgba(252,120,31,.3);
+  background: #fff;
   transform: rotate(45deg);
 }
-.realviewee-speech.is-visible { opacity: 1; transform: translateY(0) scale(1); }
+.realviewee-speech.is-visible { opacity: 1; transform: translateY(0) scale(1); animation: realviewee-speech-float 2.8s ease-in-out infinite alternate; }
 
 @keyframes realviewee-patrol {
   0% { left: 24px; opacity: 0; }
@@ -165,10 +195,10 @@
   border-radius: 24px;
   background: transparent;
   cursor: pointer;
-  filter: drop-shadow(0 10px 12px rgba(35,25,18,.12));
-  transition: transform .18s ease, filter .18s ease;
+  isolation: isolate;
+  transition: transform .18s ease;
 }
-.realviewee-static:hover { transform: translateY(-3px); filter: drop-shadow(0 13px 15px rgba(252,120,31,.2)); }
+.realviewee-static:hover { transform: translateY(-3px); }
 .realviewee-static:focus-visible { outline: 3px solid rgba(252,120,31,.42); outline-offset: 3px; }
 .trust-copy { position: relative; }
 .trust-copy > h2,
@@ -209,7 +239,7 @@
 }
 .realviewee-static--trust .realviewee-static-speech {
   right: 12px;
-  bottom: calc(100% - 5px);
+  bottom: calc(100% + 10px);
 }
 .realviewee-static--trust .realviewee-static-speech::after {
   right: 20px;
@@ -392,7 +422,7 @@
     border-radius: 20px;
   }
   .realviewee-stage--home { height: 136px; margin-top: 16px; }
-  .realviewee-speech { bottom: calc(100% - 14px); left: -14px; max-width: 168px; padding: 8px 10px; font-size: 11px; }
+  .realviewee-speech { bottom: calc(100% + 8px); left: -14px; max-width: 168px; padding: 6px 10px; font-size: 11px; }
   .realviewee-static--trust { --static-mascot-width: 66px; }
   #danh-gia-giu-lai > summary,
   #danh-gia-da-loai > summary { grid-template-columns: 42px minmax(0, 1fr) 58px 32px; gap: 9px; }
