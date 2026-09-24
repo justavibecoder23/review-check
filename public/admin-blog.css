@@ -67,6 +67,8 @@ button { color: inherit; }
 
 .admin-main { min-width: 0; padding: 42px clamp(24px, 4vw, 62px) 80px; }
 .admin-view { width: min(100%, 1360px); margin: 0 auto; }
+.admin-snapshot-notice { margin-bottom: 24px; padding: 15px 18px; border: 1px solid #e7bc81; border-radius: 14px; background: #fff8e9; color: #6d3f10; font-size: 13px; line-height: 1.55; }
+.admin-snapshot-notice strong { color: #45280d; }
 .admin-page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
 .admin-page-heading h1, .admin-editor-heading h1 { margin: 8px 0 8px; font-size: clamp(34px, 4vw, 50px); line-height: .98; letter-spacing: -2.3px; }
 .admin-page-heading > div > p:last-child { margin: 0; color: var(--admin-muted); font-size: 14px; }

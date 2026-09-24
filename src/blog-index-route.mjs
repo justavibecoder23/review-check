@@ -14,6 +14,14 @@ export default async function handler(request, response) {
     response.statusCode = 405;
     return response.end('Phương thức không được hỗ trợ.');
   }
+  if (process.env.BLOG_PUBLIC_SNAPSHOT !== 'off') {
+    const snapshot = await readFile(new URL('../public/blog/snapshots/index-snapshot.html', import.meta.url), 'utf8');
+    response.statusCode = 200;
+    response.setHeader('Content-Type', 'text/html; charset=utf-8');
+    response.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    return response.end(request.method === 'HEAD' ? undefined : snapshot);
+  }
   const template = await readTemplate();
   let html = template;
   try {

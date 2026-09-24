@@ -5,6 +5,23 @@ import { renderBlogPost } from './blog-renderer.mjs';
 import { migrateStaticBlogHtml, restoreStaticBlogPresentation } from './blog-static-migration.mjs';
 
 const legacySlugSet = new Set(LEGACY_BLOG_SLUGS);
+// Emergency, byte-verified public snapshots. They take precedence over CMS
+// until its storage is migrated; reading an article must not depend on Blob.
+const snapshotSlugSet = new Set([...LEGACY_BLOG_SLUGS,
+  'trang-check-review-uy-tin-5-cong-cu-dang-biet',
+  'realview-la-gi-cach-su-dung-realview-de-check-review-san-pham-shopee-va-tiktok-shop',
+  'vi-sao-realview-huu-ich',
+  'tips-kiem-tra-review-san-pham-checklist-truoc-khi-mua-hang',
+  'san-pham-nhieu-review-van-tiem-an-rui-ro',
+  'check-review-la-gi-tai-sao-can-check-review-truoc-khi-dat-hang',
+  'seeding-review-la-gi',
+  'seeding-review-shopee-tiktok'
+]);
+
+async function readSnapshotBlogHtml(slug) {
+  if (!snapshotSlugSet.has(slug) || process.env.BLOG_PUBLIC_SNAPSHOT === 'off') return null;
+  return readFile(new URL(`../public/blog/snapshots/${slug}.html`, import.meta.url), 'utf8');
+}
 
 async function readLegacyBlogHtml(slug) {
   if (!legacySlugSet.has(slug)) return null;
@@ -50,6 +67,15 @@ export default async function handler(request, response) {
   }
   const slug = String(queryValue(request.query?.slug) || '').trim();
   try {
+    const snapshotHtml = await readSnapshotBlogHtml(slug);
+    if (snapshotHtml) {
+      return sendHtml(
+        response,
+        200,
+        request.method === 'HEAD' ? '' : snapshotHtml,
+        'public, s-maxage=3600, stale-while-revalidate=86400'
+      );
+    }
     const route = await resolvePublishedBlogRoute(slug, { redisTimeoutMs: 1_200 });
     if (route.kind === 'redirect') {
       response.statusCode = 308;
@@ -111,4 +137,4 @@ export default async function handler(request, response) {
   }
 }
 
-export const blogPostHandlerInternals = { isUnchangedLegacyImport, readLegacyBlogHtml, sameInstant };
+export const blogPostHandlerInternals = { isUnchangedLegacyImport, readLegacyBlogHtml, readSnapshotBlogHtml, sameInstant };

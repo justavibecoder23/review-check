@@ -41,6 +41,14 @@
   },
   "headers": [
     {
+      "source": "/blog/snapshots/:path*",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+    },
+    {
+      "source": "/assets/blog-recovered/:path*",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+    },
+    {
       "source": "/assets/realview-logo-v1.webp",
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
     },
@@ -129,11 +137,28 @@
     { "source": "/api/blog-public", "destination": "/api/blog.mjs?route=public" },
     { "source": "/admin/blog", "destination": "/admin-blog.html" },
     { "source": "/admin/access", "destination": "/admin-access.html" },
-    { "source": "/sitemap.xml", "destination": "/api/blog.mjs?route=sitemap" },
+    { "source": "/sitemap.xml", "destination": "/blog/snapshots/sitemap-snapshot.xml" },
     { "source": "/bai-viet/rss.xml", "destination": "/api/blog.mjs?route=rss" },
     { "source": "/tieu-chi-loc", "destination": "/criteria.html" },
     { "source": "/lien-he", "destination": "/contact.html" },
-    { "source": "/bai-viet", "destination": "/api/blog.mjs?route=index" },
+    { "source": "/bai-viet", "destination": "/blog/snapshots/index-snapshot.html" },
+    { "source": "/bai-viet/trang-check-review-uy-tin-5-cong-cu-dang-biet", "destination": "/blog/snapshots/trang-check-review-uy-tin-5-cong-cu-dang-biet.html" },
+    { "source": "/bai-viet/realview-la-gi-cach-su-dung-realview-de-check-review-san-pham-shopee-va-tiktok-shop", "destination": "/blog/snapshots/realview-la-gi-cach-su-dung-realview-de-check-review-san-pham-shopee-va-tiktok-shop.html" },
+    { "source": "/bai-viet/vi-sao-realview-huu-ich", "destination": "/blog/snapshots/vi-sao-realview-huu-ich.html" },
+    { "source": "/bai-viet/tips-kiem-tra-review-san-pham-checklist-truoc-khi-mua-hang", "destination": "/blog/snapshots/tips-kiem-tra-review-san-pham-checklist-truoc-khi-mua-hang.html" },
+    { "source": "/bai-viet/san-pham-nhieu-review-van-tiem-an-rui-ro", "destination": "/blog/snapshots/san-pham-nhieu-review-van-tiem-an-rui-ro.html" },
+    { "source": "/bai-viet/check-review-la-gi-tai-sao-can-check-review-truoc-khi-dat-hang", "destination": "/blog/snapshots/check-review-la-gi-tai-sao-can-check-review-truoc-khi-dat-hang.html" },
+    { "source": "/bai-viet/seeding-review-la-gi", "destination": "/blog/snapshots/seeding-review-la-gi.html" },
+    { "source": "/bai-viet/seeding-review-shopee-tiktok", "destination": "/blog/snapshots/seeding-review-shopee-tiktok.html" },
+    { "source": "/bai-viet/trustscore-la-gi", "destination": "/blog/snapshots/trustscore-la-gi.html" },
+    { "source": "/bai-viet/review-san-pham-co-dang-tin-khong", "destination": "/blog/snapshots/review-san-pham-co-dang-tin-khong.html" },
+    { "source": "/bai-viet/review-gia-la-gi-dau-hieu-nhan-biet", "destination": "/blog/snapshots/review-gia-la-gi-dau-hieu-nhan-biet.html" },
+    { "source": "/bai-viet/review-san-pham-la-gi", "destination": "/blog/snapshots/review-san-pham-la-gi.html" },
+    { "source": "/bai-viet/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang", "destination": "/blog/snapshots/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html" },
+    { "source": "/bai-viet/shopee-hay-tiktok-shop-mua-hang-o-dau-tot-hon", "destination": "/blog/snapshots/shopee-hay-tiktok-shop-mua-hang-o-dau-tot-hon.html" },
+    { "source": "/bai-viet/shopee-mall-la-gi-co-nen-mua-khong", "destination": "/blog/snapshots/shopee-mall-la-gi-co-nen-mua-khong.html" },
+    { "source": "/bai-viet/tiktok-shop-la-gi-mua-hang-tren-tiktok-co-an-toan-khong", "destination": "/blog/snapshots/tiktok-shop-la-gi-mua-hang-tren-tiktok-co-an-toan-khong.html" },
+    { "source": "/bai-viet/cach-tim-shop-uy-tin-tren-shopee", "destination": "/blog/snapshots/cach-tim-shop-uy-tin-tren-shopee.html" },
     { "source": "/bai-viet/:slug", "destination": "/api/blog.mjs?route=post&slug=:slug" },
     { "source": "/ket-qua", "destination": "/results.html" }
   ]

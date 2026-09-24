@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { listBlogPosts } from './blog-cms-store.mjs';
 import { STATIC_SITEMAP_ENTRIES, blogPublicBaseUrl } from './blog-public-config.mjs';
 import { publicBlogSummary, summaryToBlogRecord } from './blog-public-data.mjs';
@@ -8,6 +9,14 @@ export default async function handler(request, response) {
     response.setHeader('Allow', 'GET, HEAD');
     response.statusCode = 405;
     return response.end('Phương thức không được hỗ trợ.');
+  }
+  if (process.env.BLOG_PUBLIC_SNAPSHOT !== 'off') {
+    const snapshot = await readFile(new URL('../public/blog/snapshots/sitemap-snapshot.xml', import.meta.url), 'utf8');
+    response.statusCode = 200;
+    response.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    response.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    return response.end(request.method === 'HEAD' ? undefined : snapshot);
   }
   let records = [];
   let staticEntries = STATIC_SITEMAP_ENTRIES;

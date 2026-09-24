@@ -235,6 +235,12 @@ async function handleGet(request, response, actor) {
 
 async function handlePost(request, response, body, actor) {
   const action = String(body.action || '').trim().toLowerCase().replace(/-/g, '_');
+  if (process.env.BLOG_PUBLIC_SNAPSHOT !== 'off' && ['import_legacy', 'publish', 'unpublish', 'archive'].includes(action)) {
+    return sendAdminJson(response, 409, {
+      error: 'Blog công khai đang dùng bản tĩnh để tránh phụ thuộc Blob. Chưa thể xuất bản hoặc thay đổi trạng thái bài cho đến khi hoàn tất di chuyển Blog Studio.',
+      code: 'BLOG_PUBLIC_SNAPSHOT_FROZEN'
+    });
+  }
   if (action === 'import_legacy') {
     const slug = String(body.slug || '').trim();
     if (!legacySlugSet.has(slug)) {
@@ -328,6 +334,7 @@ export default async function handler(request, response) {
 
 export const blogAdminRouteInternals = {
   STATIC_POST_PREFIX,
+  handlePost,
   importStaticLegacyPost,
   mergeAdminPostsWithLegacy,
   postSortTime,
