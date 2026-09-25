@@ -1,6 +1,8 @@
 import {
+  acceptEmailMarketingConsent,
   authenticateAccount,
   assertRegistrationAvailable,
+  claimOfflineConsentNotice,
   createAccountSession,
   createPasswordReset,
   deleteAccountSession,
@@ -126,6 +128,14 @@ export default async function handler(request, response) {
       return send(response, 200, { user: null });
     }
 
+    if (body.action === 'consent_email_marketing') {
+      await enforceRateLimit(request, body.action);
+      const sessionUser = await currentAccount(request);
+      if (!sessionUser) return send(response, 401, { error: 'Vui lòng đăng nhập để lưu lựa chọn này.' });
+      const user = await acceptEmailMarketingConsent(sessionUser.id);
+      return send(response, 200, { user });
+    }
+
     if (body.action === 'request_password_reset') {
       await enforceRateLimit(request, body.action);
       const reset = await createPasswordReset(body.email);
@@ -195,6 +205,9 @@ export default async function handler(request, response) {
       ? await registerAccount(body)
       : await authenticateAccount(body);
     const session = await createAccountSession(user);
+    const showOfflineConsentNotice = !isRegistration
+      ? await claimOfflineConsentNotice(user)
+      : false;
     response.setHeader('Set-Cookie', sessionCookie(request, session.token, session.expiresIn));
     const claimedGuestHistory = isRegistration && body.claimGuestHistory === 'on'
       ? await claimGuestHistory(request, response, user.id).catch((error) => {
@@ -212,6 +225,7 @@ export default async function handler(request, response) {
       : null;
     return send(response, isRegistration ? 201 : 200, {
       user,
+      ...(!isRegistration ? { showOfflineConsentNotice } : {}),
       ...(isRegistration ? { welcomeEmailDelivered: welcomeEmail.delivered, claimedGuestHistory } : {})
     });
   } catch (error) {

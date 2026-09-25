@@ -179,18 +179,72 @@ function ensureDialog() {
 
 function showOfflineConsentNotice(user) {
   if (!user || user.emailMarketingConsent?.source !== 'offline') return;
-  try {
-    if (sessionStorage.getItem('realview-offline-consent-notice')) return;
-    sessionStorage.setItem('realview-offline-consent-notice', 'shown');
-  } catch {
-    return;
-  }
   const notice = document.createElement('aside');
   notice.className = 'account-consent-toast';
   notice.setAttribute('role', 'status');
   notice.innerHTML = '<strong>Bạn đã đăng ký nhận email RealView</strong><p>Chúng tôi đã ghi nhận lựa chọn đồng ý nhận email mà bạn xác nhận trước đây. Email dịch vụ của tài khoản được gửi riêng.</p><button type="button" aria-label="Đóng thông báo">×</button>';
   notice.querySelector('button').addEventListener('click', () => notice.remove());
   document.body.append(notice);
+}
+
+function ensureMarketingConsentDialog() {
+  let dialog = document.querySelector('#marketing-consent-dialog');
+  if (dialog) return dialog;
+  document.body.insertAdjacentHTML('beforeend', `
+    <dialog id="marketing-consent-dialog" class="marketing-consent-dialog" aria-labelledby="marketing-consent-title" aria-describedby="marketing-consent-description">
+      <div class="marketing-consent-card">
+        <button class="marketing-consent-close" type="button" data-marketing-consent-dismiss aria-label="Để sau">×</button>
+        <span class="marketing-consent-mark" aria-hidden="true">R</span>
+        <p class="marketing-consent-eyebrow">MỘT LỜI MỜI TỪ REALVIEW</p>
+        <h2 id="marketing-consent-title">Nhận thêm góc nhìn hữu ích</h2>
+        <p id="marketing-consent-description" class="marketing-consent-copy">Đăng ký email để nhận mẹo đọc review, hướng dẫn mua sắm sáng suốt và thông tin tính năng mới từ RealView.</p>
+        <div class="marketing-consent-details">
+          <span aria-hidden="true">✦</span>
+          <p>Nội dung hữu ích, chọn lọc — gửi riêng với email dịch vụ của tài khoản.</p>
+        </div>
+        <p class="marketing-consent-error" data-marketing-consent-error role="alert" hidden></p>
+        <button class="marketing-consent-accept" type="button" data-marketing-consent-accept>Đồng ý nhận email <span aria-hidden="true">→</span></button>
+        <button class="marketing-consent-later" type="button" data-marketing-consent-dismiss>Không phải lúc này</button>
+        <p class="marketing-consent-footnote">Hoàn toàn tự nguyện. Chỉ đăng ký khi bạn chọn “Đồng ý nhận email”.</p>
+      </div>
+    </dialog>`);
+  dialog = document.querySelector('#marketing-consent-dialog');
+  dialog.addEventListener('close', () => document.body.classList.remove('account-dialog-open'));
+  dialog.querySelectorAll('[data-marketing-consent-dismiss]').forEach((button) => {
+    button.addEventListener('click', () => dialog.close());
+  });
+  dialog.querySelector('[data-marketing-consent-accept]').addEventListener('click', async (event) => {
+    const accept = event.currentTarget;
+    const later = dialog.querySelector('.marketing-consent-later');
+    const error = dialog.querySelector('[data-marketing-consent-error]');
+    error.hidden = true;
+    accept.disabled = true;
+    later.disabled = true;
+    accept.innerHTML = 'Đang lưu lựa chọn…';
+    try {
+      const payload = await apiRequest({ action: 'consent_email_marketing' });
+      currentUser = payload.user;
+      statusPromise = Promise.resolve(currentUser);
+      renderAccountControls();
+      dialog.close();
+    } catch (requestError) {
+      error.textContent = requestError.message || 'Chưa lưu được lựa chọn. Vui lòng thử lại.';
+      error.hidden = false;
+      accept.disabled = false;
+      later.disabled = false;
+      accept.innerHTML = 'Đồng ý nhận email <span aria-hidden="true">→</span>';
+    }
+  });
+  return dialog;
+}
+
+function showMarketingConsentPrompt(user) {
+  if (user?.emailMarketingConsent?.status !== 'not_subscribed') return;
+  const dialog = ensureMarketingConsentDialog();
+  if (!dialog.open) {
+    document.body.classList.add('account-dialog-open');
+    dialog.showModal();
+  }
 }
 
 function setMode(mode = 'login') {
@@ -249,8 +303,10 @@ export async function getCurrentUser({ refresh = false } = {}) {
       currentBlogRole = null;
       currentBlogCapabilities = null;
       renderAccountControls();
-      if (currentUser) showOfflineConsentNotice(currentUser);
-      if (currentUser) void refreshBlogAccess({ refresh: true });
+      if (currentUser) {
+        showMarketingConsentPrompt(currentUser);
+        void refreshBlogAccess({ refresh: true });
+      }
       return currentUser;
     })
     .catch(() => {
@@ -308,6 +364,7 @@ async function submitAccountForm(form) {
       renderAccountControls();
       void refreshBlogAccess({ refresh: true });
       closeAuthDialog();
+      showMarketingConsentPrompt(currentUser);
       window.realviewTrackEvent?.('sign_up', { method: 'verified_email' });
       window.dispatchEvent(new CustomEvent('realview:auth-changed', { detail: { user: currentUser } }));
       return;
@@ -333,7 +390,10 @@ async function submitAccountForm(form) {
     currentBlogCapabilities = null;
     statusPromise = Promise.resolve(currentUser);
     renderAccountControls();
-    if (action === 'login') showOfflineConsentNotice(currentUser);
+    if (action === 'login') {
+      if (payload.showOfflineConsentNotice) showOfflineConsentNotice(currentUser);
+      showMarketingConsentPrompt(currentUser);
+    }
     void refreshBlogAccess({ refresh: true });
     closeAuthDialog();
     const eventName = action === 'register' ? 'sign_up' : action === 'reset_password' ? 'password_reset' : 'login';

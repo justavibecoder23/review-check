@@ -75,6 +75,7 @@
   const mascotPatrolSteps = [[0, 'running'], [5_000, 'default'], [9_000, 'running'], [14_000, 'default'], [18_000, 'running'], [23_000, 'default']];
   let mascotTimers = [];
   let mascotBubbleTimer;
+  let mascotStateBubbleTimer;
 
   function safeMascotState(state, fallback = 'default') {
     return allowedMascotStates.has(state) ? state : fallback;
@@ -82,7 +83,40 @@
 
   function setHomeMascotState(homeMascot, state) {
     if (!homeMascot?.sprite) return;
-    homeMascot.sprite.dataset.mascotState = safeMascotState(state);
+    const nextState = safeMascotState(state);
+    homeMascot.sprite.dataset.mascotState = nextState;
+    updateHomeMascotSpeech(homeMascot, nextState);
+  }
+
+  function updateHomeMascotSpeech(homeMascot, state) {
+    const bubble = homeMascot?.stateSpeech;
+    if (!bubble) return;
+    const motion = state === 'running' ? 'running' : state === 'default' ? 'stopped' : '';
+    window.clearTimeout(mascotStateBubbleTimer);
+    if (!motion) {
+      bubble.classList.remove('is-visible');
+      return;
+    }
+
+    const nextMarkup = motion === 'running'
+      ? 'Chốt đơn, chốt đơn!'
+      : 'Khoan! Check trên RealView đã!';
+    if (bubble.dataset.motion === motion && bubble.classList.contains('is-visible')) return;
+
+    const applySpeech = () => {
+      bubble.innerHTML = nextMarkup;
+      bubble.dataset.motion = motion;
+      bubble.classList.toggle('is-running', motion === 'running');
+      bubble.classList.toggle('is-stopped', motion === 'stopped');
+      window.requestAnimationFrame(() => bubble.classList.add('is-visible'));
+    };
+
+    bubble.classList.remove('is-visible');
+    if (reducedMotion.matches || !bubble.dataset.motion) {
+      applySpeech();
+      return;
+    }
+    mascotStateBubbleTimer = window.setTimeout(applySpeech, 200);
   }
 
   function clearMascotCycle() {
@@ -120,6 +154,7 @@
     stage.setAttribute('aria-label', 'Trợ lý mua sắm RealViewee');
     stage.innerHTML = `
       <div class="realviewee-companion is-patrolling">
+        <span class="realviewee-state-speech is-running is-visible" data-motion="running" role="status" aria-live="polite">Chốt đơn, chốt đơn!</span>
         <span class="realviewee-speech" role="status" aria-live="polite">Mình giúp bạn check review nhé?</span>
         <button class="realviewee-character" type="button" aria-label="Mở Chat with RealViewee">
           <span class="realviewee-sprite" data-mascot-state="running" aria-hidden="true"></span>
@@ -132,8 +167,9 @@
     const companion = stage.querySelector('.realviewee-companion');
     const character = stage.querySelector('.realviewee-character');
     const speech = stage.querySelector('.realviewee-speech');
+    const stateSpeech = stage.querySelector('.realviewee-state-speech');
     const sprite = stage.querySelector('.realviewee-sprite');
-    const homeMascot = { stage, companion, character, speech, sprite };
+    const homeMascot = { stage, companion, character, speech, stateSpeech, sprite };
 
     const pauseForInteraction = (state = 'default') => {
       clearMascotCycle();
@@ -191,11 +227,42 @@
     return staticMascot;
   }
 
+  function connectMascotToDetails(staticMascot, details) {
+    if (!staticMascot || !details) return;
+    details.id ||= 'trust-explanation-card';
+    staticMascot.setAttribute('role', 'button');
+    staticMascot.setAttribute('tabindex', '0');
+    staticMascot.setAttribute('aria-controls', details.id);
+
+    const syncState = () => {
+      staticMascot.setAttribute('aria-expanded', String(details.open));
+      staticMascot.setAttribute('aria-label', details.open
+        ? 'Đóng giải thích chi tiết TrustScore'
+        : 'Mở giải thích chi tiết TrustScore');
+    };
+    const toggleDetails = () => {
+      details.open = !details.open;
+      syncState();
+    };
+
+    staticMascot.addEventListener('click', toggleDetails);
+    staticMascot.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      toggleDetails();
+    });
+    details.addEventListener('toggle', syncState);
+    syncState();
+  }
+
   function createResultMascots() {
     if (!document.body.classList.contains('results-page')) return [];
     const mascots = [];
     const trustCopy = document.querySelector('#trust-card .trust-copy');
-    mascots.push(createStaticMascot(trustCopy, 'confident', 'trust', 'RealViewee tự tin với kết quả TrustScore', 'Xem chi tiết điểm nha!', trustCopy?.querySelector('.trust-explanation-card')));
+    const trustExplanation = trustCopy?.querySelector('.trust-explanation-card');
+    const trustMascot = createStaticMascot(trustCopy, 'confident', 'trust', 'RealViewee tự tin với kết quả TrustScore', 'Xem chi tiết điểm nha!', trustExplanation);
+    connectMascotToDetails(trustMascot, trustExplanation);
+    mascots.push(trustMascot);
 
     const keptSummary = document.querySelector('#danh-gia-giu-lai > summary');
     mascots.push(createStaticMascot(keptSummary, 'surprised', 'kept', 'RealViewee bất ngờ với các đánh giá đáng tham khảo', 'Góc review chân thực!', keptSummary?.querySelector('.accordion-count')));

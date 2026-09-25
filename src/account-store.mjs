@@ -87,6 +87,10 @@ function passwordResetKey(requestId) {
   return `${PREFIX}:password-reset:${requestId}`;
 }
 
+function offlineConsentNoticeKey(userId) {
+  return `${PREFIX}:notice:offline-consent:${userId}`;
+}
+
 function historyIndexKey(userId) {
   return `${PREFIX}:history:${userId}:index`;
 }
@@ -197,6 +201,21 @@ export async function authenticateAccount({ username, password } = {}, options =
   return publicUser(user);
 }
 
+export async function acceptEmailMarketingConsent(userId, options = {}) {
+  ensureStorage();
+  const user = await readUser(userId, options);
+  if (!user) throw accountError('Không tìm thấy tài khoản.', 404, 'ACCOUNT_NOT_FOUND');
+  if (user.emailMarketingConsent?.status !== 'subscribed') {
+    user.emailMarketingConsent = {
+      status: 'subscribed',
+      source: 'login_prompt',
+      consentedAt: new Date().toISOString()
+    };
+    await redisCommand(['SET', userKey(user.id), JSON.stringify(user)], options);
+  }
+  return publicUser(user);
+}
+
 export async function createAccountSession(user, options = {}) {
   ensureStorage();
   const token = randomBytes(32).toString('base64url');
@@ -210,6 +229,18 @@ export async function getAccountFromSession(token, options = {}) {
   const userId = await redisCommand(['GET', sessionKey(token)], options);
   const user = await readUser(userId, options);
   return user ? publicUser(user) : null;
+}
+
+export async function claimOfflineConsentNotice(user, options = {}) {
+  ensureStorage();
+  if (!user?.id || user.emailMarketingConsent?.source !== 'offline') return false;
+  const claimed = await redisCommand([
+    'SET',
+    offlineConsentNoticeKey(user.id),
+    new Date().toISOString(),
+    'NX'
+  ], options);
+  return claimed === 'OK';
 }
 
 export async function deleteAccountSession(token, options = {}) {
@@ -408,6 +439,7 @@ export const accountStoreInternals = {
   emailKey,
   userKey,
   sessionKey,
-  passwordResetKey
+  passwordResetKey,
+  offlineConsentNoticeKey
 };
 
