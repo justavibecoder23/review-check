@@ -83,7 +83,7 @@
 .realviewee-companion {
   position: absolute;
   z-index: 1;
-  bottom: 2px;
+  bottom: -12px;
   left: 24px;
   width: var(--mascot-width);
   will-change: left;
@@ -139,6 +139,59 @@
 .realviewee-static:hover > .realviewee-sprite,
 .realviewee-static:focus-visible > .realviewee-sprite { filter: drop-shadow(0 12px 14px rgba(252,120,31,.18)); }
 .realviewee-character:focus-visible { border-radius: 24px; box-shadow: 0 0 0 3px var(--orange); }
+.realviewee-state-speech {
+  --state-speech-border: rgba(65,65,62,.22);
+  position: absolute;
+  z-index: 9;
+  bottom: calc(100% + 7px);
+  left: 50%;
+  width: max-content;
+  max-width: 218px;
+  padding: 7px 13px;
+  border: 1px solid var(--state-speech-border);
+  border-radius: 12px;
+  background: #fff;
+  color: #6b6b67;
+  box-shadow: 0 4px 12px rgba(0,0,0,.1);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translate(-50%, 5px) scale(0);
+  transform-origin: 50% calc(100% + 7px);
+  pointer-events: none;
+  transition: opacity .2s ease, transform .2s ease;
+}
+.realviewee-state-speech::after {
+  position: absolute;
+  bottom: -6px;
+  left: var(--state-speech-tail, 50%);
+  width: 10px;
+  height: 10px;
+  content: "";
+  border-right: 1px solid var(--state-speech-border);
+  border-bottom: 1px solid var(--state-speech-border);
+  border-radius: 0 0 2px 0;
+  background: #fff;
+  transform: translateX(-50%) rotate(45deg);
+}
+.realviewee-state-speech.is-running {
+  --state-speech-tail: 53%;
+  left: 70%;
+}
+.realviewee-state-speech.is-stopped {
+  --state-speech-border: rgba(238,77,45,.72);
+  color: #EE4D2D;
+  font-weight: 700;
+}
+.realviewee-state-speech.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+  transition: opacity .2s ease, transform .32s cubic-bezier(.34,1.56,.64,1);
+}
+.realviewee-state-speech.is-running.is-visible { animation: realviewee-state-speech-run .65s ease-in-out infinite alternate; }
+.realviewee-companion.is-chat-open .realviewee-state-speech { opacity: 0; transform: translate(-50%, 5px) scale(0); }
 .realviewee-speech {
   position: absolute;
   z-index: 10;
@@ -175,6 +228,11 @@
 }
 .realviewee-speech.is-visible { opacity: 1; transform: translateY(0) scale(1); animation: realviewee-speech-float 2.8s ease-in-out infinite alternate; }
 
+@keyframes realviewee-state-speech-run {
+  from { margin-top: 0; }
+  to { margin-top: -2px; }
+}
+
 @keyframes realviewee-patrol {
   0% { left: 24px; opacity: 0; }
   2% { left: 24px; opacity: 1; }
@@ -204,6 +262,7 @@
 .trust-copy > h2,
 .trust-copy > p { max-width: calc(100% - 98px); }
 .realviewee-static--trust { --static-mascot-width: 88px; position: absolute; top: 18px; right: 0; }
+.realviewee-static--trust { cursor: pointer; }
 #danh-gia-giu-lai > summary,
 #danh-gia-da-loai > summary { grid-template-columns: 54px minmax(0, 1fr) 82px auto 42px; }
 .realviewee-static--kept,
@@ -422,6 +481,8 @@
     border-radius: 20px;
   }
   .realviewee-stage--home { height: 136px; margin-top: 16px; }
+  .realviewee-companion { bottom: -5px; }
+  .realviewee-state-speech { bottom: calc(100% + 5px); max-width: 196px; padding: 6px 10px; font-size: 10.5px; }
   .realviewee-speech { bottom: calc(100% + 8px); left: -14px; max-width: 168px; padding: 6px 10px; font-size: 11px; }
   .realviewee-static--trust { --static-mascot-width: 66px; }
   #danh-gia-giu-lai > summary,
@@ -448,8 +509,9 @@
   .realviewee-sprite[data-mascot-state="running"],
   .realviewee-sprite[data-mascot-state="running"]::before,
   .realviewee-sprite[data-mascot-state="running"]::after,
+  .realviewee-state-speech,
   .realviewee-static-speech { animation: none; }
-  .realviewee-character, .realviewee-speech, .realviewee-static { transition: none; }
+  .realviewee-character, .realviewee-speech, .realviewee-state-speech, .realviewee-static { transition: none; }
 }
 
 /* Improve chatbot legibility while keeping its visual language unchanged. */
