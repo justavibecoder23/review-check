@@ -51,13 +51,15 @@ test('form đăng ký có lựa chọn email marketing riêng và thông báo kh
   assert.match(css, /\.account-consent-toast/);
 });
 
-test('lời mời email marketing chỉ bật sau đăng nhập và chỉ lưu khi người dùng đồng ý', async () => {
+test('lời mời email marketing hiện khi mở trang, vừa đăng ký hoặc đăng nhập và chỉ lưu khi đồng ý', async () => {
   const [auth, css, authApi] = await Promise.all([
     readFile(new URL('../public/auth.js', import.meta.url), 'utf8'),
     readFile(new URL('../public/auth.css', import.meta.url), 'utf8'),
     readFile(new URL('../api/auth.mjs', import.meta.url), 'utf8')
   ]);
   assert.match(auth, /if \(action === 'login'\)[\s\S]*showMarketingConsentPrompt\(currentUser\)/);
+  assert.match(auth, /export async function getCurrentUser[\s\S]*if \(currentUser\) \{\s*showMarketingConsentPrompt\(currentUser\)/);
+  assert.match(auth, /if \(action === 'verify_registration'\)[\s\S]*showMarketingConsentPrompt\(currentUser\)/);
   assert.match(auth, /user\?\.emailMarketingConsent\?\.status !== 'not_subscribed'/);
   assert.match(auth, /data-marketing-consent-accept/);
   assert.match(auth, /apiRequest\(\{ action: 'consent_email_marketing' \}\)/);

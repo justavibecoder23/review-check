@@ -303,7 +303,10 @@ export async function getCurrentUser({ refresh = false } = {}) {
       currentBlogRole = null;
       currentBlogCapabilities = null;
       renderAccountControls();
-      if (currentUser) void refreshBlogAccess({ refresh: true });
+      if (currentUser) {
+        showMarketingConsentPrompt(currentUser);
+        void refreshBlogAccess({ refresh: true });
+      }
       return currentUser;
     })
     .catch(() => {
@@ -361,6 +364,7 @@ async function submitAccountForm(form) {
       renderAccountControls();
       void refreshBlogAccess({ refresh: true });
       closeAuthDialog();
+      showMarketingConsentPrompt(currentUser);
       window.realviewTrackEvent?.('sign_up', { method: 'verified_email' });
       window.dispatchEvent(new CustomEvent('realview:auth-changed', { detail: { user: currentUser } }));
       return;
