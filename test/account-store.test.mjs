@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  acceptEmailMarketingConsent,
   authenticateAccount,
   claimOfflineConsentNotice,
   createPasswordReset,
@@ -166,6 +167,34 @@ test('lựa chọn email marketing được lưu riêng và tài khoản cũ dù
     assert.equal(await claimOfflineConsentNotice(legacy, { fetchImpl: mock.fetchImpl }), true);
     assert.equal(await claimOfflineConsentNotice(legacy, { fetchImpl: mock.fetchImpl }), false);
     assert.equal(await claimOfflineConsentNotice(optedIn, { fetchImpl: mock.fetchImpl }), false);
+  } finally {
+    if (previousUrl === undefined) delete process.env.UPSTASH_REDIS_REST_URL;
+    else process.env.UPSTASH_REDIS_REST_URL = previousUrl;
+    if (previousToken === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    else process.env.UPSTASH_REDIS_REST_TOKEN = previousToken;
+  }
+});
+
+test('chỉ ghi nhận đồng ý marketing sau khi người dùng chấp nhận', async () => {
+  const previousUrl = process.env.UPSTASH_REDIS_REST_URL;
+  const previousToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'test-token';
+  const mock = redisMock();
+  try {
+    const user = await registerAccount({
+      email: 'consent@example.com', username: 'Consent_01', password: 'mat-khau-an-toan'
+    }, { fetchImpl: mock.fetchImpl });
+    assert.equal(user.emailMarketingConsent.status, 'not_subscribed');
+
+    const accepted = await acceptEmailMarketingConsent(user.id, { fetchImpl: mock.fetchImpl });
+    assert.equal(accepted.emailMarketingConsent.status, 'subscribed');
+    assert.equal(accepted.emailMarketingConsent.source, 'login_prompt');
+    assert.ok(accepted.emailMarketingConsent.consentedAt);
+    assert.equal(JSON.parse(mock.strings.get(`realview:account:v1:user:${user.id}`)).emailMarketingConsent.source, 'login_prompt');
+
+    const repeated = await acceptEmailMarketingConsent(user.id, { fetchImpl: mock.fetchImpl });
+    assert.equal(repeated.emailMarketingConsent.consentedAt, accepted.emailMarketingConsent.consentedAt);
   } finally {
     if (previousUrl === undefined) delete process.env.UPSTASH_REDIS_REST_URL;
     else process.env.UPSTASH_REDIS_REST_URL = previousUrl;

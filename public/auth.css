@@ -220,6 +220,26 @@
 .account-consent-toast strong { display: block; font-size: 13px; }
 .account-consent-toast p { margin: 5px 0 0; color: #686862; font-size: 12px; line-height: 1.45; }
 .account-consent-toast button { position: absolute; top: 8px; right: 10px; width: 30px; height: 30px; border: 0; border-radius: 50%; background: transparent; color: #686862; font-size: 21px; cursor: pointer; }
+.marketing-consent-dialog { width: min(92vw, 440px); max-height: min(90vh, 680px); padding: 0; overflow: visible; border: 0; border-radius: 27px; background: transparent; color: var(--ink); }
+.marketing-consent-dialog::backdrop { background: rgba(18,18,17,.62); backdrop-filter: blur(7px); }
+.marketing-consent-card { position: relative; padding: 34px; overflow: hidden; border: 1px solid rgba(255,255,255,.7); border-radius: 27px; background: radial-gradient(ellipse at 95% 0%, rgba(252,120,31,.13), transparent 35%), #fffdfa; box-shadow: 0 30px 90px rgba(18,18,17,.3); }
+.marketing-consent-close { position: absolute; top: 16px; right: 16px; width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid rgba(22,22,22,.1); border-radius: 50%; background: #fff; color: #666; font-size: 24px; line-height: 1; cursor: pointer; }
+.marketing-consent-mark { width: 50px; height: 50px; display: grid; place-items: center; margin-bottom: 22px; border-radius: 16px; background: linear-gradient(140deg, #ffac65, #fc781f 70%); color: #171717; font-size: 26px; font-weight: 950; box-shadow: 0 9px 20px rgba(252,120,31,.24); }
+.marketing-consent-eyebrow { margin: 0 0 8px; color: var(--orange-dark); font-size: 10px; font-weight: 900; letter-spacing: 1.1px; }
+.marketing-consent-card h2 { max-width: 340px; margin: 0; font-size: clamp(26px, 6vw, 34px); line-height: 1.08; letter-spacing: -1.1px; }
+.marketing-consent-copy { margin: 13px 0 0; color: #5f5f59; font-size: 14px; line-height: 1.6; }
+.marketing-consent-details { margin: 20px 0 0; padding: 14px; display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: start; gap: 9px; border: 1px solid rgba(168,69,4,.14); border-radius: 15px; background: #fff5ec; }
+.marketing-consent-details > span { color: var(--orange-dark); font-size: 19px; }
+.marketing-consent-details p { margin: 0; color: #5c4b3d; font-size: 12px; font-weight: 650; line-height: 1.5; }
+.marketing-consent-error { margin: 14px 0 0; padding: 10px 12px; border-radius: 10px; background: #fae3df; color: #982f25; font-size: 12px; line-height: 1.45; }
+.marketing-consent-error[hidden] { display: none; }
+.marketing-consent-accept { width: 100%; min-height: 50px; margin-top: 21px; padding: 0 17px; display: flex; align-items: center; justify-content: space-between; border: 1px solid #b6500d; border-radius: 14px; background: var(--orange); color: var(--ink); font: inherit; font-size: 14px; font-weight: 900; cursor: pointer; box-shadow: 0 9px 20px rgba(168,69,4,.18); }
+.marketing-consent-accept:hover { background: #ff9148; }
+.marketing-consent-accept:disabled, .marketing-consent-later:disabled { opacity: .65; cursor: wait; }
+.marketing-consent-later { width: 100%; min-height: 42px; margin-top: 5px; border: 0; background: transparent; color: #65655f; font: inherit; font-size: 12px; font-weight: 750; cursor: pointer; }
+.marketing-consent-later:hover { color: var(--ink); text-decoration: underline; }
+.marketing-consent-footnote { margin: 12px 0 0; color: #85857f; font-size: 10px; line-height: 1.45; text-align: center; }
+.marketing-consent-dialog button:focus-visible { outline: 3px solid rgba(252,120,31,.42); outline-offset: 3px; }
 .account-form-error { margin: 0; padding: 10px 12px; border-radius: 10px; background: #fae3df; color: #982f25; font-size: 12px; line-height: 1.45; }
 .account-form-error[hidden] { display: none; }
 .account-submit {
@@ -267,6 +287,8 @@ body.account-dialog-open { overflow: hidden; }
 }
 
 @media (max-width: 520px) {
+  .marketing-consent-card { padding: 28px 22px 24px; border-radius: 23px; }
+  .marketing-consent-close { top: 13px; right: 13px; width: 35px; height: 35px; }
   .header-inner > .brand { gap: 6px; font-size: 15px; letter-spacing: -.55px; }
   .header-inner > .brand .brand-mark { width: 36px; height: 30px; }
   .auth-button, .account-chip { min-height: 39px; padding-inline: 11px; font-size: 11px; }

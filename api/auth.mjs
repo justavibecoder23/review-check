@@ -1,4 +1,5 @@
 import {
+  acceptEmailMarketingConsent,
   authenticateAccount,
   assertRegistrationAvailable,
   claimOfflineConsentNotice,
@@ -125,6 +126,14 @@ export default async function handler(request, response) {
       await deleteAccountSession(token);
       response.setHeader('Set-Cookie', sessionCookie(request, '', 0));
       return send(response, 200, { user: null });
+    }
+
+    if (body.action === 'consent_email_marketing') {
+      await enforceRateLimit(request, body.action);
+      const sessionUser = await currentAccount(request);
+      if (!sessionUser) return send(response, 401, { error: 'Vui lòng đăng nhập để lưu lựa chọn này.' });
+      const user = await acceptEmailMarketingConsent(sessionUser.id);
+      return send(response, 200, { user });
     }
 
     if (body.action === 'request_password_reset') {

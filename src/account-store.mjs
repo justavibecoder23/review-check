@@ -201,6 +201,21 @@ export async function authenticateAccount({ username, password } = {}, options =
   return publicUser(user);
 }
 
+export async function acceptEmailMarketingConsent(userId, options = {}) {
+  ensureStorage();
+  const user = await readUser(userId, options);
+  if (!user) throw accountError('Không tìm thấy tài khoản.', 404, 'ACCOUNT_NOT_FOUND');
+  if (user.emailMarketingConsent?.status !== 'subscribed') {
+    user.emailMarketingConsent = {
+      status: 'subscribed',
+      source: 'login_prompt',
+      consentedAt: new Date().toISOString()
+    };
+    await redisCommand(['SET', userKey(user.id), JSON.stringify(user)], options);
+  }
+  return publicUser(user);
+}
+
 export async function createAccountSession(user, options = {}) {
   ensureStorage();
   const token = randomBytes(32).toString('base64url');
