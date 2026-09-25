@@ -1,6 +1,7 @@
 import { createEmailTransport } from './email-transport.mjs';
 import { emailBrandingUrls } from './email-branding.mjs';
 import { contactAcknowledgementTemplateHtml } from './email-templates-html.mjs';
+import { withTransactionalFooter } from './transactional-email-footer.mjs';
 
 const CONTACT_ACKNOWLEDGEMENT_SUBJECT = '[Tự động] Xác nhận yêu cầu liên hệ – RealView';
 const REALVIEW_HOME_URL = emailBrandingUrls.home;
@@ -48,7 +49,8 @@ function contactAcknowledgementEmailContent(record = {}) {
     `Threads: ${emailBrandingUrls.threads}`
   ].join('\n');
 
-  const html = contactAcknowledgementTemplateHtml.replaceAll('{{USER_NAME}}', escapedDisplayName);
+  const html = withTransactionalFooter(contactAcknowledgementTemplateHtml, 'contact')
+    .replaceAll('{{USER_NAME}}', escapedDisplayName);
 
   return { subject: CONTACT_ACKNOWLEDGEMENT_SUBJECT, text, html };
 }

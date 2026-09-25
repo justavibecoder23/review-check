@@ -1,5 +1,6 @@
 import { createEmailTransport } from './email-transport.mjs';
 import { verificationTemplateHtml } from './email-templates-html.mjs';
+import { withTransactionalFooter } from './transactional-email-footer.mjs';
 
 function verificationEmailContent(codeValue, purposeValue) {
   const code = String(codeValue || '').trim();
@@ -18,7 +19,7 @@ function verificationEmailContent(codeValue, purposeValue) {
       '',
       'Đội ngũ RealView'
     ].join('\n'),
-    html: verificationTemplateHtml
+    html: withTransactionalFooter(verificationTemplateHtml, purposeValue === 'contact' ? 'contactVerification' : 'registration')
       .replaceAll('{{VERIFICATION_CODE}}', code)
       .replaceAll('{{PURPOSE}}', purpose)
   };

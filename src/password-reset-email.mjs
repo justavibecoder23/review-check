@@ -1,5 +1,6 @@
 import { createEmailTransport } from './email-transport.mjs';
 import { passwordResetTemplateHtml } from './email-templates-html.mjs';
+import { withTransactionalFooter } from './transactional-email-footer.mjs';
 
 function safeCode(value) {
   const code = String(value || '').trim();
@@ -22,7 +23,8 @@ function passwordResetEmailContent(codeValue) {
       '',
       'Đội ngũ RealView'
     ].join('\n'),
-    html: passwordResetTemplateHtml.replaceAll('{{VERIFICATION_CODE}}', code)
+    html: withTransactionalFooter(passwordResetTemplateHtml, 'passwordReset')
+      .replaceAll('{{VERIFICATION_CODE}}', code)
   };
 }
 

@@ -1,6 +1,7 @@
 import { createEmailTransport } from './email-transport.mjs';
 import { emailBrandingUrls } from './email-branding.mjs';
 import { welcomeTemplateHtml } from './email-templates-html.mjs';
+import { withTransactionalFooter } from './transactional-email-footer.mjs';
 
 const REALVIEW_HOME_URL = emailBrandingUrls.home;
 
@@ -41,7 +42,8 @@ function welcomeEmailContent(user) {
     'Góc nhìn thật, lựa chọn đúng.'
   ].join('\n');
 
-  const html = welcomeTemplateHtml.replaceAll('{{USER_NAME}}', escapedUsername);
+  const html = withTransactionalFooter(welcomeTemplateHtml, 'welcome')
+    .replaceAll('{{USER_NAME}}', escapedUsername);
 
   return { subject, text, html };
 }

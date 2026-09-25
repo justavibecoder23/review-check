@@ -42,6 +42,12 @@ test('asset logo và mascot được tham chiếu trong email có sẵn trong th
   assert.equal(existsSync(fileURLToPath(new URL(`public/assets/email/${emailBrandingUrls.logo.split('/').at(-1)}`, root))), true);
 });
 
+test('icon Facebook và TikTok của footer có sẵn trong thư mục public', () => {
+  for (const icon of ['facebook-icon.png', 'tiktok-icon.png']) {
+    assert.equal(existsSync(fileURLToPath(new URL('public/assets/email/' + icon, root))), true);
+  }
+});
+
 test('email chào mừng dẫn tới các điểm khám phá phụ đã yêu cầu', () => {
   const html = welcomeEmailInternals.welcomeEmailContent({ username: 'Minh Anh' }).html;
   assert.ok(html.includes(emailBrandingUrls.home));
@@ -75,19 +81,40 @@ test('các mẫu mới thay placeholder động và loại bỏ script khỏi HT
   }
 });
 
-test('footer có thể xuống dòng trên mobile và mã xác minh đủ lớn để dễ đọc', () => {
+test('bốn email có cùng footer RealView, chỉ khác lý do nhận email giao dịch', () => {
   const verification = emailVerificationMailInternals.verificationEmailContent('123456', 'registration').html;
+  const contactVerification = emailVerificationMailInternals.verificationEmailContent('123456', 'contact').html;
   const reset = passwordResetEmailInternals.passwordResetEmailContent('654321').html;
   const welcome = welcomeEmailInternals.welcomeEmailContent({ username: 'Minh Anh' }).html;
   const contact = contactAcknowledgementEmailInternals.contactAcknowledgementEmailContent({ name: 'Minh Anh' }).html;
 
-  for (const html of [welcome, contact, verification, reset]) {
+  const footers = [welcome, contact, verification, contactVerification, reset].map((html) => {
     assert.match(html, /class="ecw" style="width:100%;max-width:600px;min-width:0;/);
     assert.doesNotMatch(html, /class="ecw" style="[^\"]*min-width:600px|class="ecw"[^>]*width="600"/);
-    assert.match(html, /border-radius:999px;white-space:normal;overflow-wrap:anywhere;word-break:break-word/);
-    assert.doesNotMatch(html, /border-radius:999px;display:inline-block;max-width:100%/);
-    assert.doesNotMatch(html, /border-radius:999px;white-space:nowrap;max-width:100%/);
-  }
+    const start = html.lastIndexOf('<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f5f1eb"');
+    const note = html.indexOf('<div style="height:1px;background-color:#d7d2cb', start);
+    assert.ok(start > 0 && note > start);
+    assert.doesNotMatch(html, /background-color:#ede9e2/);
+    assert.doesNotMatch(html, /đã đồng ý nhận email marketing|Hủy đăng ký nhận email/);
+    for (const label of ['ĐỘI NGŨ REALVIEW', 'Website:', 'Email:', 'Facebook:', 'TikTok:', 'Threads:']) {
+      assert.ok(html.includes(label));
+    }
+    assert.match(html, /assets\/email\/facebook-icon\.png/);
+    assert.match(html, /assets\/email\/tiktok-icon\.png/);
+    assert.match(html, /overflow-wrap:anywhere/);
+    return html.slice(start, note);
+  });
+  for (const footer of footers.slice(1)) assert.equal(footer, footers[0]);
+  assert.match(welcome, /Bạn nhận email này vì đã tạo tài khoản RealView/);
+  assert.match(contact, /Bạn nhận email này vì đã gửi lời nhắn đến RealView/);
+  assert.match(verification, /Bạn nhận email này vì đã yêu cầu mã xác minh để tạo tài khoản/);
+  assert.match(contactVerification, /Bạn nhận email này vì đã yêu cầu mã xác minh để gửi liên hệ/);
+  assert.match(reset, /Bạn nhận email này vì đã yêu cầu đặt lại mật khẩu/);
+});
+
+test('mã xác minh vẫn đủ lớn và đúng sau khi đổi footer', () => {
+  const verification = emailVerificationMailInternals.verificationEmailContent('123456', 'registration').html;
+  const reset = passwordResetEmailInternals.passwordResetEmailContent('654321').html;
   for (const html of [verification, reset]) {
     assert.match(html, /font-size:32px;letter-spacing:0\.08em;line-height:38px/);
     assert.match(html, /font-size:32px">(?:123456|654321)/);
