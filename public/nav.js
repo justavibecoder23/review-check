@@ -70,7 +70,12 @@
     ${navItem('home', 'Trang chủ', isHome ? '#trang-chu' : '/#trang-chu', homeItems)}
     ${navItem('criteria', 'Tiêu chí lọc', '/tieu-chi-loc', criteriaItems)}
     <button class="nav-history-trigger" type="button" data-history-open>Lịch sử <span data-history-count hidden>0</span></button>
-    <a class="nav-link nav-blog${isBlog ? ' is-active' : ''}" href="/bai-viet"${isBlog ? ' aria-current="page"' : ''}>Blog</a>`;
+    <div class="nav-blog-wrapper${isBlog ? ' is-active' : ''}">
+      <a class="nav-link nav-blog${isBlog ? ' is-active' : ''}" href="/bai-viet"${isBlog ? ' aria-current="page"' : ''}>
+        <div class="nav-blog-content">Blog</div>
+      </a>
+      <span class="nav-blog-badge">New</span>
+    </div>`;
 
   const dropdownWraps = [...nav.querySelectorAll('.nav-parent-wrap')];
 

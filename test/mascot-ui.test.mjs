@@ -48,8 +48,8 @@ test('mascot Curious trên thanh tiến trình là ảnh ngang độc lập, tro
   assert.match(resultsStyles, /\.analysis-progress-mascot\.is-moving \.analysis-progress-mascot-bubble \{ opacity:\s*0/);
   assert.match(resultsStyles, /\.analysis-progress-mascot-bubble \{[\s\S]*?bottom:\s*calc\(100% \+ 3px\);[\s\S]*?border:\s*1px solid rgba\(252,120,31,\.3\);[\s\S]*?color:\s*var\(--orange-dark\);/);
   assert.match(resultsStyles, /\.analysis-progress-thinking-text \{[\s\S]*?background:\s*linear-gradient\(/);
-  assert.match(resultsStyles, /\.analysis-progress-mascot:not\(\.is-moving\) \.analysis-progress-thinking-text \{[\s\S]*?animation:\s*analysis-thinking-shimmer 1\.8s ease-in-out infinite;/);
-  assert.match(resultsStyles, /@keyframes analysis-thinking-shimmer[\s\S]*?background-position:\s*-125% 50%/);
+  assert.match(resultsStyles, /\.analysis-progress-mascot:not\(\.is-moving\) \.analysis-progress-thinking-text \{[\s\S]*?animation:\s*analysis-thinking-shimmer 5s linear infinite;/);
+  assert.match(resultsStyles, /@keyframes analysis-thinking-shimmer[\s\S]*?0% \{ background-position:\s*125% 50%; \}[\s\S]*?60%, 100% \{ background-position:\s*-125% 50%; \}/);
   assert.match(resultsStyles, /\.analysis-progress-mascot\.is-moving \.analysis-progress-mascot-step-b \{ transform:\s*scale\(\.92\)/);
   assert.match(resultsStyles, /@keyframes analysis-mascot-leg-cycle-a[\s\S]*?0%, 32\.99%, 66%, 100% \{ opacity: 1; \}[\s\S]*?33%, 65\.99% \{ opacity: 0; \}/);
   assert.match(resultsStyles, /@keyframes analysis-mascot-leg-cycle[\s\S]*?0%, 32\.99%, 66%, 100% \{ opacity: 0; \}[\s\S]*?33%, 65\.99% \{ opacity: 1; \}/);
@@ -67,8 +67,8 @@ test('mascot homepage mở chatbot và mascot Confident đóng mở giải thíc
   assert.match(chatbot, /details\.open = !details\.open/);
   assert.match(chatbot, /staticMascot\.setAttribute\('aria-expanded', String\(details\.open\)\)/);
   assert.match(chatbot, /details\.id \|\|= 'trust-explanation-card'/);
-  assert.match(chatbot, /Chat with RealViewee/);
-  assert.match(chatbot, /Your AI shopping &amp; review assistant/);
+  assert.match(chatbot, /Trò chuyện cùng RealViewee/);
+  assert.match(chatbot, /Trợ lý AI mua sắm &amp; đánh giá của bạn/);
 });
 
 test('chỉ triển khai các biểu cảm đã duyệt và khung chạy, không có Suspicious hoặc Thinking', () => {
@@ -101,6 +101,9 @@ test('chỉ triển khai các biểu cảm đã duyệt và khung chạy, không
   assert.match(styles, /\.realviewee-static--counterpart \.realviewee-static-speech \{[\s\S]*?right:\s*calc\(100% - 22px\);[\s\S]*?bottom:\s*calc\(100% - 8px\)/);
   assert.match(styles, /\.realviewee-static--trust \.realviewee-static-speech \{[\s\S]*?bottom:\s*calc\(100% \+ 4px\)/);
   assert.match(styles, /\.realviewee-speech \{[\s\S]*?bottom:\s*calc\(100% \+ 10px\);[\s\S]*?border-radius:\s*12px;[\s\S]*?color:\s*var\(--orange-dark\);/);
+  assert.doesNotMatch(chatbot, /attachRightSpeechFrame/);
+  assert.match(styles, /\.realviewee-static-speech \{[\s\S]*?border:\s*1px solid rgba\(252,120,31,\.3\);/);
+  assert.match(styles, /\.realviewee-static--kept \.realviewee-static-speech::after,[\s\S]*?right:\s*-6px;[\s\S]*?transform:\s*rotate\(-45deg\);/);
 });
 
 test('chỉ mascot homepage chuyển động; mascot result đứng yên và responsive', () => {

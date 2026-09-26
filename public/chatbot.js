@@ -28,7 +28,7 @@
   panel.innerHTML = `
     <header class="chatbot-header">
       <span class="chatbot-avatar" aria-hidden="true"><span class="realviewee-sprite" data-mascot-state="happy"></span></span>
-      <div><h2 id="chatbot-title">Chat with RealViewee</h2><p><i aria-hidden="true"></i> Your AI shopping &amp; review assistant</p></div>
+      <div><h2 id="chatbot-title">Trò chuyện cùng RealViewee</h2><p><i aria-hidden="true"></i> Trợ lý AI mua sắm &amp; đánh giá của bạn</p></div>
       <button class="chatbot-close" type="button" aria-label="Đóng trợ lý RealViewee">
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
       </button>

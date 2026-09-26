@@ -140,3 +140,108 @@
     }
   });
 })();
+
+(() => {
+  const title = document.querySelector('.article-title');
+  const sidebarCta = document.querySelector('.article-sidebar-cta');
+  if (!title || !sidebarCta) return;
+
+  const ASSET_ROOT = '/assets/mascot/';
+  const titleFrames = [
+    ['relaxed', 'realviewee-blog-title-relaxed-v1.png'],
+    ['inspect', 'realviewee-blog-title-inspect-v1.png'],
+    ['surprised', 'realviewee-blog-title-surprised-v2.png'],
+  ];
+  const ctaFrames = [
+    ['thinking', 'realviewee-blog-cta-thinking-v1.png'],
+    ['point', 'realviewee-blog-cta-point-v1.png'],
+    ['happy', 'realviewee-blog-cta-happy-v1.png'],
+  ];
+  const timers = [];
+  const BLOG_MASCOT_ACTION_DURATION = 4_000;
+  const schedule = (callback, delay) => timers.push(window.setTimeout(callback, delay));
+  const frameMarkup = (frames) => frames.map(([pose, file]) => (
+    `<img class="article-blog-mascot-pose" data-blog-mascot-pose="${pose}" src="${ASSET_ROOT}${file}" alt="" width="657" height="768" decoding="async" />`
+  )).join('');
+
+  const titleZone = document.createElement('div');
+  titleZone.className = 'article-title-zone';
+  title.before(titleZone);
+  titleZone.append(title);
+  titleZone.insertAdjacentHTML('beforeend', `
+    <span class="article-title-mascot" data-blog-title-mascot aria-hidden="true">
+      <span class="article-title-mascot-bubble"></span>
+      ${frameMarkup(titleFrames)}
+    </span>`);
+
+  const ctaMascot = document.createElement('div');
+  ctaMascot.className = 'article-cta-mascot';
+  ctaMascot.setAttribute('data-blog-cta-mascot', '');
+  ctaMascot.innerHTML = `
+    <span class="article-cta-mascot-bubble" role="status">Chúc bạn đọc blog vui vẻ, nhớ dùng RealView nha!</span>
+    <span class="article-cta-mascot-frame" aria-hidden="true">
+      ${frameMarkup(ctaFrames)}
+    </span>`;
+  sidebarCta.after(ctaMascot);
+
+  const titleMascot = titleZone.querySelector('[data-blog-title-mascot]');
+  const titleBubble = titleMascot.querySelector('.article-title-mascot-bubble');
+  const bubble = ctaMascot.querySelector('.article-cta-mascot-bubble');
+  const allImages = [...titleMascot.querySelectorAll('img'), ...ctaMascot.querySelectorAll('img')];
+  const setPose = (stage, pose) => {
+    stage.dataset.pose = pose;
+    stage.querySelectorAll('[data-blog-mascot-pose]').forEach((frame) => {
+      frame.classList.toggle('is-active', frame.dataset.blogMascotPose === pose);
+    });
+  };
+  const show = (stage) => stage.classList.add('is-visible');
+  const hide = (stage) => stage.classList.remove('is-visible');
+  const setTitleSpeech = (text = '') => {
+    titleBubble.classList.remove('is-visible');
+    if (!text) return;
+    schedule(() => {
+      titleBubble.textContent = text;
+      titleBubble.classList.add('is-visible');
+    }, 200);
+  };
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const startSequence = () => {
+    if (reducedMotion) {
+      setPose(ctaMascot, 'happy');
+      show(ctaMascot);
+      bubble.classList.add('is-visible');
+      return;
+    }
+
+    setPose(titleMascot, 'relaxed');
+    show(titleMascot);
+    schedule(() => {
+      setPose(titleMascot, 'inspect');
+      setTitleSpeech('Gì đây ta??');
+    }, BLOG_MASCOT_ACTION_DURATION);
+    schedule(() => {
+      setPose(titleMascot, 'surprised');
+      setTitleSpeech('Woww, bài này hay ghê!');
+    }, BLOG_MASCOT_ACTION_DURATION * 2);
+    schedule(() => {
+      setTitleSpeech();
+      hide(titleMascot);
+    }, BLOG_MASCOT_ACTION_DURATION * 3);
+
+    schedule(() => {
+      setPose(ctaMascot, 'thinking');
+      show(ctaMascot);
+    }, BLOG_MASCOT_ACTION_DURATION * 3 + 400);
+    schedule(() => setPose(ctaMascot, 'point'), BLOG_MASCOT_ACTION_DURATION * 4 + 400);
+    schedule(() => {
+      setPose(ctaMascot, 'happy');
+      bubble.classList.add('is-visible');
+    }, BLOG_MASCOT_ACTION_DURATION * 5 + 400);
+  };
+
+  Promise.all(allImages.map((image) => (
+    image.complete ? Promise.resolve() : image.decode?.().catch(() => undefined)
+  ))).then(startSequence);
+  window.addEventListener('pagehide', () => timers.forEach((timer) => window.clearTimeout(timer)), { once: true });
+})();

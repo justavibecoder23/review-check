@@ -120,3 +120,72 @@
   });
   update();
 })();
+
+(() => {
+  const heading = document.querySelector('.blog-library .library-heading');
+  const featuredPost = document.querySelector('.blog-library .featured-post');
+  if (!heading || !featuredPost || heading.dataset.mascotReady === 'true') return;
+  heading.dataset.mascotReady = 'true';
+
+  const mascot = document.createElement('div');
+  mascot.className = 'blog-home-mascot';
+  mascot.setAttribute('role', 'img');
+  mascot.setAttribute('aria-label', 'RealViewee mời bạn đọc bài viết mới từ RealView');
+  mascot.dataset.pose = 'dazed';
+  mascot.innerHTML = `
+    <span class="blog-home-mascot-bubble" role="status">Cùng mình đọc blog nào!</span>
+    <span class="blog-home-mascot-stage" aria-hidden="true">
+      <img class="blog-home-mascot-pose is-active" data-blog-home-pose="dazed" src="/assets/mascot/realviewee-blog-home-dazed-v1.png" alt="" width="1254" height="1254" decoding="async" />
+      <img class="blog-home-mascot-pose" data-blog-home-pose="alert" src="/assets/mascot/realviewee-blog-home-alert-v1.png" alt="" width="1254" height="1254" decoding="async" />
+      <img class="blog-home-mascot-pose" data-blog-home-pose="point" src="/assets/mascot/realviewee-blog-home-point-v1.png" alt="" width="1254" height="1254" decoding="async" />
+    </span>`;
+  heading.append(mascot);
+
+  const frames = [...mascot.querySelectorAll('[data-blog-home-pose]')];
+  const bubble = mascot.querySelector('.blog-home-mascot-bubble');
+  const timers = [];
+  const schedule = (callback, delay) => timers.push(window.setTimeout(callback, delay));
+  const setPose = (pose) => {
+    mascot.dataset.pose = pose;
+    frames.forEach((frame) => frame.classList.toggle('is-active', frame.dataset.blogHomePose === pose));
+  };
+  const showFinalPose = () => {
+    setPose('point');
+    mascot.classList.add('is-visible', 'is-pointing');
+    bubble.classList.add('is-visible');
+  };
+
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    showFinalPose();
+    return;
+  }
+
+  let hasStarted = false;
+  const start = () => {
+    if (hasStarted) return;
+    hasStarted = true;
+    mascot.classList.add('is-visible');
+    requestAnimationFrame(() => mascot.classList.add('is-dropping'));
+  };
+  mascot.addEventListener('animationend', (event) => {
+    if (event.animationName !== 'blog-home-mascot-drop') return;
+    mascot.classList.add('is-landed');
+    mascot.classList.remove('is-dropping');
+    mascot.classList.add('is-dazed');
+    schedule(() => {
+      mascot.classList.remove('is-dazed');
+      setPose('alert');
+    }, 2700);
+    schedule(() => {
+      setPose('point');
+      mascot.classList.add('is-pointing');
+      bubble.classList.add('is-visible');
+    }, 5400);
+  }, { once: true });
+
+  Promise.allSettled(frames.map((frame) => (
+    frame.complete || typeof frame.decode !== 'function' ? Promise.resolve() : frame.decode()
+  ))).then(start);
+  schedule(start, 250);
+  window.addEventListener('pagehide', () => timers.forEach((timer) => window.clearTimeout(timer)), { once: true });
+})();
