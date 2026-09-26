@@ -175,12 +175,12 @@
     schedule(() => {
       mascot.classList.remove('is-dazed');
       setPose('alert');
-    }, 2700);
+    }, 1600);
     schedule(() => {
       setPose('point');
       mascot.classList.add('is-pointing');
       bubble.classList.add('is-visible');
-    }, 5400);
+    }, 3200);
   }, { once: true });
 
   Promise.allSettled(frames.map((frame) => (

@@ -12,10 +12,10 @@ test('item Blog có viền cam-gold tĩnh và badge New metallic nhưng vẫn l�
   assert.match(nav, /<a class="nav-link nav-blog\$\{isBlog \? ' is-active' : ''\}" href="\/bai-viet"/);
   assert.match(nav, /<div class="nav-blog-content">Blog<\/div>/);
   assert.match(nav, /<span class="nav-blog-badge">New<\/span>/);
-  assert.match(styles, /\.nav-blog-wrapper \{[^}]*padding:\s*1\.5px;[^}]*border-radius:\s*99px;/);
+  assert.match(styles, /\.nav-blog-wrapper \{[^}]*padding:\s*1\.5px;[^}]*border-radius:\s*16px;/);
   assert.match(styles, /\.nav-blog-wrapper::before \{[^}]*linear-gradient\(120deg, #ff7652 0%, #ee4d2d 42%, #fde0a3 100%\);/);
   assert.doesNotMatch(styles, /nav-blog-border-shimmer/);
-  assert.match(styles, /\.nav-blog-wrapper::after \{[^}]*inset:\s*1\.5px;[^}]*background:\s*#f3f4f6;/);
+  assert.match(styles, /\.nav-blog-wrapper::after \{[^}]*inset:\s*1\.5px;[^}]*border-radius:\s*14\.5px;[^}]*background:\s*#f3f4f6;/);
   assert.match(styles, /\.nav-blog-badge \{[^}]*top:\s*-10px;[^}]*right:\s*-12px;[^}]*linear-gradient\(135deg, #fffaf4 0%, #efd8bd 50%, #fffaf4 100%\);/);
   assert.match(styles, /\.nav-blog-badge::after \{[^}]*animation:\s*nav-blog-badge-glare 4s ease-in-out infinite;/);
 });

@@ -17,6 +17,8 @@
 .realviewee-sprite[data-mascot-state="confident"] { background-position: 0 100%; }
 .realviewee-sprite[data-mascot-state="excited"] { background-position: 33.333% 100%; }
 .realviewee-sprite[data-mascot-state="concerned"] { background-position: 66.667% 100%; }
+.results-page .realviewee-static .realviewee-sprite[data-mascot-state="surprised"] { aspect-ratio: 1302 / 1208; background-image: url('/assets/mascot/realviewee-result-surprised-cutout-v1.png'); background-position: center; background-size: contain; }
+.results-page .realviewee-static .realviewee-sprite[data-mascot-state="concerned"] { aspect-ratio: 1174 / 1339; background-image: url('/assets/mascot/realviewee-result-concerned-cutout-v1.png'); background-position: center; background-size: contain; }
 .realviewee-sprite[data-mascot-state="running"] { position: relative; background-image: none; animation: realviewee-run-bob .65s ease-in-out infinite alternate; }
 .realviewee-sprite[data-mascot-state="running"]::before,
 .realviewee-sprite[data-mascot-state="running"]::after {

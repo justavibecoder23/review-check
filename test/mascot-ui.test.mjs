@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const [chatbot, styles, home, results, resultsScript, resultsStyles, sprite, progressMascot, progressStepB, homeStepB] = await Promise.all([
+const [chatbot, styles, home, results, resultsScript, resultsStyles, sprite, progressMascot, progressStepB, homeStepB, resultSurprised, resultConcerned] = await Promise.all([
   readFile(new URL('../public/chatbot.js', import.meta.url), 'utf8'),
   readFile(new URL('../public/chatbot.css', import.meta.url), 'utf8'),
   readFile(new URL('../public/index.html', import.meta.url), 'utf8'),
@@ -13,6 +13,8 @@ const [chatbot, styles, home, results, resultsScript, resultsStyles, sprite, pro
   readFile(new URL('../public/assets/mascot/realviewee-running-curious-v1.png', import.meta.url)),
   readFile(new URL('../public/assets/mascot/realviewee-running-curious-step-b-v1.png', import.meta.url)),
   readFile(new URL('../public/assets/mascot/realviewee-running-default-step-b-v2.png', import.meta.url)),
+  readFile(new URL('../public/assets/mascot/realviewee-result-surprised-cutout-v1.png', import.meta.url)),
+  readFile(new URL('../public/assets/mascot/realviewee-result-concerned-cutout-v1.png', import.meta.url)),
 ]);
 
 test('sprite RealViewee giữ nền trong suốt và đúng lưới tám trạng thái', () => {
@@ -54,6 +56,15 @@ test('mascot Curious trên thanh tiến trình là ảnh ngang độc lập, tro
   assert.match(resultsStyles, /@keyframes analysis-mascot-leg-cycle-a[\s\S]*?0%, 32\.99%, 66%, 100% \{ opacity: 1; \}[\s\S]*?33%, 65\.99% \{ opacity: 0; \}/);
   assert.match(resultsStyles, /@keyframes analysis-mascot-leg-cycle[\s\S]*?0%, 32\.99%, 66%, 100% \{ opacity: 0; \}[\s\S]*?33%, 65\.99% \{ opacity: 1; \}/);
   assert.doesNotMatch(results, /id="analysis-guest-quota"/);
+});
+
+test('hai mascot review trên trang kết quả dùng cutout RGBA riêng không còn nền xám', () => {
+  for (const image of [resultSurprised, resultConcerned]) {
+    assert.deepEqual([...image.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+    assert.equal(image[25], 6, 'Cutout kết quả phải dùng RGBA để giữ nền trong suốt');
+  }
+  assert.match(styles, /results-page \.realviewee-static \.realviewee-sprite\[data-mascot-state="surprised"\][^}]*realviewee-result-surprised-cutout-v1\.png/);
+  assert.match(styles, /results-page \.realviewee-static \.realviewee-sprite\[data-mascot-state="concerned"\][^}]*realviewee-result-concerned-cutout-v1\.png/);
 });
 
 test('mascot homepage mở chatbot và mascot Confident đóng mở giải thích TrustScore', () => {
