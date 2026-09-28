@@ -159,6 +159,7 @@
     { "source": "/bai-viet/shopee-mall-la-gi-co-nen-mua-khong", "destination": "/blog/snapshots/shopee-mall-la-gi-co-nen-mua-khong.html" },
     { "source": "/bai-viet/tiktok-shop-la-gi-mua-hang-tren-tiktok-co-an-toan-khong", "destination": "/blog/snapshots/tiktok-shop-la-gi-mua-hang-tren-tiktok-co-an-toan-khong.html" },
     { "source": "/bai-viet/cach-tim-shop-uy-tin-tren-shopee", "destination": "/blog/snapshots/cach-tim-shop-uy-tin-tren-shopee.html" },
+    { "source": "/bai-viet/tieu-chi-danh-gia-cong-cu-check-review", "destination": "/blog/snapshots/tieu-chi-danh-gia-cong-cu-check-review.html" },
     { "source": "/bai-viet/:slug", "destination": "/api/blog.mjs?route=post&slug=:slug" },
     { "source": "/ket-qua", "destination": "/results.html" }
   ]

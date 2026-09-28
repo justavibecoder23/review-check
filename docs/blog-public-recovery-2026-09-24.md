@@ -20,3 +20,7 @@ Khôi phục này chỉ cách ly **trang blog công khai đã xuất bản và �
 ## Rollback
 
 Nếu file tĩnh có lỗi, bỏ các rewrite snapshot trong `vercel.json` và đặt `BLOG_PUBLIC_SNAPSHOT=off` để dùng lại CMS/Blob, **chỉ khi Blob còn truy cập được**. Có thể tái xuất bản tĩnh bằng `node tools/snapshot-published-blog.mjs`, nhưng script không ghi đè bản đã có; cần chủ động quản lý manifest và file cũ khi muốn cập nhật nội dung.
+
+## Bổ sung bài SEO 16 (28/09/2026)
+
+Bài “Tiêu chí đánh giá công cụ check review hiệu quả” được thêm thành snapshot tĩnh để phù hợp với trạng thái blog đang đóng băng. Bản cập nhật cũng thêm thẻ bài vào trang `/bai-viet`, URL bài và ảnh đại diện vào sitemap, đồng thời ghi hash vào `snapshot-manifest.json`. Mười ảnh WebP đã tối ưu được lưu trong `public/assets/blog/`.
