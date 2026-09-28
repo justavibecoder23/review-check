@@ -221,9 +221,12 @@
 .article-math math { width: max-content; min-width: 100%; margin: 0 auto; font-size: clamp(20px, 3.2vw, 30px); text-align: center; }
 .math-inline { white-space: nowrap; font-family: "STIX Two Math", "Cambria Math", Georgia, serif; }
 .math-inline var { font-family: inherit; }
-.article-content .article-source-cta { width: 100%; max-width: 100%; margin: 32px auto; padding: 0; display: flex; justify-content: center; border: 0; border-radius: 0; background: transparent; color: #374151; box-shadow: none; font-size: clamp(18px, 2.1vw, 24px); font-weight: 800; line-height: 1.45; text-align: center; }
-.article-source-cta a { color: #fc781f; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 5px; }
-.article-source-cta a:hover { color: var(--orange-dark); }
+.article-content .article-source-cta { box-sizing: border-box; width: 100%; max-width: 100%; min-width: 0; margin: 32px auto; padding: 26px 30px; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "eyebrow action" "title action" "copy action"; align-items: center; column-gap: 28px; row-gap: 10px; border: 1px solid rgba(223,89,0,.2); border-radius: 22px; background: linear-gradient(120deg, #fff8f2, #fff 78%); color: #374151; box-shadow: 0 14px 34px rgba(59,35,20,.07); font-size: 16px; line-height: 1.65; text-align: left; }
+.article-content .article-source-cta > span:first-child { grid-area: eyebrow; color: var(--orange-dark); font-size: 13px; font-weight: 850; letter-spacing: .1em; text-transform: uppercase; }
+.article-content .article-source-cta > h2 { grid-area: title; min-width: 0; margin: 0; color: #182334; font-size: clamp(21px, 2.3vw, 28px); font-weight: 850; line-height: 1.25; }
+.article-content .article-source-cta > p { grid-area: copy; min-width: 0; margin: 0; color: #4b5563; font-size: 16px; font-weight: 400; line-height: 1.65; overflow-wrap: anywhere; }
+.article-content .article-source-cta > a { grid-area: action; justify-self: end; max-width: 100%; padding: 13px 18px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 999px; background: #fc781f; color: white; font-weight: 800; line-height: 1.4; text-align: center; text-decoration: none; overflow-wrap: anywhere; }
+.article-source-cta a:hover { background: var(--orange-dark); color: white; }
 .article-figure { margin: 38px 0 46px; }
 .article-figure img { box-sizing: border-box; width: 100%; max-width: 100%; height: auto; display: block; margin-inline: auto; border: 1px solid rgba(22,22,22,.09); border-radius: 20px; background: #f7f7f3; }
 .article-figure--seo07 img { width: auto; max-width: min(100%, 640px); max-height: 620px; margin-right: auto; margin-left: auto; object-fit: contain; }
@@ -324,6 +327,8 @@
     box-sizing: border-box;
   }
   .article-content { font-size: 17px; line-height: 1.78; }
+  .article-content .article-source-cta { grid-template-columns: minmax(0, 1fr); grid-template-areas: "eyebrow" "title" "copy" "action"; gap: 10px; margin: 26px 0; padding: 22px 20px; }
+  .article-content .article-source-cta > a { justify-self: start; margin-top: 4px; }
   .article-math { margin-bottom: 16px; padding: 8px 0 10px; }
   .article-math math { font-size: clamp(18px, 4.7vw, 24px); }
   .article-content h2 { margin-top: 48px; font-size: 30px; }
