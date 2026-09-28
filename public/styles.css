@@ -727,11 +727,9 @@ blockquote footer { margin-top: 7px; color: #9a4507; font-size: 10px; }
 .contact-card dt svg { width: 22px; height: 22px; stroke: var(--ink); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .contact-card dd { margin: 0; text-align: right; font-size: 12px; }
 .contact-card dd a { text-decoration: none; }
-.contact-social-links { display: inline-flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.contact-social-links { display: inline-flex; align-items: center; justify-content: flex-end; gap: 18px; }
 .contact-social-links a { width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; color: var(--ink); text-decoration: none; }
 .contact-social-links svg { width: 20px; height: 20px; fill: currentColor; }
-.contact-social-links .social-icon-outline,
-.footer-social .social-icon-outline { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .contact-social-links .social-icon-threads,
 .footer-social .social-icon-threads { display: inline-block; background-color: currentColor; -webkit-mask: var(--social-icon) center / contain no-repeat; mask: var(--social-icon) center / contain no-repeat; }
 .contact-social-links .social-icon-threads { width: 20px; height: 20px; }

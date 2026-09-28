@@ -262,6 +262,8 @@ test('model và renderer giữ nguồn ảnh responsive an toàn, vẫn có src 
   assert.match(html, /src="https:\/\/cdn\.example\.com\/hero-1600\.webp"/);
   assert.match(html, /srcset="https:\/\/cdn\.example\.com\/hero-480\.webp 480w, https:\/\/cdn\.example\.com\/hero-960\.webp 960w"/);
   assert.match(html, /srcset="https:\/\/cdn\.example\.com\/content-480\.webp 480w, https:\/\/cdn\.example\.com\/content-960\.webp 960w"/);
+  assert.match(html, /footer-social[\s\S]*facebook\.com[\s\S]*<svg viewBox="0 0 16 16"[\s\S]*<span>Facebook<\/span>/);
+  assert.match(html, /footer-social[\s\S]*tiktok\.com[\s\S]*<svg viewBox="0 0 24 24"[\s\S]*<span>TikTok<\/span>/);
   assert.doesNotMatch(html, /javascript:alert/);
 });
 

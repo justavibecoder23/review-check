@@ -84,7 +84,7 @@ test('criteria closing note stays on one desktop row without the artwork badge',
   assert.match(criteriaStyles, /@media \(max-width: 980px\)[\s\S]*?\.criteria-closing p \{ white-space: normal; \}/);
 });
 
-test('contact and every page footer expose responsive social links', () => {
+test('contact and every page footer expose responsive social links without Instagram', () => {
   for (const page of publicPages) {
     const footer = page.match(/<footer class="site-footer[\s\S]*?<\/footer>/)?.[0] || '';
     assert.match(footer, /class="[^"]*footer-grid[^"]*"[\s\S]*class="footer-brand"[\s\S]*class="footer-menu-group"/);
@@ -92,23 +92,25 @@ test('contact and every page footer expose responsive social links', () => {
     assert.match(footer, /class="footer-social"/);
     assert.match(footer, /href="https:\/\/www\.facebook\.com\/profile\.php\?id=61594093477895"/);
     assert.match(footer, /href="https:\/\/www\.tiktok\.com\/@realviewueh"/);
+    assert.doesNotMatch(footer, /instagram/i);
     assert.equal((footer.match(/<svg /g) || []).length >= 2, true);
     assert.doesNotMatch(footer, /footer-social[\s\S]*?<img /);
   }
 
   const contact = publicPages[1];
   assert.match(contact, /Phạm vi[\s\S]*Kết nối[\s\S]*contact-social-links/);
+  assert.doesNotMatch(contact, /instagram/i);
   assert.match(contact, /M10 13a5 5 0 0 0 7\.1\.1l2-2/);
-  assert.match(nav, /https:\/\/www\.instagram\.com\/real\.viewueh\?stkn=em9tdjNmcTJ5OW91/);
+  assert.doesNotMatch(nav, /instagram/i);
   assert.match(nav, /https:\/\/www\.threads\.com\/@real\.viewueh/);
   assert.match(nav, /asset: '\/assets\/threads-logo\.svg'/);
   assert.match(nav, /document\.querySelectorAll\('\.footer-social'\)/);
   assert.match(nav, /document\.querySelector\('\.contact-social-links'\)/);
+  assert.match(nav, /if \(!link\.querySelector\('svg, \.social-icon-threads'\)\) link\.insertAdjacentHTML\('afterbegin', iconMarkup\);/);
   assert.match(nav, /target = '_blank'/);
   assert.match(nav, /rel = 'noopener noreferrer'/);
-  assert.match(styles, /\.contact-social-links \{[^}]*gap: 12px;/);
+  assert.match(styles, /\.contact-social-links \{[^}]*gap: 18px;/);
   assert.match(styles, /\.contact-social-links svg \{[^}]*width: 20px; height: 20px;/);
-  assert.match(styles, /\.footer-social \.social-icon-outline \{ fill: none; stroke: currentColor;/);
   assert.match(styles, /\.footer-social \.social-icon-threads \{ display: inline-block; background-color: currentColor;/);
   assert.match(styles, /\.contact-social-links \.social-icon-threads \{ width: 20px; height: 20px; \}/);
   assert.match(styles, /\.footer-social a \{[^}]*color: #666666;[^}]*font-size: 11px;[^}]*text-decoration: none;[^}]*transition:/);
