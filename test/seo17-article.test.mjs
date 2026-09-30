@@ -11,7 +11,9 @@ test('SEO 17 is published as a complete and indexable article with its requested
   assert.match(html, new RegExp(`<link rel="canonical" href="https://www\\.realview\\.com\\.vn/bai-viet/${slug}"`));
   assert.match(html, /name="description" content="Khi nào nên check review trước khi mua\?/);
   assert.match(html, /data-article-toc/);
-  for (const heading of [
+  const toc = html.match(/<nav class="article-toc-links"[^>]*><ol>([\s\S]*?)<\/ol><\/nav>/)?.[1] || '';
+  const tocHeadings = [...toc.matchAll(/<a href="#[^"]+">([^<]+)<\/a>/g)].map((match) => match[1]);
+  assert.deepEqual(tocHeadings, [
     'Check review trước khi mua là gì?',
     'Khi nào nên check review trước khi mua?',
     'Có nên check review của mọi sản phẩm trước khi mua?',
@@ -20,7 +22,8 @@ test('SEO 17 is published as a complete and indexable article with its requested
     'RealView có thể dùng như một bước kiểm tra bổ sung',
     'FAQ – Câu hỏi thường gặp về check review trước khi mua',
     'Bài viết liên quan'
-  ]) assert.ok(html.includes(heading), `Missing section: ${heading}`);
+  ]);
+  for (const heading of tocHeadings) assert.ok(html.includes(heading), `Missing section: ${heading}`);
   const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]));
   for (const [, target] of html.matchAll(/<a href="#([^"]+)"/g)) assert.ok(ids.has(target), `Broken TOC anchor: ${target}`);
   const schemas = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((match) => JSON.parse(match[1]));

@@ -123,9 +123,9 @@
     },
     {
       "path": "blog/snapshots/check-review-truoc-khi-mua-hang.html",
-      "originalSha256": "98ea967613c819cdc8ae5c1ce433065a6b4522b31c72b20ae17c7866681400ab",
-      "deployedSha256": "98ea967613c819cdc8ae5c1ce433065a6b4522b31c72b20ae17c7866681400ab",
-      "bytes": 38503
+      "originalSha256": "47e3d7f9cfc9d33e2719f6bcf186d03f1edd560fdb94710849958be8425ad92b",
+      "deployedSha256": "47e3d7f9cfc9d33e2719f6bcf186d03f1edd560fdb94710849958be8425ad92b",
+      "bytes": 36113
     }
   ],
   "images": [
