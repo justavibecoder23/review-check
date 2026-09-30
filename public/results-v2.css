@@ -171,8 +171,6 @@
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-}
-.analysis-progress-mascot:not(.is-moving) .analysis-progress-thinking-text {
   animation: analysis-thinking-shimmer 5s linear infinite;
 }
 .analysis-progress-thinking-dots { display: inline-flex; }

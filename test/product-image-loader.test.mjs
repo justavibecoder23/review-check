@@ -119,6 +119,7 @@ test('a later TikTok image upgrades the metadata-only media request without a re
   const context = {
     productMediaRequestKey: '',
     productMediaRequest: null,
+    productMediaRequestSequence: 0,
     safeImageUrl: (value) => String(value || '').startsWith('https://') ? String(value) : '',
     pollProductMedia(product) {
       calls.push({ ...product });
@@ -141,8 +142,24 @@ test('a later TikTok image upgrades the metadata-only media request without a re
   assert.notEqual(withImage, metadataOnly);
   assert.equal(calls.length, 2);
   assert.equal(calls[1].image, 'https://p16-oec-sg.ibyteimg.com/tos/product-main.webp');
+  const resultReconciliation = context.requestProductMedia({
+    ...base,
+    image: 'https://p16-oec-sg.ibyteimg.com/tos/product-main.webp'
+  }, { force: true });
+  assert.notEqual(resultReconciliation, withImage);
+  assert.equal(calls.length, 3);
+  pending[2].resolve({ image: 'https://realview.public.blob.vercel-storage.com/result-product.webp' });
+  assert.equal((await resultReconciliation).image, 'https://realview.public.blob.vercel-storage.com/result-product.webp');
   pending[1].resolve({ image: 'https://realview.public.blob.vercel-storage.com/product.webp' });
   await withImage;
   pending[0].resolve(null);
   await metadataOnly;
+});
+
+test('the result view forces a fresh TikTok image reconciliation', () => {
+  const refreshSource = source.slice(
+    source.indexOf('async function refreshProductMediaInBackground('),
+    source.indexOf('\nfunction clamp(')
+  );
+  assert.match(refreshSource, /requestProductMedia\(resultData\?\.product \|\| \{\}, \{ force: true \}\)/);
 });

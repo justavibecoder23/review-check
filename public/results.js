@@ -45,6 +45,7 @@ const PRODUCT_MEDIA_POLL_TIMEOUT_MS = 120_000;
 let productImageLoadSequence = 0;
 let productMediaRequestKey = '';
 let productMediaRequest = null;
+let productMediaRequestSequence = 0;
 
 function loadProductImage({ image, fallback, url, alt = '', skeletonTarget = null }) {
   if (!image || !fallback) return;
@@ -100,7 +101,7 @@ function loadProductImage({ image, fallback, url, alt = '', skeletonTarget = nul
   if (candidate.complete && candidate.naturalWidth > 0) finish(true);
 }
 
-function requestProductMedia(product = {}) {
+function requestProductMedia(product = {}, { force = false } = {}) {
   if (!String(product.platform || '').toLowerCase().includes('tiktok') || !/^\d{8,25}$/.test(String(product.productId || ''))) return;
   const productId = String(product.productId);
   // Metadata TikTok arrives progressively: the first event often has only a
@@ -109,11 +110,12 @@ function requestProductMedia(product = {}) {
   // metadata-only mirror request instead of being trapped behind it.
   const sourceImage = safeImageUrl(product.image || product.imageUrl || product.thumbnail);
   const requestKey = `${productId}|${sourceImage}`;
-  if (productMediaRequestKey === requestKey && productMediaRequest) return productMediaRequest;
+  if (!force && productMediaRequestKey === requestKey && productMediaRequest) return productMediaRequest;
   productMediaRequestKey = requestKey;
+  const requestSequence = ++productMediaRequestSequence;
   const request = pollProductMedia(product).then((mirrored) => {
     // A later Actor update may contain a different, usable product image.
-    if (!mirrored && productMediaRequestKey === requestKey) productMediaRequest = null;
+    if (!mirrored && productMediaRequestSequence === requestSequence) productMediaRequest = null;
     return mirrored;
   });
   productMediaRequest = request;
@@ -147,7 +149,9 @@ async function pollProductMedia(product) {
 }
 
 async function refreshProductMediaInBackground(resultData, initialHistorySave) {
-  const mirrored = await requestProductMedia(resultData?.product || {});
+  // The result view owns a fresh reconciliation request. It must not inherit a
+  // metadata-only poll started by the progress view for the same product.
+  const mirrored = await requestProductMedia(resultData?.product || {}, { force: true });
   const imageUrl = safeImageUrl(mirrored?.image);
   if (!imageUrl) return;
   resultData.product = {
