@@ -23,7 +23,18 @@ async function refreshGuestQuota() {
   } catch { /* The server remains authoritative if the status request fails. */ }
 }
 
-void refreshGuestQuota();
+// The quota is informational; the analyze endpoint enforces limits on submit.
+// On small screens, let the initial hero paint before requesting this status.
+if (window.matchMedia('(max-width: 700px)').matches) {
+  const loadQuota = () => window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+    if ('requestIdleCallback' in window) window.requestIdleCallback(() => { void refreshGuestQuota(); }, { timeout: 2000 });
+    else window.setTimeout(() => { void refreshGuestQuota(); }, 200);
+  }));
+  if (document.readyState === 'complete') loadQuota();
+  else window.addEventListener('load', loadQuota, { once: true });
+} else {
+  void refreshGuestQuota();
+}
 window.addEventListener('realview:auth-changed', () => { void refreshGuestQuota(); });
 
 function showInputError(message, { focus = false } = {}) {

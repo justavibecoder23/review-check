@@ -138,7 +138,18 @@ async function confirmClear() {
 
 function initialize() {
   ensureDrawer();
-  renderHistory();
+  // History is below the fold and optional on the initial mobile view.
+  // Explicit drawer clicks still request it immediately through openDrawer().
+  if (document.querySelector('#analyze-form') && window.matchMedia('(max-width: 700px)').matches) {
+    const loadHistory = () => window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      if ('requestIdleCallback' in window) window.requestIdleCallback(() => { void renderHistory(); }, { timeout: 2000 });
+      else window.setTimeout(() => { void renderHistory(); }, 200);
+    }));
+    if (document.readyState === 'complete') loadHistory();
+    else window.addEventListener('load', loadHistory, { once: true });
+  } else {
+    void renderHistory();
+  }
   document.addEventListener('click', (event) => {
     const openTrigger = event.target.closest('[data-history-open]');
     if (openTrigger) {

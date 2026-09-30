@@ -32,9 +32,12 @@
     <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicon-v1-48.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon-v1.png" />
     <link rel="stylesheet" href="/styles.css" />
-    <link rel="stylesheet" href="/history.css" />
-    <link rel="stylesheet" href="/auth.css" />
-    <link rel="stylesheet" href="/chatbot.css" />
+    <link rel="stylesheet" href="/home-widgets.css" media="(max-width: 700px)" />
+    <link rel="stylesheet" href="/history.css" media="(min-width: 701px)" onload="this.media='all'" />
+    <noscript><link rel="stylesheet" href="/history.css" /></noscript>
+    <link rel="stylesheet" href="/auth.css" media="(min-width: 701px)" onload="this.media='all'" />
+    <link rel="stylesheet" href="/chatbot.css" media="(min-width: 701px)" onload="this.media='all'" />
+    <noscript><link rel="stylesheet" href="/auth.css" /><link rel="stylesheet" href="/chatbot.css" /></noscript>
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"RealView","url":"https://www.realview.com.vn/","logo":{"@type":"ImageObject","url":"https://www.realview.com.vn/assets/realview-rv.png","width":1400,"height":823}}</script>
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"RealView","url":"https://www.realview.com.vn/","inLanguage":"vi-VN"}</script>
   </head>
@@ -53,7 +56,13 @@
           <span class="nav-indicator" aria-hidden="true"></span>
         </nav>
         <div class="header-utilities">
+          <div class="header-actions">
+            <button class="chatbot-trigger" type="button" aria-expanded="false" aria-controls="realview-chatbot" aria-label="Mở Trợ lý RealView"><span class="chatbot-trigger-mascot" aria-hidden="true"><span class="realviewee-sprite" data-mascot-state="happy"></span></span><span>Trợ lý</span><i aria-hidden="true"></i></button>
           <a class="header-contact" href="/lien-he" aria-label="Mở trang Liên hệ RealView"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z" /><path d="M8 10h.01M12 10h.01M16 10h.01" /></svg><span>Liên hệ</span></a>
+          </div>
+          <div class="header-auth" data-auth-controls>
+            <button class="auth-button auth-button--access" type="button" data-auth-open="login" aria-label="Đăng nhập / Đăng ký"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-5 3-8 8-8s8 3 8 8" /></svg><span>Đăng nhập / Đăng ký</span></button>
+          </div>
         </div>
         <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="main-navigation">
           <span class="nav-toggle-label sr-only">Mở menu</span>
@@ -94,6 +103,15 @@
               <p id="form-error" class="error hidden" role="alert"></p>
             </div>
             <div class="supported"><span><i class="status-dot"></i> Hỗ trợ link Shopee &amp; TikTok Shop</span><span>3 lượt dùng thử không cần đăng nhập</span><span>Dữ liệu công khai</span></div>
+            <aside class="realviewee-stage realviewee-stage--home" aria-label="Trợ lý mua sắm RealViewee">
+              <div class="realviewee-companion is-patrolling">
+                <span class="realviewee-state-speech is-running is-visible" data-motion="running" role="status" aria-live="polite">Chốt đơn, chốt đơn!</span>
+                <span class="realviewee-speech" role="status" aria-live="polite">Mình giúp bạn check review nhé?</span>
+                <button class="realviewee-character" type="button" aria-label="Mở Chat with RealViewee">
+                  <span class="realviewee-sprite" data-mascot-state="running" aria-hidden="true"></span>
+                </button>
+              </div>
+            </aside>
           </div>
         </div>
 

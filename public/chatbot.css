@@ -5,12 +5,12 @@
   width: 100%;
   aspect-ratio: 418 / 470.5;
   display: block;
-  background-image: url('/assets/mascot/realviewee-sprite-v2.png');
+  background-image: url('/assets/mascot/realviewee-sprite-v2.webp');
   background-repeat: no-repeat;
   background-size: 400% 200%;
   background-position: 0 0;
 }
-.realviewee-sprite[data-mascot-state="default"] { background-image: url('/assets/mascot/realviewee-sprite-v1.png'); background-position: 0 0; }
+.realviewee-sprite[data-mascot-state="default"] { background-image: url('/assets/mascot/realviewee-sprite-v1.webp'); background-position: 0 0; }
 .realviewee-sprite[data-mascot-state="happy"] { background-position: 0 0; }
 .realviewee-sprite[data-mascot-state="curious"] { background-position: 33.333% 0; }
 .realviewee-sprite[data-mascot-state="surprised"] { background-position: 66.667% 0; }
@@ -27,12 +27,12 @@
   content: "";
 }
 .realviewee-sprite[data-mascot-state="running"]::before {
-  background: url('/assets/mascot/realviewee-sprite-v2.png') 100% 100% / 400% 200% no-repeat;
+  background: url('/assets/mascot/realviewee-sprite-v2.webp') 100% 100% / 400% 200% no-repeat;
   animation: realviewee-leg-cycle-a 5s steps(1, end) infinite;
 }
 .realviewee-sprite[data-mascot-state="running"]::after {
   opacity: 0;
-  background: url('/assets/mascot/realviewee-running-default-step-b-v2.png') center bottom / 126% 99% no-repeat;
+  background: url('/assets/mascot/realviewee-running-default-step-b-v2.webp') center bottom / 126% 99% no-repeat;
   animation: realviewee-leg-cycle 5s steps(1, end) infinite;
 }
 
@@ -553,4 +553,21 @@
   .chatbot-header { min-height: 78px; padding: 11px; grid-template-columns: 46px minmax(0, 1fr) 38px; gap: 9px; }
   .chatbot-avatar { width: 46px; height: 46px; }
   .chatbot-close { width: 38px; height: 38px; }
+}
+
+/* The mobile homepage only needs these three frames, not the full sprite atlases. */
+@media (max-width: 700px) {
+  .realviewee-sprite[data-mascot-state="happy"] {
+    background-image: url('/assets/mascot/realviewee-happy-mobile-v1.webp');
+    background-position: center;
+    background-size: 100% 100%;
+  }
+  .realviewee-sprite[data-mascot-state="default"] {
+    background-image: url('/assets/mascot/realviewee-default-mobile-v1.webp');
+    background-position: center;
+    background-size: 100% 100%;
+  }
+  .realviewee-sprite[data-mascot-state="running"]::before {
+    background: url('/assets/mascot/realviewee-running-mobile-v1.webp') center / 100% 100% no-repeat;
+  }
 }

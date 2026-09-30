@@ -35,7 +35,7 @@ test('nút trợ lý và avatar đều dùng mascot RealViewee', async () => {
   const chatbotStyles = await readFile(new URL('../public/chatbot.css', import.meta.url), 'utf8');
   assert.match(chatbot, /class="chatbot-trigger-mascot"[\s\S]*?data-mascot-state="happy"/);
   assert.match(chatbot, /class="chatbot-avatar"[\s\S]*?class="realviewee-sprite" data-mascot-state="happy"/);
-  assert.match(chatbotStyles, /\.realviewee-sprite \{[\s\S]*?background-image: url\('\/assets\/mascot\/realviewee-sprite-v2\.png'\)/);
+  assert.match(chatbotStyles, /\.realviewee-sprite \{[\s\S]*?background-image: url\('\/assets\/mascot\/realviewee-sprite-v2\.webp'\)/);
   assert.doesNotMatch(chatbot, /M12 3a8 8 0 0 0-8 8v5/);
   assert.doesNotMatch(chatbot, /class="chatbot-logo"/);
   assert.match(chatbotStyles, /\.chatbot-trigger-mascot \{ position: relative; order: 1;[\s\S]*?overflow: hidden;/);

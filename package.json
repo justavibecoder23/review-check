@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build:home-css": "node tools/build-home-widget-css.mjs",
     "start:local": "node tools/local-server.mjs",
     "dev": "node --watch tools/local-server.mjs",
     "generate:apify-pool": "node tools/generate-apify-pool.mjs",

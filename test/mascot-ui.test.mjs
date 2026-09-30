@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const [chatbot, styles, home, results, resultsScript, resultsStyles, sprite, progressMascot, progressStepB, homeStepB, resultSurprised, resultConcerned] = await Promise.all([
+const [chatbot, styles, home, results, resultsScript, resultsStyles, sprite, progressMascot, progressStepB, homeStepB, resultSurprised, resultConcerned, spriteWebp, defaultWebp, homeStepBWebp, happyMobile, defaultMobile, runningMobile] = await Promise.all([
   readFile(new URL('../public/chatbot.js', import.meta.url), 'utf8'),
   readFile(new URL('../public/chatbot.css', import.meta.url), 'utf8'),
   readFile(new URL('../public/index.html', import.meta.url), 'utf8'),
@@ -15,6 +15,12 @@ const [chatbot, styles, home, results, resultsScript, resultsStyles, sprite, pro
   readFile(new URL('../public/assets/mascot/realviewee-running-default-step-b-v2.png', import.meta.url)),
   readFile(new URL('../public/assets/mascot/realviewee-result-surprised-cutout-v1.png', import.meta.url)),
   readFile(new URL('../public/assets/mascot/realviewee-result-concerned-cutout-v1.png', import.meta.url)),
+  readFile(new URL('../public/assets/mascot/realviewee-sprite-v2.webp', import.meta.url)),
+  readFile(new URL('../public/assets/mascot/realviewee-sprite-v1.webp', import.meta.url)),
+  readFile(new URL('../public/assets/mascot/realviewee-running-default-step-b-v2.webp', import.meta.url)),
+  readFile(new URL('../public/assets/mascot/realviewee-happy-mobile-v1.webp', import.meta.url)),
+  readFile(new URL('../public/assets/mascot/realviewee-default-mobile-v1.webp', import.meta.url)),
+  readFile(new URL('../public/assets/mascot/realviewee-running-mobile-v1.webp', import.meta.url)),
 ]);
 
 test('sprite RealViewee giữ nền trong suốt và đúng lưới tám trạng thái', () => {
@@ -22,8 +28,17 @@ test('sprite RealViewee giữ nền trong suốt và đúng lưới tám trạng
   assert.equal(sprite.readUInt32BE(16), 1672);
   assert.equal(sprite.readUInt32BE(20), 941);
   assert.equal(sprite[25], 6, 'PNG phải dùng RGBA để giữ nền trong suốt');
-  assert.match(styles, /background-image:\s*url\('\/assets\/mascot\/realviewee-sprite-v2\.png'\)/);
+  for (const image of [spriteWebp, defaultWebp, homeStepBWebp, happyMobile, defaultMobile, runningMobile]) {
+    assert.equal(image.toString('ascii', 0, 4), 'RIFF');
+    assert.equal(image.toString('ascii', 8, 12), 'WEBP');
+  }
+  assert.match(styles, /background-image:\s*url\('\/assets\/mascot\/realviewee-sprite-v2\.webp'\)/);
   assert.match(styles, /background-size:\s*400% 200%/);
+  assert.match(styles, /realviewee-sprite-v1\.webp/);
+  assert.match(styles, /realviewee-running-default-step-b-v2\.webp/);
+  for (const state of ['happy', 'default', 'running']) {
+    assert.match(styles, new RegExp(`realviewee-${state}-mobile-v1\\.webp`));
+  }
 });
 
 test('mascot Curious trên thanh tiến trình là ảnh ngang độc lập, trong suốt và bám tiến độ thật', () => {
@@ -69,6 +84,8 @@ test('hai mascot review trên trang kết quả dùng cutout RGBA riêng không 
 });
 
 test('mascot homepage mở chatbot và mascot Confident đóng mở giải thích TrustScore', () => {
+  assert.match(home, /<aside class="realviewee-stage realviewee-stage--home"/);
+  assert.match(chatbot, /homeHost\.querySelector\('\.realviewee-stage--home'\)/);
   assert.match(home, /<script src="\/chatbot\.js" defer><\/script>/);
   assert.match(results, /<script src="\/chatbot\.js" defer><\/script>/);
   assert.match(chatbot, /createHomepageMascot/);
@@ -92,7 +109,7 @@ test('chỉ triển khai các biểu cảm đã duyệt và khung chạy, không
   assert.doesNotMatch(styles, /suspicious/i);
   assert.doesNotMatch(chatbot, /thinking/i);
   assert.doesNotMatch(styles, /thinking/i);
-  assert.match(styles, /data-mascot-state="default"[^}]*sprite-v1\.png/);
+  assert.match(styles, /data-mascot-state="default"[^}]*sprite-v1\.webp/);
   assert.match(chatbot, /trustCopy, 'confident', 'trust'/);
   assert.match(styles, /\.trust-copy \{ position: relative; \}/);
   assert.doesNotMatch(styles, /\.trust-copy \{[^}]*padding-right:/);
@@ -120,7 +137,7 @@ test('chỉ triển khai các biểu cảm đã duyệt và khung chạy, không
 
 test('chỉ mascot homepage chuyển động; mascot result đứng yên và responsive', () => {
   assert.match(styles, /@keyframes realviewee-patrol/);
-  assert.match(styles, /realviewee-running-default-step-b-v2\.png/);
+  assert.match(styles, /realviewee-running-default-step-b-v2\.webp/);
   assert.match(styles, /@keyframes realviewee-leg-cycle-a[\s\S]*?0%, 32\.99%, 66%, 100% \{ opacity: 1; \}[\s\S]*?33%, 65\.99% \{ opacity: 0; \}/);
   assert.match(styles, /@keyframes realviewee-leg-cycle[\s\S]*?0%, 32\.99%, 66%, 100% \{ opacity: 0; \}[\s\S]*?33%, 65\.99% \{ opacity: 1; \}/);
   assert.match(styles, /\.realviewee-companion\.is-interacting,[\s\S]*animation-play-state:\s*paused/);
@@ -140,7 +157,7 @@ test('chỉ mascot homepage chuyển động; mascot result đứng yên và res
   assert.match(chatbot, /const mascotPatrolDuration = 24_000/);
   assert.match(chatbot, /\[5_000, 'default'\][\s\S]*?\[9_000, 'running'\][\s\S]*?\[14_000, 'default'\][\s\S]*?\[18_000, 'running'\][\s\S]*?\[23_000, 'default'\]/);
   assert.match(styles, /20\.833%, 37\.5% \{ left: 31%; opacity: 1; \}[\s\S]*?58\.333%, 75% \{ left: 61%; opacity: 1; \}/);
-  assert.match(styles, /realviewee-running-default-step-b-v2\.png'\) center bottom \/ 126% 99% no-repeat/);
+  assert.match(styles, /realviewee-running-default-step-b-v2\.webp'\) center bottom \/ 126% 99% no-repeat/);
   assert.doesNotMatch(styles, /realviewee-sprite\[data-mascot-state="running"\]::after\s*\{[^}]*filter:/s);
   assert.match(styles, /animation:\s*realviewee-leg-cycle-a 5s/);
   assert.doesNotMatch(styles, /is-chat-open[^}]*left:/);

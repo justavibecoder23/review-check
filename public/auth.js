@@ -422,7 +422,18 @@ async function logout() {
 function initialize() {
   ensureAccountControls();
   ensureDialog();
-  getCurrentUser();
+  // Keep the account button interactive immediately, but defer the optional
+  // session lookup until after the mobile hero has finished its first load.
+  if (document.querySelector('#analyze-form') && window.matchMedia('(max-width: 700px)').matches) {
+    const loadSession = () => window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      if ('requestIdleCallback' in window) window.requestIdleCallback(() => { void getCurrentUser(); }, { timeout: 2000 });
+      else window.setTimeout(() => { void getCurrentUser(); }, 200);
+    }));
+    if (document.readyState === 'complete') loadSession();
+    else window.addEventListener('load', loadSession, { once: true });
+  } else {
+    void getCurrentUser();
+  }
   document.addEventListener('click', (event) => {
     const open = event.target.closest('[data-auth-open]');
     if (open) {

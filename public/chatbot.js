@@ -5,11 +5,13 @@
   const navToggle = document.querySelector('.nav-toggle');
   const navToggleLabel = document.querySelector('.nav-toggle-label');
 
-  const headerActions = document.createElement('div');
-  headerActions.className = 'header-actions';
-  contactButton.parentNode.insertBefore(headerActions, contactButton);
+  const headerActions = contactButton.closest('.header-actions') || document.createElement('div');
+  if (!headerActions.isConnected) {
+    headerActions.className = 'header-actions';
+    contactButton.parentNode.insertBefore(headerActions, contactButton);
+  }
 
-  const trigger = document.createElement('button');
+  const trigger = headerActions.querySelector('.chatbot-trigger') || document.createElement('button');
   trigger.className = 'chatbot-trigger';
   trigger.type = 'button';
   trigger.setAttribute('aria-expanded', 'false');
@@ -149,10 +151,11 @@
     const isHome = Boolean(homeHost && document.querySelector('#analyze-form'));
     if (!isHome) return null;
 
-    const stage = document.createElement('aside');
-    stage.className = 'realviewee-stage realviewee-stage--home';
-    stage.setAttribute('aria-label', 'Trợ lý mua sắm RealViewee');
-    stage.innerHTML = `
+    const stage = homeHost.querySelector('.realviewee-stage--home') || document.createElement('aside');
+    if (!stage.isConnected) {
+      stage.className = 'realviewee-stage realviewee-stage--home';
+      stage.setAttribute('aria-label', 'Trợ lý mua sắm RealViewee');
+      stage.innerHTML = `
       <div class="realviewee-companion is-patrolling">
         <span class="realviewee-state-speech is-running is-visible" data-motion="running" role="status" aria-live="polite">Chốt đơn, chốt đơn!</span>
         <span class="realviewee-speech" role="status" aria-live="polite">Mình giúp bạn check review nhé?</span>
@@ -160,9 +163,10 @@
           <span class="realviewee-sprite" data-mascot-state="running" aria-hidden="true"></span>
         </button>
       </div>`;
+      homeHost.append(stage);
+    }
 
     homeHost.classList.add('has-realviewee-stage');
-    homeHost.append(stage);
 
     const companion = stage.querySelector('.realviewee-companion');
     const character = stage.querySelector('.realviewee-character');
