@@ -7,6 +7,7 @@ import {
   mergeProductMetadata,
   normaliseProductMeta
 } from '../src/sources.mjs';
+import { normalizeTikTokProductMetadata } from '../src/product-cache.mjs';
 
 const SHOP_ID = '796123153';
 const ITEM_ID = '25219635609';
@@ -128,4 +129,56 @@ test('TikTok dùng metadata cấp sản phẩm từ Actor khi trang sản phẩm
   assert.equal(metadataEvents.at(0).image, undefined);
   assert.equal(metadataEvents.at(-1).image, actorImage);
   assert.equal(metadataEvents.at(-1).productId, productId);
+});
+
+test('metadata cache TikTok bỏ tên Security Check nhưng giữ ảnh hợp lệ', () => {
+  const metadata = normalizeTikTokProductMetadata('1732344645376247746', {
+    title: 'Security Check',
+    image: 'https://p16-oec-sg.ibyteimg.com/tos/product-cover.webp'
+  });
+  assert.equal(metadata.title, undefined);
+  assert.equal(metadata.image, 'https://p16-oec-sg.ibyteimg.com/tos/product-cover.webp');
+});
+
+test('ảnh TikTok vừa lấy từ Actor không bị URL Blob cũ ghi đè', async () => {
+  const productId = '1732344645376247746';
+  const liveImage = 'https://p16-oec-sg.ibyteimg.com/tos/current-product.webp';
+  const result = await getReviews(`https://shop.tiktok.com/vn/pdp/op-lung-iphone-tpu/${productId}`, {
+    env: { TIKTOK_RECENT_RAW_CACHE: 'false' },
+    fetchImpl: async () => ({ ok: false, status: 403, headers: { get: () => null } }),
+    getTikTokProductMetadataImpl: async () => ({
+      title: 'Tên cũ',
+      image: 'https://realview.public.blob.vercel-storage.com/product-media/tiktok/old.webp'
+    }),
+    setTikTokProductMetadataImpl: async () => ({ saved: true }),
+    collectTikTokReviewsImpl: async () => ({
+      reviews: Array.from({ length: 20 }, (_, index) => ({ id: `review-${index}`, rating: 5, text: `Đánh giá ${index}` })),
+      productMeta: { title: 'Tên mới từ Actor', image: liveImage },
+      collection: { strategy: 'single-unfiltered', targetMaximum: 100 }
+    })
+  });
+  assert.equal(result.product.title, 'Tên mới từ Actor');
+  assert.equal(result.product.image, liveImage);
+});
+
+test('Shopee tiếp tục lấy review khi API metadata hỏng nhưng trang sản phẩm hợp lệ', async () => {
+  const diagnostics = [];
+  const metaEvents = [];
+  const result = await getReviews(`https://shopee.vn/product-i.${SHOP_ID}.${ITEM_ID}`, {
+    onProductMeta: (metadata) => metaEvents.push(metadata),
+    onMetadataDiagnostic: (entry) => diagnostics.push(entry),
+    fetchImpl: async (url) => String(url).includes('/api/v4/item/get')
+      ? { ok: false, status: 403, headers: { get: () => null } }
+      : htmlResponse(shopeeHtml()),
+    collectShopeeReviewsImpl: async () => ({
+      reviews: [{ id: 'review-1', rating: 5, text: 'Đánh giá thật' }],
+      productMetaSource: {},
+      collection: { strategy: 'parallel-star-filters', targetMaximum: 100 }
+    })
+  });
+  assert.equal(result.reviews.length, 1);
+  assert.equal(result.product.image, PRODUCT_IMAGE_URL);
+  assert.ok(metaEvents.some((metadata) => metadata.image === PRODUCT_IMAGE_URL));
+  assert.ok(diagnostics.some((entry) => entry.source === 'shopee_item_api' && entry.status === 403));
+  assert.ok(diagnostics.every((entry) => entry.traceId && entry.productId === ITEM_ID));
 });

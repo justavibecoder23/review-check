@@ -4,6 +4,7 @@ import {
   extractProductPageMeta,
   extractShopeeProductApiMeta,
   fetchProductPageMeta,
+  fetchShopeeProductApiMeta,
   mergeProductMetadata,
   productMetadataUrls
 } from '../src/sources.mjs';
@@ -276,6 +277,48 @@ test('yêu cầu metadata TikTok bằng chế độ trình duyệt để nhận 
     title: 'Sản phẩm TikTok',
     image: 'https://p16-oec-sg.ibyteimg.com/tos/product.webp'
   });
+});
+
+test('không dùng trang Security Check làm tên hoặc ảnh sản phẩm', async () => {
+  const html = '<title>Security Check</title><meta property="og:title" content="Security Check"><meta property="og:image" content="https://p16-oec-sg.ibyteimg.com/tos/challenge.webp">';
+  assert.deepEqual(extractProductPageMeta(html, 'https://shop.tiktok.com/vn/pdp/example/1731159356089795879'), {});
+  const diagnostics = [];
+  const result = await fetchProductPageMeta('https://shop.tiktok.com/vn/pdp/example/1731159356089795879', {
+    onDiagnostic: (entry) => diagnostics.push(entry),
+    fetchImpl: async () => ({ ok: true, status: 200, headers: { get: () => 'text/html' }, body: null, text: async () => html })
+  });
+  assert.deepEqual(result, {});
+  assert.equal(diagnostics[0].reason, 'security_challenge');
+  assert.equal(diagnostics[0].status, 200);
+});
+
+test('Shopee API từ chối dữ liệu sai itemId và ghi rõ lý do', async () => {
+  const diagnostics = [];
+  const result = await fetchShopeeProductApiMeta('123', '456', {
+    onDiagnostic: (entry) => diagnostics.push(entry),
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { item: { shop_id: 123, item_id: 999, name: 'Sản phẩm khác', image: 'vn-11134207-7ras8-exampleimagehash' } } })
+    })
+  });
+  assert.deepEqual(result, {});
+  assert.equal(diagnostics[0].reason, 'product_id_mismatch');
+});
+
+test('Shopee API trả challenge HTML được phân loại đúng dù HTTP 200', async () => {
+  const diagnostics = [];
+  const result = await fetchShopeeProductApiMeta('123', '456', {
+    onDiagnostic: (entry) => diagnostics.push(entry),
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => 'text/html' },
+      text: async () => '<title>Security Check</title>'
+    })
+  });
+  assert.deepEqual(result, {});
+  assert.equal(diagnostics[0].reason, 'security_challenge');
 });
 
 
