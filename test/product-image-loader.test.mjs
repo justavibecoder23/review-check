@@ -6,11 +6,7 @@ import { runInNewContext } from 'node:vm';
 const source = readFileSync(new URL('../public/results.js', import.meta.url), 'utf8');
 const loaderSource = source.slice(
   source.indexOf('function loadProductImage('),
-  source.indexOf('\nfunction requestProductMedia(')
-);
-const mediaRequestSource = source.slice(
-  source.indexOf('function requestProductMedia('),
-  source.indexOf('\nasync function pollProductMedia(')
+  source.indexOf('\nfunction clamp(')
 );
 
 function classList(initial = []) {
@@ -113,53 +109,9 @@ test('a slow image still replaces the illustration when it eventually loads', ()
   assert.equal(ui.fallback.classList.contains('hidden'), true);
 });
 
-test('a later TikTok image upgrades the metadata-only media request without a reload', async () => {
-  const calls = [];
-  const pending = [];
-  const context = {
-    productMediaRequestKey: '',
-    productMediaRequest: null,
-    productMediaRequestSequence: 0,
-    safeImageUrl: (value) => String(value || '').startsWith('https://') ? String(value) : '',
-    pollProductMedia(product) {
-      calls.push({ ...product });
-      let resolve;
-      const promise = new Promise((done) => { resolve = done; });
-      pending.push({ promise, resolve });
-      return promise;
-    }
-  };
-  runInNewContext(`${mediaRequestSource}\nthis.requestProductMedia = requestProductMedia;`, context);
-  const base = { platform: 'TikTok Shop', productId: '1731846286968456663', title: 'Sản phẩm TikTok' };
-
-  const metadataOnly = context.requestProductMedia(base);
-  assert.equal(context.requestProductMedia(base), metadataOnly);
-  const withImage = context.requestProductMedia({
-    ...base,
-    image: 'https://p16-oec-sg.ibyteimg.com/tos/product-main.webp'
-  });
-
-  assert.notEqual(withImage, metadataOnly);
-  assert.equal(calls.length, 2);
-  assert.equal(calls[1].image, 'https://p16-oec-sg.ibyteimg.com/tos/product-main.webp');
-  const resultReconciliation = context.requestProductMedia({
-    ...base,
-    image: 'https://p16-oec-sg.ibyteimg.com/tos/product-main.webp'
-  }, { force: true });
-  assert.notEqual(resultReconciliation, withImage);
-  assert.equal(calls.length, 3);
-  pending[2].resolve({ image: 'https://realview.public.blob.vercel-storage.com/result-product.webp' });
-  assert.equal((await resultReconciliation).image, 'https://realview.public.blob.vercel-storage.com/result-product.webp');
-  pending[1].resolve({ image: 'https://realview.public.blob.vercel-storage.com/product.webp' });
-  await withImage;
-  pending[0].resolve(null);
-  await metadataOnly;
-});
-
-test('the result view forces a fresh TikTok image reconciliation', () => {
-  const refreshSource = source.slice(
-    source.indexOf('async function refreshProductMediaInBackground('),
-    source.indexOf('\nfunction clamp(')
-  );
-  assert.match(refreshSource, /requestProductMedia\(resultData\?\.product \|\| \{\}, \{ force: true \}\)/);
+test('TikTok source image is reused in result without a Blob mirror request', () => {
+  assert.doesNotMatch(source, /operation=product-media|refreshProductMediaInBackground/);
+  assert.match(source, /const verifiedImage = progressImage/);
+  assert.match(source, /const continuingImage = verifiedImage \|\| progressImageUrl/);
+  assert.match(source, /resultData\.product = \{ \.\.\.resultData\.product, image: continuingImage \}/);
 });

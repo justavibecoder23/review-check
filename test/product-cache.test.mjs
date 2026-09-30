@@ -231,6 +231,19 @@ test('metadata cache không lưu Security Check thành tên sản phẩm', () =>
   );
 });
 
+test('metadata TikTok bỏ URL Blob cũ nhưng giữ URL ảnh nguồn', () => {
+  const productId = '1732344645376247746';
+  const oldMirror = normalizeTikTokProductMetadata(productId, {
+    title: 'Sản phẩm TikTok',
+    image: 'https://realview.public.blob.vercel-storage.com/product-media/tiktok/old.webp'
+  });
+  assert.equal(oldMirror.image, undefined);
+  const source = normalizeTikTokProductMetadata(productId, {
+    image: 'https://p16-oec-sg.ibyteimg.com/tos/product-main.webp'
+  });
+  assert.equal(source.image, 'https://p16-oec-sg.ibyteimg.com/tos/product-main.webp');
+});
+
 test('ghi và đọc mapping cache với TTL còn lại của mốc năm ngày', async (context) => {
   enableRedisEnv(context);
   const redis = createRedisFake();

@@ -57,7 +57,10 @@ export function normalizeTikTokProductMetadata(productId, metadata = {}, options
   const normalizedId = String(productId || '').trim();
   if (!/^\d{8,25}$/.test(normalizedId)) return null;
   const title = cleanProductTitle(metadata.title || metadata.productName);
-  const image = safeProductImage(metadata.image || metadata.productImage || metadata.imageUrl || metadata.thumbnail);
+  // Old public Blob overlays may no longer be readable. Keep only the source
+  // image URL; never let a suspended mirror replace a fresh Actor image.
+  const imageCandidate = safeProductImage(metadata.image || metadata.productImage || metadata.imageUrl || metadata.thumbnail);
+  const image = isMirroredProductImage(imageCandidate) ? '' : imageCandidate;
   if (!title && !image) return null;
   const price = String(metadata.price || metadata.productPrice || '').trim().slice(0, 80);
   const rating = Number(metadata.rating || metadata.productRating);

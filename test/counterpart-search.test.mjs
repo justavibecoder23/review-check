@@ -331,11 +331,10 @@ test('section đối ứng ẩn mặc định và chỉ có module nền riêng'
   assert.match(statusToastSource, /}, 7_500\);/);
   assert.match(script, /showMetadataUnavailable/);
   assert.match(html, /results-v2\.css\?v=3/);
-  assert.match(html, /results\.js\?v=5/);
+  assert.match(html, /results\.js\?v=6/);
   assert.match(html, /id="analysis-product-illustration"/);
-  assert.match(resultsScript, /const PRODUCT_IMAGE_TIMEOUT_MS = 4_000;/);
-  assert.match(resultsScript, /PRODUCT_MEDIA_POLL_TIMEOUT_MS = 120_000/);
-  assert.match(resultsScript, /refreshProductMediaInBackground/);
+  assert.match(resultsScript, /const PRODUCT_IMAGE_TIMEOUT_MS = 20_000;/);
+  assert.doesNotMatch(resultsScript, /operation=product-media/);
   assert.match(resultsScript, /image\.removeAttribute\('src'\)/);
   assert.match(script, /showSearchProgress/);
   assert.match(script, /completeProgress/);

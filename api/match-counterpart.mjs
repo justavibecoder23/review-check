@@ -7,10 +7,6 @@ import {
   resumeCounterpartJob
 } from '../src/counterpart-job-store.mjs';
 import { isRedisConfigured, redisCommand } from '../src/redis-rest.mjs';
-import {
-  readMirroredProductImage,
-  scheduleProductImageMirror
-} from '../src/product-image-background.mjs';
 
 const MAX_BODY_BYTES = 12_000;
 
@@ -68,17 +64,6 @@ function requestUrl(request) {
   return new URL(request.url || '/api/match-counterpart', 'https://realview.local');
 }
 
-async function handleProductMedia(request, response) {
-  const body = request.method === 'POST' ? await requestBody(request) : {};
-  const product = request.method === 'POST' ? body.product || {} : {};
-  const productId = String(product.productId || requestUrl(request).searchParams.get('productId') || '').trim();
-  if (!/^\d{8,25}$/.test(productId)) return sendJson(response, 400, { error: 'INVALID_PRODUCT_ID' });
-  const existing = await readMirroredProductImage(productId);
-  if (existing) return sendJson(response, 200, { status: 'ready', product: existing });
-  if (request.method === 'POST') scheduleProductImageMirror({ ...product, productId });
-  return sendJson(response, 202, { status: 'pending', retryAfterMs: 2_000 });
-}
-
 async function withinRateLimit(request) {
   if (!isRedisConfigured()) return true;
   const forwarded = String(request.headers?.['x-forwarded-for'] || '').split(',')[0].trim();
@@ -103,7 +88,7 @@ export default async function handler(request, response) {
 
   if (!isSameOriginRequest(request)) return sendJson(response, 403, { error: 'ORIGIN_NOT_ALLOWED' });
   if (requestUrl(request).searchParams.get('operation') === 'product-media') {
-    return handleProductMedia(request, response);
+    return sendJson(response, 410, { error: 'PRODUCT_MEDIA_MIRROR_DISABLED' });
   }
   if (request.method === 'POST' && !(await withinRateLimit(request))) {
     return sendJson(response, 429, { status: 'unavailable', reason: 'rate_limited' });

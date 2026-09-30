@@ -38,14 +38,14 @@ function safeImageUrl(value) {
   return url && /^https:/i.test(url) ? url : '';
 }
 
-// The illustration is visible immediately when no image has loaded. Keep the
-// network request alive longer so a slow public Blob can still replace it.
+// The illustration is visible immediately while the original product image loads.
 const PRODUCT_IMAGE_TIMEOUT_MS = 20_000;
-const PRODUCT_MEDIA_POLL_TIMEOUT_MS = 120_000;
 let productImageLoadSequence = 0;
-let productMediaRequestKey = '';
-let productMediaRequest = null;
-let productMediaRequestSequence = 0;
+
+function isRetiredProductMirror(value) {
+  try { return /\.public\.blob\.vercel-storage\.com$/i.test(new URL(value).hostname); }
+  catch { return false; }
+}
 
 function loadProductImage({ image, fallback, url, alt = '', skeletonTarget = null }) {
   if (!image || !fallback) return;
@@ -69,7 +69,7 @@ function loadProductImage({ image, fallback, url, alt = '', skeletonTarget = nul
     fallback.classList.remove('hidden');
     skeletonTarget?.classList.add('is-skeleton');
   }
-  // Load the replacement separately. A slower or broken Actor/Blob URL must
+  // Load the replacement separately. A slower or broken Actor URL must
   // never remove an image that was already shown successfully.
   const candidate = new Image();
   candidate.referrerPolicy = image.referrerPolicy || 'no-referrer';
@@ -99,83 +99,6 @@ function loadProductImage({ image, fallback, url, alt = '', skeletonTarget = nul
   }, PRODUCT_IMAGE_TIMEOUT_MS);
   candidate.src = safe;
   if (candidate.complete && candidate.naturalWidth > 0) finish(true);
-}
-
-function requestProductMedia(product = {}, { force = false } = {}) {
-  if (!String(product.platform || '').toLowerCase().includes('tiktok') || !/^\d{8,25}$/.test(String(product.productId || ''))) return;
-  const productId = String(product.productId);
-  // Metadata TikTok arrives progressively: the first event often has only a
-  // title, while the Actor supplies the actual product image later. Include
-  // that image in the dedupe key so the later event can upgrade an in-flight
-  // metadata-only mirror request instead of being trapped behind it.
-  const sourceImage = safeImageUrl(product.image || product.imageUrl || product.thumbnail);
-  const requestKey = `${productId}|${sourceImage}`;
-  if (!force && productMediaRequestKey === requestKey && productMediaRequest) return productMediaRequest;
-  productMediaRequestKey = requestKey;
-  const requestSequence = ++productMediaRequestSequence;
-  const request = pollProductMedia(product).then((mirrored) => {
-    // A later Actor update may contain a different, usable product image.
-    if (!mirrored && productMediaRequestSequence === requestSequence) productMediaRequest = null;
-    return mirrored;
-  });
-  productMediaRequest = request;
-  return request;
-}
-
-async function pollProductMedia(product) {
-  const startedAt = Date.now();
-  let response;
-  try {
-    response = await fetch('/api/match-counterpart?operation=product-media', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ product })
-    });
-  } catch {
-    return;
-  }
-  let payload = await response.json().catch(() => null);
-  while (payload?.status === 'pending' && Date.now() - startedAt < PRODUCT_MEDIA_POLL_TIMEOUT_MS) {
-    await new Promise((resolve) => window.setTimeout(resolve, Math.max(1_500, Number(payload.retryAfterMs) || 2_000)));
-    try {
-      const poll = await fetch(`/api/match-counterpart?operation=product-media&productId=${encodeURIComponent(product.productId)}`, { cache: 'no-store' });
-      payload = await poll.json().catch(() => null);
-    } catch {
-      return;
-    }
-  }
-  const mirrored = payload?.status === 'ready' ? payload.product : null;
-  return safeImageUrl(mirrored?.image) ? mirrored : null;
-}
-
-async function refreshProductMediaInBackground(resultData, initialHistorySave) {
-  // The result view owns a fresh reconciliation request. It must not inherit a
-  // metadata-only poll started by the progress view for the same product.
-  const mirrored = await requestProductMedia(resultData?.product || {}, { force: true });
-  const imageUrl = safeImageUrl(mirrored?.image);
-  if (!imageUrl) return;
-  resultData.product = {
-    ...resultData.product,
-    ...(mirrored.title ? { title: mirrored.title } : {}),
-    image: imageUrl
-  };
-  try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(resultData)); } catch { /* Giao diện vẫn được cập nhật. */ }
-  document.querySelector('#results-title').textContent = resultData.product.title || document.querySelector('#results-title').textContent;
-  loadProductImage({
-    image: document.querySelector('#product-image'),
-    fallback: document.querySelector('#product-illustration'),
-    url: imageUrl,
-    alt: `Ảnh ${resultData.product.title || 'sản phẩm'}`
-  });
-  // Ghi đè đúng bản ghi lịch sử hiện có, giữ nguyên thời điểm phân tích.
-  void Promise.resolve(initialHistorySave).then(async (saved) => {
-    if (!saved?.analyzedAt) return;
-    const historyModulePath = './history-manager.js';
-    const { saveToHistory } = await import(historyModulePath);
-    const analyzedAt = saved?.analyzedAt ? new Date(saved.analyzedAt) : new Date();
-    await saveToHistory(resultData, { now: () => analyzedAt });
-    window.dispatchEvent(new CustomEvent('realview:history-changed'));
-  }).catch(() => {});
 }
 
 function clamp(value, minimum, maximum) {
@@ -526,7 +449,8 @@ function renderResult(data) {
   loadProductImage({
     image: document.querySelector('#product-image'),
     fallback: document.querySelector('#product-illustration'),
-    url: product.image || product.imageUrl || product.thumbnail,
+    url: platform.toLowerCase().includes('tiktok') && isRetiredProductMirror(product.image || product.imageUrl || product.thumbnail)
+      ? '' : product.image || product.imageUrl || product.thumbnail,
     alt: `Ảnh ${productTitle}`
   });
 
@@ -674,8 +598,8 @@ function updateElapsed() {
   if (seconds >= 45 && progressMessage) progressMessage.textContent = 'Vẫn đang xử lý những đánh giá cuối cùng. Bạn có thể giữ trang này mở.';
 }
 
-function renderProgressProduct(update = {}, { startMediaMirror = true } = {}) {
-  // Metadata from the page can be incomplete; Actor and Blob updates must not
+function renderProgressProduct(update = {}) {
+  // Metadata from the page can be incomplete; later Actor updates must not
   // erase a title or image that a previous SSE event already supplied.
   progressProduct = { ...progressProduct, ...Object.fromEntries(
     Object.entries(update).filter(([, value]) => value !== '' && value !== null && value !== undefined)
@@ -690,7 +614,8 @@ function renderProgressProduct(update = {}, { startMediaMirror = true } = {}) {
   titleElement.classList.remove('skeleton-line', 'skeleton-line--title');
   const meta = [product.price, product.rating ? `${product.rating} sao trên sàn` : ''].filter(Boolean).join(' · ');
   document.querySelector('#analysis-product-meta').textContent = meta || 'Đã xác nhận đúng sản phẩm. Đang thu thập các đánh giá công khai.';
-  const imageUrl = safeImageUrl(product.image || product.imageUrl || product.thumbnail);
+  const sourceImage = product.image || product.imageUrl || product.thumbnail;
+  const imageUrl = isRetiredProductMirror(sourceImage) ? '' : safeImageUrl(sourceImage);
   const imageChanged = Boolean(imageUrl && imageUrl !== progressImageUrl);
   if (imageChanged) {
     progressImageUrl = imageUrl;
@@ -701,16 +626,6 @@ function renderProgressProduct(update = {}, { startMediaMirror = true } = {}) {
       url: imageUrl,
       alt: `Ảnh ${title || 'sản phẩm đang phân tích'}`
     });
-  }
-  const canRequestMedia = platform === 'TikTok Shop' && /^\d{8,25}$/.test(String(product.productId || ''));
-  const needsMediaMirror = canRequestMedia && (!imageUrl || !/\.public\.blob\.vercel-storage\.com(?:\/|$)/i.test(imageUrl));
-  if (startMediaMirror && needsMediaMirror && (imageChanged || !progressImageUrl)) {
-    const generation = analysisGeneration;
-    void Promise.resolve(requestProductMedia(product)).then((mirrored) => {
-      if (generation === analysisGeneration && mirrored?.image) {
-        renderProgressProduct(mirrored, { startMediaMirror: false });
-      }
-    }).catch(() => {});
   }
   productMetaReceived = true;
   if (activeStepIndex < 2) {
@@ -866,6 +781,27 @@ async function startProgressiveAnalysis(url) {
 
   try {
     const resultData = await readAnalysisStream(url);
+    // Reuse an image already verified in progress. A late result with an old
+    // Blob URL or no image must not make that visible image disappear.
+    const progressImage = document.querySelector('#analysis-product-image');
+    const verifiedImage = progressImage && !progressImage.classList.contains('hidden') && progressImage.naturalWidth > 0
+      ? safeImageUrl(progressImage.src) : '';
+    if (String(resultData.product?.platform || progressProduct.platform).toLowerCase().includes('tiktok')) {
+      const currentImage = safeImageUrl(resultData.product?.image);
+      if (!currentImage || isRetiredProductMirror(currentImage)) {
+        // If the progress image is still loading, let result keep loading the
+        // same source URL without holding up the SSE result or history save.
+        const continuingImage = verifiedImage || progressImageUrl;
+        if (continuingImage) resultData.product = { ...resultData.product, image: continuingImage };
+        else if (resultData.product) delete resultData.product.image;
+      }
+      if (verifiedImage) {
+        const resultImage = document.querySelector('#product-image');
+        resultImage.src = verifiedImage;
+        resultImage.classList.remove('hidden');
+        document.querySelector('#product-illustration').classList.add('hidden');
+      }
+    }
     setAnalysisStep(3);
     analysisSteps.forEach((step) => {
       step.classList.remove('is-active');
@@ -882,14 +818,13 @@ async function startProgressiveAnalysis(url) {
     progressPanel?.classList.add('hidden');
     // Đồng bộ lịch sử là tính năng bổ sung: thực hiện sau khi kết quả đã hiển
     // thị để Redis hoặc mạng chậm không giữ người dùng ở bước hoàn thiện.
-    const historySave = import('./history-manager.js')
+    void import('./history-manager.js')
       .then(({ saveToHistory }) => saveToHistory(resultData))
       .then((savedHistoryItem) => {
         if (savedHistoryItem) window.dispatchEvent(new CustomEvent('realview:history-changed'));
         return savedHistoryItem;
       })
       .catch(() => {});
-    void refreshProductMediaInBackground(resultData, historySave);
   } catch (error) {
     if (error?.name === 'AbortError') return;
     window.realviewTrackEvent?.('analysis_error', {
@@ -942,10 +877,6 @@ if (hasBrowserWindow && requestedUrl) {
   }
   if (data?.reviews && data?.product) {
     renderResult(data);
-    const preservedHistory = data._historyAnalyzedAt
-      ? Promise.resolve({ analyzedAt: data._historyAnalyzedAt })
-      : Promise.resolve(null);
-    void refreshProductMediaInBackground(data, preservedHistory);
   }
   else emptyState.classList.remove('hidden');
 }

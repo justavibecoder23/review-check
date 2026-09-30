@@ -10,7 +10,6 @@ import {
   getCachedTikTokDataset,
   getFallbackTikTokDataset,
   getTikTokProductMetadata,
-  isMirroredProductImage,
   normalizeTikTokProductMetadata,
   recordShopeeCacheHit,
   recordShopeeServed,
@@ -584,6 +583,8 @@ export function mergeProductMetadata(pageMeta = {}, collectedMeta = {}, platform
 
 async function hydrateTikTokProductMetadata(productId, productUrl, product = {}, options = {}) {
   let merged = { ...product, ...normaliseProductMeta(product) };
+  // Cached datasets from the old mirror flow can contain suspended Blob URLs.
+  if (/\.public\.blob\.vercel-storage\.com(?:\/|$)/i.test(String(merged.image || ''))) delete merged.image;
   const initialTitle = cleanProductTitle(merged.title);
   if (initialTitle) merged.title = initialTitle;
   else delete merged.title;
@@ -592,7 +593,7 @@ async function hydrateTikTokProductMetadata(productId, productUrl, product = {},
   const overlay = await getTikTokProductMetadata(productId, {
     redisFetchImpl: options.redisFetchImpl
   }).catch(() => null);
-  if (overlay && (!merged.title || !merged.image || isMirroredProductImage(overlay.image))) {
+  if (overlay && (!merged.title || !merged.image)) {
       // The overlay has already been normalized and its image URL validated by
       // product-cache. Merge its explicit `image` field directly: the generic
       // product normalizer intentionally ignores root-level `image` because a
@@ -600,11 +601,11 @@ async function hydrateTikTokProductMetadata(productId, productUrl, product = {},
       merged = {
         ...merged,
         ...(!merged.title && overlay.title ? { title: overlay.title } : {}),
-        ...((!merged.image || isMirroredProductImage(overlay.image)) && overlay.image ? { image: overlay.image } : {}),
+        ...(!merged.image && overlay.image ? { image: overlay.image } : {}),
         ...(!merged.price && overlay.price ? { price: overlay.price } : {}),
         ...(!merged.rating && overlay.rating ? { rating: overlay.rating } : {})
       };
-    source = isMirroredProductImage(overlay.image) ? 'blob-mirror' : 'redis-overlay';
+    source = 'redis-overlay';
   }
 
   if (!merged.title || !merged.image) {
