@@ -43,7 +43,7 @@ function safeImageUrl(value) {
 const PRODUCT_IMAGE_TIMEOUT_MS = 20_000;
 const PRODUCT_MEDIA_POLL_TIMEOUT_MS = 120_000;
 let productImageLoadSequence = 0;
-let productMediaRequestId = '';
+let productMediaRequestKey = '';
 let productMediaRequest = null;
 
 function loadProductImage({ image, fallback, url, alt = '', skeletonTarget = null }) {
@@ -103,14 +103,21 @@ function loadProductImage({ image, fallback, url, alt = '', skeletonTarget = nul
 function requestProductMedia(product = {}) {
   if (!String(product.platform || '').toLowerCase().includes('tiktok') || !/^\d{8,25}$/.test(String(product.productId || ''))) return;
   const productId = String(product.productId);
-  if (productMediaRequestId === productId && productMediaRequest) return productMediaRequest;
-  productMediaRequestId = productId;
-  productMediaRequest = pollProductMedia(product).then((mirrored) => {
+  // Metadata TikTok arrives progressively: the first event often has only a
+  // title, while the Actor supplies the actual product image later. Include
+  // that image in the dedupe key so the later event can upgrade an in-flight
+  // metadata-only mirror request instead of being trapped behind it.
+  const sourceImage = safeImageUrl(product.image || product.imageUrl || product.thumbnail);
+  const requestKey = `${productId}|${sourceImage}`;
+  if (productMediaRequestKey === requestKey && productMediaRequest) return productMediaRequest;
+  productMediaRequestKey = requestKey;
+  const request = pollProductMedia(product).then((mirrored) => {
     // A later Actor update may contain a different, usable product image.
-    if (!mirrored && productMediaRequestId === productId) productMediaRequest = null;
+    if (!mirrored && productMediaRequestKey === requestKey) productMediaRequest = null;
     return mirrored;
   });
-  return productMediaRequest;
+  productMediaRequest = request;
+  return request;
 }
 
 async function pollProductMedia(product) {

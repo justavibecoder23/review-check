@@ -8,6 +8,10 @@ const loaderSource = source.slice(
   source.indexOf('function loadProductImage('),
   source.indexOf('\nfunction requestProductMedia(')
 );
+const mediaRequestSource = source.slice(
+  source.indexOf('function requestProductMedia('),
+  source.indexOf('\nasync function pollProductMedia(')
+);
 
 function classList(initial = []) {
   const values = new Set(initial);
@@ -107,4 +111,38 @@ test('a slow image still replaces the illustration when it eventually loads', ()
   assert.equal(ui.image.src, 'https://example.com/slow-blob.webp');
   assert.equal(ui.image.classList.contains('hidden'), false);
   assert.equal(ui.fallback.classList.contains('hidden'), true);
+});
+
+test('a later TikTok image upgrades the metadata-only media request without a reload', async () => {
+  const calls = [];
+  const pending = [];
+  const context = {
+    productMediaRequestKey: '',
+    productMediaRequest: null,
+    safeImageUrl: (value) => String(value || '').startsWith('https://') ? String(value) : '',
+    pollProductMedia(product) {
+      calls.push({ ...product });
+      let resolve;
+      const promise = new Promise((done) => { resolve = done; });
+      pending.push({ promise, resolve });
+      return promise;
+    }
+  };
+  runInNewContext(`${mediaRequestSource}\nthis.requestProductMedia = requestProductMedia;`, context);
+  const base = { platform: 'TikTok Shop', productId: '1731846286968456663', title: 'Sản phẩm TikTok' };
+
+  const metadataOnly = context.requestProductMedia(base);
+  assert.equal(context.requestProductMedia(base), metadataOnly);
+  const withImage = context.requestProductMedia({
+    ...base,
+    image: 'https://p16-oec-sg.ibyteimg.com/tos/product-main.webp'
+  });
+
+  assert.notEqual(withImage, metadataOnly);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].image, 'https://p16-oec-sg.ibyteimg.com/tos/product-main.webp');
+  pending[1].resolve({ image: 'https://realview.public.blob.vercel-storage.com/product.webp' });
+  await withImage;
+  pending[0].resolve(null);
+  await metadataOnly;
 });
