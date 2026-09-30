@@ -691,7 +691,9 @@ function renderProgressProduct(update = {}, { startMediaMirror = true } = {}) {
       alt: `Ảnh ${title || 'sản phẩm đang phân tích'}`
     });
   }
-  if (startMediaMirror && imageChanged && !/\.public\.blob\.vercel-storage\.com(?:\/|$)/i.test(imageUrl)) {
+  const canRequestMedia = platform === 'TikTok Shop' && /^\d{8,25}$/.test(String(product.productId || ''));
+  const needsMediaMirror = canRequestMedia && (!imageUrl || !/\.public\.blob\.vercel-storage\.com(?:\/|$)/i.test(imageUrl));
+  if (startMediaMirror && needsMediaMirror && (imageChanged || !progressImageUrl)) {
     const generation = analysisGeneration;
     void Promise.resolve(requestProductMedia(product)).then((mirrored) => {
       if (generation === analysisGeneration && mirrored?.image) {

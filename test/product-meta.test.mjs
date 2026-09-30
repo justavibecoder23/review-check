@@ -50,6 +50,16 @@ test('đọc ảnh sản phẩm từ preload khi TikTok không trả Open Graph'
   );
 });
 
+test('không dùng tiêu đề của trang TikTok security check làm tên sản phẩm', () => {
+  const metadata = extractProductPageMeta(`
+    <title>Security Check</title>
+    <meta property="og:title" content="TikTok Shop | Security Check">
+  `, 'https://shop.tiktok.com/vn/pdp/dep-xo-ngon/1731159356089795879');
+
+  assert.equal(metadata.title, undefined);
+  assert.equal(mergeProductMetadata({}, { title: 'Security Check' }, 'TikTok Shop').title, undefined);
+});
+
 test('từ chối metadata TikTok nếu redirect sang product id khác', async () => {
   const metadata = await fetchProductPageMeta(
     'https://shop.tiktok.com/vn/pdp/san-pham/1731159356089795879',

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { collectTikTokReviews } from '../src/apify-tiktok-review-scraper.mjs';
+import { extractTikTokProductMeta } from '../src/apify-tiktok-adapters.mjs';
 
 function allocation(count = 5, plannedReviews = count === 5 ? 20 : 100) {
   return {
@@ -52,6 +53,26 @@ function progressiveActorFetch(snapshots, options = {}) {
     throw new Error(`Unexpected Apify URL: ${url}`);
   };
 }
+
+test('đọc product main image từ output TikTok Actor', () => {
+  const image = 'https://p16-oec-sg.ibyteimg.com/tos/product-main.webp';
+  assert.deepEqual(extractTikTokProductMeta([{
+    product_title: 'Dép xỏ ngón nữ hè',
+    product_main_image: { url_list: [image] },
+    review_id: 'review-1'
+  }]), {
+    title: 'Dép xỏ ngón nữ hè',
+    image
+  });
+});
+
+test('bỏ tiêu đề security check nhưng vẫn giữ ảnh sản phẩm hợp lệ từ Actor', () => {
+  const image = 'https://p16-oec-sg.ibyteimg.com/tos/product-main.webp';
+  assert.deepEqual(extractTikTokProductMeta([{
+    product_title: 'Security Check',
+    productMainImage: { imageUrl: image }
+  }]), { image });
+});
 
 test('TikTok chia 100 review thành 5 star filter chạy song song và không lộ token', async () => {
   const inputs = [];

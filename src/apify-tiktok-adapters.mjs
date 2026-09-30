@@ -1,3 +1,5 @@
+import { cleanProductTitle } from './product-metadata-quality.mjs';
+
 function firstValue(object, paths) {
   for (const path of paths) {
     let value = object;
@@ -17,11 +19,21 @@ export function extractReviewsFromDatasetItems(items) {
 }
 
 function imageValue(value) {
-  const candidate = Array.isArray(value) ? value[0] : value;
-  if (candidate && typeof candidate === 'object') {
-    return candidate.url || candidate.url_list?.[0] || candidate.urlList?.[0] || candidate.uri || null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const candidate = imageValue(item);
+      if (candidate) return candidate;
+    }
+    return null;
   }
-  return candidate;
+  if (value && typeof value === 'object') {
+    for (const key of ['url', 'url_list', 'urlList', 'uri', 'image_url', 'imageUrl', 'src', 'original', 'large']) {
+      const candidate = imageValue(value[key]);
+      if (candidate) return candidate;
+    }
+    return null;
+  }
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
 /**
@@ -36,8 +48,8 @@ export function extractTikTokProductMeta(items) {
     const wrapperTitle = (Array.isArray(entry.reviews) || Array.isArray(entry.data?.reviews))
       ? firstValue(entry, ['title', 'name'])
       : null;
-    const title = firstValue(entry, [
-      'product_name', 'productName',
+    const title = cleanProductTitle(firstValue(entry, [
+      'product_title', 'productTitle', 'product_name', 'productName',
       'product.title', 'product.name', 'product.product_name',
       'productInfo.title', 'productInfo.name', 'productInfo.product_name',
       'product_info.title', 'product_info.name', 'product_info.product_name',
@@ -45,15 +57,16 @@ export function extractTikTokProductMeta(items) {
       'data.productInfo.title', 'data.productInfo.name', 'data.productInfo.product_name',
       'data.product_info.title', 'data.product_info.name', 'data.product_info.product_name',
       'data.item.title', 'data.item.name'
-    ]) || wrapperTitle;
+    ]) || wrapperTitle);
     const rawImage = firstValue(entry, [
-      'product_image', 'productImage', 'product_image_url', 'productCover', 'product_cover_url',
-      'product.image', 'product.cover', 'product.cover_url', 'product.images', 'product.main_images',
-      'productInfo.image', 'productInfo.cover', 'productInfo.images',
-      'product_info.image', 'product_info.cover', 'product_info.images',
-      'data.product.image', 'data.product.cover', 'data.product.cover_url', 'data.product.images', 'data.product.main_images',
-      'data.productInfo.image', 'data.productInfo.cover', 'data.productInfo.images',
-      'data.product_info.image', 'data.product_info.cover', 'data.product_info.images',
+      'product_main_image', 'productMainImage', 'product_main_image_url', 'productMainImageUrl',
+      'product_image', 'productImage', 'product_image_url', 'productCover', 'product_cover_url', 'main_image', 'mainImage',
+      'product.main_image', 'product.mainImage', 'product.image', 'product.cover', 'product.cover_url', 'product.images', 'product.main_images',
+      'productInfo.main_image', 'productInfo.mainImage', 'productInfo.image', 'productInfo.cover', 'productInfo.images',
+      'product_info.main_image', 'product_info.image', 'product_info.cover', 'product_info.images',
+      'data.product.main_image', 'data.product.mainImage', 'data.product.image', 'data.product.cover', 'data.product.cover_url', 'data.product.images', 'data.product.main_images',
+      'data.productInfo.main_image', 'data.productInfo.mainImage', 'data.productInfo.image', 'data.productInfo.cover', 'data.productInfo.images',
+      'data.product_info.main_image', 'data.product_info.image', 'data.product_info.cover', 'data.product_info.images',
       'data.item.image', 'data.item.cover', 'data.item.images'
     ]);
     const productImage = imageValue(rawImage);
@@ -77,10 +90,11 @@ export function extractTikTokProductMeta(items) {
 
   const firstReview = extractReviewsFromDatasetItems(items)[0];
   if (!firstReview || typeof firstReview !== 'object') return {};
-  const title = firstValue(firstReview, ['product_name', 'productName', 'product.title', 'product.name']);
+  const title = cleanProductTitle(firstValue(firstReview, ['product_title', 'productTitle', 'product_name', 'productName', 'product.title', 'product.name']));
   const productImage = imageValue(firstValue(firstReview, [
+    'product_main_image', 'productMainImage', 'product_main_image_url', 'productMainImageUrl',
     'product_image', 'productImage', 'product_image_url',
-    'product.image', 'product.cover', 'product.images'
+    'product.main_image', 'product.mainImage', 'product.image', 'product.cover', 'product.images'
   ]));
   return {
     ...(title ? { title: String(title) } : {}),

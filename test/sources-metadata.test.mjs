@@ -95,6 +95,16 @@ test('metadata actor giữ category path để xác định ngành hàng', () =>
   );
 });
 
+test('metadata chung đọc được product main image dạng object của TikTok', () => {
+  assert.deepEqual(normaliseProductMeta({
+    product_title: 'Dép xỏ ngón nữ hè',
+    product_main_image: { url_list: ['https://p16-oec-sg.ibyteimg.com/tos/product-main.webp'] }
+  }), {
+    title: 'Dép xỏ ngón nữ hè',
+    image: 'https://p16-oec-sg.ibyteimg.com/tos/product-main.webp'
+  });
+});
+
 test('TikTok dùng metadata cấp sản phẩm từ Actor khi trang sản phẩm bị chặn', async () => {
   const productId = '1732344645376247746';
   const actorImage = 'https://p16-oec-sg.ibyteimg.com/tos/product-cover.webp';
@@ -128,4 +138,22 @@ test('TikTok dùng metadata cấp sản phẩm từ Actor khi trang sản phẩm
   assert.equal(metadataEvents.at(0).image, undefined);
   assert.equal(metadataEvents.at(-1).image, actorImage);
   assert.equal(metadataEvents.at(-1).productId, productId);
+});
+
+test('TikTok không để security check từ trang ghi đè metadata Actor', async () => {
+  const productId = '1732344645376247746';
+  const actorImage = 'https://p16-oec-sg.ibyteimg.com/tos/product-main.webp';
+  const result = await getReviews(`https://shop.tiktok.com/vn/pdp/dep-xo-ngon/${productId}`, {
+    env: { TIKTOK_RECENT_RAW_CACHE: 'false' },
+    fetchImpl: async () => htmlResponse('<title>Security Check</title><meta property="og:title" content="Security Check">'),
+    collectTikTokReviewsImpl: async () => ({
+      reviews: Array.from({ length: 20 }, (_, index) => ({ id: `review-${index}`, rating: 5, text: `Review ${index}` })),
+      productMeta: { title: 'Dép xỏ ngón nữ hè', image: actorImage },
+      collection: { targetMaximum: 100, strategy: 'single-unfiltered' },
+      warnings: []
+    })
+  });
+
+  assert.equal(result.product.title, 'Dép xỏ ngón nữ hè');
+  assert.equal(result.product.image, actorImage);
 });

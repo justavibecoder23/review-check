@@ -16,6 +16,7 @@ import {
   setTikTokProductMetadata
 } from './product-cache.mjs';
 import { assertPlatformReviewEnabled } from './platform-availability.mjs';
+import { cleanProductTitle } from './product-metadata-quality.mjs';
 
 const DEMO_REVIEWS = [
   { rating: 5, text: 'Nhận xu nên đánh giá cho shop 5 sao nha mọi người.', date: '12/08/2026', verified: false },
@@ -110,12 +111,34 @@ function normaliseCategoryPath(value) {
   return categoryLabel(value) || undefined;
 }
 
+function explicitProductImageValue(value) {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const image = explicitProductImageValue(item);
+      if (image) return image;
+    }
+    return '';
+  }
+  if (value && typeof value === 'object') {
+    for (const key of ['url', 'url_list', 'urlList', 'uri', 'image_url', 'imageUrl', 'src']) {
+      const image = explicitProductImageValue(value[key]);
+      if (image) return image;
+    }
+    return '';
+  }
+  return typeof value === 'string' ? value.trim() : '';
+}
+
 export function normaliseProductMeta(source = {}) {
   if (!source || typeof source !== 'object') return {};
-  const title = firstValue(source, ['title', 'name', 'productName', 'product_name', 'productTitle', 'itemName', 'product.name', 'item.name']);
+  const title = cleanProductTitle(firstValue(source, ['title', 'name', 'productTitle', 'product_title', 'productName', 'product_name', 'itemName', 'product.name', 'item.name']));
   // Chỉ nhận các trường được đặt tên rõ là ảnh sản phẩm. Các trường `image`,
   // `images` và `thumbnail` ở dataset review thường là ảnh do người mua tải lên.
-  const image = firstValue(source, ['productImage', 'product_image', 'product_image_url', 'productCover', 'product_cover_url', 'product_images.0', 'product.image', 'product.images.0', 'item.image']);
+  const image = explicitProductImageValue(firstValue(source, [
+    'productMainImage', 'product_main_image', 'productMainImageUrl', 'product_main_image_url',
+    'productImage', 'product_image', 'product_image_url', 'productCover', 'product_cover_url',
+    'product.mainImage', 'product.main_image', 'product_images.0', 'product.image', 'product.images.0', 'item.image'
+  ]));
   const price = firstValue(source, ['price', 'productPrice', 'currentPrice', 'product.price', 'item.price']);
   const rating = firstValue(source, ['productRating', 'ratingAverage', 'averageRating', 'product.rating', 'item.rating']);
   const rawCategory = firstValue(source, ['categoryName', 'category_name', 'productCategory', 'product.category.name', 'product.category.display_name', 'item.category.name', 'item.category.display_name', 'category']);
@@ -359,7 +382,9 @@ export function extractProductPageMeta(html, baseUrl, options = {}) {
     ? shopeeEmbeddedProductMeta(html, baseUrl, options)
     : {};
   const pageTitle = decodeHtmlEntities(String(html || '').match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '');
-  const title = decodeHtmlEntities(metadata['og:title'] || metadata['twitter:title'] || embeddedProduct.title || structured.title || pageTitle);
+  const title = cleanProductTitle(decodeHtmlEntities(
+    metadata['og:title'] || metadata['twitter:title'] || embeddedProduct.title || structured.title || pageTitle
+  ));
   const category = decodeHtmlEntities(
     metadata['product:category'] || metadata['og:product:category'] || embeddedProduct.category || structured.category || ''
   );
@@ -499,7 +524,7 @@ export async function fetchProductPageMetaCandidates(urls, options = {}) {
 }
 
 export function mergeProductMetadata(pageMeta = {}, collectedMeta = {}, platform = '') {
-  const title = collectedMeta.title || pageMeta.title;
+  const title = cleanProductTitle(collectedMeta.title) || cleanProductTitle(pageMeta.title);
   // Dataset Shopee có thể đặt ảnh review của người mua vào trường ảnh chung.
   // Chỉ ảnh đã xác nhận từ trang/API sản phẩm mới được phép hiển thị ở Shopee.
   const image = pageMeta.image || (platform === 'Shopee' && !collectedMeta[trustedProductImage] ? null : collectedMeta.image);
@@ -512,11 +537,16 @@ export function mergeProductMetadata(pageMeta = {}, collectedMeta = {}, platform
   };
   if (image) merged.image = image;
   else delete merged.image;
+  if (title) merged.title = title;
+  else delete merged.title;
   return merged;
 }
 
 async function hydrateTikTokProductMetadata(productId, productUrl, product = {}, options = {}) {
   let merged = { ...product, ...normaliseProductMeta(product) };
+  const initialTitle = cleanProductTitle(merged.title);
+  if (initialTitle) merged.title = initialTitle;
+  else delete merged.title;
   let source = merged.title && merged.image ? 'dataset' : '';
 
   const overlay = await getTikTokProductMetadata(productId, {
@@ -529,10 +559,10 @@ async function hydrateTikTokProductMetadata(productId, productUrl, product = {},
       // raw actor review may use that field for buyer-uploaded media.
       merged = {
         ...merged,
-        ...(overlay.title ? { title: overlay.title } : {}),
-        ...(overlay.image ? { image: overlay.image } : {}),
-        ...(overlay.price ? { price: overlay.price } : {}),
-        ...(overlay.rating ? { rating: overlay.rating } : {})
+        ...(!merged.title && overlay.title ? { title: overlay.title } : {}),
+        ...((!merged.image || isMirroredProductImage(overlay.image)) && overlay.image ? { image: overlay.image } : {}),
+        ...(!merged.price && overlay.price ? { price: overlay.price } : {}),
+        ...(!merged.rating && overlay.rating ? { rating: overlay.rating } : {})
       };
     source = isMirroredProductImage(overlay.image) ? 'blob-mirror' : 'redis-overlay';
   }
@@ -545,7 +575,11 @@ async function hydrateTikTokProductMetadata(productId, productUrl, product = {},
       timeoutMs: 6_500
     }).catch(() => ({}));
     if (pageMeta.title || pageMeta.image) {
-      merged = { ...merged, ...pageMeta };
+      merged = {
+        ...merged,
+        ...(!merged.title && pageMeta.title ? { title: pageMeta.title } : {}),
+        ...(!merged.image && pageMeta.image ? { image: pageMeta.image } : {})
+      };
       source = 'page';
     }
   }

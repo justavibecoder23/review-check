@@ -1,4 +1,5 @@
 import { isRedisConfigured, redisCommand, redisTransaction } from './redis-rest.mjs';
+import { cleanProductTitle } from './product-metadata-quality.mjs';
 
 export const SHOPEE_CACHE_TTL_SECONDS = 5 * 24 * 60 * 60;
 export const TIKTOK_CACHE_TTL_SECONDS = 5 * 24 * 60 * 60;
@@ -55,7 +56,7 @@ function safeProductImage(value) {
 export function normalizeTikTokProductMetadata(productId, metadata = {}, options = {}) {
   const normalizedId = String(productId || '').trim();
   if (!/^\d{8,25}$/.test(normalizedId)) return null;
-  const title = String(metadata.title || metadata.productName || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  const title = cleanProductTitle(metadata.title || metadata.productName);
   const image = safeProductImage(metadata.image || metadata.productImage || metadata.imageUrl || metadata.thumbnail);
   if (!title && !image) return null;
   const price = String(metadata.price || metadata.productPrice || '').trim().slice(0, 80);

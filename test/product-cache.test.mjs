@@ -15,6 +15,7 @@ import {
   isShopeeCacheEligible,
   recordShopeeCacheHit,
   recordShopeeServed,
+  normalizeTikTokProductMetadata,
   setCachedShopeeDataset,
   setCachedTikTokDataset,
   setTikTokProductMetadata,
@@ -211,6 +212,23 @@ test('metadata TikTok được lưu riêng và không tạo thêm Blob dataset',
   assert.equal(metadata.source, 'page');
   assert.ok(redis.values.has(getTikTokProductMetaKey(productId)));
   assert.equal(redis.commands.some((command) => command[0] === 'HINCRBY'), false);
+});
+
+test('metadata cache không lưu Security Check thành tên sản phẩm', () => {
+  const productId = '1732344645376247746';
+  assert.equal(normalizeTikTokProductMetadata(productId, { title: 'Security Check' }), null);
+  assert.deepEqual(
+    normalizeTikTokProductMetadata(productId, {
+      title: 'TikTok Shop | Security Check',
+      image: 'https://p16-oec-sg.ibyteimg.com/tos/product-main.webp'
+    }, { source: 'actor', now: '2026-09-30T00:00:00.000Z' }),
+    {
+      productId,
+      image: 'https://p16-oec-sg.ibyteimg.com/tos/product-main.webp',
+      source: 'actor',
+      updatedAt: '2026-09-30T00:00:00.000Z'
+    }
+  );
 });
 
 test('ghi và đọc mapping cache với TTL còn lại của mốc năm ngày', async (context) => {
