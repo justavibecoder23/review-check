@@ -16,7 +16,8 @@ const snapshotSlugSet = new Set([...LEGACY_BLOG_SLUGS,
   'check-review-la-gi-tai-sao-can-check-review-truoc-khi-dat-hang',
   'seeding-review-la-gi',
   'seeding-review-shopee-tiktok',
-  'tieu-chi-danh-gia-cong-cu-check-review'
+  'tieu-chi-danh-gia-cong-cu-check-review',
+  'check-review-truoc-khi-mua-hang'
 ]);
 
 async function readSnapshotBlogHtml(slug) {

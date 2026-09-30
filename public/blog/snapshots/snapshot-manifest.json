@@ -1,5 +1,5 @@
 {
-  "exportedAt": "2026-09-28T00:00:00.000Z",
+  "exportedAt": "2026-10-01T00:00:00.000Z",
   "articles": [
     {
       "path": "blog/snapshots/tieu-chi-danh-gia-cong-cu-check-review.html",
@@ -57,15 +57,15 @@
     },
     {
       "path": "blog/snapshots/index-snapshot.html",
-      "originalSha256": "b3be6db7d254f7fab7cc751568a8ebf65184ada6d14b55cfcab0091ad4f21b2f",
-      "deployedSha256": "7199b67e0504770da3846489589103b5f2ab06e502488d7c5c9e5049005e7c8d",
-      "bytes": 48378
+      "originalSha256": "116d1d9774ddc13c294fb3d38c8786ff8fe90eaafeaf5532add707a5283c90ea",
+      "deployedSha256": "8a9ea31559f91b0880c0b8cb923a9fcffb149cdcbd2747bac45c32ae3bb89b6c",
+      "bytes": 49947
     },
     {
       "path": "blog/snapshots/sitemap-snapshot.xml",
-      "originalSha256": "7cb2339bf03f2db3d4f4be7ac3ab9c38859bb54f641e726a1d6cd7d8fb749d0d",
-      "deployedSha256": "2f9c671fe7d9f50c0dcf94f156213025848c58ae47e4a40000b2a4d9e9832068",
-      "bytes": 5851
+      "originalSha256": "253b8937ec4f214f6f5841ef073091f50f4271383edb3c94413669f8a93ee7bd",
+      "deployedSha256": "96cc6adfd028c4cb7c35b4b573afbfb06c79229e6597ab287ff0117bbcadc136",
+      "bytes": 6108
     },
     {
       "path": "blog/snapshots/trustscore-la-gi.html",
@@ -120,6 +120,12 @@
       "originalSha256": "3ea1a0497f5c9c0e280527cc83d16747bf1b55644987541d5ebf052c5062db62",
       "deployedSha256": "3ea1a0497f5c9c0e280527cc83d16747bf1b55644987541d5ebf052c5062db62",
       "bytes": 35824
+    },
+    {
+      "path": "blog/snapshots/check-review-truoc-khi-mua-hang.html",
+      "originalSha256": "98ea967613c819cdc8ae5c1ce433065a6b4522b31c72b20ae17c7866681400ab",
+      "deployedSha256": "98ea967613c819cdc8ae5c1ce433065a6b4522b31c72b20ae17c7866681400ab",
+      "bytes": 38503
     }
   ],
   "images": [

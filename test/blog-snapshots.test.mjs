@@ -27,8 +27,8 @@ function responseMock() {
 }
 
 test('bản tĩnh giữ nguyên từng byte HTML ngoại trừ URL ảnh đã mirror', async () => {
-  assert.equal(manifest.articles.length, 20);
-  assert.equal(manifest.articles.filter((article) => article.path.endsWith('.html')).length, 19);
+  assert.equal(manifest.articles.length, 21);
+  assert.equal(manifest.articles.filter((article) => article.path.endsWith('.html')).length, 20);
   for (const article of manifest.articles) {
     const html = await readFile(new URL(article.path, root), 'utf8');
     assert.equal(sha256(html), article.deployedSha256, article.path);
@@ -75,7 +75,7 @@ test('toàn bộ bài published, index và sitemap đọc bản tĩnh mà không
   }
 });
 
-test('rewrites công khai trỏ đúng 18 bài và không gọi function', async () => {
+test('rewrites công khai trỏ đúng 19 bài và không gọi function', async () => {
   const config = JSON.parse(await readFile(new URL('../vercel.json', import.meta.url), 'utf8'));
   for (const article of manifest.articles.filter((item) => item.path.endsWith('.html') && !item.path.endsWith('index-snapshot.html'))) {
     const slug = article.path.split('/').at(-1).replace(/\.html$/, '');

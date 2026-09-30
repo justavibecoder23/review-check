@@ -166,6 +166,7 @@
     { "source": "/tieu-chi-loc", "destination": "/criteria.html" },
     { "source": "/lien-he", "destination": "/contact.html" },
     { "source": "/bai-viet", "destination": "/blog/snapshots/index-snapshot.html" },
+    { "source": "/bai-viet/check-review-truoc-khi-mua-hang", "destination": "/blog/snapshots/check-review-truoc-khi-mua-hang.html" },
     { "source": "/bai-viet/trang-check-review-uy-tin-5-cong-cu-dang-biet", "destination": "/blog/snapshots/trang-check-review-uy-tin-5-cong-cu-dang-biet.html" },
     { "source": "/bai-viet/realview-la-gi-cach-su-dung-realview-de-check-review-san-pham-shopee-va-tiktok-shop", "destination": "/blog/snapshots/realview-la-gi-cach-su-dung-realview-de-check-review-san-pham-shopee-va-tiktok-shop.html" },
     { "source": "/bai-viet/vi-sao-realview-huu-ich", "destination": "/blog/snapshots/vi-sao-realview-huu-ich.html" },
