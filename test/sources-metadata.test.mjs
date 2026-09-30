@@ -71,6 +71,28 @@ test('metadata URL được đọc tuần tự và dừng khi đã có đủ ả
   assert.equal(calls.length, 1);
 });
 
+test('Shopee vẫn dùng ảnh trang sản phẩm khi API metadata lỗi', async () => {
+  const diagnostics = [];
+  const metadataEvents = [];
+  const result = await getReviews(`https://shopee.vn/product-i.${SHOP_ID}.${ITEM_ID}`, {
+    onProductMeta: (metadata) => metadataEvents.push(metadata),
+    onMetadataDiagnostic: (entry) => diagnostics.push(entry),
+    fetchImpl: async (url) => String(url).includes('/api/v4/item/get')
+      ? { ok: false, status: 403, headers: { get: () => null } }
+      : htmlResponse(shopeeHtml()),
+    collectShopeeReviewsImpl: async () => ({
+      reviews: [{ id: 'review-1', rating: 5, text: 'Đánh giá thật' }],
+      productMetaSource: {},
+      collection: { strategy: 'parallel-star-filters', targetMaximum: 100 }
+    })
+  });
+  assert.equal(result.reviews.length, 1);
+  assert.equal(result.product.image, PRODUCT_IMAGE_URL);
+  assert.ok(metadataEvents.some((metadata) => metadata.image === PRODUCT_IMAGE_URL));
+  assert.ok(diagnostics.some((entry) => entry.source === 'shopee_item_api' && entry.status === 403));
+  assert.ok(diagnostics.every((entry) => entry.traceId && entry.productId === ITEM_ID));
+});
+
 test('Shopee chỉ dùng fallback ảnh được đặt tên rõ là ảnh sản phẩm', () => {
   const unsafe = normaliseProductMeta({
     image: 'https://example.com/comment.jpg',

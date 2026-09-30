@@ -4,6 +4,7 @@ import {
   extractProductPageMeta,
   extractShopeeProductApiMeta,
   fetchProductPageMeta,
+  fetchShopeeProductApiMeta,
   mergeProductMetadata,
   productMetadataUrls
 } from '../src/sources.mjs';
@@ -193,6 +194,61 @@ test('đổi mã ảnh Shopee thành URL CDN hiển thị được', () => {
       image: 'https://down-vn.img.susercontent.com/file/vn-11134207-7ras8-exampleimagehash'
     }
   );
+});
+
+test('Shopee bỏ trang kiểm tra bảo mật dù response chứa ảnh Open Graph', async () => {
+  const html = '<title>Security Check</title><meta property="og:title" content="Security Check"><meta property="og:image" content="https://down-vn.img.susercontent.com/file/challenge">';
+  const url = 'https://shopee.vn/product/123/456';
+  assert.deepEqual(extractProductPageMeta(html, url), {});
+  const diagnostics = [];
+  const metadata = await fetchProductPageMeta(url, {
+    expectedShopId: '123',
+    expectedItemId: '456',
+    onDiagnostic: (entry) => diagnostics.push(entry),
+    fetchImpl: async () => ({ ok: true, status: 200, headers: { get: () => 'text/html' }, text: async () => html })
+  });
+  assert.deepEqual(metadata, {});
+  assert.equal(diagnostics[0].reason, 'security_challenge');
+});
+
+test('Shopee từ chối trang chuyển sang sản phẩm khác', async () => {
+  const diagnostics = [];
+  const metadata = await fetchProductPageMeta('https://shopee.vn/product/123/456', {
+    expectedShopId: '123',
+    expectedItemId: '456',
+    onDiagnostic: (entry) => diagnostics.push(entry),
+    fetchImpl: async (url) => String(url).endsWith('/123/456')
+      ? { status: 302, headers: { get: (name) => name === 'location' ? 'https://shopee.vn/product/123/999' : null } }
+      : { ok: true, status: 200, headers: { get: () => 'text/html' }, text: async () => '<meta property="og:title" content="Sản phẩm khác">' }
+  });
+  assert.deepEqual(metadata, {});
+  assert.equal(diagnostics[0].reason, 'product_id_mismatch');
+});
+
+test('Shopee API từ chối itemId sai và ghi nhận challenge HTTP 200', async () => {
+  const diagnostics = [];
+  const mismatched = await fetchShopeeProductApiMeta('123', '456', {
+    onDiagnostic: (entry) => diagnostics.push(entry),
+    fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ data: { item: { shop_id: 123, item_id: 999, name: 'Sản phẩm khác' } } }) })
+  });
+  assert.deepEqual(mismatched, {});
+  assert.equal(diagnostics[0].reason, 'product_id_mismatch');
+  const challenged = await fetchShopeeProductApiMeta('123', '456', {
+    onDiagnostic: (entry) => diagnostics.push(entry),
+    fetchImpl: async () => ({ ok: true, status: 200, headers: { get: () => 'text/html' }, text: async () => '<title>Security Check</title>' })
+  });
+  assert.deepEqual(challenged, {});
+  assert.equal(diagnostics[1].reason, 'security_challenge');
+});
+
+test('Shopee giữ ảnh hợp lệ khi tên Actor là trang bảo mật', () => {
+  const metadata = mergeProductMetadata(
+    { title: 'Khăn giấy chính hãng', image: 'https://down-vn.img.susercontent.com/file/product' },
+    { title: 'Security Check' },
+    'Shopee'
+  );
+  assert.equal(metadata.title, 'Khăn giấy chính hãng');
+  assert.equal(metadata.image, 'https://down-vn.img.susercontent.com/file/product');
 });
 
 test('đọc đúng ảnh bìa Shopee từ dữ liệu hydration theo shop và sản phẩm', () => {
