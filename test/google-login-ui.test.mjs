@@ -50,9 +50,12 @@ test('approved UI and real handlers complete Google/password/link/OTP/error flow
     return { ok: result.status < 400, status: result.status, json: async () => result.body };
   };
   let sdkConfig, googleKind = 'google';
+  const renderedButtons = [];
   const credential = () => {
     if (googleKind === 'error') return 'invalid-token';
-    const value = googleKind === 'legacy' ? { subject: 'ui-linked', email: legacy.email, name: 'Legacy Buyer' }
+    const value = googleKind === 'new' ? { subject: 'ui-new', email: 'newbuyer@gmail.com', name: 'New Buyer' }
+      : googleKind === 'new_login' ? { subject: 'ui-new-login', email: 'newlogin@gmail.com', name: 'New Login' }
+      : googleKind === 'legacy' ? { subject: 'ui-linked', email: legacy.email, name: 'Legacy Buyer' }
       : googleKind === 'external' ? { subject: 'ui-external', email: 'external@example.net', name: 'External Buyer' } : identity;
     const now = Math.floor(Date.now() / 1000);
     const header = Buffer.from(JSON.stringify({ alg: 'RS256', kid: 'ui' })).toString('base64url');
@@ -61,7 +64,8 @@ test('approved UI and real handlers complete Google/password/link/OTP/error flow
     const input = `${header}.${claims}`; return `${input}.${sign('RSA-SHA256', Buffer.from(input), privateKey).toString('base64url')}`;
   };
   window.google = { accounts: { id: { initialize(config) { sdkConfig = config; }, cancel() {}, disableAutoSelect() {},
-    renderButton(slot) { const button = window.document.createElement('button'); button.dataset.testGoogle = ''; button.textContent = 'Google';
+    renderButton(slot, config) { renderedButtons.push(config); const button = window.document.createElement('button'); button.dataset.testGoogle = '';
+      button.textContent = config.text === 'signup_with' ? 'Đăng ký bằng Google' : 'Đăng nhập bằng Google';
       button.onclick = () => { void sdkConfig.callback({ credential: credential() }); }; slot.append(button); } } } };
   const q = selector => window.document.querySelector(selector);
   const wait = async predicate => { for (let i = 0; i < 200; i++) { if (predicate()) return; await new Promise(resolve => setTimeout(resolve, 10)); } assert.fail('UI transition did not complete'); };
@@ -71,6 +75,41 @@ test('approved UI and real handlers complete Google/password/link/OTP/error flow
     const auth = await import(`../public/auth.js?dom-integration=${Date.now()}`);
     await auth.getCurrentUser();
     assert.equal(requests.some(r => r.url === '/api/auth-google'), false, 'Google is not fetched on homepage initialization');
+    auth.openAuthDialog(); await wait(() => q('[data-test-google]'));
+    assert.equal(renderedButtons.at(-1).text, 'signin_with');
+    assert.equal(q('[data-google-button]').getAttribute('aria-label'), 'Đăng nhập bằng tài khoản Google');
+    assert.match(q('.google-purpose').textContent, /Không cần tạo mật khẩu RealView/);
+    // Switching tabs reuses the nonce but must update the official button text.
+    const initialChallenge = sdkConfig.nonce;
+    q('[data-auth-tab="register"]').click();
+    await wait(() => renderedButtons.at(-1).text === 'signup_with');
+    assert.equal(sdkConfig.nonce, initialChallenge);
+    assert.equal(q('[data-google-button]').getAttribute('aria-label'), 'Đăng ký bằng tài khoản Google');
+    googleKind = 'new';
+    const beforeSignup = requests.length;
+    q('[data-test-google]').click(); await wait(() => !q('#account-dialog').open); dismissMarketing();
+    const firstGoogleUser = await auth.getCurrentUser();
+    assert.equal(firstGoogleUser.email, 'newbuyer@gmail.com');
+    assert.equal(firstGoogleUser.hasPassword, false);
+    assert.deepEqual(firstGoogleUser.authProviders, ['google']);
+    assert.deepEqual(requests.slice(beforeSignup).filter(r => r.url === '/api/auth-google').map(r => r.action), ['authenticate']);
+    assert.equal(requests.slice(beforeSignup).some(r => /password|registration/.test(r.action || '')), false);
+    q('[data-auth-logout]').click(); await wait(() => q('[data-auth-open]'));
+    // The login tab accepts the account created through the register tab.
+    auth.openAuthDialog(); await wait(() => q('[data-test-google]'));
+    assert.equal(renderedButtons.at(-1).text, 'signin_with');
+    q('[data-test-google]').click(); await wait(() => !q('#account-dialog').open); dismissMarketing();
+    assert.equal((await auth.getCurrentUser()).id, firstGoogleUser.id);
+    assert.equal((await auth.getCurrentUser()).hasPassword, false);
+    q('[data-auth-logout]').click(); await wait(() => q('[data-auth-open]'));
+    // Also sign in a never-seen Google identity from the login tab.
+    googleKind = 'new_login';
+    auth.openAuthDialog(); await wait(() => q('[data-test-google]'));
+    q('[data-test-google]').click(); await wait(() => !q('#account-dialog').open); dismissMarketing();
+    assert.equal((await auth.getCurrentUser()).email, 'newlogin@gmail.com');
+    assert.equal((await auth.getCurrentUser()).hasPassword, false);
+    q('[data-auth-logout]').click(); await wait(() => q('[data-auth-open]'));
+    googleKind = 'google';
     auth.openAuthDialog(); await wait(() => q('[data-test-google]'));
     q('[data-test-google]').click(); await wait(() => !q('#account-dialog').open); dismissMarketing();
     assert.equal((await auth.getCurrentUser()).id, googleUser.id);

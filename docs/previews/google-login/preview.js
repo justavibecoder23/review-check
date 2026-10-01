@@ -45,6 +45,8 @@ function render(mode) {
     button.setAttribute('aria-pressed', 'false');
   });
   const view = ['error', 'cancel'].includes(mode) ? 'login' : mode;
+  googleButton.querySelector('span').textContent = view === 'register'
+    ? 'Đăng ký bằng tài khoản Google' : 'Đăng nhập bằng tài khoản Google';
   title.textContent = headings[view][0];
   description.textContent = headings[view][1];
   tabs.hidden = !['login', 'register'].includes(view);

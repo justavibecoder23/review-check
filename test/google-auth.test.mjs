@@ -307,6 +307,8 @@ test('API signs in, rotates the existing session, rejects replay, and returns co
   const logged = await request(handler, body, { cookie });
   assert.equal(logged.statusCode, 201);
   assert.equal(logged.body.status, 'signed_in');
+  assert.equal(logged.body.user.hasPassword, false);
+  assert.deepEqual(logged.body.user.authProviders, ['google']);
   assert.match(logged.headers['set-cookie'], /HttpOnly; SameSite=Lax; Secure/);
   const sessionToken = logged.headers['set-cookie'].match(/realview_session=([^;]+)/)[1];
   assert.equal((await getAccountFromSession(sessionToken, options)).id, logged.body.user.id);
@@ -315,6 +317,7 @@ test('API signs in, rotates the existing session, rejects replay, and returns co
   const again = await request(handler, { action: 'authenticate', challengeId: next.response.body.challengeId, credential: token(next.response.body.nonce) }, { cookie: `${cookie}; realview_session=${sessionToken}` });
   assert.equal(again.statusCode, 200);
   assert.equal(again.body.user.id, logged.body.user.id);
+  assert.equal(again.body.user.hasPassword, false);
   assert.equal(await getAccountFromSession(sessionToken, options), null);
 });
 

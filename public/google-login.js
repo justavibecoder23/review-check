@@ -52,10 +52,15 @@ export function createGoogleLoginController({ dialog, setMode, onSignedIn, setBu
     errorBox.querySelector('p').textContent = error.message || 'Chưa thể kết nối với Google. Bạn có thể thử lại hoặc dùng mật khẩu bên dưới.';
   }
   function render() {
+    const registering = dialog.dataset.mode === 'register';
     const width = Math.min(400, Math.floor(slot.clientWidth || 300));
     renderedWidth = width;
+    slot.setAttribute('role', 'group');
+    slot.setAttribute('aria-label', registering ? 'Đăng ký bằng tài khoản Google' : 'Đăng nhập bằng tài khoản Google');
     slot.replaceChildren();
-    sdk.renderButton(slot, { type: 'standard', theme: 'outline', size: 'large', text: 'continue_with', shape: 'pill', locale: 'vi', width,
+    // Official Google labels differ by tab; both use receiveCredential and the
+    // same server action, which creates a session without a RealView password.
+    sdk.renderButton(slot, { type: 'standard', theme: 'outline', size: 'large', text: registering ? 'signup_with' : 'signin_with', shape: 'pill', locale: 'vi', width,
       click_listener: () => {
         if (challenge?.expiresAt <= Date.now()) {
           showError(new Error('Phiên đăng nhập đã hết hạn. Hãy nhấn “Thử lại với Google” để bắt đầu lại.'));
@@ -89,7 +94,10 @@ export function createGoogleLoginController({ dialog, setMode, onSignedIn, setBu
       const ticket = generation;
       await preparation;
       if (ticket !== generation || !dialog.open) return;
-      if (challenge && challenge.expiresAt > Date.now()) return;
+      if (challenge && challenge.expiresAt > Date.now()) {
+        if (['login', 'register'].includes(dialog.dataset.mode)) render();
+        return;
+      }
     }
     const ticket = generation;
     preparation = (async () => {
