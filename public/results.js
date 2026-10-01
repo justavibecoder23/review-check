@@ -1,5 +1,4 @@
 const STORAGE_KEY = 'realview:last-analysis';
-let renderedProductData;
 const content = document.querySelector('#results-content');
 const emptyState = document.querySelector('#results-empty');
 const siteHeader = document.querySelector('.site-header');
@@ -537,20 +536,6 @@ function renderResult(data) {
   document.querySelector('#result-action-bar').classList.remove('hidden');
   const introDialog = document.querySelector('#trust-intro-dialog');
   if (introDialog?.showModal && !introDialog.open) requestAnimationFrame(() => introDialog.showModal());
-  renderedProductData = data;
-  if (String(product.platform).toLowerCase() === 'shopee' && !product.image) {
-    void import('./shopee-metadata-loader.js?v=1').then(({ refreshShopeeProductMetadata }) => refreshShopeeProductMetadata(product))
-      .then((metadata) => {
-        if (!metadata || renderedProductData !== data) return;
-        data.product = { ...data.product, ...metadata };
-        const title = data.product.title || productTitle;
-        document.querySelector('#results-title').textContent = title;
-        loadProductImage({ image: document.querySelector('#product-image'), fallback: document.querySelector('#product-illustration'),
-          url: metadata.image, alt: `Ảnh ${title}` });
-        try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch { /* Result stays usable. */ }
-        window.dispatchEvent(new CustomEvent('realview:counterpart-source', { detail: { result: data } }));
-      }).catch(() => {});
-  }
 }
 
 const progressPanel = document.querySelector('#analysis-progress');
@@ -767,8 +752,6 @@ async function readAnalysisStream(url) {
 }
 
 async function startProgressiveAnalysis(url) {
-  renderedProductData = null;
-  void import('./shopee-metadata-loader.js?v=1').then(({ cancelShopeeMetadataRefresh }) => cancelShopeeMetadataRefresh()).catch(() => {});
   analysisGeneration += 1;
   const marketplace = window.realviewMarketplaceFromUrl?.(url) || 'unknown';
   window.realviewTrackEvent?.('analysis_start', { marketplace });

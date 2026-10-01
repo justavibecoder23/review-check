@@ -7,8 +7,6 @@ import {
   resumeCounterpartJob
 } from '../src/counterpart-job-store.mjs';
 import { isRedisConfigured, redisCommand } from '../src/redis-rest.mjs';
-import { isShopeeUrl, getShopeeProductIds } from '../src/shopee-url.mjs';
-import { readShopeeProductMetadata } from '../src/shopee-product-metadata.mjs';
 
 const MAX_BODY_BYTES = 12_000;
 
@@ -97,20 +95,6 @@ export default async function handler(request, response) {
   }
 
   try {
-    if (requestUrl(request).searchParams.get('operation') === 'product-metadata') {
-      if (request.method !== 'GET') return sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
-      const sourceUrl = requestUrl(request).searchParams.get('sourceUrl') || '';
-      const ids = isShopeeUrl(sourceUrl) ? getShopeeProductIds(sourceUrl) : null;
-      if (!ids) return sendJson(response, 400, { error: 'INVALID_SOURCE_PRODUCT' });
-      // Read-only: polling never starts another paid Actor or reads reviews.
-      const metadata = await readShopeeProductMetadata(ids.shopId, ids.itemId);
-      return sendJson(response, 200, {
-        status: metadata?.image ? 'ready' : metadata?.attempted ? 'unavailable' : 'pending',
-        product: { shopId: ids.shopId, itemId: ids.itemId,
-          ...(metadata?.title ? { title: metadata.title } : {}),
-          ...(metadata?.image ? { image: metadata.image } : {}) }
-      });
-    }
     if (request.method === 'GET') {
       const jobId = new URL(request.url || '/api/match-counterpart', 'https://realview.local').searchParams.get('jobId');
       if (!/^[a-f0-9]{32}$/.test(String(jobId || ''))) return sendJson(response, 400, { error: 'INVALID_JOB_ID' });
