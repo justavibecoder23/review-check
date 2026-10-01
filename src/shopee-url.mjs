@@ -116,6 +116,16 @@ export function canonicalShopeeProductUrl(shopId, itemId) {
   return `https://shopee.vn/product-i.${shopId}.${itemId}`;
 }
 
+export function getShopeeProductTitle(value) {
+  try {
+    const url = new URL(value);
+    if (!DIRECT_SHOPEE_HOSTS.has(cleanHostname(url.hostname))) return '';
+    const slug = decodeURIComponent(url.pathname).match(/^\/([^/]+)-i\.\d+\.\d+\/?$/i)?.[1];
+    if (!slug || /^product$/i.test(slug)) return '';
+    return slug.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300);
+  } catch { return ''; }
+}
+
 function decodeNestedUrl(value) {
   let candidate = String(value || '').trim().replace(/&amp;/gi, '&').replace(/\\\//g, '/');
   for (let attempt = 0; attempt < 3; attempt += 1) {

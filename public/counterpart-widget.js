@@ -70,7 +70,11 @@ function setProgressPlatformTone(platform) {
 
 function titleFromProductUrl(value) {
   try {
-    const parts = new URL(String(value || '')).pathname.split('/').filter(Boolean);
+    const parsed = new URL(String(value || ''));
+    const shopeeSlug = /^(?:www\.)?shopee\.vn$/i.test(parsed.hostname)
+      ? decodeURIComponent(parsed.pathname).match(/^\/([^/]+)-i\.\d+\.\d+\/?$/i)?.[1] : '';
+    if (shopeeSlug && !/^product$/i.test(shopeeSlug)) return shopeeSlug.replace(/[-_]+/g, ' ').trim();
+    const parts = parsed.pathname.split('/').filter(Boolean);
     const pdpIndex = parts.findIndex((part) => part.toLowerCase() === 'pdp');
     const slug = pdpIndex >= 0 ? parts[pdpIndex + 1] : '';
     if (!slug || /^product$/i.test(slug)) return '';
@@ -85,7 +89,7 @@ function sourceFromResult(result = {}) {
   const url = safeUrl(product.url || product.originalUrl);
   return {
     platform: platformName(product.platform),
-    title: String(product.title || titleFromProductUrl(url)).trim(),
+    title: String(product.title || titleFromProductUrl(product.originalUrl) || titleFromProductUrl(url)).trim(),
     url,
     image: safeUrl(product.image || product.imageUrl || product.thumbnail),
     itemId: String(product.itemId || ''),
@@ -96,7 +100,7 @@ function sourceFromResult(result = {}) {
 }
 
 function sourceKey(source) {
-  return encodeURIComponent(`${source.platform}:${source.itemId || source.productId || source.url}:${source.image}`).slice(0, 900);
+  return encodeURIComponent(`${source.platform}:${source.itemId || source.productId || source.url}:${source.title}:${source.image}`).slice(0, 900);
 }
 
 function readStoredResult() {
@@ -251,9 +255,9 @@ async function showMetadataUnavailable(platform) {
   progressButton.removeAttribute('aria-valuemin');
   progressButton.removeAttribute('aria-valuemax');
   progressButton.removeAttribute('aria-valuenow');
-  progressButton.setAttribute('aria-label', 'Chưa lấy được ảnh sản phẩm để đối chiếu');
+  progressButton.setAttribute('aria-label', 'Chưa xác định được tên sản phẩm để tìm kiếm');
   setProgress(100);
-  if (progressTitle) progressTitle.textContent = 'Chưa lấy được ảnh sản phẩm để đối chiếu';
+  if (progressTitle) progressTitle.textContent = 'Chưa xác định được tên sản phẩm để tìm kiếm';
   if (progressCopy) progressCopy.textContent = `Kết quả phân tích vẫn dùng bình thường; RealView chưa gửi yêu cầu tìm kiếm sang ${platform}`;
 }
 

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { extractMarketplaceUrl, getShopeeProductIds, isShopeeUrl, resolveShopeeProductUrl } from './shopee-url.mjs';
+import { extractMarketplaceUrl, getShopeeProductIds, getShopeeProductTitle, isShopeeUrl, resolveShopeeProductUrl } from './shopee-url.mjs';
 import { collectShopeeReviews } from './apify-review-scraper.mjs';
 import { collectTikTokReviews } from './apify-tiktok-review-scraper.mjs';
 import { getTikTokProductId, isTikTokUrl, resolveTikTokProductUrl } from './tiktok-url.mjs';
@@ -17,6 +17,7 @@ import {
 } from './product-cache.mjs';
 import { assertPlatformReviewEnabled } from './platform-availability.mjs';
 import { cleanProductTitle } from './product-metadata-quality.mjs';
+import { fetchShopeeProductDetails, normalizeShopeeProductDetails, readShopeeProductMetadata, writeShopeeProductMetadata } from './shopee-product-metadata.mjs';
 
 const DEMO_REVIEWS = [
   { rating: 5, text: 'Nhận xu nên đánh giá cho shop 5 sao nha mọi người.', date: '12/08/2026', verified: false },
@@ -525,6 +526,13 @@ export function productMetadataUrls(productUrl, product = {}) {
     && /^\d+$/.test(String(product.shopId || ''))
     && /^\d+$/.test(String(product.itemId || ''))) {
     urls.unshift(`https://shopee.vn/product/${product.shopId}/${product.itemId}`);
+    if (product.originalUrl) {
+      try {
+        const ids = getShopeeProductIds(product.originalUrl);
+        if (isSafeMarketplacePageUrl(product.originalUrl) && isShopeeUrl(product.originalUrl)
+          && ids?.shopId === String(product.shopId) && ids?.itemId === String(product.itemId)) urls.unshift(product.originalUrl);
+      } catch { /* Ignore a malformed original URL. */ }
+    }
   }
   if (product.platform === 'TikTok Shop' && /^\d{8,25}$/.test(String(product.productId || ''))) {
     // URL không có slug của TikTok có thể chuyển sang một sản phẩm gợi ý khác.
@@ -710,6 +718,43 @@ export async function fetchShopeeProductApiMeta(shopId, itemId, options = {}) {
   }
 }
 
+export async function hydrateShopeeProductMetadata(resolved, product = {}, options = {}) {
+  let merged = { ...product, ...normalizeShopeeProductDetails(resolved.shopId, resolved.itemId, product) };
+  if (!cleanShopeeTitle(merged.title)) delete merged.title;
+  // Old product mirrors can be inaccessible; keep only the original Shopee CDN.
+  const initial = normalizeShopeeProductDetails(resolved.shopId, resolved.itemId, merged);
+  if (initial.image) merged.image = initial.image;
+  else delete merged.image;
+  const overlay = await readShopeeProductMetadata(resolved.shopId, resolved.itemId, options);
+  if (overlay) {
+    if (!merged.title && overlay.title) merged.title = overlay.title;
+    if (!merged.image && overlay.image) merged.image = overlay.image;
+  }
+  if ((!merged.title || !merged.image) && !overlay?.attempted) {
+    const [page, api] = await Promise.all([
+      fetchProductPageMetaCandidates(productMetadataUrls(resolved.canonicalUrl, {
+        platform: 'Shopee', ...resolved
+      }), {
+        ...options, timeoutMs: 5000, expectedShopId: resolved.shopId, expectedItemId: resolved.itemId,
+        onDiagnostic: options.onMetadataDiagnostic
+      }),
+      fetchShopeeProductApiMeta(resolved.shopId, resolved.itemId, {
+        ...options, timeoutMs: 5000, onDiagnostic: options.onMetadataDiagnostic
+      }).catch(() => ({}))
+    ]);
+    const direct = { ...page, ...api };
+    merged = { ...merged, ...direct };
+    if (!merged.image) {
+      const details = await (options.fetchShopeeProductDetailsImpl || fetchShopeeProductDetails)(resolved, options).catch(() => ({}));
+      const verified = normalizeShopeeProductDetails(resolved.shopId, resolved.itemId, details);
+      merged = { ...merged, ...verified };
+    }
+    await writeShopeeProductMetadata(resolved.shopId, resolved.itemId, merged, options);
+  }
+  if (!merged.title) merged.title = getShopeeProductTitle(resolved.resolvedUrl) || getShopeeProductTitle(resolved.originalUrl);
+  return merged;
+}
+
 export async function getReviews(url, options = {}) {
   throwIfAborted(options.signal);
   const progress = createProgressReporter(options.onProgress);
@@ -731,7 +776,7 @@ export async function getReviews(url, options = {}) {
   progress('resolving', 8, 'Đang kiểm tra liên kết...');
   const warnings = [];
   const shopeeProduct = platform === 'Shopee'
-    ? await resolveShopeeProductUrl(parsed.href, { signal: options.signal })
+    ? await resolveShopeeProductUrl(parsed.href, { signal: options.signal, fetchImpl: options.fetchImpl })
     : null;
   const tiktokProduct = platform === 'TikTok Shop'
     ? await resolveTikTokProductUrl(parsed.href, { signal: options.signal, fetchImpl: options.fetchImpl })
@@ -841,7 +886,9 @@ export async function getReviews(url, options = {}) {
         recordShopeeCacheHit({ redisFetchImpl: options.redisFetchImpl }),
         recordShopeeServed({ redisFetchImpl: options.redisFetchImpl })
       ]);
-      const cachedProduct = cached.dataset.product || {};
+      const cachedProduct = await hydrateShopeeProductMetadata(shopeeProduct, cached.dataset.product || {}, {
+        ...options, onMetadataDiagnostic: reportShopeeMetadata
+      });
       const cachedTitle = cleanShopeeTitle(cachedProduct.title);
       const product = {
         ...cachedProduct,
@@ -882,24 +929,16 @@ export async function getReviews(url, options = {}) {
     shopId: shopeeProduct?.shopId,
     itemId: shopeeProduct?.itemId
   });
-  const productMetaPromise = Promise.all([
-    fetchProductPageMetaCandidates(metadataUrls, {
+  const productMetaPromise = (shopeeProduct
+    ? hydrateShopeeProductMetadata(shopeeProduct, {}, { ...options, onMetadataDiagnostic: reportShopeeMetadata })
+    : fetchProductPageMetaCandidates(metadataUrls, {
       expectedProductId: tiktokProduct?.productId,
       expectedShopId: shopeeProduct?.shopId,
       expectedItemId: shopeeProduct?.itemId,
       signal: options.signal,
       fetchImpl: options.fetchImpl,
       ...(shopeeProduct ? { onDiagnostic: reportShopeeMetadata } : {})
-    }),
-    shopeeProduct
-      ? fetchShopeeProductApiMeta(shopeeProduct.shopId, shopeeProduct.itemId, {
-          signal: options.signal,
-          fetchImpl: options.fetchImpl,
-          onDiagnostic: reportShopeeMetadata
-        })
-      : Promise.resolve({})
-  ].map((promise) => shopeeProduct ? Promise.resolve(promise).catch(() => ({})) : promise))
-    .then(([pageMeta, platformMeta]) => ({ ...pageMeta, ...platformMeta }))
+    }))
     .then((metadata) => {
       emitProductMeta({
         platform,
@@ -942,6 +981,9 @@ export async function getReviews(url, options = {}) {
     // fields remain untrusted. `productMeta` is extracted only from explicit
     // product wrappers by the actor adapter and is URL-normalized above.
     const collectedMeta = { ...reviewLevelMeta, ...actorProductMeta };
+    if (reviewLevelMeta[trustedProductImage] || actorProductMeta[trustedProductImage]) {
+      Object.defineProperty(collectedMeta, trustedProductImage, { value: true });
+    }
     let productMeta = mergeProductMetadata(pageMeta, collectedMeta, platform);
     if (platform === 'TikTok Shop') {
       productMeta = await hydrateTikTokProductMetadata(
