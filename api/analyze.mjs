@@ -3,6 +3,7 @@ import { clientDisconnectSignal } from '../src/sse.mjs';
 import { attachResultChatContext, scheduleResultChatContext } from '../src/result-chat-background.mjs';
 import { analysisAccessStatus, analysisErrorPayload, beginAnalysisAccess } from '../src/analysis-access.mjs';
 import { guestQuotaConfig } from '../src/guest-analysis-quota.mjs';
+import { waitUntil } from '@vercel/functions';
 
 export default async function handler(request, response) {
   response.setHeader('Cache-Control', 'no-store');
@@ -22,7 +23,10 @@ export default async function handler(request, response) {
   try {
     const body = typeof request.body === 'string' ? JSON.parse(request.body || '{}') : (request.body || {});
     access = await beginAnalysisAccess(request, response, body.url);
-    const result = await analyzeProductUrl(body.url, { signal: clientDisconnectSignal(request, response) });
+    const result = await analyzeProductUrl(body.url, {
+      signal: clientDisconnectSignal(request, response),
+      scheduleMetadataBackground: (pending) => waitUntil(pending)
+    });
     const preparedContext = attachResultChatContext(result);
     const remainingGuestQuota = await access.confirm(result);
     const sent = response.status(200).json({ ...result, remainingGuestQuota, guestQuotaLimit: guestQuotaConfig.limit });

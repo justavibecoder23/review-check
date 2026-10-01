@@ -765,6 +765,43 @@ export async function hydrateShopeeProductMetadata(resolved, product = {}, optio
   return merged;
 }
 
+export function beginShopeeMetadata(resolved, product = {}, options = {}) {
+  const normalized = normalizeShopeeProductDetails(resolved.shopId, resolved.itemId, product);
+  let current = {
+    ...product,
+    ...normalized,
+    title: cleanShopeeTitle(product.title) || getShopeeProductTitle(resolved.resolvedUrl) || getShopeeProductTitle(resolved.originalUrl),
+    platform: 'Shopee', url: resolved.canonicalUrl, originalUrl: resolved.originalUrl,
+    shopId: resolved.shopId, itemId: resolved.itemId
+  };
+  if (!normalized.image) delete current.image;
+  delete current.imageUrl;
+  delete current.thumbnail;
+  const pending = hydrateShopeeProductMetadata(resolved, current, {
+    ...options,
+    // Retained by waitUntil on Vercel; closing the analysis stream must not
+    // cancel an optional image that can still be stored in the metadata cache.
+    signal: options.scheduleMetadataBackground ? undefined : options.signal
+  }).then((metadata) => {
+    current = { ...current, ...metadata };
+    try { options.onProductMeta?.(current); } catch { /* Optional UI event. */ }
+    return current;
+  }).catch(() => current);
+  options.scheduleMetadataBackground?.(pending);
+  return {
+    pending,
+    async read() {
+      let timer;
+      try {
+        const waitMs = Math.max(0, Math.min(1000, Number(options.metadataWaitMs ?? 800)));
+        return await Promise.race([pending, new Promise((resolve) => {
+          timer = setTimeout(() => resolve(current), waitMs);
+        })]);
+      } finally { clearTimeout(timer); }
+    }
+  };
+}
+
 export async function getReviews(url, options = {}) {
   throwIfAborted(options.signal);
   const progress = createProgressReporter(options.onProgress);
@@ -821,6 +858,12 @@ export async function getReviews(url, options = {}) {
       hasImage: Boolean(product?.image)
     }));
   };
+
+  if (shopeeProduct) {
+    emitProductMeta({ platform: 'Shopee', url: productUrl, originalUrl: parsed.href,
+      shopId: shopeeProduct.shopId, itemId: shopeeProduct.itemId,
+      title: getShopeeProductTitle(shopeeProduct.resolvedUrl) || getShopeeProductTitle(parsed.href) }, 'resolved');
+  }
 
   if (shopeeProduct?.wasShortened) {
     warnings.push('Đã mở link chia sẻ Shopee và chuẩn hóa về đúng sản phẩm trước khi thu thập review.');
@@ -896,9 +939,9 @@ export async function getReviews(url, options = {}) {
         recordShopeeCacheHit({ redisFetchImpl: options.redisFetchImpl }),
         recordShopeeServed({ redisFetchImpl: options.redisFetchImpl })
       ]);
-      const cachedProduct = await hydrateShopeeProductMetadata(shopeeProduct, cached.dataset.product || {}, {
-        ...options, onMetadataDiagnostic: reportShopeeMetadata
-      });
+      const cachedProduct = await beginShopeeMetadata(shopeeProduct, cached.dataset.product || {}, {
+        ...options, onMetadataDiagnostic: reportShopeeMetadata, onProductMeta: emitProductMeta
+      }).read();
       const cachedTitle = cleanShopeeTitle(cachedProduct.title);
       const product = {
         ...cachedProduct,
@@ -939,8 +982,11 @@ export async function getReviews(url, options = {}) {
     shopId: shopeeProduct?.shopId,
     itemId: shopeeProduct?.itemId
   });
-  const productMetaPromise = (shopeeProduct
-    ? hydrateShopeeProductMetadata(shopeeProduct, {}, { ...options, onMetadataDiagnostic: reportShopeeMetadata })
+  const shopeeMetadataTask = shopeeProduct ? beginShopeeMetadata(shopeeProduct, {}, {
+    ...options, onMetadataDiagnostic: reportShopeeMetadata, onProductMeta: emitProductMeta
+  }) : null;
+  const productMetaPromise = (shopeeMetadataTask
+    ? shopeeMetadataTask.read()
     : fetchProductPageMetaCandidates(metadataUrls, {
       expectedProductId: tiktokProduct?.productId,
       expectedShopId: shopeeProduct?.shopId,
@@ -980,7 +1026,7 @@ export async function getReviews(url, options = {}) {
           signal: options.signal
         });
     const reviews = collected.reviews;
-    const pageMeta = await productMetaPromise;
+    const pageMeta = shopeeMetadataTask ? await shopeeMetadataTask.read() : await productMetaPromise;
     const reviewLevelMeta = normaliseProductMeta(collected.productMetaSource || {});
     const actorProductMeta = platform === 'TikTok Shop'
       ? normalizeTikTokProductMetadata(tiktokProduct.productId, collected.productMeta || {}, {

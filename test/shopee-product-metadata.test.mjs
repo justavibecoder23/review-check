@@ -17,6 +17,34 @@ test('link áo VESCA giữ tên từ slug và không coi product-i là tên', ()
   assert.equal(getShopeeProductTitle(`https://other.test/ao-i.${shopId}.${itemId}`), '');
 });
 
+test('Bioderma và RIEM tiếp tục review khi actor ảnh chưa hoàn tất', async () => {
+  for (const url of [
+    'https://shopee.vn/Dung-dich-tay-trang-Bioderma-Sebium-H2O-500ml-i.233692311.4819028193',
+    'https://shopee.vn/Cay-Cha-Lung-Combo-3-Mon-RIEM-i.430886634.25851626185'
+  ]) {
+    let finishImage, retained, collected = false;
+    const events = [];
+    const result = await getReviews(url, {
+      metadataWaitMs: 1, fetchImpl: blocked,
+      scheduleMetadataBackground: (pending) => { retained = pending; },
+      onProductMeta: (product) => events.push({ product, collected }),
+      fetchShopeeProductDetailsImpl: async () => new Promise((resolve) => { finishImage = resolve; }),
+      collectShopeeReviewsImpl: async () => {
+        collected = true;
+        return { reviews: [{ rating: 5, text: 'Sản phẩm hữu ích' }] };
+      }
+    });
+    assert.equal(collected, true);
+    assert.ok(events[0].product.title);
+    assert.equal(events[0].collected, false, 'title must appear before waiting on review/metadata providers');
+    assert.equal(result.product.image, undefined);
+    assert.ok(retained, 'optional actor is retained as background work');
+    finishImage({ title: result.product.title, image });
+    await retained;
+    assert.equal(events.at(-1).product.image, image);
+  }
+});
+
 test('Shopee bị chặn vẫn lấy đúng ảnh/tên từ product detail fallback', async () => {
   const resolved = await resolveShopeeProductUrl(originalUrl);
   const metadata = await hydrateShopeeProductMetadata(resolved, {}, {

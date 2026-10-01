@@ -361,7 +361,7 @@ test('section đối ứng ẩn mặc định và chỉ có module nền riêng'
   assert.match(statusToastSource, /}, 7_500\);/);
   assert.match(script, /showMetadataUnavailable/);
   assert.match(html, /results-v2\.css\?v=3/);
-  assert.match(html, /results\.js\?v=7/);
+  assert.match(html, /results\.js\?v=8/);
   assert.match(html, /id="analysis-product-illustration"/);
   assert.match(resultsScript, /const PRODUCT_IMAGE_TIMEOUT_MS = 20_000;/);
   assert.doesNotMatch(resultsScript, /operation=product-media/);
