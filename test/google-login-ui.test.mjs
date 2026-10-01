@@ -5,7 +5,7 @@ import { generateKeyPairSync, sign } from 'node:crypto';
 import { OAuth2Client } from 'google-auth-library';
 import { redisLuaMock } from './helpers/redis-lua.mjs';
 import { createAccountAuthHandler } from '../api/auth.mjs';
-import { createGoogleAuthHandler } from '../api/auth-google.mjs';
+import { createGoogleAuthHandler } from '../src/google-auth-route.mjs';
 import { registerAccount, saveAccountHistory, listAccountHistory } from '../src/account-store.mjs';
 import { commitGoogleAccount } from '../src/google-auth-store.mjs';
 

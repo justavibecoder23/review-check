@@ -7,7 +7,7 @@ import { assertGeminiAdmin, readGeminiAdminStatus, updateGeminiAdminPool } from 
 import { clientDisconnectSignal, openSse } from '../src/sse.mjs';
 import { normalizeApiPath } from '../src/server-route.mjs';
 import authHandler from '../api/auth.mjs';
-import googleAuthHandler from '../api/auth-google.mjs';
+import googleAuthHandler from '../src/google-auth-route.mjs';
 import historyHandler from '../api/history.mjs';
 import contactHandler from '../api/contact.mjs';
 import chatHandler from '../api/chat.mjs';

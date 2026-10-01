@@ -253,7 +253,17 @@ export function createAccountAuthHandler(options = {}) {
   }
 }
 
-export default createAccountAuthHandler();
+const accountAuthHandler = createAccountAuthHandler();
+
+// Keep Google's public URL separate without deploying a thirteenth function
+// on Vercel Hobby. The Google handler keeps its own origin/nonce/rate checks.
+export default async function authEndpoint(request, response) {
+  if (request.query?.authProvider === 'google') {
+    const { default: googleAuthHandler } = await import('../src/google-auth-route.mjs');
+    return googleAuthHandler(request, response);
+  }
+  return accountAuthHandler(request, response);
+}
 
 export { readSessionToken, sessionCookie };
 

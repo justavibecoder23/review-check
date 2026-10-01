@@ -1,16 +1,16 @@
 import { createHash } from 'node:crypto';
-import { googleAuthConfig, assertGoogleEnabled, googleAuthError, verifyGoogleCredential } from '../src/google-identity.mjs';
+import { googleAuthConfig, assertGoogleEnabled, googleAuthError, verifyGoogleCredential } from './google-identity.mjs';
 import {
   beginGoogleLogin, readGoogleChallenge, consumeGoogleChallenge, resolveGoogleIdentity,
   createGooglePending, readGooglePending, verifyGoogleLinkPassword, createGoogleEmailCode,
   verifyGoogleEmailCode, commitGoogleAccount
-} from '../src/google-auth-store.mjs';
-import { createAccountSession, deleteAccountSession, claimOfflineConsentNotice } from '../src/account-store.mjs';
-import { readSessionToken, sessionCookie } from './auth.mjs';
-import { redisCommand } from '../src/redis-rest.mjs';
-import { claimGuestHistory, discardGuestHistory } from '../src/guest-analysis-quota.mjs';
-import { sendEmailVerificationCode } from '../src/email-verification-mail.mjs';
-import { sendWelcomeEmail } from '../src/welcome-email.mjs';
+} from './google-auth-store.mjs';
+import { createAccountSession, deleteAccountSession, claimOfflineConsentNotice } from './account-store.mjs';
+import { readSessionToken, sessionCookie } from '../api/auth.mjs';
+import { redisCommand } from './redis-rest.mjs';
+import { claimGuestHistory, discardGuestHistory } from './guest-analysis-quota.mjs';
+import { sendEmailVerificationCode } from './email-verification-mail.mjs';
+import { sendWelcomeEmail } from './welcome-email.mjs';
 
 const BROWSER_COOKIE = 'realview_google_browser';
 

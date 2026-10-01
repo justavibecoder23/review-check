@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { randomUUID, randomBytes } from 'node:crypto';
 import assert from 'node:assert/strict';
-import { createGoogleAuthHandler } from '../api/auth-google.mjs';
+import { createGoogleAuthHandler } from '../src/google-auth-route.mjs';
 import { readSessionToken, sessionCookie } from '../api/auth.mjs';
 import * as accounts from '../src/account-store.mjs';
 import * as googleStore from '../src/google-auth-store.mjs';

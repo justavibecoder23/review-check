@@ -15,7 +15,7 @@ import {
   resetAccountPassword, acceptEmailMarketingConsent, saveAccountHistory, listAccountHistory,
   accountStoreInternals as accounts
 } from '../src/account-store.mjs';
-import { createGoogleAuthHandler } from '../api/auth-google.mjs';
+import { createGoogleAuthHandler } from '../src/google-auth-route.mjs';
 import { resolveBlogRole } from '../src/blog-admin-auth.mjs';
 
 const clientId = '154335934284-1fupk8riad0u56jughvv73pep358hdft.apps.googleusercontent.com';
@@ -380,8 +380,9 @@ test('API sends OTP only by mail, denies cross-browser use, and supports explici
 
 test('Google backend is routed locally and on Vercel without adding frontend scripts', async () => {
   const config = JSON.parse(await readFile(new URL('../vercel.json', import.meta.url), 'utf8'));
-  assert.equal(config.functions['api/auth-google.mjs'].maxDuration, 30);
-  assert.ok(config.rewrites.some((r) => r.source === '/api/auth-google' && r.destination === '/api/auth-google.mjs'));
+  assert.equal(config.functions['api/auth.mjs'].maxDuration, 30);
+  assert.equal(config.functions['api/auth-google.mjs'], undefined);
+  assert.ok(config.rewrites.some((r) => r.source === '/api/auth-google' && r.destination === '/api/auth.mjs?authProvider=google'));
   const server = await readFile(new URL('../tools/local-server.mjs', import.meta.url), 'utf8');
   assert.match(server, /apiPath === '\/api\/auth-google'/);
   const html = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
