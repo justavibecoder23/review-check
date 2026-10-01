@@ -64,8 +64,12 @@
     {
       "path": "blog/snapshots/sitemap-snapshot.xml",
       "originalSha256": "253b8937ec4f214f6f5841ef073091f50f4271383edb3c94413669f8a93ee7bd",
-      "deployedSha256": "96cc6adfd028c4cb7c35b4b573afbfb06c79229e6597ab287ff0117bbcadc136",
-      "bytes": 6108
+      "deployedSha256": "056ffd008da0398f4a1828de43242db3682f3212ab9d7f5d1c5eb17e0f54ea63",
+      "bytes": 6284,
+      "sitemapAdditions": [
+        { "path": "/chinh-sach-bao-mat", "lastmod": "2026-10-01" },
+        { "path": "/dieu-khoan-su-dung", "lastmod": "2026-10-01" }
+      ]
     },
     {
       "path": "blog/snapshots/trustscore-la-gi.html",

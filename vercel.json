@@ -19,6 +19,9 @@
     "api/auth.mjs": {
       "maxDuration": 10
     },
+    "api/auth-google.mjs": {
+      "maxDuration": 30
+    },
     "api/history.mjs": {
       "maxDuration": 10
     },
@@ -130,6 +133,8 @@
     }
   ],
   "redirects": [
+    { "source": "/privacy.html", "destination": "/chinh-sach-bao-mat", "permanent": true },
+    { "source": "/terms.html", "destination": "/dieu-khoan-su-dung", "permanent": true },
     { "source": "/criteria.html", "destination": "/tieu-chi-loc", "permanent": true },
     { "source": "/contact.html", "destination": "/lien-he", "permanent": true },
     { "source": "/blog.html", "destination": "/bai-viet", "permanent": true },
@@ -146,11 +151,14 @@
     { "source": "/results.html", "destination": "/ket-qua", "permanent": true }
   ],
   "rewrites": [
+    { "source": "/chinh-sach-bao-mat", "destination": "/privacy.html" },
+    { "source": "/dieu-khoan-su-dung", "destination": "/terms.html" },
     { "source": "/api/analyze", "destination": "/api/analyze.mjs" },
     { "source": "/api/analyze-stream", "destination": "/api/analyze-stream.mjs" },
     { "source": "/api/match-counterpart", "destination": "/api/match-counterpart.mjs" },
     { "source": "/api/chat", "destination": "/api/chat.mjs" },
     { "source": "/api/auth", "destination": "/api/auth.mjs" },
+    { "source": "/api/auth-google", "destination": "/api/auth-google.mjs" },
     { "source": "/api/history", "destination": "/api/history.mjs" },
     { "source": "/api/contact", "destination": "/api/contact.mjs" },
     { "source": "/api/apify-config", "destination": "/api/apify-config.mjs" },

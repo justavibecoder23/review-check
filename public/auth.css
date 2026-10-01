@@ -98,6 +98,8 @@
 .account-popover .account-admin-link--access { border-color: rgba(168,69,4,.2); background: #fff5ed; color: #9b4108; }
 .account-popover .account-admin-link--access:hover { border-color: rgba(168,69,4,.42); background: #ffecde; }
 .account-popover button { width: 100%; min-height: 38px; border: 0; border-radius: 11px; background: #f2f1ed; color: #8a3426; font-weight: 800; cursor: pointer; }
+.account-popover .account-password-action { min-height: 44px; margin-bottom: 8px; color: #34342e; font-weight: 650; }
+.account-chip > b { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
 
 .account-dialog {
   width: min(94vw, 470px);
@@ -308,3 +310,46 @@ body.account-dialog-open { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .auth-button { transition: none; }
 }
+
+/* Account dialog: approved Google sign-in layout. No homepage layout changes. */
+.account-dialog-shell { padding: 24px 30px; scrollbar-width: thin; scrollbar-color: #c9c9c1 transparent; }
+.account-dialog-shell::-webkit-scrollbar { width: 5px; }
+.account-dialog-shell::-webkit-scrollbar-track { background: transparent; margin-block: 20px; }
+.account-dialog-shell::-webkit-scrollbar-thumb { background: #c9c9c1; border-radius: 20px; }
+.account-dialog-brand { width: 54px; height: 28px; }
+.account-dialog-heading { margin-top: 14px; }
+.account-dialog .account-tabs { margin-block: 16px 14px; }
+.account-dialog-heading h2 { font-size: 28px; line-height: 1.25; letter-spacing: -.7px; font-weight: 700; }
+.account-dialog-heading p { font-size: 14px; line-height: 1.65; }
+.account-dialog-close { width: 44px; height: 44px; }
+.account-dialog .account-form { gap: 12px; }
+.account-dialog .account-submit { min-height: 48px; box-shadow: none; font-weight: 650; }
+.account-dialog .account-forgot { min-height: 44px; font-weight: 600; color: #a44100; }
+.google-option { margin-top: 0; }
+.google-button-slot { width: 100%; min-height: 44px; display: flex; justify-content: center; }
+.google-button-slot.is-busy { pointer-events: none; opacity: .65; }
+.google-purpose { margin: 6px 0 0; color: #62625c; font-size: 12px; text-align: center; line-height: 1.5; }
+.google-status { display: flex; align-items: center; justify-content: center; gap: 9px; margin: 12px 0 0; font-size: 13px; line-height: 1.6; color: #4d4d46; }
+.google-spinner { width: 16px; height: 16px; flex: none; border: 2px solid #deded8; border-top-color: #353531; border-radius: 50%; animation: google-auth-spin .85s linear infinite; }
+.google-error { margin-top: 12px; padding: 12px 14px; border: 1px solid #e4bdb6; border-radius: 10px; background: #fff1ed; color: #82362c; }
+.google-error p { margin: 0; font-size: 13px; line-height: 1.6; }
+.google-error button { min-height: 44px; padding: 0; background: none; border: 0; color: inherit; font: inherit; font-size: 13px; font-weight: 650; text-decoration: underline; cursor: pointer; }
+.auth-divider { display: flex; align-items: center; gap: 12px; margin-block: 16px; color: #6a6a64; font-size: 12px; line-height: 1.5; }
+.auth-divider::before, .auth-divider::after { content: ''; height: 1px; flex: 1; background: #dcdcd5; }
+.password-group { display: grid; gap: 7px; }
+.account-dialog .password-group > label { font-size: 13px; font-weight: 600; }
+.password-field { position: relative; }
+.account-dialog .password-field input { width: 100%; padding-right: 66px; }
+.password-field button { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); min-width: 50px; min-height: 44px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: #55554e; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.auth-legal { margin: 16px 0 0; padding-top: 14px; border-top: 1px solid #ddddd5; color: #62625b; font-size: 12px; line-height: 1.7; text-align: center; }
+.auth-legal a { color: #53534c; text-underline-offset: 3px; }
+.auth-explanation { margin: 0; color: #4e4e47; font-size: 14px; line-height: 1.7; }
+.auth-secondary { min-height: 44px; padding: 10px 14px; border: 1px solid #d2d2ca; border-radius: 12px; background: #fff; color: #3d3d37; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.account-dialog button:focus-visible, .account-dialog a:focus-visible { outline: 3px solid #fc781f88; outline-offset: 3px; }
+.account-dialog [hidden] { display: none !important; }
+@keyframes google-auth-spin { to { transform: rotate(360deg); } }
+@media (max-width: 520px) {
+  .account-dialog-shell { padding: 24px 20px; }
+  .account-dialog-heading h2 { font-size: 26px; }
+}
+@media (prefers-reduced-motion: reduce) { .google-spinner { animation: none; } }

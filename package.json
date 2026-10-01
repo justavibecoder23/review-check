@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build:legal": "node tools/build-legal-pages.mjs",
     "build:home-css": "node tools/build-home-widget-css.mjs",
     "start:local": "node tools/local-server.mjs",
     "dev": "node --watch tools/local-server.mjs",
@@ -18,7 +19,12 @@
     "@vercel/blob": "^2.8.0",
     "@vercel/functions": "^3.9.7",
     "ai": "^7.0.99",
-    "nodemailer": "^10.0.1",
+    "google-auth-library": "^11.1.0",
+    "nodemailer": "^10.0.13",
     "sharp": "^0.35.4"
+  },
+  "devDependencies": {
+    "fengari": "^0.1.5",
+    "jsdom": "^26.1.0"
   }
 }

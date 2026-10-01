@@ -17,6 +17,8 @@ const PASSWORD_RESET_MAX_ATTEMPTS = 5;
 const HISTORY_LIMIT = 50;
 const MAX_HISTORY_BYTES = 700_000;
 const PREFIX = 'realview:account:v1';
+// Carry the authenticated snapshot without exposing session metadata in JSON.
+const authenticatedVersions = new WeakMap();
 
 function accountError(message, statusCode = 400, code = 'ACCOUNT_ERROR') {
   const error = new Error(message);
@@ -100,17 +102,22 @@ function historyItemKey(userId, itemId) {
 }
 
 function publicUser(user) {
-  return {
+  const result = {
     id: user.id,
     username: user.username,
     email: user.email,
     createdAt: user.createdAt,
+    displayName: user.displayName || user.username,
+    authProviders: [...(user.passwordHash ? ['password'] : []), ...(user.googleSubject ? ['google'] : [])],
+    hasPassword: Boolean(user.passwordHash),
     emailMarketingConsent: user.emailMarketingConsent || {
       status: 'subscribed',
       source: 'offline',
       consentedAt: null
     }
   };
+  authenticatedVersions.set(result, Number(user.sessionVersion || 0));
+  return result;
 }
 
 async function hashPassword(password) {
@@ -139,7 +146,7 @@ async function readUser(userId, options = {}) {
         source: 'offline',
         consentedAt: null
       };
-      await redisCommand(['SET', userKey(userId), JSON.stringify(user)], options);
+      // Derive the legacy default without rewriting a stale account snapshot.
     }
     return user;
   } catch {
@@ -187,23 +194,23 @@ export async function registerAccount(input = {}, options = {}) {
   return publicUser(user);
 }
 
-export async function authenticateAccount({ username, password } = {}, options = {}) {
+export async function authenticateAccount({ identifier, username, email, password } = {}, options = {}) {
   ensureStorage();
-  const normalizedUsername = normalizeUsername(username);
-  if (!normalizedUsername || typeof password !== 'string') {
-    throw accountError('Vui lòng nhập tên đăng nhập và mật khẩu.', 400, 'MISSING_CREDENTIALS');
+  const login = normalizeUsername(identifier ?? username ?? email);
+  if (!login || login.length > 254 || typeof password !== 'string' || password.length > 128) {
+    throw accountError('Vui lòng nhập email hoặc tên đăng nhập và mật khẩu.', 400, 'MISSING_CREDENTIALS');
   }
-  const userId = await redisCommand(['GET', usernameKey(normalizedUsername)], options);
+  const userId = await redisCommand(['GET', login.includes('@') ? emailKey(login) : usernameKey(login)], options);
   const user = await readUser(userId, options);
   if (!user || !(await verifyPassword(password, user.passwordHash))) {
-    throw accountError('Tên đăng nhập hoặc mật khẩu không đúng.', 401, 'INVALID_CREDENTIALS');
+    throw accountError('Email, tên đăng nhập hoặc mật khẩu không đúng.', 401, 'INVALID_CREDENTIALS');
   }
   return publicUser(user);
 }
 
 export async function acceptEmailMarketingConsent(userId, options = {}) {
   ensureStorage();
-  const user = await readUser(userId, options);
+  let user = await readUser(userId, options);
   if (!user) throw accountError('Không tìm thấy tài khoản.', 404, 'ACCOUNT_NOT_FOUND');
   if (user.emailMarketingConsent?.status !== 'subscribed') {
     user.emailMarketingConsent = {
@@ -211,24 +218,49 @@ export async function acceptEmailMarketingConsent(userId, options = {}) {
       source: 'login_prompt',
       consentedAt: new Date().toISOString()
     };
-    await redisCommand(['SET', userKey(user.id), JSON.stringify(user)], options);
+    const updated = await redisCommand(['EVAL', `-- account:consent
+        local raw = redis.call('GET', KEYS[1])
+        if not raw then return false end
+        local user = cjson.decode(raw)
+        if not user.emailMarketingConsent or user.emailMarketingConsent.status ~= 'subscribed' then
+          user.emailMarketingConsent = cjson.decode(ARGV[1])
+          raw = cjson.encode(user)
+          redis.call('SET', KEYS[1], raw)
+        end
+        return raw
+      `, 1, userKey(user.id), JSON.stringify(user.emailMarketingConsent)], options);
+    if (!updated) throw accountError('Không tìm thấy tài khoản.', 404, 'ACCOUNT_NOT_FOUND');
+    user = JSON.parse(updated);
   }
   return publicUser(user);
 }
 
 export async function createAccountSession(user, options = {}) {
   ensureStorage();
+  const stored = await readUser(user.id, options);
+  if (!stored) throw accountError('Không tìm thấy tài khoản.', 401, 'ACCOUNT_NOT_FOUND');
+  const version = authenticatedVersions.get(user) ?? Number(stored.sessionVersion || 0);
   const token = randomBytes(32).toString('base64url');
-  await redisCommand(['SET', sessionKey(token), user.id, 'EX', SESSION_TTL_SECONDS], options);
+  const created = await redisCommand(['EVAL', `-- account:create-session
+    local raw = redis.call('GET', KEYS[1])
+    if not raw then return false end
+    local user = cjson.decode(raw)
+    if tonumber(user.sessionVersion or 0) ~= tonumber(ARGV[1]) then return false end
+    return redis.call('SET', KEYS[2], ARGV[2], 'EX', ARGV[3])
+  `, 2, userKey(user.id), sessionKey(token), version, JSON.stringify({ userId: user.id, version }), SESSION_TTL_SECONDS], options);
+  if (!created) throw accountError('Thông tin đăng nhập đã thay đổi. Vui lòng đăng nhập lại.', 401, 'SESSION_CHANGED');
   return { token, expiresIn: SESSION_TTL_SECONDS };
 }
 
 export async function getAccountFromSession(token, options = {}) {
   ensureStorage();
   if (!token) return null;
-  const userId = await redisCommand(['GET', sessionKey(token)], options);
-  const user = await readUser(userId, options);
-  return user ? publicUser(user) : null;
+  const raw = await redisCommand(['GET', sessionKey(token)], options);
+  if (!raw) return null;
+  let session;
+  try { session = JSON.parse(raw); } catch { session = { userId: raw, version: 0 }; }
+  const user = await readUser(session?.userId, options);
+  return user && Number(user.sessionVersion || 0) === Number(session.version) ? publicUser(user) : null;
 }
 
 export async function claimOfflineConsentNotice(user, options = {}) {
@@ -262,24 +294,35 @@ export async function createPasswordReset(email, options = {}) {
   const salt = randomBytes(16).toString('hex');
   const expiresAt = Date.now() + PASSWORD_RESET_TTL_SECONDS * 1000;
   const record = {
-    userId: user?.id || '',
+    userId: user && (user.passwordHash || user.googleSubject) ? user.id : '',
+    email: normalizedEmail,
+    passwordSnapshot: user?.passwordHash || '',
     salt,
     codeHash: createHash('sha256').update(`${salt}:${code}`).digest('hex'),
     attempts: 0,
     expiresAt
   };
-  await redisCommand([
-    'SET',
-    passwordResetKey(requestId),
-    JSON.stringify(record),
-    'EX',
-    PASSWORD_RESET_TTL_SECONDS
-  ], options);
+  const emailDigest = createHash('sha256').update(normalizedEmail).digest('hex');
+  const activeKey = `${PREFIX}:password-reset-active:${emailDigest}`;
+  const created = await redisCommand(['EVAL', `-- account:create-reset
+    if redis.call('EXISTS', KEYS[2]) == 1 then return 'COOLDOWN' end
+    local count = redis.call('INCR', KEYS[1])
+    if count == 1 then redis.call('EXPIRE', KEYS[1], 3600) end
+    if count > 5 then return 'LIMIT' end
+    local previous = redis.call('GET', KEYS[3])
+    if previous then redis.call('DEL', previous) end
+    redis.call('SET', KEYS[2], '1', 'EX', 60)
+    redis.call('SET', KEYS[3], KEYS[4], 'EX', ARGV[2])
+    redis.call('SET', KEYS[4], ARGV[1], 'EX', ARGV[2])
+    return 'OK'
+  `, 4, `${PREFIX}:password-reset-rate:${emailDigest}`, `${PREFIX}:password-reset-cooldown:${emailDigest}`,
+  activeKey, passwordResetKey(requestId), JSON.stringify(record), PASSWORD_RESET_TTL_SECONDS], options);
+  if (created !== 'OK') throw accountError('Vui lòng đợi ít nhất 60 giây trước khi gửi lại mã. Mỗi email được gửi tối đa 5 lần mỗi giờ.', 429, 'RATE_LIMITED');
   return {
     requestId,
     expiresIn: PASSWORD_RESET_TTL_SECONDS,
-    user: user ? publicUser(user) : null,
-    code: user ? code : null
+    user: record.userId ? publicUser(user) : null,
+    code: record.userId ? code : null
   };
 }
 
@@ -288,7 +331,7 @@ export async function resetAccountPassword(input = {}, options = {}) {
   const requestId = String(input.requestId || '').trim();
   const code = String(input.code || '').trim();
   const password = input.password;
-  if (!requestId || !/^\d{6}$/.test(code)) {
+  if (!/^[a-zA-Z0-9_-]{32}$/.test(requestId) || !/^\d{6}$/.test(code)) {
     throw accountError('Mã xác minh không hợp lệ hoặc đã hết hạn.', 400, 'INVALID_RESET_CODE');
   }
   if (typeof password !== 'string' || password.length < 8 || password.length > 128) {
@@ -308,32 +351,45 @@ export async function resetAccountPassword(input = {}, options = {}) {
     throw accountError('Mã xác minh không hợp lệ hoặc đã hết hạn.', 400, 'INVALID_RESET_CODE');
   }
 
-  const expected = Buffer.from(String(record.codeHash || ''), 'hex');
-  const actual = Buffer.from(createHash('sha256').update(`${record.salt}:${code}`).digest('hex'), 'hex');
-  const valid = expected.length === actual.length && timingSafeEqual(actual, expected);
-  if (!valid) {
-    record.attempts = Number(record.attempts || 0) + 1;
-    if (record.attempts >= PASSWORD_RESET_MAX_ATTEMPTS) {
-      await redisCommand(['DEL', key], options);
-    } else {
-      const remainingSeconds = Math.max(1, Math.ceil((record.expiresAt - Date.now()) / 1000));
-      await redisCommand(['SET', key, JSON.stringify(record), 'EX', remainingSeconds], options);
-    }
-    throw accountError('Mã xác minh không đúng. Vui lòng kiểm tra lại.', 400, 'INVALID_RESET_CODE');
-  }
-
-  const user = await readUser(record.userId, options);
-  if (!user) {
-    await redisCommand(['DEL', key], options);
-    throw accountError('Mã xác minh không hợp lệ hoặc đã hết hạn.', 400, 'INVALID_RESET_CODE');
-  }
-  user.passwordHash = await hashPassword(password);
-  user.passwordUpdatedAt = new Date().toISOString();
-  await redisTransaction([
-    ['SET', userKey(user.id), JSON.stringify(user)],
-    ['DEL', key]
-  ], options);
-  return publicUser(user);
+  const actual = createHash('sha256').update(`${record.salt}:${code}`).digest('hex');
+  const valid = actual === record.codeHash;
+  // Wrong guesses take the same atomic attempt-budget path, without expensive scrypt.
+  const passwordHash = valid ? await hashPassword(password) : '';
+  const emailDigest = createHash('sha256').update(String(record.email || '')).digest('hex');
+  const updated = await redisCommand(['EVAL', `-- account:reset-password
+      local proofRaw = redis.call('GET', KEYS[2])
+      if not proofRaw or redis.call('GET', KEYS[3]) ~= KEYS[2] then return 'EXPIRED' end
+      local proof = cjson.decode(proofRaw)
+      if proof.salt ~= ARGV[4] or tonumber(proof.expiresAt) <= tonumber(ARGV[5]) then return 'EXPIRED' end
+      if tonumber(proof.attempts or 0) >= tonumber(ARGV[6]) then return 'EXPIRED' end
+      if proof.codeHash ~= ARGV[3] then
+        proof.attempts = tonumber(proof.attempts or 0) + 1
+        if proof.attempts >= tonumber(ARGV[6]) then redis.call('DEL', KEYS[2])
+        else redis.call('SET', KEYS[2], cjson.encode(proof), 'KEEPTTL') end
+        return 'WRONG'
+      end
+      local raw = redis.call('GET', KEYS[1])
+      if not raw then return 'EXPIRED' end
+      local user = cjson.decode(raw)
+      local oldPassword = user.passwordHash
+      if not oldPassword or oldPassword == cjson.null then oldPassword = '' end
+      if user.id ~= proof.userId or user.email ~= proof.email or oldPassword ~= proof.passwordSnapshot
+        or (oldPassword == '' and (not user.googleSubject or user.googleSubject == cjson.null)) then
+        redis.call('DEL', KEYS[2])
+        return 'EXPIRED'
+      end
+      user.passwordHash = ARGV[1]
+      user.passwordUpdatedAt = ARGV[2]
+      user.sessionVersion = tonumber(user.sessionVersion or 0) + 1
+      local updated = cjson.encode(user)
+      redis.call('SET', KEYS[1], updated)
+      redis.call('DEL', KEYS[2], KEYS[3])
+      return updated
+  `, 3, userKey(record.userId), key, `${PREFIX}:password-reset-active:${emailDigest}`,
+  passwordHash, new Date().toISOString(), actual, record.salt, Date.now(), PASSWORD_RESET_MAX_ATTEMPTS], options);
+  if (updated === 'WRONG') throw accountError('Mã xác minh không đúng. Vui lòng kiểm tra lại.', 400, 'INVALID_RESET_CODE');
+  if (!updated || updated === 'EXPIRED') throw accountError('Mã xác minh không hợp lệ hoặc đã hết hạn.', 400, 'INVALID_RESET_CODE');
+  return publicUser(JSON.parse(updated));
 }
 
 function normalizeHistoryItem(item) {
@@ -430,6 +486,9 @@ export async function clearAccountHistory(userId, options = {}) {
 }
 
 export const accountStoreInternals = {
+  publicUser,
+  readUser,
+  verifyPassword,
   SESSION_TTL_SECONDS,
   PASSWORD_RESET_TTL_SECONDS,
   PASSWORD_RESET_MAX_ATTEMPTS,

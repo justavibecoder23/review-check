@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Duyệt giao diện đăng nhập Google | RealView</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/auth.css">
+  <link rel="stylesheet" href="/preview.css">
+  <script src="/preview.js" defer></script>
+</head>
+<body class="google-preview">
+  <header class="preview-toolbar">
+    <div><strong>RealView · Bản duyệt</strong><span>Không nhập mật khẩu thật · Không kết nối Google/Redis</span></div>
+    <div class="preview-state-control"><label for="preview-state">Xem trạng thái</label>
+      <select id="preview-state">
+        <option value="login">Đăng nhập</option>
+        <option value="register">Đăng ký</option>
+        <option value="link">Liên kết tài khoản cũ</option>
+        <option value="email">Xác minh email</option>
+        <option value="error">Lỗi kết nối Google</option>
+        <option value="cancel">Huỷ đăng nhập Google</option>
+        <option value="success">Đăng nhập thành công</option>
+      </select>
+    </div>
+  </header>
+  <main class="preview-stage">
+    <section class="account-dialog-shell preview-card" aria-labelledby="account-dialog-title">
+      <button class="account-dialog-close" type="button" data-close aria-label="Đóng cửa sổ tài khoản">×</button>
+      <div class="account-dialog-brand" aria-hidden="true"><img src="/assets/realview-logo-v1.webp" alt="" width="128" height="75"></div>
+      <div class="account-dialog-heading">
+        <span>TÀI KHOẢN REALVIEW</span>
+        <h1 id="account-dialog-title">Chào mừng bạn trở lại</h1>
+        <p id="account-description">Đăng nhập để lưu và xem lại lịch sử phân tích.</p>
+      </div>
+      <div class="account-tabs" role="tablist" aria-label="Chọn đăng nhập hoặc đăng ký">
+        <button id="preview-login-tab" type="button" role="tab" aria-selected="true" aria-controls="auth-login-panel" data-mode="login">Đăng nhập</button>
+        <button id="preview-register-tab" type="button" role="tab" aria-selected="false" aria-controls="auth-register-panel" data-mode="register">Đăng ký</button>
+      </div>
+      <div class="google-option">
+        <button class="google-signin" type="button" data-google>
+          <img src="/google-g.png" width="20" height="20" alt="">
+          <span>Tiếp tục với Google</span>
+        </button>
+        <p class="google-purpose">Chỉ dùng thông tin cơ bản để xác thực tài khoản.</p>
+        <p class="google-status" role="status" aria-live="polite" hidden><span class="google-spinner" aria-hidden="true"></span><span>Đang xác thực tài khoản…</span></p>
+        <div class="google-error" role="alert" hidden><p></p><button type="button" data-retry>Thử lại</button></div>
+        <p class="google-cancel" role="status" hidden>Chưa đăng nhập. Bạn có thể thử lại với Google hoặc dùng mật khẩu bên dưới.</p>
+        <div class="auth-divider"><span>hoặc dùng tài khoản RealView</span></div>
+      </div>
+      <form id="auth-login-panel" class="account-form" role="tabpanel" aria-labelledby="preview-login-tab">
+        <label><span>Tên đăng nhập</span><input name="username" type="text" autocomplete="off" placeholder="Nhập tên đăng nhập" required></label>
+        <div class="password-group"><label for="login-password">Mật khẩu</label><div class="password-field"><input id="login-password" name="password" type="password" autocomplete="off" placeholder="Nhập mật khẩu" required><button type="button" data-password-toggle aria-label="Hiện mật khẩu" aria-pressed="false">Hiện</button></div></div>
+        <button class="account-forgot" type="button" data-forgot>Quên mật khẩu?</button>
+        <button class="account-submit" type="submit">Đăng nhập <span aria-hidden="true">→</span></button>
+      </form>
+      <form id="auth-register-panel" class="account-form" role="tabpanel" aria-labelledby="preview-register-tab" hidden>
+        <label><span>Email</span><input name="email" type="email" autocomplete="off" placeholder="ban@example.com" required></label>
+        <label><span>Tên đăng nhập</span><input name="username" type="text" autocomplete="off" placeholder="3–30 ký tự" required></label>
+        <div class="password-group"><label for="register-password">Mật khẩu</label><div class="password-field"><input id="register-password" name="password" type="password" autocomplete="off" placeholder="Tối thiểu 8 ký tự" minlength="8" required><button type="button" data-password-toggle aria-label="Hiện mật khẩu" aria-pressed="false">Hiện</button></div></div>
+        <label class="account-claim-history"><input name="claimGuestHistory" type="checkbox" checked><span>Đưa kết quả dùng thử trên thiết bị này vào lịch sử tài khoản</span></label>
+        <label class="account-consent-option"><input name="emailMarketingConsent" type="checkbox"><span><strong>Nhận email cập nhật RealView (không bắt buộc)</strong><small>Mẹo đọc review và thông tin tính năng mới. Không ảnh hưởng việc tạo tài khoản.</small></span></label>
+        <button class="account-submit" type="submit">Gửi mã xác minh <span aria-hidden="true">→</span></button>
+      </form>
+      <form class="account-form" id="auth-link-panel" hidden>
+        <p class="auth-explanation">Email Google của bạn đã được dùng cho một tài khoản RealView. Nhập mật khẩu tài khoản đó để xác nhận liên kết.</p>
+        <div class="password-group"><label for="link-password">Mật khẩu RealView hiện tại</label><div class="password-field"><input id="link-password" name="password" type="password" autocomplete="off" placeholder="Nhập mật khẩu RealView" required><button type="button" data-password-toggle aria-label="Hiện mật khẩu" aria-pressed="false">Hiện</button></div></div>
+        <button class="account-submit" type="submit">Xác nhận và liên kết <span aria-hidden="true">→</span></button>
+        <button class="auth-secondary" type="button" data-mode="login">Quay lại đăng nhập</button>
+        <p class="auth-small">Sau khi liên kết, bạn có thể đăng nhập bằng Google. Lịch sử hiện có vẫn thuộc tài khoản RealView của bạn.</p>
+      </form>
+      <form class="account-form" id="auth-email-panel" hidden>
+        <p class="auth-explanation">Địa chỉ email này cần được xác minh thêm. RealView sẽ gửi mã 6 số đến email bạn dùng với Google.</p>
+        <div class="email-code" hidden><label><span>Mã xác minh email</span><input name="code" type="text" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" autocomplete="off" placeholder="000000"></label><p class="auth-small">Mã có hiệu lực trong 10 phút. Không chia sẻ mã với người khác.</p></div>
+        <button class="account-submit" type="submit"><span data-email-action>Gửi mã xác minh</span><span aria-hidden="true">→</span></button>
+        <button class="auth-secondary" type="button" data-mode="login">Quay lại đăng nhập</button>
+      </form>
+      <form class="account-form" id="auth-forgot-panel" hidden>
+        <label><span>Email đã đăng ký</span><input name="email" type="email" autocomplete="off" placeholder="ban@example.com" required></label>
+        <p class="auth-small">RealView sẽ gửi mã xác minh 6 số để đặt lại mật khẩu.</p>
+        <button class="account-submit" type="submit">Gửi mã xác minh <span aria-hidden="true">→</span></button>
+        <button class="auth-secondary" type="button" data-mode="login">Quay lại đăng nhập</button>
+      </form>
+      <div class="auth-success" hidden>
+        <div class="sample-account"><span aria-hidden="true">M</span><div><strong>Tài khoản mẫu</strong><small>Đã đăng nhập bằng Google</small></div></div>
+        <p>Lịch sử phân tích đã sẵn sàng. Bạn có thể tiếp tục kiểm tra sản phẩm.</p>
+        <button class="account-submit" type="button" data-close>Tiếp tục sử dụng RealView <span aria-hidden="true">→</span></button>
+      </div>
+      <p class="auth-preview-status" role="status" aria-live="polite" hidden></p>
+      <p class="auth-legal">Khi tiếp tục, bạn đồng ý với <a href="/dieu-khoan-su-dung">Điều khoản sử dụng</a> và xác nhận đã đọc <a href="/chinh-sach-bao-mat">Chính sách bảo mật</a>.</p>
+    </section>
+    <div class="preview-closed" hidden><p>Cửa sổ tài khoản đã đóng.</p><button class="auth-secondary" type="button" data-mode="login">Mở lại bản duyệt</button></div>
+  </main>
+</body>
+</html>

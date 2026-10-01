@@ -26,7 +26,7 @@ function responseMock() {
   };
 }
 
-test('bản tĩnh giữ nguyên từng byte HTML ngoại trừ URL ảnh đã mirror', async () => {
+test('bản tĩnh giữ nguyên nguồn, ngoại trừ ảnh mirror và hai URL pháp lý được ghi nhận', async () => {
   assert.equal(manifest.articles.length, 21);
   assert.equal(manifest.articles.filter((article) => article.path.endsWith('.html')).length, 20);
   for (const article of manifest.articles) {
@@ -36,6 +36,18 @@ test('bản tĩnh giữ nguyên từng byte HTML ngoại trừ URL ảnh đã mi
     let original = html;
     for (const image of manifest.images) {
       original = original.replaceAll(`https://www.realview.com.vn${image.local}`, image.source);
+    }
+    // Keep the original snapshot hash: reverse only the explicitly authorised
+    // sitemap additions, not arbitrary changes to frozen posts/index/source URLs.
+    if (article.sitemapAdditions) {
+      assert.equal(article.path, 'blog/snapshots/sitemap-snapshot.xml');
+      assert.deepEqual(article.sitemapAdditions.map((entry) => entry.path), ['/chinh-sach-bao-mat', '/dieu-khoan-su-dung']);
+      for (const entry of article.sitemapAdditions) {
+        const line = `  <url><loc>https://www.realview.com.vn${entry.path}</loc><lastmod>${entry.lastmod}</lastmod></url>\n`;
+        assert.ok(original.includes(line));
+        original = original.replace(line, '');
+      }
+      original = original.replace(/<\/urlset>\n$/, '</urlset>');
     }
     assert.equal(sha256(original), article.originalSha256, article.path);
   }

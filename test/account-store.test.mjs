@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { redisLuaMock } from './helpers/redis-lua.mjs';
 import {
   acceptEmailMarketingConsent,
   authenticateAccount,
@@ -15,84 +16,7 @@ import {
 } from '../src/account-store.mjs';
 
 function redisMock() {
-  const strings = new Map();
-  const sets = new Map();
-  const sorted = new Map();
-
-  function range(values, startValue, stopValue, reverse = false) {
-    const ordered = [...values.entries()]
-      .sort((left, right) => left[1] - right[1])
-      .map(([member]) => member);
-    if (reverse) ordered.reverse();
-    const start = Number(startValue);
-    const rawStop = Number(stopValue);
-    const stop = rawStop < 0 ? ordered.length + rawStop : rawStop;
-    return ordered.slice(start, stop + 1);
-  }
-
-  function command(parts) {
-    const [name, ...args] = parts;
-    switch (String(name).toUpperCase()) {
-      case 'SET': {
-        const [key, value] = args;
-        if (args.includes('NX') && strings.has(key)) return null;
-        strings.set(key, String(value));
-        return 'OK';
-      }
-      case 'GET':
-        return strings.get(args[0]) ?? null;
-      case 'DEL': {
-        let deleted = 0;
-        for (const key of args) {
-          deleted += strings.delete(key) ? 1 : 0;
-          deleted += sorted.delete(key) ? 1 : 0;
-        }
-        return deleted;
-      }
-      case 'SADD': {
-        const [key, ...members] = args;
-        const value = sets.get(key) || new Set();
-        const before = value.size;
-        members.forEach((member) => value.add(member));
-        sets.set(key, value);
-        return value.size - before;
-      }
-      case 'ZADD': {
-        const [key, score, member] = args;
-        const value = sorted.get(key) || new Map();
-        value.set(String(member), Number(score));
-        sorted.set(key, value);
-        return 1;
-      }
-      case 'ZRANGE':
-        return range(sorted.get(args[0]) || new Map(), args[1], args[2]);
-      case 'ZREVRANGE':
-        return range(sorted.get(args[0]) || new Map(), args[1], args[2], true);
-      case 'ZREM': {
-        const [key, ...members] = args;
-        const value = sorted.get(key) || new Map();
-        let deleted = 0;
-        members.forEach((member) => { deleted += value.delete(String(member)) ? 1 : 0; });
-        return deleted;
-      }
-      case 'MGET':
-        return args.map((key) => strings.get(key) ?? null);
-      default:
-        throw new Error(`Unsupported Redis command in test: ${name}`);
-    }
-  }
-
-  return {
-    strings,
-    sets,
-    fetchImpl: async (url, options) => {
-      const input = JSON.parse(options.body);
-      const result = url.endsWith('/multi-exec')
-        ? input.map((parts) => ({ result: command(parts) }))
-        : { result: command(input) };
-      return { ok: true, json: async () => result };
-    }
-  };
+  return redisLuaMock();
 }
 
 test('đăng ký lưu email riêng, mật khẩu băm và đăng nhập bằng username', async () => {
@@ -163,7 +87,8 @@ test('lựa chọn email marketing được lưu riêng và tài khoản cũ dù
     assert.deepEqual(legacy.emailMarketingConsent, {
       status: 'subscribed', source: 'offline', consentedAt: null
     });
-    assert.deepEqual(JSON.parse(mock.strings.get(userKey)).emailMarketingConsent, legacy.emailMarketingConsent);
+    // Reading a legacy record derives the fallback without a stale whole-user write.
+    assert.equal(JSON.parse(mock.strings.get(userKey)).emailMarketingConsent, undefined);
     assert.equal(await claimOfflineConsentNotice(legacy, { fetchImpl: mock.fetchImpl }), true);
     assert.equal(await claimOfflineConsentNotice(legacy, { fetchImpl: mock.fetchImpl }), false);
     assert.equal(await claimOfflineConsentNotice(optedIn, { fetchImpl: mock.fetchImpl }), false);

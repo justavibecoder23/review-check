@@ -5,7 +5,8 @@ import { withTransactionalFooter } from './transactional-email-footer.mjs';
 function verificationEmailContent(codeValue, purposeValue) {
   const code = String(codeValue || '').trim();
   if (!/^\d{6}$/.test(code)) throw new Error('Mã xác minh email không hợp lệ.');
-  const purpose = purposeValue === 'contact' ? 'gửi liên hệ' : 'tạo tài khoản';
+  const purpose = purposeValue === 'contact' ? 'gửi liên hệ'
+    : purposeValue === 'google_login' ? 'xác minh email để đăng nhập bằng Google' : 'tạo tài khoản';
   return {
     subject: `Mã xác minh ${purpose} RealView`,
     text: [

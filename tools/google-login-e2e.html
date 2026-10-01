@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="vi"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RealView — Google + Redis E2E</title>
+<style>body{font:16px/1.6 system-ui;max-width:780px;margin:60px auto;padding:24px;color:#222;background:#faf9f6}button{padding:12px 20px;border:1px solid #ccc;border-radius:12px;background:white;cursor:pointer;margin:8px}pre{white-space:pre-wrap;border:1px solid #ddd;background:white;padding:20px;border-radius:16px}#google{margin:20px 8px}</style>
+<h1>Kiểm thử Google + Redis thật</h1>
+<p>Trang thử nghiệm local, không phải thiết kế frontend. Tài khoản thử nghiệm được lưu trong namespace riêng rồi xoá khi kết thúc. Không gửi email chào mừng.</p>
+<button id="begin">Bắt đầu đăng nhập Google thật</button><div id="google"></div>
+<button id="session">Kiểm tra phiên từ Redis</button><button id="logout">Đăng xuất</button>
+<pre id="status" role="status">Sẵn sàng.</pre>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+const status = document.querySelector('#status');
+let challenge;
+async function call(path, body) {
+ const r = await fetch(path, body ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)} : {});
+ const result = await r.json();
+ if (!r.ok) throw new Error(result.error || 'Request failed');
+ return result;
+}
+function report(data) { status.textContent = JSON.stringify(data, null, 2); }
+document.querySelector('#begin').onclick = async () => {
+ try {
+  challenge = await call('/api/auth-google', {action:'begin'});
+  google.accounts.id.initialize({client_id:challenge.clientId, nonce:challenge.nonce, auto_select:false, callback:async (response) => {
+   try {
+    const result = await call('/api/auth-google', {action:'authenticate', challengeId:challenge.challengeId, credential:response.credential});
+    report({status:result.status, created:result.created});
+    if (result.status === 'signed_in') {
+     const replay = await fetch('/api/auth-google', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action:'authenticate', challengeId:challenge.challengeId, credential:response.credential})});
+     const rejected = await replay.json();
+     report({status:result.status, created:result.created, replayRejected:replay.status === 401, replayCode:rejected.code, session:await call('/e2e/session')});
+    }
+   } catch(e) {status.textContent=e.message;}
+  }});
+  document.querySelector('#google').replaceChildren();
+  google.accounts.id.renderButton(document.querySelector('#google'), {type:'standard', theme:'outline', size:'large', text:'signin_with'});
+  status.textContent = 'Challenge đã lưu trên Redis thật. Nhấn nút Google để đăng nhập.';
+ } catch(e) {status.textContent=e.message;}
+};
+document.querySelector('#session').onclick = async () => {try{report(await call('/e2e/session'));}catch(e){status.textContent=e.message;}};
+document.querySelector('#logout').onclick = async () => {try{report(await call('/e2e/logout', {}));}catch(e){status.textContent=e.message;}};
+</script></html>

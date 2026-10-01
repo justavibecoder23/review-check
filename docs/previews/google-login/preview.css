@@ -1,0 +1,78 @@
+@font-face { font-family: 'Google Sans'; font-style: normal; font-weight: 500; font-display: swap; src: url('/google-sans.ttf') format('truetype'); }
+.google-preview { background: #e9e9e4; min-width: 0; }
+.google-preview [hidden] { display: none !important; }
+.preview-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; padding: 18px 28px; background: #fff; border-bottom: 1px solid #d8d8d2; }
+.preview-toolbar > div { display: grid; gap: 5px; }
+.preview-toolbar strong { font-size: 14px; font-weight: 650; }
+.preview-toolbar span { color: #62625b; font-size: 12px; line-height: 1.5; }
+.preview-state-control { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: #62625b; font-size: 12px; }
+.preview-toolbar select { min-height: 44px; max-width: 100%; padding: 8px 34px 8px 12px; border: 1px solid #d4d4cd; border-radius: 9px; background: #fff; color: #222; font: inherit; font-size: 14px; }
+.preview-stage { display: grid; justify-items: center; padding: 32px 16px 48px; }
+.preview-card { width: min(100%, 470px); max-height: none; overflow: visible; padding: 24px 30px; background: #faf9f6; box-shadow: 0 18px 64px #16161618; }
+.preview-card .account-dialog-close { top: 20px; right: 20px; width: 44px; height: 44px; }
+.preview-card .account-dialog-brand { width: 54px; height: 28px; }
+.preview-card .account-dialog-heading { margin-top: 14px; }
+.preview-card .account-dialog-heading > span { font-size: 10px; font-weight: 700; letter-spacing: .09em; }
+.preview-card h1 { margin: 8px 0 8px; max-width: 360px; font-size: 28px; line-height: 1.25; letter-spacing: -.7px; font-weight: 700; }
+.preview-card .account-dialog-heading p { font-size: 14px; line-height: 1.65; }
+.preview-card .account-tabs { margin-block: 16px 14px; }
+.preview-card .account-tabs button { font-weight: 650; }
+.google-option { margin-top: 22px; }
+.preview-card .account-tabs + .google-option { margin-top: 0; }
+.google-signin { display: flex; align-items: center; position: relative; width: 100%; min-height: 44px; padding: 11px 12px; border: 1px solid #747775; border-radius: 12px; background: #fff; color: #1f1f1f; font: 500 14px/20px 'Google Sans', Arial, sans-serif; cursor: pointer; }
+.google-signin img { width: 20px; height: auto; flex: none; }
+.google-signin > span { flex: 1; padding-left: 10px; padding-right: 30px; text-align: center; }
+.google-signin:hover { background: #f8fafd; }
+.google-signin:disabled { opacity: .7; cursor: wait; }
+.google-purpose { margin: 6px 0 0; color: #62625c; font-size: 12px; text-align: center; line-height: 1.5; }
+.google-status { display: flex; align-items: center; justify-content: center; gap: 9px; margin: 12px 0 0; font-size: 13px; line-height: 1.6; color: #4d4d46; }
+.google-spinner { width: 16px; height: 16px; flex: none; border: 2px solid #deded8; border-top-color: #353531; border-radius: 50%; animation: preview-spin .85s linear infinite; }
+.google-error { margin-top: 12px; padding: 12px 14px; border: 1px solid #e4bdb6; border-radius: 10px; background: #fff1ed; color: #82362c; }
+.google-error p, .google-cancel { margin: 0; font-size: 13px; line-height: 1.6; }
+.google-error button { min-height: 44px; margin-top: 3px; padding: 0; background: none; border: 0; color: inherit; font: inherit; font-size: 13px; font-weight: 650; text-decoration: underline; cursor: pointer; }
+.google-cancel { margin-top: 12px; color: #62625c; }
+.auth-divider { display: flex; align-items: center; gap: 12px; margin-block: 16px; color: #6a6a64; font-size: 12px; line-height: 1.5; }
+.auth-divider::before, .auth-divider::after { content: ''; height: 1px; flex: 1; background: #dcdcd5; }
+.preview-card .account-form { gap: 12px; }
+.preview-card .account-form label > span { font-weight: 600; }
+.password-group { display: grid; gap: 7px; }
+.preview-card .password-group > label { font-size: 13px; font-weight: 600; }
+.preview-card .account-form input { border-color: #cecec6; background: #fff; }
+.password-field { display: flex !important; align-items: center; position: relative; }
+.password-field input { padding-right: 66px; }
+.password-field button { position: absolute; right: 4px; min-width: 50px; min-height: 44px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: #55554e; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.preview-card .account-forgot { min-height: 44px; margin-top: -9px; font-weight: 600; color: #a44100; }
+.preview-card .account-submit { min-height: 48px; margin: 0; background: #fc781f; box-shadow: none; border-color: #d46518; font-weight: 650; }
+.preview-card .account-submit:hover { background: #ff8632; }
+.preview-card .account-submit:disabled { opacity: .7; }
+.auth-legal { margin: 16px 0 0; padding-top: 14px; border-top: 1px solid #ddddd5; color: #62625b; font-size: 12px; line-height: 1.7; text-align: center; }
+.auth-legal a { color: #53534c; text-underline-offset: 3px; }
+.auth-explanation { margin: 0; color: #4e4e47; font-size: 14px; line-height: 1.7; }
+.auth-secondary { min-height: 44px; padding: 10px 14px; border: 1px solid #d2d2ca; border-radius: 12px; background: #fff; color: #3d3d37; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.auth-small { margin: 0; color: #62625b; font-size: 12px; line-height: 1.65; }
+.auth-success { display: grid; gap: 22px; margin-top: 24px; }
+.auth-success p { margin: 0; font-size: 14px; line-height: 1.7; color: #575750; }
+.sample-account { display: flex; align-items: center; gap: 12px; padding: 16px; background: #f0efe9; border-radius: 14px; }
+.sample-account > span { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: #d9e5d7; color: #31562d; font-size: 18px; }
+.sample-account div { display: grid; gap: 5px; }
+.sample-account strong { font-size: 14px; font-weight: 650; }
+.sample-account small { font-size: 12px; color: #5e5e57; }
+.email-code { display: grid; gap: 10px; }
+.email-code input { letter-spacing: .35em; text-align: center; }
+.auth-preview-status { margin: 16px 0 0; font-size: 13px; line-height: 1.6; color: #575750; }
+.preview-closed { text-align: center; padding: 60px 20px; }
+.preview-closed p { color: #62625b; }
+.google-preview button:focus-visible, .google-preview select:focus-visible, .google-preview a:focus-visible { outline: 3px solid #fc781f88; outline-offset: 3px; }
+@keyframes preview-spin { to { transform: rotate(360deg); } }
+@media (max-width: 520px) {
+  .preview-toolbar { padding: 16px; gap: 12px; }
+  .preview-state-control { width: 100%; }
+  .preview-toolbar select { flex: 1; min-width: 0; }
+  .preview-stage { padding: 20px 12px 32px; }
+  .preview-card { padding: 24px 20px; border-radius: 22px; }
+  .preview-card h1 { font-size: 26px; }
+  .preview-card .account-dialog-close { top: 16px; right: 16px; }
+  .preview-card .account-form label > span { font-size: 13px; }
+  .google-signin > span { padding-right: 30px; }
+}
+@media (prefers-reduced-motion: reduce) { .google-spinner { animation: none; } }

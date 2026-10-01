@@ -41,8 +41,8 @@ test('API không trả mã xác minh về trình duyệt và giao diện có đ�
     readFile(new URL('../api/auth.mjs', import.meta.url), 'utf8'),
     readFile(new URL('../public/auth.js', import.meta.url), 'utf8')
   ]);
-  assert.match(api, /action === 'request_password_reset'/);
-  assert.match(api, /sendPasswordResetEmail\(reset\.user, reset\.code\)/);
+  assert.match(api, /\['request_password_reset', 'request_password_change'\]\.includes\(body\.action\)/);
+  assert.match(api, /options\.sendReset \|\| sendPasswordResetEmail\)\(reset\.user, reset\.code\)/);
   assert.doesNotMatch(api, /code:\s*reset\.code/);
   assert.match(ui, /autocomplete="one-time-code"/);
   assert.match(ui, /data-auth-form="reset_password"/);

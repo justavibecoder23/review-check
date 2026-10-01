@@ -96,6 +96,8 @@ export const STATIC_SITEMAP_ENTRIES = Object.freeze([
   { path: '/', lastmod: '2026-09-10' },
   { path: '/tieu-chi-loc', lastmod: '2026-09-14' },
   { path: '/lien-he', lastmod: '2026-09-14' },
+  { path: '/chinh-sach-bao-mat', lastmod: '2026-10-01' },
+  { path: '/dieu-khoan-su-dung', lastmod: '2026-10-01' },
   {
     path: '/bai-viet',
     lastmod: '2026-09-17',

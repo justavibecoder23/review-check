@@ -67,7 +67,7 @@ test('email chào mừng thoát an toàn nội dung tên đăng nhập', () => {
 test('đăng ký gọi email chào mừng nhưng đăng nhập thì không', async () => {
   const authApi = await readFile(new URL('../api/auth.mjs', import.meta.url), 'utf8');
   assert.match(authApi, /const isRegistration = body\.action === 'register'/);
-  assert.match(authApi, /isRegistration\s*\? await sendWelcomeEmail\(user\)/);
+  assert.match(authApi, /isRegistration\s*\? await \(options\.sendWelcome \|\| sendWelcomeEmail\)\(user\)/);
   assert.match(authApi, /welcomeEmailDelivered/);
 });
 

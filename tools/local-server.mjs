@@ -7,6 +7,7 @@ import { assertGeminiAdmin, readGeminiAdminStatus, updateGeminiAdminPool } from 
 import { clientDisconnectSignal, openSse } from '../src/sse.mjs';
 import { normalizeApiPath } from '../src/server-route.mjs';
 import authHandler from '../api/auth.mjs';
+import googleAuthHandler from '../api/auth-google.mjs';
 import historyHandler from '../api/history.mjs';
 import contactHandler from '../api/contact.mjs';
 import chatHandler from '../api/chat.mjs';
@@ -18,6 +19,8 @@ const host = process.env.HOST || '127.0.0.1';
 const publicDir = join(process.cwd(), 'public');
 const mimeTypes = {
   '.html': 'text/html; charset=utf-8',
+  '.xml': 'application/xml; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml',
@@ -28,6 +31,9 @@ const mimeTypes = {
   '.ico': 'image/x-icon'
 };
 const publicRouteFiles = new Map([
+  ['/chinh-sach-bao-mat', '/privacy.html'],
+  ['/dieu-khoan-su-dung', '/terms.html'],
+  ['/sitemap.xml', '/blog/snapshots/sitemap-snapshot.xml'],
   ['/tieu-chi-loc', '/criteria.html'],
   ['/lien-he', '/contact.html'],
   ['/bai-viet', '/blog.html'],
@@ -116,6 +122,11 @@ const server = createServer(async (request, response) => {
       return matchCounterpartHandler(request, response);
     }
 
+    if (['GET', 'POST'].includes(request.method) && apiPath === '/api/auth-google') {
+      if (request.method === 'POST') request.body = await getBody(request);
+      return googleAuthHandler(request, vercelResponse(response));
+    }
+
     if (['GET', 'POST'].includes(request.method) && apiPath === '/api/auth') {
       if (request.method === 'POST') request.body = await getBody(request);
       return authHandler(request, vercelResponse(response));
@@ -153,7 +164,7 @@ const server = createServer(async (request, response) => {
     }
 
     if (apiPath.startsWith('/api/')) {
-      const knownPath = ['/api/analyze', '/api/analyze-stream', '/api/chat', '/api/match-counterpart', '/api/auth', '/api/history', '/api/contact', '/api/apify-config', '/api/gemini-config', '/api/chatbot-gemini-config'].includes(apiPath);
+      const knownPath = ['/api/analyze', '/api/analyze-stream', '/api/chat', '/api/match-counterpart', '/api/auth', '/api/auth-google', '/api/history', '/api/contact', '/api/apify-config', '/api/gemini-config', '/api/chatbot-gemini-config'].includes(apiPath);
       return sendJson(response, knownPath ? 405 : 404, {
         error: knownPath ? 'Phương thức không được hỗ trợ.' : 'API không tồn tại.'
       });

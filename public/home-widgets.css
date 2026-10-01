@@ -64,6 +64,7 @@
   background: var(--orange);
   font-size: 11px;
 }
+.account-chip > b { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 1180px) {
 .header-auth { gap: 5px; }
 .auth-button { padding-inline: 11px; }
