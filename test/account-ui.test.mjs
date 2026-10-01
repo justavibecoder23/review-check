@@ -40,7 +40,8 @@ test('form đăng ký có lựa chọn email marketing riêng và thông báo kh
     readFile(new URL('../public/auth.css', import.meta.url), 'utf8'),
     readFile(new URL('../api/auth.mjs', import.meta.url), 'utf8')
   ]);
-  assert.match(auth, /name="emailMarketingConsent" type="checkbox"/);
+  assert.match(auth, /name="emailMarketingConsent" type="checkbox" value="true" checked/);
+  assert.match(auth, /values\.emailMarketingConsent = form\.elements\.emailMarketingConsent\.checked/);
   assert.match(auth, /Đồng ý nhận email marketing từ RealView \(không bắt buộc\)/);
   assert.match(auth, /if \(payload\.showOfflineConsentNotice\) showOfflineConsentNotice\(currentUser\)/);
   assert.doesNotMatch(auth, /realview-offline-consent-notice|sessionStorage/);

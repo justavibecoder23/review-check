@@ -191,7 +191,7 @@ function dialogMarkup() {
           <label class="account-claim-history"><input name="claimGuestHistory" type="checkbox" checked /><span>Đưa các kết quả dùng thử trên thiết bị này vào lịch sử tài khoản</span></label>
           <p class="account-form-help">Email này dùng cho hồ sơ tài khoản và thông báo dịch vụ như thư chào mừng hoặc khôi phục mật khẩu.</p>
           <label class="account-consent-option">
-            <input name="emailMarketingConsent" type="checkbox" value="true" />
+            <input name="emailMarketingConsent" type="checkbox" value="true" checked />
             <span><strong>Đồng ý nhận email marketing từ RealView (không bắt buộc)</strong><small>Tin hướng dẫn đọc review, cập nhật tính năng và nội dung hữu ích. Lựa chọn này không ảnh hưởng việc tạo tài khoản.</small></span>
           </label>
           <p class="account-form-error" data-auth-error role="alert" hidden></p>
