@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'realview:last-analysis';
-const SESSION_PREFIX = 'realview:counterpart:v3:';
+const SESSION_PREFIX = 'realview:counterpart:v4:';
 const READY_TOAST_DURATION_MS = 5_000;
 const section = document.querySelector('#counterpart-section');
 const comparison = document.querySelector('#counterpart-comparison');
@@ -239,6 +239,8 @@ async function showProgressUnavailable(result) {
   if (progressTitle) progressTitle.textContent = 'Chưa tìm thấy sản phẩm tương tự phù hợp';
   if (progressCopy) progressCopy.textContent = result?.reason === 'rate_limited'
     ? 'Tìm kiếm đang tạm dừng, bạn có thể thử lại sau'
+    : result?.reason === 'source_image_unavailable'
+      ? 'Chưa lấy được ảnh Shopee để kiểm chứng; không hiển thị kết quả chỉ trùng tên'
     : 'Bạn vẫn có thể tiếp tục xem kết quả phân tích hiện tại';
 }
 
@@ -395,6 +397,7 @@ function showReadyToast(platform) {
 function showStatusToast(result) {
   if (!toast) return;
   const messages = {
+    source_image_unavailable: ['Chưa thể đối chiếu sản phẩm tương tự', 'Chưa lấy được ảnh Shopee để kiểm chứng; RealView không hiển thị kết quả chỉ trùng tên.'],
     rate_limited: ['Đã tạm dừng tìm kiếm', 'Vui lòng thử lại sau ít phút.'],
     no_verified_visual_match: ['Chưa tìm thấy sản phẩm đủ giống', 'RealView không hiển thị kết quả khi hình ảnh chưa đủ tin cậy.'],
     missing_search_terms: ['Chưa đủ dữ liệu để tìm kiếm', 'Tên sản phẩm hiện chưa cung cấp đủ tín hiệu đối chiếu.'],

@@ -3,7 +3,7 @@ import { findCounterpart, normalizePlatform, targetPlatformFor } from './counter
 import { isRedisConfigured, redisCommand } from './redis-rest.mjs';
 import { platformMaintenanceStatus } from './platform-availability.mjs';
 
-const JOB_PREFIX = 'realview:counterpart:v3:job:';
+const JOB_PREFIX = 'realview:counterpart:v4:job:';
 const JOB_TTL_SECONDS = 7 * 24 * 60 * 60;
 const LOCK_TTL_SECONDS = 116;
 const ATTEMPT_DEADLINE_MS = 105_000;
@@ -28,7 +28,7 @@ export function counterpartJobId(source = {}) {
   const clean = cleanSource(source);
   const stable = clean.itemId || clean.productId || clean.url;
   const imageIdentity = createHash('sha256').update(clean.image).digest('hex').slice(0, 12);
-  return createHash('sha256').update(`v3|${clean.platform}|${stable}|${imageIdentity}`).digest('hex').slice(0, 32);
+  return createHash('sha256').update(`v4|${clean.platform}|${stable}|${imageIdentity}`).digest('hex').slice(0, 32);
 }
 
 function jobKey(jobId) {

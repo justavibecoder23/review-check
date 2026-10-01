@@ -440,8 +440,18 @@ function hasModelConflict(sourceTitle, candidateTitle) {
   return ![...source].some((token) => candidate.has(token));
 }
 
+function hasProductTypeConflict(sourceTitle, candidateTitle) {
+  const source = normalizeText(sourceTitle);
+  const candidate = normalizeText(candidateTitle);
+  // Thermal underwear and sports shirts can share sleeve/colour descriptors
+  // and look alike in thumbnails, but are different product purposes.
+  const thermal = /\b(?:giu nhiet|thermal|heattech)\b/;
+  return thermal.test(source) && !thermal.test(candidate);
+}
+
 export function classifyCounterpartMatch(candidate, sourceTitle) {
-  if (!candidate || candidate.imageScore == null || hasModelConflict(sourceTitle, candidate.title)) return 'unverified';
+  if (!candidate || candidate.imageScore == null || hasModelConflict(sourceTitle, candidate.title)
+    || hasProductTypeConflict(sourceTitle, candidate.title)) return 'unverified';
   if (candidate.lensExact && candidate.imageScore >= 0.68 && candidate.textScore >= 0.12) return 'exact';
   if (candidate.imageScore >= 0.80 && candidate.textScore >= 0.18) return 'exact';
   if (candidate.imageScore >= 0.67 && candidate.textScore >= 0.12) return 'variant';
@@ -535,7 +545,10 @@ export function rankActorCandidatesByMetadata(source, candidates) {
     const textScore = tokenSimilarity(source.title, candidate.title);
     const searchRankScore = 1 - Math.min(1, (candidate.searchRank - 1) / 30);
     const matchScore = clamp((textScore * 0.92) + (searchRankScore * 0.08));
-    const matchClass = textScore >= 0.62 ? 'exact' : textScore >= 0.34 ? 'variant' : 'unverified';
+    // Shared generic words (e.g. men's long-sleeve shirts) do not establish
+    // product identity when no source image could be compared.
+    const matchClass = textScore >= 0.80 && !hasModelConflict(source.title, candidate.title)
+      && !hasProductTypeConflict(source.title, candidate.title) ? 'exact' : 'unverified';
     return {
       ...candidate,
       textScore,
@@ -569,7 +582,7 @@ function sourceIdentity(source) {
 }
 
 function cacheKey(source) {
-  return `realview:counterpart:v3:lens-visual:${sourceIdentity(source)}`;
+  return `realview:counterpart:v4:lens-visual:${sourceIdentity(source)}`;
 }
 
 async function readCache(source, options = {}) {
@@ -680,6 +693,9 @@ export async function findCounterpart(rawSource, options = {}) {
   if (!source.platform || !targetPlatform || !source.title || !source.url) {
     return { status: 'unavailable', reason: 'invalid_source' };
   }
+  if (source.platform === 'Shopee' && !source.image) {
+    return { status: 'unavailable', targetPlatform, reason: 'source_image_unavailable' };
+  }
   const cached = await readCache(source, scopedOptions);
   if (cached) return { ...cached, cached: true };
 
@@ -711,13 +727,16 @@ export async function findCounterpart(rawSource, options = {}) {
       candidate = source.image
         ? await (options.rankCandidatesImpl || rankCandidatesBySimilarity)(source, mergeCandidates(lensCandidates, actorCandidates), scopedOptions)
         : (options.rankActorCandidatesImpl || rankActorCandidatesByMetadata)(source, actorCandidates);
-      if (!candidate && actorCandidates.length) {
+      if (!candidate && actorCandidates.length && source.platform !== 'Shopee') {
         candidate = (options.rankActorCandidatesImpl || rankActorCandidatesByMetadata)(source, actorCandidates);
       }
     } catch (error) {
       await stage('actor_unavailable', { code: error?.code || '', error: String(error?.message || '').slice(0, 160) });
     }
   }
+
+  // Shopee must have an actual visual comparison, not a title-only substitute.
+  if (source.platform === 'Shopee' && candidate?.imageScore == null) candidate = null;
 
   if (candidate && targetPlatform === 'Shopee') {
     await stage('metadata_validation');
