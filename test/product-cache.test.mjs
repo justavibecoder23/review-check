@@ -336,7 +336,6 @@ test('getReviews dùng Blob cache Shopee và bỏ qua hoàn toàn Apify', async 
   });
   const redis = createRedisFake({ [getShopeeCacheKey('123')]: mapping });
   const result = await getReviews('https://shopee.vn/san-pham-i.1.123', {
-    fetchImpl: async () => ({ ok: false, status: 403 }),
     redisFetchImpl: redis.fetchImpl,
     blobGetImpl: blobGetFor(dataset),
     now: new Date('2026-09-07T00:00:00.000Z')

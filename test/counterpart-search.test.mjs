@@ -317,8 +317,8 @@ test('section đối ứng ẩn mặc định và chỉ có module nền riêng'
   assert.match(script, /removeEventListener\('abort'/);
   assert.match(script, /trustIntroIsOpen/);
   assert.match(loader, /realview:analysis-result/);
-  assert.match(loader, /import\('\.\/counterpart-widget\.js\?v=19'\)/);
-  assert.match(html, /counterpart-loader\.js\?v=19/);
+  assert.match(loader, /import\('\.\/counterpart-widget\.js\?v=18'\)/);
+  assert.match(html, /counterpart-loader\.js\?v=18/);
   assert.match(script, /counterpart-widget\.css\?v=16/);
   assert.match(script, /classList\.toggle\('counterpart-progress--tiktok', platformName\(platform\) === 'TikTok Shop'\)/);
   assert.match(script, /classList\.remove\([^\n]*'counterpart-progress--tiktok'/);
@@ -331,7 +331,7 @@ test('section đối ứng ẩn mặc định và chỉ có module nền riêng'
   assert.match(statusToastSource, /}, 7_500\);/);
   assert.match(script, /showMetadataUnavailable/);
   assert.match(html, /results-v2\.css\?v=3/);
-  assert.match(html, /results\.js\?v=7/);
+  assert.match(html, /results\.js\?v=6/);
   assert.match(html, /id="analysis-product-illustration"/);
   assert.match(resultsScript, /const PRODUCT_IMAGE_TIMEOUT_MS = 20_000;/);
   assert.doesNotMatch(resultsScript, /operation=product-media/);

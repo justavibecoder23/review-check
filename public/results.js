@@ -24,15 +24,6 @@ function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 }
 
-function shopeeTitleFromUrl(value) {
-  try {
-    const url = new URL(String(value || ''));
-    if (!/^(?:www\.)?shopee\.vn$/i.test(url.hostname)) return '';
-    const slug = decodeURIComponent(url.pathname).match(/^\/([^/]+)-i\.\d+\.\d+\/?$/i)?.[1];
-    return slug && !/^product$/i.test(slug) ? slug.replace(/[-_]+/g, ' ').trim() : '';
-  } catch { return ''; }
-}
-
 function safeUrl(value, fallback = '/#trang-chu') {
   try {
     const url = new URL(value);
@@ -442,7 +433,7 @@ function renderResult(data) {
   const tone = toneForScore(scoreAvailable ? score : null);
   const platform = String(product.platform || 'Shopee');
   const productUrl = safeUrl(product.url);
-  const productTitle = String(product.title || shopeeTitleFromUrl(product.originalUrl) || shopeeTitleFromUrl(productUrl) || `Sản phẩm đang phân tích trên ${platform}`);
+  const productTitle = String(product.title || `Sản phẩm đang phân tích trên ${platform}`);
 
   document.querySelector('#results-platform').textContent = platform.toLocaleUpperCase('vi');
   document.querySelector('#results-title').textContent = productTitle;
