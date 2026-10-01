@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { extractMarketplaceUrl, getShopeeProductIds, getShopeeProductTitle, isShopeeUrl, resolveShopeeProductUrl } from './shopee-url.mjs';
 import { collectShopeeReviews } from './apify-review-scraper.mjs';
 import { collectTikTokReviews } from './apify-tiktok-review-scraper.mjs';
-import { classifyApifyFailure } from './apify-tiktok-runtime.mjs';
 import { getTikTokProductId, isTikTokUrl, resolveTikTokProductUrl } from './tiktok-url.mjs';
 import { createProgressReporter } from './sse.mjs';
 import { combineAbortSignals, throwIfAborted } from './abort.mjs';
@@ -730,7 +729,6 @@ export async function hydrateShopeeProductMetadata(resolved, product = {}, optio
   if (overlay) {
     if (!merged.title && overlay.title) merged.title = overlay.title;
     if (!merged.image && overlay.image) merged.image = overlay.image;
-      if (!merged.image && overlay.metadataStatus) merged.metadataStatus = overlay.metadataStatus;
   }
   if ((!merged.title || !merged.image) && !overlay?.attempted) {
     const [page, api] = await Promise.all([
@@ -747,17 +745,9 @@ export async function hydrateShopeeProductMetadata(resolved, product = {}, optio
     const direct = { ...page, ...api };
     merged = { ...merged, ...direct };
     if (!merged.image) {
-      const details = await (options.fetchShopeeProductDetailsImpl || fetchShopeeProductDetails)(resolved, options).catch((error) => {
-        const reason = error?.code === 'COUNTERPART_BUDGET_PROTECTED'
-          ? 'budget_protected' : classifyApifyFailure(error?.statusCode, error);
-        merged.metadataStatus = { status: 'unavailable', reason };
-        options.onMetadataDiagnostic?.({ source: 'product-detail-actor', reason, statusCode: error?.statusCode || null });
-        return {};
-      });
+      const details = await (options.fetchShopeeProductDetailsImpl || fetchShopeeProductDetails)(resolved, options).catch(() => ({}));
       const verified = normalizeShopeeProductDetails(resolved.shopId, resolved.itemId, details);
       merged = { ...merged, ...verified };
-      if (merged.image) delete merged.metadataStatus;
-      else if (!merged.metadataStatus) merged.metadataStatus = { status: 'unavailable', reason: 'no_product_image' };
     }
     await writeShopeeProductMetadata(resolved.shopId, resolved.itemId, merged, options);
   }

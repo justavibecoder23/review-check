@@ -4,7 +4,6 @@ import { reserveCounterpartCostCredential, finalizeCounterpartCostCredential } f
 import { getShopeeProductIds } from './shopee-url.mjs';
 import { cleanProductTitle } from './product-metadata-quality.mjs';
 import { classifyApifyFailure } from './apify-tiktok-runtime.mjs';
-import { setTimeout as delay } from 'node:timers/promises';
 
 function metadataKey(shopId, itemId) {
   if (!/^\d+$/.test(String(shopId)) || !/^\d+$/.test(String(itemId))) throw new Error('Invalid Shopee product identity');
@@ -28,13 +27,8 @@ export function normalizeShopeeProductDetails(shopId, itemId, value = {}, { requ
     else image = url.href;
   } catch { image = ''; }
   const categoryPath = value.categoryPath || value.categoryBreadcrumb || value.feCategoryBreadcrumb;
-  const allowedReasons = new Set(['not_configured', 'budget_protected', 'timeout', 'actor_access_denied',
-    'invalid_auth', 'billing_exhausted', 'temporary_throttle', 'upstream_service_error', 'unknown_error', 'no_product_image']);
-  const metadataStatus = !image && value.metadataStatus?.status === 'unavailable'
-    && allowedReasons.has(value.metadataStatus.reason) ? value.metadataStatus : null;
   return {
     ...(title ? { title } : {}), ...(image ? { image } : {}),
-    ...(metadataStatus ? { metadataStatus: { status: 'unavailable', reason: metadataStatus.reason } } : {}),
     ...(Array.isArray(categoryPath) ? { categoryPath: categoryPath.filter((entry) => typeof entry === 'string') } : {})
   };
 }
@@ -64,20 +58,16 @@ export async function writeShopeeProductMetadata(shopId, itemId, metadata, optio
 // product only when page/API metadata is unavailable; use the existing cost pool.
 export async function fetchShopeeProductDetails(product, options = {}) {
   const env = options.env || process.env;
-  if (!options.reserveCounterpartImpl && (!isRedisConfigured() || !env.APIFY_TOKEN_VAULT_KEY)) {
-    return { metadataStatus: { status: 'unavailable', reason: 'not_configured' } };
-  }
+  if (!options.reserveCounterpartImpl && (!isRedisConfigured() || !env.APIFY_TOKEN_VAULT_KEY)) return {};
   const actorId = String(env.SHOPEE_PRODUCT_METADATA_ACTOR_ID || 'zen-studio/shopee-product-detail-scraper').replace('~', '/');
-  const timeoutMs = Math.max(10_000, Math.min(100_000, Number(env.SHOPEE_PRODUCT_METADATA_TIMEOUT_MS) || 90_000));
+  const timeoutMs = Math.max(10_000, Math.min(35_000, Number(env.SHOPEE_PRODUCT_METADATA_TIMEOUT_MS) || 30_000));
+  const signal = combineAbortSignals(options.signal, AbortSignal.timeout(timeoutMs));
   const fetchImpl = options.fetchImpl || fetch;
   const allocation = await (options.reserveCounterpartImpl || reserveCounterpartCostCredential)({
     actorId, plannedCostMicroUsd: 25_000, pricingVersion: 'shopee-product-metadata-2026-10',
     fetchImpl: options.redisFetchImpl, usageFetchImpl: options.usageFetchImpl
   });
   const credential = allocation.credential;
-  // Allocation may need to scan the pool. Do not consume the actor's runtime
-  // allowance while no actor has even started.
-  const signal = combineAbortSignals(options.signal, AbortSignal.timeout(timeoutMs));
   const headers = { authorization: `Bearer ${credential.token}`, 'content-type': 'application/json' };
   let runId = null, cost = null, started = false, statusCode = 0, itemCount = 0, failureClass = '';
   try {
@@ -92,7 +82,6 @@ export async function fetchShopeeProductDetails(product, options = {}) {
     started = Boolean(runId);
     if (!runId) throw new Error('Shopee metadata actor missing run ID');
     while (!['SUCCEEDED', 'FAILED', 'TIMED-OUT', 'ABORTED'].includes(run.status)) {
-      await delay(500, undefined, { signal });
       const poll = await fetchImpl(`https://api.apify.com/v2/actor-runs/${encodeURIComponent(runId)}?waitForFinish=5`, { headers, signal });
       statusCode = poll.status;
       if (!poll.ok) throw Object.assign(new Error('Shopee metadata actor polling failed'), { statusCode });

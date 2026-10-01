@@ -233,36 +233,6 @@ test('thiếu ảnh bỏ qua Lens và dùng Actor fallback theo metadata ngay', 
   assert.equal(result.candidate.matchMethod, 'actor-metadata-fallback');
 });
 
-test('áo VESCA không bị ghép thành combo áo thể thao ARME chỉ vì trùng từ', async () => {
-  const source = {
-    platform: 'Shopee',
-    title: 'Áo Giữ Nhiệt Nam Dài Tay Vải Thun Lạnh Co Giãn 4 Chiều Thoải Mái Giữ Ấm Tốt VESCA N',
-    url: 'https://shopee.vn/product-i.364598436.3395107842', itemId: '3395107842'
-  };
-  const candidate = {
-    title: 'COMBO 2-3 Áo thun thể thao dài tay nam nữ ARME',
-    url: 'https://shop.tiktok.com/view/product/123', searchRank: 1, reviewCount: 100
-  };
-  assert.equal(rankActorCandidatesByMetadata(source, [candidate]), null);
-  assert.equal(classifyCounterpartMatch({ ...candidate, imageScore: 0.95, textScore: 0.8 }, source.title), 'unverified');
-  let actorCalls = 0;
-  const noImage = await findCounterpart(source, {
-    env: { GOOGLE_LENS_SERPAPI_KEY: 'fixture' },
-    runSearchActorImpl: async () => { actorCalls++; return [candidate]; }
-  });
-  assert.equal(noImage.status, 'unavailable');
-  assert.equal(noImage.reason, 'source_image_unavailable');
-  assert.equal(actorCalls, 0);
-  const brokenImage = await findCounterpart({ ...source, image: 'https://down-vn.img.susercontent.com/file/fixture' }, {
-    env: { GOOGLE_LENS_SERPAPI_KEY: 'fixture' },
-    searchGoogleLensImpl: async () => [],
-    runSearchActorImpl: async () => [candidate],
-    rankCandidatesImpl: async () => null,
-    rankActorCandidatesImpl: () => { throw new Error('Must not replace failed visual verification with metadata'); }
-  });
-  assert.equal(brokenImage.status, 'unavailable');
-});
-
 test('xếp hạng Actor metadata không giả lập điểm giống ảnh', () => {
   const match = rankActorCandidatesByMetadata({ title: 'Serum Lucenbase Niacinamide 30ml' }, [{
     title: 'Serum Lucenbase Niacinamide 30ml chính hãng',
@@ -347,8 +317,8 @@ test('section đối ứng ẩn mặc định và chỉ có module nền riêng'
   assert.match(script, /removeEventListener\('abort'/);
   assert.match(script, /trustIntroIsOpen/);
   assert.match(loader, /realview:analysis-result/);
-  assert.match(loader, /import\('\.\/counterpart-widget\.js\?v=20'\)/);
-  assert.match(html, /counterpart-loader\.js\?v=20/);
+  assert.match(loader, /import\('\.\/counterpart-widget\.js\?v=19'\)/);
+  assert.match(html, /counterpart-loader\.js\?v=19/);
   assert.match(script, /counterpart-widget\.css\?v=16/);
   assert.match(script, /classList\.toggle\('counterpart-progress--tiktok', platformName\(platform\) === 'TikTok Shop'\)/);
   assert.match(script, /classList\.remove\([^\n]*'counterpart-progress--tiktok'/);

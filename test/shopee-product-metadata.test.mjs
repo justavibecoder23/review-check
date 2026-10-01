@@ -36,19 +36,6 @@ test('Shopee bị chặn vẫn lấy đúng ảnh/tên từ product detail fallb
   assert.equal(partial.image, undefined);
 });
 
-test('lỗi actor ảnh có chẩn đoán an toàn và không che mất tên sản phẩm', async () => {
-  const diagnostics = [];
-  const result = await hydrateShopeeProductMetadata(await resolveShopeeProductUrl(originalUrl), {}, {
-    fetchImpl: blocked,
-    fetchShopeeProductDetailsImpl: async () => { throw new DOMException('Actor timeout', 'TimeoutError'); },
-    onMetadataDiagnostic: (value) => diagnostics.push(value)
-  });
-  assert.equal(result.title, title);
-  assert.equal(result.image, undefined);
-  assert.deepEqual(result.metadataStatus, { status: 'unavailable', reason: 'timeout' });
-  assert.ok(diagnostics.some((entry) => entry.source === 'product-detail-actor' && entry.reason === 'timeout'));
-});
-
 test('product detail actor chỉ lấy một sản phẩm, không review, có trần chi phí và quyết toán', async () => {
   let reservation, settlement, calls = 0;
   const result = await fetchShopeeProductDetails(await resolveShopeeProductUrl(originalUrl), {
