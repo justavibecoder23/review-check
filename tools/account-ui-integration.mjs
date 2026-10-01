@@ -14,6 +14,7 @@ import { registerAccount, saveAccountHistory, listAccountHistory } from '../src/
 const port = Number(process.env.ACCOUNT_UI_TEST_PORT || 3146);
 const origin = `http://localhost:${port}`;
 const mockGoogle = process.argv.includes('--mock-google');
+const googleDelay = Math.min(5000, Math.max(0, Number(process.env.ACCOUNT_UI_GOOGLE_DELAY_MS) || 0));
 process.env.UPSTASH_REDIS_REST_URL = 'https://memory.test';
 process.env.UPSTASH_REDIS_REST_TOKEN = 'disposable-test-only';
 const clientId = '154335934284-1fupk8riad0u56jughvv73pep358hdft.apps.googleusercontent.com';
@@ -45,9 +46,9 @@ const sdkFixture = `<script>
   let qaGoogleConfig;
   window.google = { accounts: { id: {
     initialize(config) { qaGoogleConfig = config; }, cancel() {}, disableAutoSelect() {},
-    renderButton(slot) {
+    renderButton(slot, config) {
       const button = document.createElement('button'); button.type = 'button';
-      button.className = 'qa-google-button'; button.textContent = 'Tiếp tục với Google (mô phỏng)';
+      button.className = 'qa-google-button'; button.textContent = config.text === 'signup_with' ? 'Đăng ký bằng Google (mô phỏng)' : 'Đăng nhập bằng Google (mô phỏng)';
       button.onclick = async () => {
         const response = await fetch('/test/credential', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ nonce:qaGoogleConfig.nonce, kind:document.querySelector('#qa-google-kind').value }) });
         qaGoogleConfig.callback(await response.json());
@@ -72,7 +73,10 @@ const server = createServer(async (request, response) => {
       request.body = JSON.parse(raw || '{}');
     }
     if (pathname === '/api/auth') return accountHandler(request, response);
-    if (pathname === '/api/auth-google') return googleHandler(request, response);
+    if (pathname === '/api/auth-google') {
+      if (googleDelay) await new Promise(resolve => setTimeout(resolve, googleDelay));
+      return googleHandler(request, response);
+    }
     if (pathname === '/api/admin-blog') return json(200, { role: null });
     if (pathname === '/api/history') {
       const user = await currentAccount(request, options);

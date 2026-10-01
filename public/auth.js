@@ -9,6 +9,8 @@ let googleController, googleControllerPromise;
 let authBusy = false;
 let passwordContext = 'request_password_reset';
 let authRevision = 0;
+let authStylesPromise;
+let authOpenRevision = 0;
 
 function setAuthBusy(busy) {
   authBusy = busy;
@@ -25,7 +27,10 @@ async function prepareGoogleLogin() {
   }).catch(error => { googleControllerPromise = null; throw error; });
   try { const controller = await googleControllerPromise; if (ensureDialog().open) await controller.prepare(); }
   catch {
-    const box = ensureDialog().querySelector('[data-google-error]');
+    const dialog = ensureDialog();
+    dialog.querySelector('[data-google-option]').classList.remove('is-preparing');
+    dialog.querySelector('[data-google-status]').hidden = true;
+    const box = dialog.querySelector('[data-google-error]');
     box.hidden = false;
     box.querySelector('p').textContent = 'Chưa thể tải đăng nhập Google. Bạn vẫn có thể dùng mật khẩu bên dưới.';
   }
@@ -373,6 +378,13 @@ function setMode(mode = 'login', { focus = true } = {}) {
   });
   const googleOption = dialog.querySelector('[data-google-option]');
   googleOption.hidden = !['login', 'register'].includes(activeMode);
+  if (!googleOption.hidden && !googleOption.querySelector('[data-google-button]').firstElementChild) {
+    // Reserve the final button's footprint before the lazy Google module loads.
+    googleOption.classList.add('is-preparing');
+    googleOption.querySelector('[data-google-status]').hidden = false;
+    googleOption.querySelector('[data-google-status-text]').textContent = 'Chuẩn bị đăng nhập Google…';
+    googleOption.querySelector('.google-spinner').hidden = false;
+  }
   dialog.querySelector('.account-tabs').hidden = !['login', 'register'].includes(activeMode);
   const copy = {
     login: ['Chào mừng bạn trở lại', 'Đăng nhập để tiếp tục xem lịch sử phân tích.'],
@@ -395,7 +407,41 @@ function setMode(mode = 'login', { focus = true } = {}) {
   if (dialog.open && ['login', 'register'].includes(activeMode)) void prepareGoogleLogin();
 }
 
-export function openAuthDialog({ mode = 'login', message = '' } = {}) {
+function accountStylesReady() {
+  const link = document.querySelector('link[rel="stylesheet"][href="/auth.css"]');
+  if (!link || link.sheet) return null;
+  if (!authStylesPromise) {
+    authStylesPromise = new Promise((resolve, reject) => {
+      const finish = (error) => {
+        window.clearTimeout(timer);
+        link.removeEventListener('load', loaded);
+        link.removeEventListener('error', failed);
+        if (error) { authStylesPromise = null; reject(error); } else resolve();
+      };
+      const loaded = () => finish();
+      const failed = () => finish(new Error('Account stylesheet unavailable'));
+      const timer = window.setTimeout(failed, 10000);
+      link.addEventListener('load', loaded, { once: true });
+      link.addEventListener('error', failed, { once: true });
+      // Load on demand if the mobile stylesheet has not finished yet.
+      link.media = 'all';
+    });
+  }
+  return authStylesPromise;
+}
+
+export function openAuthDialog(options = {}) {
+  const ticket = ++authOpenRevision;
+  const styles = accountStylesReady();
+  if (styles) return styles.then(() => {
+    if (ticket === authOpenRevision) showAuthDialog(options);
+  }).catch(() => {
+    if (ticket === authOpenRevision) showAccountMessage('Chưa tải được giao diện đăng nhập. Vui lòng tải lại trang rồi thử lại.');
+  });
+  showAuthDialog(options);
+}
+
+function showAuthDialog({ mode = 'login', message = '' } = {}) {
   const dialog = ensureDialog();
   returnFocus = document.activeElement;
   setMode(mode);
@@ -409,6 +455,7 @@ export function openAuthDialog({ mode = 'login', message = '' } = {}) {
 
 export function closeAuthDialog() {
   if (authBusy) return;
+  authOpenRevision++;
   pendingRegistration = null;
   googleController?.close();
   const dialog = document.querySelector('#account-dialog');

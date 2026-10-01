@@ -325,8 +325,10 @@ body.account-dialog-open { overflow: hidden; }
 .account-dialog .account-form { gap: 12px; }
 .account-dialog .account-submit { min-height: 48px; box-shadow: none; font-weight: 650; }
 .account-dialog .account-forgot { min-height: 44px; font-weight: 600; color: #a44100; }
-.google-option { margin-top: 0; }
-.google-button-slot { width: 100%; min-height: 44px; display: flex; justify-content: center; }
+.google-option { position: relative; margin-top: 0; }
+.google-button-slot { width: 100%; min-height: 44px; display: flex; align-items: center; justify-content: center; }
+.google-option.is-preparing .google-button-slot { visibility: hidden; }
+.google-option.is-preparing .google-status { position: absolute; inset: 0 0 auto; min-height: 44px; margin: 0; padding: 4px 12px; border: 1px solid #dadce0; border-radius: 999px; background: #fff; font-size: 12px; line-height: 1.4; pointer-events: none; }
 .google-button-slot.is-busy { pointer-events: none; opacity: .65; }
 .google-purpose { margin: 6px 0 0; color: #62625c; font-size: 12px; text-align: center; line-height: 1.5; }
 .google-status { display: flex; align-items: center; justify-content: center; gap: 9px; margin: 12px 0 0; font-size: 13px; line-height: 1.6; color: #4d4d46; }

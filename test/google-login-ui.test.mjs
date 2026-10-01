@@ -75,8 +75,20 @@ test('approved UI and real handlers complete Google/password/link/OTP/error flow
     const auth = await import(`../public/auth.js?dom-integration=${Date.now()}`);
     await auth.getCurrentUser();
     assert.equal(requests.some(r => r.url === '/api/auth-google'), false, 'Google is not fetched on homepage initialization');
+    // Mobile CSS is deferred. Do not flash an unstyled dialog before it loads.
+    const stylesheet = window.document.createElement('link');
+    stylesheet.rel = 'stylesheet'; stylesheet.href = '/auth.css'; stylesheet.media = '(min-width: 701px)';
+    window.document.head.append(stylesheet);
+    const opening = auth.openAuthDialog();
+    assert.equal(q('#account-dialog').open, false);
+    assert.equal(stylesheet.media, 'all');
+    assert.equal(requests.some(r => r.url === '/api/auth-google'), false);
+    Object.defineProperty(stylesheet, 'sheet', { value: {}, configurable: true });
+    stylesheet.dispatchEvent(new window.Event('load'));
+    await opening;
     auth.openAuthDialog(); await wait(() => q('[data-test-google]'));
     assert.equal(renderedButtons.at(-1).text, 'signin_with');
+    assert.equal(renderedButtons.length, 1, 'Opening the form must not redraw the Google button twice');
     assert.equal(q('[data-google-button]').getAttribute('aria-label'), 'Đăng nhập bằng tài khoản Google');
     assert.equal(q('.google-purpose'), null, 'No explanatory caption below the Google button');
     // Switching tabs reuses the nonce but must update the official button text.

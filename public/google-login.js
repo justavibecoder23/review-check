@@ -39,9 +39,10 @@ export function createGoogleLoginController({ dialog, setMode, onSignedIn, setBu
   const slot = dialog.querySelector('[data-google-button]');
   const status = dialog.querySelector('[data-google-status]');
   const errorBox = dialog.querySelector('[data-google-error]');
-  let sdk, challenge, pending, preparation, generation = 0, renderedWidth = 0;
+  let sdk, challenge, pending, preparation, generation = 0, renderedWidth = 0, renderedMode = '';
   const claimHistory = () => dialog.dataset.mode === 'register' && dialog.querySelector('[data-auth-form="register"] [name="claimGuestHistory"]').checked;
-  function message(text, spinning = false) {
+  function message(text, spinning = false, preparing = false) {
+    option.classList.toggle('is-preparing', preparing);
     status.hidden = !text;
     status.querySelector('[data-google-status-text]').textContent = text;
     status.querySelector('.google-spinner').hidden = !spinning;
@@ -54,7 +55,9 @@ export function createGoogleLoginController({ dialog, setMode, onSignedIn, setBu
   function render() {
     const registering = dialog.dataset.mode === 'register';
     const width = Math.min(400, Math.floor(slot.clientWidth || 300));
+    if (slot.firstElementChild && renderedWidth === width && renderedMode === dialog.dataset.mode) return;
     renderedWidth = width;
+    renderedMode = dialog.dataset.mode;
     slot.setAttribute('role', 'group');
     slot.setAttribute('aria-label', registering ? 'Đăng ký bằng tài khoản Google' : 'Đăng nhập bằng tài khoản Google');
     slot.replaceChildren();
@@ -99,10 +102,16 @@ export function createGoogleLoginController({ dialog, setMode, onSignedIn, setBu
         return;
       }
     }
+    if (sdk && challenge?.expiresAt > Date.now()) {
+      errorBox.hidden = true;
+      if (['login', 'register'].includes(dialog.dataset.mode)) render();
+      message('');
+      return;
+    }
     const ticket = generation;
     preparation = (async () => {
       try {
-        option.hidden = false; errorBox.hidden = true; message('Chuẩn bị đăng nhập Google…', true);
+        option.hidden = false; errorBox.hidden = true; message('Chuẩn bị đăng nhập Google…', true, true);
         const config = await googleRequest();
         if (ticket !== generation || !dialog.open) return;
         if (!config.enabled) { option.hidden = true; message(''); return; }
