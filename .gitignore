@@ -1,4 +1,6 @@
 node_modules/
+.wrangler/
+data/cloudflare-review-migration*.json
 bot/node_modules/
 .DS_Store
 .env

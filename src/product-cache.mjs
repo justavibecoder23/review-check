@@ -1,5 +1,6 @@
 import { isRedisConfigured, redisCommand, redisTransaction } from './redis-rest.mjs';
 import { cleanProductTitle } from './product-metadata-quality.mjs';
+import { blobReviewFallbackAllowed, getCloudflareReviewDataset, reviewStorageMode } from './cloudflare-review-store.mjs';
 
 export const SHOPEE_CACHE_TTL_SECONDS = 5 * 24 * 60 * 60;
 export const TIKTOK_CACHE_TTL_SECONDS = 5 * 24 * 60 * 60;
@@ -287,6 +288,18 @@ async function writeCacheAndLatestPointer(activeKey, latestKey, mapping, ttlSeco
 }
 
 export async function getCachedTikTokDataset(productId, options = {}) {
+  if (reviewStorageMode(options) === 'd1') {
+    try {
+      const cached = await getCloudflareReviewDataset({ platform: 'TikTok Shop', productId }, options);
+      if (cached) {
+        const validation = validateTikTokCachedDataset(cached.dataset, { ...options, productId });
+        if (validation.valid) return { ...cached, validation, recoveredFromPointer: false };
+      }
+    } catch (error) {
+      console.error(JSON.stringify({ event: 'review_cache_d1_read_failed', platform: 'tiktok', code: error.message }));
+    }
+    if (!blobReviewFallbackAllowed(options)) return null;
+  }
   if (!isRedisConfigured() && !options.redisFetchImpl) return null;
   const key = getTikTokCacheKey(productId);
   try {
@@ -363,6 +376,18 @@ function parseMapping(value) {
 }
 
 export async function getCachedShopeeDataset(itemId, options = {}) {
+  if (reviewStorageMode(options) === 'd1') {
+    try {
+      const cached = await getCloudflareReviewDataset({ platform: 'Shopee', itemId, shopId: options.shopId }, options);
+      if (cached) {
+        const validation = validateShopeeCachedDataset(cached.dataset, { ...options, itemId });
+        if (validation.valid) return { ...cached, validation, recoveredFromPointer: false };
+      }
+    } catch (error) {
+      console.error(JSON.stringify({ event: 'review_cache_d1_read_failed', platform: 'shopee', code: error.message }));
+    }
+    if (!blobReviewFallbackAllowed(options)) return null;
+  }
   if (!isRedisConfigured() && !options.redisFetchImpl) return null;
   const key = getShopeeCacheKey(itemId);
   try {

@@ -201,7 +201,7 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
         saved: false,
         reused: true,
         runId: source.cache?.runId || null,
-        provider: 'vercel-blob-cache'
+        provider: source.cache?.provider || 'vercel-blob-cache'
       }
     : await saveReviewDatasets({
         rawReviews: reviews,

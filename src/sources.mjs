@@ -819,6 +819,7 @@ export async function getReviews(url, options = {}) {
             ageMs: cached.validation?.ageMs ?? null,
             recoveredFromPointer: Boolean(cached.recoveredFromPointer),
             rawOnly: true,
+            provider: cached.mapping?.provider || 'vercel-blob-cache',
             exactMatch: true
           }
         },
@@ -831,6 +832,7 @@ export async function getReviews(url, options = {}) {
   if (shopeeProduct?.itemId) {
     progress('cache', 12, 'Đang kiểm tra dữ liệu Shopee gần đây...');
     const cached = await getCachedShopeeDataset(shopeeProduct.itemId, {
+      shopId: shopeeProduct.shopId,
       redisFetchImpl: options.redisFetchImpl,
       blobGetImpl: options.blobGetImpl,
       blobToken: options.blobToken,
@@ -859,11 +861,12 @@ export async function getReviews(url, options = {}) {
         reviews: cached.dataset.reviews,
         source: {
           type: 'cached',
-          label: 'Vercel Blob Cache · Shopee',
+          label: 'Shopee Product Reviews',
           reviewLimit: cached.dataset.source?.collection?.targetMaximum || 100,
           collection: cached.dataset.source?.collection,
           cache: {
             hit: true,
+            provider: cached.mapping?.provider || 'vercel-blob-cache',
             runId: cached.dataset.runId,
             createdAt: cached.dataset.createdAt,
             ageMs: cached.validation.ageMs,

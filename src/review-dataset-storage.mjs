@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { isRedisConfigured, redisCommand } from './redis-rest.mjs';
+import { blobReviewFallbackAllowed, reviewStorageMode, saveCloudflareReviewBundle } from './cloudflare-review-store.mjs';
 
 const BUNDLE_SCHEMA_VERSION = '2.0.0';
 const DATASET_DEDUPE_TTL_SECONDS = 5 * 24 * 60 * 60;
@@ -90,7 +91,7 @@ function datasetBundle({ runId, createdAt, product, rawDataset, labeledDataset }
   };
 }
 
-function datasetFingerprint(product, rawDataset) {
+export function datasetFingerprint(product, rawDataset) {
   const identity = product?.platform === 'TikTok Shop'
     ? `tiktok:${product?.productId || ''}`
     : `shopee:${product?.itemId || ''}`;
@@ -191,7 +192,7 @@ async function saveToVercelBlob(pathPrefix, bundleJson, fingerprint, options = {
   };
 }
 
-export async function saveReviewDatasets({ rawReviews = [], labeledReviews = [], product = {}, source = null, labeling = null }, options = {}) {
+async function saveLegacyReviewDatasets({ rawReviews = [], labeledReviews = [], product = {}, source = null, labeling = null }, options = {}) {
   const now = options.now || new Date();
   const runId = options.runId || createRunId(now);
   const createdAt = now.toISOString();
@@ -299,4 +300,36 @@ export async function saveReviewDatasets({ rawReviews = [], labeledReviews = [],
       warning: `Không lưu được dataset: ${error?.message || 'lỗi không xác định'}`
     };
   }
+}
+
+export async function saveReviewDatasets(input, options = {}) {
+  const mode = reviewStorageMode(options);
+  if (mode === 'blob') return saveLegacyReviewDatasets(input, options);
+  const now = options.now || new Date();
+  const runId = options.runId || createRunId(now);
+  const createdAt = now.toISOString();
+  const product = input.product || {};
+  const rawDataset = datasetEnvelope({ kind: 'raw-reviews', runId, createdAt, product,
+    source: input.source, reviews: (input.rawReviews || []).map(rawReview) });
+  const labeledDataset = datasetEnvelope({ kind: 'labeled-reviews', runId, createdAt, product,
+    source: input.source, labeling: input.labeling, reviews: (input.labeledReviews || []).map(classifiedReview) });
+  const bundle = datasetBundle({ runId, createdAt, product, rawDataset, labeledDataset });
+  const cloudflare = saveCloudflareReviewBundle(bundle, datasetFingerprint(product, rawDataset), {
+    ...options, cacheable: input.source?.type === 'live' && input.source?.collection?.cacheable !== false
+  }).then(value => ({ value }), error => ({ error }));
+  const legacy = mode === 'dual' ? saveLegacyReviewDatasets(input, { ...options, now, runId }) : null;
+  const result = await cloudflare;
+  if (mode === 'dual') {
+    const stored = await legacy;
+    console.log(JSON.stringify({ event: 'review_dataset_dual_write', runId,
+      blobSaved: Boolean(stored.saved), d1Saved: Boolean(result.value?.saved),
+      d1Error: result.error ? String(result.error.message).slice(0, 100) : null }));
+    return { ...stored, cloudflareSaved: Boolean(result.value?.saved) };
+  }
+  if (result.value) return result.value;
+  console.error(JSON.stringify({ event: 'review_dataset_d1_write_failed', runId,
+    code: String(result.error?.message || 'UNKNOWN_ERROR').slice(0, 100) }));
+  if (blobReviewFallbackAllowed(options)) return saveLegacyReviewDatasets(input, { ...options, now, runId });
+  return { saved: false, runId, provider: 'cloudflare-d1',
+    warning: 'Chưa lưu được dataset review; kết quả phân tích hiện tại vẫn được trả về.' };
 }
