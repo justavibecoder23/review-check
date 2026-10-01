@@ -167,7 +167,6 @@ function dialogMarkup() {
         </div>
         <div class="google-option" data-google-option hidden>
           <div class="google-button-slot" data-google-button></div>
-          <p class="google-purpose">Đăng nhập thành công là có thể sử dụng ngay. Không cần tạo mật khẩu RealView.</p>
           <p class="google-status" data-google-status role="status" aria-live="polite" hidden><span class="google-spinner" aria-hidden="true" hidden></span><span data-google-status-text></span></p>
           <div class="google-error" data-google-error role="alert" hidden><p></p><button type="button" data-google-retry>Thử lại với Google</button></div>
           <div class="auth-divider">hoặc dùng tài khoản RealView</div>

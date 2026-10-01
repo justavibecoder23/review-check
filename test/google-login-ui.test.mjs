@@ -78,7 +78,7 @@ test('approved UI and real handlers complete Google/password/link/OTP/error flow
     auth.openAuthDialog(); await wait(() => q('[data-test-google]'));
     assert.equal(renderedButtons.at(-1).text, 'signin_with');
     assert.equal(q('[data-google-button]').getAttribute('aria-label'), 'Đăng nhập bằng tài khoản Google');
-    assert.match(q('.google-purpose').textContent, /Không cần tạo mật khẩu RealView/);
+    assert.equal(q('.google-purpose'), null, 'No explanatory caption below the Google button');
     // Switching tabs reuses the nonce but must update the official button text.
     const initialChallenge = sdkConfig.nonce;
     q('[data-auth-tab="register"]').click();
