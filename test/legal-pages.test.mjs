@@ -20,7 +20,7 @@ test('landing adds exactly two ordinary links in a separate footer row', () => {
   assert.ok(!home.slice(0, home.indexOf('<footer')).includes('/legal.css'));
   assert.ok(!home.includes('/legal.js'));
   assert.ok(footer.includes('footer-grid'));
-  assert.ok(footer.includes('Illustration: Open Doodles'));
+  assert.ok(!footer.includes('Illustration: Open Doodles'));
 });
 
 for (const page of LEGAL_PAGES) {
