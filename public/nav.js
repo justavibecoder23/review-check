@@ -1,4 +1,10 @@
 (() => {
+  if (!window.RealViewI18n && !document.querySelector('script[src^="/i18n.js"]')) {
+    const script = document.createElement('script');
+    script.src = '/i18n.js';
+    script.defer = true;
+    document.head.append(script);
+  }
   const nav = document.querySelector('#main-navigation');
   const header = document.querySelector('.site-header');
   const toggle = document.querySelector('.nav-toggle');

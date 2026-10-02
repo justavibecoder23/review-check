@@ -87,6 +87,7 @@ export function renderLegalPage(page, footer) {
       </div>
     </main>
     ${markedFooter}
+    <script src="/i18n.js" defer></script>
   </body>
 </html>
 `.replace(/[\t ]+$/gm, '');

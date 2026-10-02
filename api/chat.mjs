@@ -101,7 +101,8 @@ export default async function handler(request, response) {
     const result = await answerWebsiteQuestion(body.messages, {
       resultContext,
       resultContexts,
-      chatContextType
+      chatContextType,
+      language: body.language === 'en' ? 'en' : 'vi'
     });
     await persistChatGeneration({
       id: generationId,

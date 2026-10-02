@@ -194,6 +194,19 @@ if (navSections.length) {
     setActiveNav(link.hash.slice(1));
     setMobileMenu(false);
   }));
+
+  const realignNavIndicator = () => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const activeLink = navLinks.find((link) => link.classList.contains('is-active'));
+        if (activeLink) moveNavIndicator(activeLink, false);
+      });
+    });
+  };
+
+  // Translated labels can change the active item's width after the indicator was measured.
+  window.addEventListener('realview:language-changed', realignNavIndicator);
+  window.addEventListener('load', realignNavIndicator, { once: true });
   window.addEventListener('resize', () => {
     if (window.innerWidth > 1024) setMobileMenu(false);
     const activeLink = navLinks.find((link) => link.classList.contains('is-active'));

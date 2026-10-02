@@ -344,11 +344,12 @@ function fallbackReason(error) {
 export async function answerWebsiteQuestion(messages, options = {}) {
   const cleaned = cleanMessages(messages);
   const latestQuestion = cleaned.at(-1).content;
+  const answerLanguage = options.language === 'en' ? 'en' : 'vi';
   const resultContext = options.resultContext || null;
   const resultContexts = Array.isArray(options.resultContexts) && options.resultContexts.length
     ? options.resultContexts
     : (resultContext ? [resultContext] : []);
-  if (options.chatContextType === 'history_item' && isPurchaseDecisionQuestion(latestQuestion)) {
+  if (answerLanguage === 'vi' && options.chatContextType === 'history_item' && isPurchaseDecisionQuestion(latestQuestion)) {
     const guidance = historyPurchaseDecisionAnswer(resultContext);
     if (guidance) {
       return {
@@ -358,9 +359,15 @@ export async function answerWebsiteQuestion(messages, options = {}) {
       };
     }
   }
-  if (!resultContext && isClearlyProductAdvice(latestQuestion)) return { answer: OUT_OF_SCOPE_REPLY, engine: 'rules', contextType: 'website' };
+  if (!resultContext && isClearlyProductAdvice(latestQuestion)) return {
+    answer: answerLanguage === 'en'
+      ? 'I do not have this information in RealView’s official knowledge base. Please contact the team for support.'
+      : OUT_OF_SCOPE_REPLY,
+    engine: 'rules',
+    contextType: 'website'
+  };
   const resultScopedQuestion = Boolean(resultContext && /\b(san pham|ket qua|tap review|review (?:nay|do)|cai nay|mat hang)\b/.test(normalizeText(latestQuestion)));
-  const direct = resultScopedQuestion ? null : directKnowledgeAnswer(latestQuestion);
+  const direct = answerLanguage === 'en' || resultScopedQuestion ? null : directKnowledgeAnswer(latestQuestion);
   if (direct) return { answer: direct.answer, engine: 'knowledge-base', sourceId: direct.id };
   // Câu hỏi mới quyết định chủ đề; không trộn câu hỏi trước vào mọi lượt.
   let matches = retrieveKnowledge(latestQuestion);
@@ -383,7 +390,7 @@ export async function answerWebsiteQuestion(messages, options = {}) {
     return implementation(url, { ...init, signal: init.signal ? AbortSignal.any([init.signal, requestSignal]) : requestSignal });
   };
   const prompt = `
-Bạn là Trợ lý RealView. Hãy trả lời bằng tiếng Việt, thân thiện, ngắn gọn và dễ hiểu.
+Bạn là Trợ lý RealView. Hãy trả lời ${answerLanguage === 'en' ? 'bằng tiếng Anh tự nhiên, chính xác, thân thiện, ngắn gọn và dễ hiểu' : 'bằng tiếng Việt, thân thiện, ngắn gọn và dễ hiểu'}.
 
 QUY TẮC BẮT BUỘC:
 1. Chỉ được dùng THÔNG TIN VẬN HÀNH và CÁC MỤC LIÊN QUAN bên dưới. Không dùng kiến thức bên ngoài và không suy đoán.
@@ -477,12 +484,15 @@ ${contextEntries.map(entry => `[${entry.id}] ${entry.title}\n${entry.answer}`).j
       geminiResult = await requestGemini({ maxRetries: 1, attemptTimeoutMs: 5_500, standaloneApiKey: '' });
     }
     const parsed = geminiResult.value;
-    if (parsed?.supported !== true) return { answer: OUT_OF_SCOPE_REPLY, engine: 'gemini', model, contextType: resultContext ? 'result' : 'website' };
+    const outOfScopeReply = answerLanguage === 'en'
+      ? 'I do not have this information in RealView’s official knowledge base. Please contact the team for support.'
+      : OUT_OF_SCOPE_REPLY;
+    if (parsed?.supported !== true) return { answer: outOfScopeReply, engine: 'gemini', model, contextType: resultContext ? 'result' : 'website' };
     const answer = String(parsed.answer || '').trim().slice(0, 1200);
     const validRefs = new Set(resultContexts.flatMap((context) => context?.reviews || []).map((review) => review.ref));
     const citations = (Array.isArray(parsed.citations) ? parsed.citations : [])
       .map(String).filter((ref) => validRefs.has(ref)).slice(0, 8);
-    return { answer: answer || OUT_OF_SCOPE_REPLY, engine: 'gemini', model, contextType: resultContexts.length > 1 ? 'history-comparison' : resultContext ? 'result' : 'website', citations };
+    return { answer: answer || outOfScopeReply, engine: 'gemini', model, contextType: resultContexts.length > 1 ? 'history-comparison' : resultContext ? 'result' : 'website', citations };
   } catch (error) {
     if (process.env.VERCEL || options.logGeminiErrors) {
       (options.logger || console).error('[site-chatbot] Gemini request failed', {
@@ -492,7 +502,9 @@ ${contextEntries.map(entry => `[${entry.id}] ${entry.title}\n${entry.answer}`).j
       });
     }
     return {
-      answer: resultFallbackAnswer(resultContext, latestQuestion) || fallbackAnswer(matches),
+      answer: answerLanguage === 'en'
+        ? 'I cannot connect to the answer service right now. Please try again later or contact the RealView team.'
+        : resultFallbackAnswer(resultContext, latestQuestion) || fallbackAnswer(matches),
       engine: 'rules', model, contextType: resultContext ? 'result' : 'website',
       fallbackReason: fallbackReason(error), providerAttempted, providerStatus
     };

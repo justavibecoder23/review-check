@@ -37,6 +37,10 @@
     </header>
     <div class="chatbot-context" data-chatbot-context hidden><span></span><button type="button" aria-label="Bỏ chọn sản phẩm">×</button></div>
     <div class="chatbot-messages" role="log" aria-live="polite" aria-relevant="additions">
+      <aside class="chatbot-language-notice" data-chatbot-language-notice role="status" hidden>
+        <strong>English support isn’t available yet</strong>
+        <span>RealViewee currently supports Vietnamese only, so it can’t answer questions in English. English support is coming soon.</span>
+      </aside>
       <article class="chatbot-message chatbot-message--assistant">
         <span class="chatbot-message-avatar chatbot-message-avatar--realviewee" aria-hidden="true"><span class="realviewee-sprite" data-mascot-state="happy"></span></span>
         <div><p>Xin chào! Mình có thể giải thích cách dùng RealView, ý nghĩa của TrustScore và tiêu chí lọc review.</p><time>RealViewee</time></div>
@@ -55,6 +59,7 @@
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4 20-7Z"/><path d="M22 2 11 13"/></svg>
         </button>
       </div>
+      <button class="chatbot-language-switch" data-chatbot-language-switch type="button" aria-label="Switch RealViewee to Vietnamese" hidden>Switch to Vietnamese <span aria-hidden="true">→</span></button>
       <p>Chỉ trả lời từ thông tin chính thức của RealView.</p>
     </form>`;
   document.body.append(panel);
@@ -65,8 +70,10 @@
   const form = panel.querySelector('.chatbot-form');
   const input = panel.querySelector('#chatbot-input');
   const submitButton = form.querySelector('button[type="submit"]');
+  const languageSwitchButton = form.querySelector('[data-chatbot-language-switch]');
   const contextBar = panel.querySelector('[data-chatbot-context]');
   const contextClearButton = contextBar.querySelector('button');
+  const languageNotice = panel.querySelector('[data-chatbot-language-notice]');
   const conversation = [];
   let isSending = false;
   let selectedHistoryContext = null;
@@ -304,16 +311,24 @@
   }
 
   function syncResultMode() {
+    const englishUnsupported = window.RealViewI18n?.getLanguage?.() === 'en';
     const currentContext = currentResultAccess();
     const currentUnavailable = currentContext && resultReadiness.resultId === currentContext.resultId
       && resultReadiness.state === 'unavailable';
     const activeContext = selectedHistoryContext || (currentUnavailable ? null : currentContext);
     const hasResult = Boolean(activeContext);
     const helper = form.querySelector(':scope > p');
-    input.placeholder = hasResult ? 'Hỏi thêm về kết quả này...' : 'Hỏi về RealView...';
-    if (helper) helper.textContent = hasResult
-      ? 'Câu trả lời chỉ dựa trên kết quả và review đã phân tích.'
-      : 'Chỉ trả lời từ thông tin chính thức của RealView.';
+    panel.classList.toggle('is-language-unsupported', englishUnsupported);
+    languageNotice.hidden = !englishUnsupported;
+    languageSwitchButton.hidden = !englishUnsupported;
+    input.placeholder = englishUnsupported
+      ? 'English support is coming soon.'
+      : hasResult ? 'Hỏi thêm về kết quả này...' : 'Hỏi về RealView...';
+    if (helper) helper.textContent = englishUnsupported
+      ? 'Switch to Vietnamese to use RealViewee and ask questions normally.'
+      : hasResult
+        ? 'Câu trả lời chỉ dựa trên kết quả và review đã phân tích.'
+        : 'Chỉ trả lời từ thông tin chính thức của RealView.';
     contextBar.hidden = !selectedHistoryContext && !currentContext;
     contextBar.dataset.state = 'ready';
     contextClearButton.hidden = !selectedHistoryContext;
@@ -330,8 +345,9 @@
     }
     const syncing = Boolean(currentContext && !selectedHistoryContext
       && resultReadiness.resultId === currentContext.resultId && resultReadiness.state === 'syncing');
-    input.disabled = isSending || syncing;
-    submitButton.disabled = isSending || syncing;
+    input.disabled = isSending || syncing || englishUnsupported;
+    submitButton.disabled = isSending || syncing || englishUnsupported;
+    suggestions?.querySelectorAll('button').forEach((button) => { button.disabled = englishUnsupported; });
   }
 
   function scheduleResultReadinessCheck(delay = 450, attempt = 0) {
@@ -392,7 +408,9 @@
         mascot.speech.classList.remove('is-visible');
         setHomeMascotState(mascot, 'happy');
       }
-      window.setTimeout(() => input.focus(), 180);
+      window.setTimeout(() => {
+        if (!input.disabled) input.focus();
+      }, 180);
     } else {
       panel.classList.remove('is-open');
       trigger.setAttribute('aria-expanded', 'false');
@@ -461,6 +479,10 @@
   }
 
   async function sendQuestion(value) {
+    if (window.RealViewI18n?.getLanguage?.() === 'en') {
+      syncResultMode();
+      return;
+    }
     const question = String(value || '').replace(/\s+/g, ' ').trim().slice(0, 500);
     if (!question || isSending) return;
     isSending = true;
@@ -484,7 +506,11 @@
           method: 'POST',
           credentials: 'same-origin',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ messages: conversation.slice(-8), ...(context ? { context } : {}) }),
+          body: JSON.stringify({
+            messages: conversation.slice(-8),
+            language: window.RealViewI18n?.getLanguage?.() || 'vi',
+            ...(context ? { context } : {})
+          }),
           signal: AbortSignal.timeout(15_000)
         });
         data = await response.json().catch(() => ({}));
@@ -520,6 +546,10 @@
   form.addEventListener('submit', (event) => {
     event.preventDefault();
     sendQuestion(input.value);
+  });
+  languageSwitchButton.addEventListener('click', () => {
+    window.RealViewI18n?.setLanguage?.('vi');
+    window.requestAnimationFrame(() => input.focus());
   });
   input.addEventListener('input', () => {
     input.style.height = '';
@@ -557,4 +587,5 @@
       syncResultMode();
     }
   });
+  window.addEventListener('realview:language-changed', syncResultMode);
 })();

@@ -47,6 +47,14 @@ main section[id] { scroll-margin-top: 90px; }
 .site-header .header-inner { width: min(1480px, calc(100% - 48px)); }
 .header-inner { position: relative; min-height: 78px; display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; align-items: center; gap: 28px; }
 .header-inner > .brand { justify-self: start; }
+.header-brand-cluster { min-width: 0; display: flex; align-items: center; justify-self: start; gap: clamp(24px, 2vw, 32px); }
+.header-brand-cluster > .brand { flex: 0 0 auto; }
+.language-toggle { display: inline-flex; align-items: center; flex: 0 0 auto; color: #9ca3af; font-size: 14px; font-weight: 500; line-height: 1; white-space: nowrap; }
+.language-toggle button { min-width: 32px; min-height: 44px; padding: 0 4px; border: 0; background: transparent; color: #6b7280; font: inherit; font-weight: 500; cursor: pointer; transition: color .2s ease; }
+.language-toggle > span { padding-inline: 1px; color: #b4b8bf; pointer-events: none; }
+.language-toggle button:hover { color: var(--orange-dark); }
+.language-toggle button.is-active { color: var(--orange); font-weight: 800; }
+.language-toggle button:focus-visible { outline: 2px solid var(--orange); outline-offset: 0; border-radius: 4px; }
 .header-inner > .main-nav { justify-self: center; }
 .header-utilities { min-width: 0; display: flex; align-items: center; justify-content: flex-end; justify-self: end; gap: 8px; }
 .header-utilities > .header-actions, .header-utilities > .header-auth { margin-left: 0; }
@@ -119,6 +127,16 @@ main section[id] { scroll-margin-top: 90px; }
 .nav-toggle-lines i:last-child { top: 10px; }
 .is-menu-open .nav-toggle-lines i:first-child { top: 6px; transform: rotate(45deg); }
 .is-menu-open .nav-toggle-lines i:last-child { top: 6px; transform: rotate(-45deg); }
+
+.blog-language-dialog { width: min(520px, calc(100% - 32px)); max-width: 520px; padding: 0; overflow: visible; border: 0; border-radius: 26px; background: transparent; color: var(--ink); }
+.blog-language-dialog::backdrop { background: rgba(22,22,22,.48); backdrop-filter: blur(5px); }
+.blog-language-dialog-card { position: relative; padding: 34px 34px 30px; border: 1px solid rgba(238,77,45,.22); border-radius: 26px; background: #fffdfb; box-shadow: 0 28px 80px rgba(35,26,18,.23); text-align: center; }
+.blog-language-dialog-close { position: absolute; top: 13px; right: 13px; width: 40px; height: 40px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 50%; background: #f3f2ee; color: #555550; font-size: 24px; line-height: 1; cursor: pointer; }
+.blog-language-dialog-kicker { display: block; color: var(--orange-dark); font-size: 11px; font-weight: 900; letter-spacing: 1.5px; }
+.blog-language-dialog h2 { max-width: 390px; margin: 12px auto 0; font-size: clamp(25px, 5vw, 34px); line-height: 1.08; letter-spacing: -1px; }
+.blog-language-dialog p { max-width: 410px; margin: 16px auto 0; color: #5f5f59; font-size: 15px; line-height: 1.65; }
+.blog-language-dialog-continue { min-height: 48px; margin-top: 24px; padding: 0 22px; border: 1px solid #b6500d; border-radius: 999px; background: var(--orange); color: var(--ink); font-weight: 850; cursor: pointer; box-shadow: 0 10px 24px rgba(168,69,4,.18); }
+.blog-language-dialog button:hover { background-color: #ff8b3d; }
 
 .hero-section { position: relative; overflow-x: hidden; overflow-x: clip; padding: 34px 0 120px; background: radial-gradient(circle at 74% 18%, rgba(252,120,31,.12), transparent 29%), var(--linen); }
 .hero-grid { position: relative; min-height: 680px; display: grid; grid-template-columns: minmax(0, .3fr) minmax(0, .7fr); align-items: center; gap: clamp(24px, 4vw, 64px); }
@@ -804,6 +822,7 @@ blockquote footer { margin-top: 7px; color: #9a4507; font-size: 10px; }
   .site-header { background: rgba(239,239,235,.96); }
   .site-header.is-menu-open { box-shadow: 0 16px 38px rgba(22,22,22,.1); }
   .header-inner { display: flex; gap: 12px; }
+  .header-brand-cluster { gap: 16px; }
   .header-utilities { margin-left: auto; }
   .header-cta { margin-left: auto; }
   .header-contact { margin-left: auto; }
@@ -905,6 +924,11 @@ blockquote footer { margin-top: 7px; color: #9a4507; font-size: 10px; }
   .header-cta { padding: 9px 12px; font-size: 11px; }
   .brand { font-size: 16px; }
   .brand-mark { width: 40px; height: 32px; }
+  .header-brand-cluster { gap: 8px; }
+  .language-toggle { font-size: 12px; }
+  .language-toggle button { min-width: 28px; min-height: 40px; padding-inline: 2px; }
+  .blog-language-dialog-card { padding: 32px 20px 24px; border-radius: 22px; }
+  .blog-language-dialog p { font-size: 14px; }
   .hero-section { padding: 22px 0 68px; overflow-x: clip; }
   .hero-grid { min-height: 0; display: flex; flex-direction: column; }
   .hero-grid { row-gap: 14px; }
@@ -1126,6 +1150,13 @@ blockquote footer { margin-top: 7px; color: #9a4507; font-size: 10px; }
   .contact-form, .contact-card { padding: 22px 17px; }
   .form-title { align-items: flex-start; }
   .form-title h2, .form-title h3 { font-size: 17px; }
+}
+@media (max-width: 420px) {
+  .header-brand-cluster { gap: 3px; }
+  .header-brand-cluster > .brand > span:not(.brand-mark) { display: none; }
+  .language-toggle { font-size: 11px; }
+  .language-toggle button { min-width: 23px; padding-inline: 1px; }
+  .language-toggle > span { padding-inline: 0; }
 }
 @media (hover: none) {
   .info-card:hover, .step-card:hover, .header-cta:hover, .header-contact:hover { transform: none; }
@@ -1414,4 +1445,100 @@ main .contact-note { font-size: 13px; }
   .hero-section { padding-top: 16px; }
   .hero-copy { padding-top: 16px; }
   .url-form { border-radius: 19px; }
+}
+
+/* The English hero is longer, so let it wrap inside the copy column instead of the artwork. */
+body.is-english .hero-copy {
+  width: 100%;
+  max-width: min(100%, 980px);
+  transform: none;
+}
+
+body.is-english .hero-copy h1 {
+  width: 100%;
+  max-width: 940px;
+  font-size: clamp(48px, 4.65vw, 72px);
+  line-height: 1.04;
+  letter-spacing: -3.4px;
+}
+
+body.is-english .hero-copy h1 .hero-heading-line {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: normal;
+}
+
+body.is-english .hero-copy h1 .hero-heading-line + .hero-heading-line {
+  max-width: 940px;
+  font-size: .94em;
+}
+
+body.is-english .hero-copy h1 .hero-heading-line-primary { font-size: .94em; }
+
+@media (min-width: 1025px) {
+  body.is-english .hero-grid {
+    width: min(1320px, calc(100% - 48px));
+    grid-template-columns: minmax(0, .28fr) minmax(0, .72fr);
+    transform: translateX(clamp(8px, .7vw, 14px));
+  }
+  body.is-english .hero-copy {
+    max-width: 1040px;
+    transform: translateX(clamp(8px, 1vw, 18px));
+  }
+  body.is-english .hero-visual {
+    transform: translate(clamp(10px, 1vw, 18px), clamp(-48px, -3vw, -28px));
+  }
+  body.is-english .hero-copy h1 {
+    font-size: clamp(54px, 4.9vw, 78px);
+  }
+  body.is-english .hero-copy h1 .hero-heading-line-primary,
+  body.is-english .hero-copy h1 .hero-heading-line + .hero-heading-line {
+    font-size: clamp(48px, 4vw, 72px);
+  }
+  body.is-english .hero-copy h1 .hero-heading-line + .hero-heading-line {
+    white-space: nowrap;
+  }
+  body.is-english .hero-description {
+    max-width: 800px;
+    font-size: 16px;
+  }
+  body.is-english .url-form { width: min(100%, 900px); }
+  body.is-english .hero-copy > .supported {
+    margin-top: 16px;
+    font-size: 10.5px;
+  }
+}
+
+@media (max-width: 1280px) {
+  body.is-english .hero-copy h1 {
+    font-size: clamp(45px, 4.9vw, 62px);
+    letter-spacing: -3px;
+  }
+}
+
+@media (max-width: 1024px) {
+  body.is-english .hero-copy { max-width: 820px; }
+  body.is-english .hero-copy h1 {
+    max-width: 820px;
+    font-size: clamp(46px, 7vw, 64px);
+  }
+}
+
+@media (max-width: 700px) {
+  body.is-english .hero-copy h1 {
+    font-size: clamp(36px, 10.4vw, 48px);
+    letter-spacing: -2.2px;
+  }
+  body.is-english .hero-copy h1 .hero-heading-line-primary,
+  body.is-english .hero-copy h1 .hero-heading-line + .hero-heading-line { font-size: .96em; }
+  main .hero-description { font-size: 15px; line-height: 1.58; }
+  main .supported { font-size: clamp(10px, 2.8vw, 11px); }
+  .hero-copy > .supported { margin-top: 14px; }
+}
+
+@media (max-width: 420px) {
+  body.is-english .hero-copy h1 {
+    font-size: clamp(34px, 10vw, 40px);
+    letter-spacing: -1.9px;
+  }
 }

@@ -51,6 +51,14 @@
   }
 }
 
+@media (min-width: 1280px) {
+  body.is-english .header-utilities .header-actions .chatbot-trigger {
+    width: 146px;
+    padding-inline: 14px;
+    flex-basis: 146px;
+  }
+}
+
 .account-chip {
   gap: 8px;
   border: 1px solid rgba(22,22,22,.12);
@@ -245,11 +253,13 @@
 .account-form-error { margin: 0; padding: 10px 12px; border-radius: 10px; background: #fae3df; color: #982f25; font-size: 12px; line-height: 1.45; }
 .account-form-error[hidden] { display: none; }
 .account-submit {
+  position: relative;
   min-height: 50px;
   padding: 0 18px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
+  text-align: center;
   border: 1px solid #b6500d;
   border-radius: 14px;
   background: var(--orange);
@@ -291,8 +301,8 @@ body.account-dialog-open { overflow: hidden; }
 @media (max-width: 520px) {
   .marketing-consent-card { padding: 28px 22px 24px; border-radius: 23px; }
   .marketing-consent-close { top: 13px; right: 13px; width: 35px; height: 35px; }
-  .header-inner > .brand { gap: 6px; font-size: 15px; letter-spacing: -.55px; }
-  .header-inner > .brand .brand-mark { width: 36px; height: 30px; }
+  .header-brand-cluster > .brand { gap: 6px; font-size: 15px; letter-spacing: -.55px; }
+  .header-brand-cluster > .brand .brand-mark { width: 36px; height: 30px; }
   .auth-button, .account-chip { min-height: 39px; padding-inline: 11px; font-size: 11px; }
   .auth-button--access, .account-chip { width: 44px; height: 44px; min-height: 44px; padding: 0; flex: 0 0 44px; }
   .auth-button--access span, .account-chip b { display: none; }
@@ -310,6 +320,7 @@ body.account-dialog-open { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .auth-button { transition: none; }
 }
+.account-submit > [aria-hidden="true"] { position: absolute; right: 18px; }
 
 /* Account dialog: approved Google sign-in layout. No homepage layout changes. */
 .account-dialog-shell { padding: 24px 30px; scrollbar-width: thin; scrollbar-color: #c9c9c1 transparent; }
