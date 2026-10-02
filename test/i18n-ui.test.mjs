@@ -46,6 +46,14 @@ test('English navigation and longer interface copy reflow without stale measurem
   assert.match(i18n, /'Vui lòng đăng ký tài khoản để kích hoạt tính năng lịch sử phân tích\.': 'Please sign up for an account to enable analysis history\.'/);
 });
 
+test('English progress copy uses only the three animated dots and translates maintenance errors', async () => {
+  const i18n = await readFile(publicFile('i18n.js'), 'utf8');
+  assert.match(i18n, /'Đợi mình chút xíu nhé': 'Just a moment'/);
+  assert.doesNotMatch(i18n, /'Đợi mình chút xíu nhé': 'Just a moment…'/);
+  assert.match(i18n, /Hệ thống lấy review \(\.\+\) đang bảo trì\\\. Hiện chưa thể phân tích sản phẩm này/);
+  assert.match(i18n, /Hệ thống \(\.\+\) đang bảo trì/);
+});
+
 test('English mode clearly disables unsupported Assistant questions', async () => {
   const [client, css] = await Promise.all([
     readFile(publicFile('chatbot.js'), 'utf8'),

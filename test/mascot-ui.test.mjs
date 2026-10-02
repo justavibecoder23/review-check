@@ -65,9 +65,9 @@ test('mascot Curious trên thanh tiến trình là ảnh ngang độc lập, tro
   assert.match(resultsStyles, /\.analysis-progress-mascot\.is-moving \.analysis-progress-mascot-bubble \{ opacity:\s*0/);
   assert.match(resultsStyles, /\.analysis-progress-mascot-bubble \{[\s\S]*?bottom:\s*calc\(100% \+ 3px\);[\s\S]*?border:\s*1px solid rgba\(252,120,31,\.3\);[\s\S]*?color:\s*var\(--orange-dark\);/);
   assert.match(resultsStyles, /\.analysis-progress-thinking-text \{[\s\S]*?background:\s*linear-gradient\(/);
-  assert.match(resultsStyles, /\.analysis-progress-thinking-text \{[\s\S]*?animation:\s*analysis-thinking-shimmer 5s linear infinite;/);
+  assert.match(resultsStyles, /\.analysis-progress-thinking-text \{[\s\S]*?animation:\s*analysis-thinking-shimmer 2\.8s linear infinite;/);
   assert.doesNotMatch(resultsStyles, /\.analysis-progress-mascot:not\(\.is-moving\) \.analysis-progress-thinking-text/);
-  assert.match(resultsStyles, /@keyframes analysis-thinking-shimmer[\s\S]*?0% \{ background-position:\s*125% 50%; \}[\s\S]*?60%, 100% \{ background-position:\s*-125% 50%; \}/);
+  assert.match(resultsStyles, /@keyframes analysis-thinking-shimmer[\s\S]*?0% \{ background-position:\s*125% 50%; \}[\s\S]*?100% \{ background-position:\s*-125% 50%; \}/);
   assert.match(resultsStyles, /\.analysis-progress-mascot\.is-moving \.analysis-progress-mascot-step-b \{ transform:\s*scale\(\.92\)/);
   assert.match(resultsStyles, /@keyframes analysis-mascot-leg-cycle-a[\s\S]*?0%, 32\.99%, 66%, 100% \{ opacity: 1; \}[\s\S]*?33%, 65\.99% \{ opacity: 0; \}/);
   assert.match(resultsStyles, /@keyframes analysis-mascot-leg-cycle[\s\S]*?0%, 32\.99%, 66%, 100% \{ opacity: 0; \}[\s\S]*?33%, 65\.99% \{ opacity: 1; \}/);
