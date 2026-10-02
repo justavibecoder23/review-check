@@ -60,6 +60,14 @@ function platformName(value) {
   return '';
 }
 
+function currentLocale() {
+  return window.RealViewI18n?.getLanguage?.() === 'en' ? 'en-US' : 'vi-VN';
+}
+
+function formatNumber(value, options = {}) {
+  return new Intl.NumberFormat(currentLocale(), options).format(value);
+}
+
 function targetPlatformName(sourcePlatform) {
   return platformName(sourcePlatform) === 'Shopee' ? 'TikTok Shop' : 'Shopee';
 }
@@ -267,7 +275,7 @@ function priceLabel(value) {
   if (!raw) return '';
   const numeric = Number(raw.replace(/[^\d.]/g, ''));
   if (/^\d+(?:\.\d+)?$/.test(raw) && Number.isFinite(numeric) && numeric >= 1_000) {
-    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(numeric);
+    return formatNumber(numeric, { style: 'currency', currency: 'VND', maximumFractionDigits: 0 });
   }
   return raw.slice(0, 50);
 }
@@ -282,8 +290,8 @@ function renderProductCard(product, options = {}) {
     : '<svg class="counterpart-platform-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M14 4v10.2a4.2 4.2 0 1 1-3.4-4.1" /><path d="M14 4c.7 2.4 2.4 3.8 5 4" /></svg>';
   const reviewCount = Number(product.reviewCount);
   const facts = [
-    Number.isFinite(reviewCount) ? fact('Review', new Intl.NumberFormat('vi-VN').format(reviewCount)) : '',
-    Number(product.rating) > 0 ? fact('Đánh giá', `${Number(product.rating).toFixed(1).replace('.', ',')} ★`) : '',
+    Number.isFinite(reviewCount) ? fact('Review', formatNumber(reviewCount)) : '',
+    Number(product.rating) > 0 ? fact('Đánh giá', `${formatNumber(Number(product.rating), { minimumFractionDigits: 1, maximumFractionDigits: 1 })} ★`) : '',
     priceLabel(product.price) ? fact('Giá', priceLabel(product.price)) : ''
   ].filter(Boolean).join('');
   return `
@@ -319,8 +327,8 @@ function renderSection() {
   const notice = !analysisAvailable
     ? `<strong>Hệ thống lấy review ${escapeHtml(targetPlatform)} đang bảo trì.</strong> Bạn vẫn có thể đối chiếu sản phẩm; nếu chọn phân tích, RealView sẽ thông báo trạng thái bảo trì.`
     : hasEnoughReviews
-    ? `<strong>${Number(candidate.reviewCount).toLocaleString('vi-VN')} review công khai.</strong> Sản phẩm đáp ứng ngưỡng dữ liệu ban đầu để bắt đầu phân tích.`
-    : `<strong>Hiện chỉ ghi nhận ${Number(candidate.reviewCount || 0).toLocaleString('vi-VN')} review.</strong> Bạn vẫn có thể phân tích; RealView sẽ dừng và thông báo nếu không đủ 20 review có nội dung như khi dán link ở trang chủ.`;
+    ? `<strong>${formatNumber(Number(candidate.reviewCount))} review công khai.</strong> Sản phẩm đáp ứng ngưỡng dữ liệu ban đầu để bắt đầu phân tích.`
+    : `<strong>Hiện chỉ ghi nhận ${formatNumber(Number(candidate.reviewCount || 0))} review.</strong> Bạn vẫn có thể phân tích; RealView sẽ dừng và thông báo nếu không đủ 20 review có nội dung như khi dán link ở trang chủ.`;
   const analyzeUrl = `/ket-qua?url=${encodeURIComponent(candidate.url)}`;
   targetHeading.textContent = targetPlatform;
   comparison.innerHTML = `
@@ -548,6 +556,9 @@ toast?.addEventListener('keydown', (event) => {
 });
 window.addEventListener('realview:analysis-result', (event) => beginForResult(event.detail?.result));
 window.addEventListener('realview:counterpart-source', (event) => beginForResult(event.detail?.result));
+window.addEventListener('realview:language-changed', () => {
+  if (currentMatch && section && !section.hidden) renderSection();
+});
 
 if (!new URLSearchParams(window.location.search).has('url')) {
   const restoredResult = readStoredResult();

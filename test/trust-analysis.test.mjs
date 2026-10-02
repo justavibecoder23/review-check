@@ -33,6 +33,22 @@ test('mẫu quá nhỏ không công bố điểm nhưng vẫn trả ưu nhược
   assert.doesNotMatch(trust.drivers.map((driver) => `${driver.title} ${driver.detail}`).join(' '), /Fisher|p\s*=|OR\*|logistic|hard cap|Bonferroni/i);
 });
 
+test('tóm tắt quy tắc luôn kèm bản tiếng Anh mà không đổi số lượt hoặc bằng chứng', () => {
+  const trust = buildRuleBasedTrust(reviews);
+  assert.equal(trust.translations.en.pros.length, trust.pros.length);
+  assert.equal(trust.translations.en.cons.length, trust.cons.length);
+  for (const key of ['pros', 'cons']) {
+    trust[key].forEach((item, index) => {
+      const translated = trust.translations.en[key][index];
+      assert.ok(translated.title);
+      assert.ok(translated.detail);
+      assert.equal(translated.mentions, item.mentions);
+      assert.deepEqual(translated.evidenceIds, item.evidenceIds);
+      assert.doesNotMatch(`${translated.title} ${translated.detail}`, /[À-ỹ]/u);
+    });
+  }
+});
+
 test('backend luôn chỉ ra yếu tố thực sự hạ điểm và Gemini không thể đổi thành trung lập', async () => {
   const sample = Array.from({ length: 20 }, (_value, index) => index < 10 ? {
     rating: index % 5 + 1,
@@ -359,6 +375,10 @@ test('Gemini dùng khóa ở header backend và trả cấu trúc giao diện an
                 summary: 'Phần lớn review hữu ích tích cực nhưng vẫn có vấn đề về chất liệu và form.',
                 pros: [{ title: 'Đúng mô tả', detail: 'Một số người mua xác nhận sản phẩm đúng mô tả.', mentions: 999 }],
                 cons: [{ title: 'Chất liệu mỏng', detail: 'Có review chi tiết cho biết vải mỏng.', mentions: 999 }],
+                translations: { en: {
+                  pros: [{ title: 'Matches the description', detail: 'Buyers report that the product matches its description.' }],
+                  cons: [{ title: 'Material quality', detail: 'Buyers report a specific material-quality issue.' }]
+                } },
                 drivers: [
                   { impact: 'up', title: 'Kiểm định Fisher', detail: 'Điểm Fisher 90/100, p=0.01 và OR*=2.4.' },
                   { impact: 'down', title: 'Có phản hồi tiêu cực', detail: 'Review chi tiết nêu vấn đề chất liệu và kích cỡ.' }
@@ -378,6 +398,9 @@ test('Gemini dùng khóa ở header backend và trả cấu trúc giao diện an
     assert.equal(trust.pros[0].title, statisticalFallback.pros[0].title, 'Gemini không được đổi chủ đề backend');
     assert.equal(trust.pros[0].mentions, statisticalFallback.pros[0].mentions, 'Gemini không được thay đổi bộ đếm backend');
     assert.equal(trust.cons[0].mentions, statisticalFallback.cons[0].mentions, 'Gemini không được thay đổi bộ đếm backend');
+    assert.equal(trust.translations.en.pros[0].title, 'Matches the description');
+    assert.equal(trust.translations.en.pros[0].mentions, statisticalFallback.pros[0].mentions);
+    assert.equal(trust.translations.en.cons[0].title, 'Material quality');
     assert.equal(trust.drivers.length, 4);
     assert.doesNotMatch(`${trust.drivers[0].title} ${trust.drivers[0].detail}`, /Fisher|p\s*=|OR\*/i);
   } finally {

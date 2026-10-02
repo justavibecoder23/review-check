@@ -113,3 +113,33 @@ test('chat requests carry the selected language through to the answer service', 
   assert.match(chatbot, /answerLanguage === 'en'/);
   assert.match(chatbot, /bằng tiếng Anh tự nhiên, chính xác/);
 });
+
+test('dynamic result, comparison, and account copy has complete English coverage', async () => {
+  const [i18n, results, counterpart, auth, trust] = await Promise.all([
+    readFile(publicFile('i18n.js'), 'utf8'),
+    readFile(publicFile('results.js'), 'utf8'),
+    readFile(publicFile('counterpart-widget.js'), 'utf8'),
+    readFile(publicFile('auth.js'), 'utf8'),
+    readFile(new URL('../src/trust-analysis.mjs', import.meta.url), 'utf8')
+  ]);
+
+  for (const copy of [
+    'Moderate reliability',
+    'Factors strengthening reliability',
+    'Reviews checked: $1',
+    'Publish and edit Blog posts',
+    'Manage admin and editor roles',
+    'Analyze this product'
+  ]) assert.ok(i18n.includes(copy), `Missing English UI copy: ${copy}`);
+
+  const combinedRule = i18n.indexOf('The first three ratios establish the initial reliability level');
+  const shortRule = i18n.indexOf("'Reliability before the sample-coverage adjustment is $1.'");
+  assert.ok(combinedRule > -1 && shortRule > combinedRule, 'the specific combined explanation rule must run before the generic rule');
+  assert.match(results, /trust\?\.translations\?\.en\?\.\[key\]/);
+  assert.match(results, /addEventListener\('realview:language-changed',[\s\S]*refreshSentimentLanguage/);
+  assert.match(counterpart, /function currentLocale\(\)[\s\S]*'en-US'[\s\S]*'vi-VN'/);
+  assert.match(counterpart, /addEventListener\('realview:language-changed',[\s\S]*renderSection/);
+  assert.match(auth, /Email cập nhật RealView/);
+  assert.match(trust, /translations\.en\.pros/);
+  assert.match(trust, /fallbackEnglishTranslation/);
+});

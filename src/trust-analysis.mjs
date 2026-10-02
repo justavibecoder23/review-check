@@ -31,6 +31,57 @@ const negativeDefinitions = [
 const MAX_NARRATIVE_EVIDENCE = 18;
 const MAX_SUMMARY_ITEMS = 5;
 
+const englishThemeTitles = new Map([
+  ['Chất lượng sản phẩm', 'Product quality'],
+  ['Đúng mô tả và hình ảnh', 'Matches the description and images'],
+  ['Trải nghiệm sử dụng tốt', 'Good user experience'],
+  ['Giao hàng và đóng gói', 'Delivery and packaging'],
+  ['Mức độ đáp ứng kỳ vọng', 'Meets expectations'],
+  ['Màu sắc và độ lên màu', 'Color and color payoff'],
+  ['Độ bám và độ lì', 'Wear and staying power'],
+  ['Cảm giác khi sử dụng', 'Comfort during use'],
+  ['Dễ sử dụng và che phủ', 'Ease of use and coverage'],
+  ['Chất liệu / độ bền', 'Material and durability'],
+  ['Kích thước / độ phù hợp', 'Size and fit'],
+  ['Khác mô tả / hình ảnh', 'Differences from the description or images'],
+  ['Giao hàng / đóng gói', 'Delivery and packaging'],
+  ['Trải nghiệm sử dụng', 'User experience'],
+  ['Độ bám và khả năng giữ màu', 'Wear and color retention'],
+  ['Kết cấu và thao tác sử dụng', 'Texture and application'],
+  ['Cảm giác trên môi', 'Feel on the lips'],
+  ['Màu sắc thực tế', 'Actual color'],
+  ['Hương vị', 'Flavor'],
+  ['Độ cay', 'Spiciness'],
+  ['Độ hoàn thiện / độ bền phần cứng', 'Build quality and hardware durability'],
+  ['Chất âm', 'Sound quality'],
+  ['Giá cả', 'Price'],
+  ['Thời lượng pin', 'Battery life'],
+  ['Tính năng pin', 'Battery features'],
+  ['Micro đàm thoại', 'Call microphone'],
+  ['Có phản hồi tích cực', 'Positive feedback'],
+  ['Chưa có ưu điểm nổi trội', 'No standout strength identified'],
+  ['Có phản hồi cần cân nhắc', 'Feedback to consider'],
+  ['Chưa thấy nhược điểm lặp lại', 'No recurring drawback identified']
+]);
+
+function fallbackEnglishNarrative(items = [], sentiment = 'positive') {
+  return items.map((item) => {
+    const title = englishThemeTitles.get(item.title)
+      || (sentiment === 'positive' ? 'Positive product experience' : 'Product issue reported');
+    const detail = sentiment === 'positive'
+      ? `Buyers report a positive experience related to ${title.toLocaleLowerCase('en')} during actual use.`
+      : `Buyers report a specific issue related to ${title.toLocaleLowerCase('en')} during actual use.`;
+    return { title, detail, mentions: item.mentions, evidenceIds: item.evidenceIds };
+  });
+}
+
+function fallbackEnglishTranslation(fallback) {
+  return {
+    pros: fallbackEnglishNarrative(fallback.pros, 'positive'),
+    cons: fallbackEnglishNarrative(fallback.cons, 'negative')
+  };
+}
+
 function normalise(value = '') {
   return String(value).toLocaleLowerCase('vi').replace(/\s+/g, ' ').trim();
 }
@@ -357,6 +408,7 @@ export function buildRuleBasedTrust(reviews = [], options = {}) {
     summary: withCoverageNotice(plainTrustSummary(score, method.scoreStatus), method),
     pros,
     cons,
+    translations: { en: fallbackEnglishTranslation({ pros, cons }) },
     drivers,
     method,
     engine: `statistical-v${method.version}`
@@ -378,6 +430,26 @@ const trustSchema = {
     drivers: {
       type: 'array', minItems: 4, maxItems: 4,
       items: { type: 'object', properties: { impact: { type: 'string', enum: ['up', 'down', 'neutral'] }, title: { type: 'string' }, detail: { type: 'string' } }, required: ['impact', 'title', 'detail'] }
+    },
+    translations: {
+      type: 'object',
+      properties: {
+        en: {
+          type: 'object',
+          properties: {
+            pros: {
+              type: 'array', minItems: 1, maxItems: MAX_SUMMARY_ITEMS,
+              items: { type: 'object', properties: { title: { type: 'string' }, detail: { type: 'string' } }, required: ['title', 'detail'] }
+            },
+            cons: {
+              type: 'array', minItems: 1, maxItems: MAX_SUMMARY_ITEMS,
+              items: { type: 'object', properties: { title: { type: 'string' }, detail: { type: 'string' } }, required: ['title', 'detail'] }
+            }
+          },
+          required: ['pros', 'cons']
+        }
+      },
+      required: ['en']
     }
   },
   required: ['summary', 'pros', 'cons', 'drivers']
@@ -563,6 +635,24 @@ function cleanDriver(item, fallback) {
   return TECHNICAL_USER_COPY.test(`${candidate.title} ${candidate.detail}`) ? fallback : candidate;
 }
 
+function cleanEnglishItem(item, fallback) {
+  const title = String(item?.title || fallback?.title || '').replace(/\s+/g, ' ').trim().slice(0, 100);
+  const detail = String(item?.detail || fallback?.detail || '').replace(/\s+/g, ' ').trim().slice(0, 240);
+  return {
+    title,
+    detail,
+    mentions: Math.max(0, Math.round(Number(fallback?.mentions) || 0)),
+    evidenceIds: Array.isArray(fallback?.evidenceIds) ? fallback.evidenceIds : []
+  };
+}
+
+function cleanEnglishTranslation(value, fallback) {
+  const safeFallback = fallbackEnglishTranslation(fallback);
+  const provided = value?.translations?.en;
+  const translateList = (key) => fallback[key].map((item, index) => cleanEnglishItem(provided?.[key]?.[index], safeFallback[key][index] || item));
+  return { pros: translateList('pros'), cons: translateList('cons') };
+}
+
 function validateGeminiTrust(value, fallback) {
   if (!value || typeof value !== 'object') throw new Error('Gemini không trả về kết quả JSON hợp lệ.');
   const pros = Array.isArray(value.pros) ? value.pros.slice(0, MAX_SUMMARY_ITEMS).map((item, index) => cleanItem(item, fallback.pros[index] || fallback.pros[0])) : fallback.pros;
@@ -578,6 +668,7 @@ function validateGeminiTrust(value, fallback) {
     pros: pros.length ? pros : fallback.pros,
     cons: cons.length ? cons : fallback.cons,
     drivers: drivers.length ? drivers : fallback.drivers,
+    translations: { en: cleanEnglishTranslation(value, fallback) },
     engine: 'gemini'
   };
 }
@@ -600,6 +691,7 @@ async function analyzeWithGemini(reviews, fallback, options = {}) {
     'Nội dung hiển thị cho người dùng tuyệt đối không được nhắc Fisher, p-value, odds ratio, binomial, logistic, Bonferroni, guardrail, điểm thành phần hoặc công thức.',
     'Summary đã được backend khóa trong fixedBackendDraft; phải chép nguyên văn, không viết lại.',
     'Mỗi ưu/nhược điểm chỉ viết một câu ngắn, cụ thể: người mua thích hoặc chưa hài lòng điều gì và ảnh hưởng thực tế ra sao. Không lặp số lượt review, không thêm câu “cùng đề cập” và không chèn dẫn chứng vì giao diện đã liên kết trực tiếp tới review nguồn.',
+    'Ngoài nội dung tiếng Việt, phải trả thêm translations.en.pros và translations.en.cons. Dịch đúng từng mục tương ứng sang tiếng Anh tự nhiên; giữ nguyên thứ tự và ý nghĩa, không thêm nhận định, không đổi chủ đề và không đưa số lượt vào câu dịch.',
     'Danh sách drivers trong fixedBackendDraft đã được backend xác định và sẽ được giữ nguyên; không đổi impact, thứ tự, tiêu đề hoặc nội dung của các driver.',
     Number.isFinite(fallback.score)
       ? `Điểm cố định phải giữ nguyên: ${fallback.score}/100.`

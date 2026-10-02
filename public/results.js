@@ -258,6 +258,54 @@ function renderSentimentList(selector, items, totalReviews) {
   }).join('');
 }
 
+const legacyEnglishTopics = new Map([
+  ['Chất lượng sản phẩm', 'Product quality'],
+  ['Đúng mô tả và hình ảnh', 'Matches the description and images'],
+  ['Trải nghiệm sử dụng tốt', 'Good user experience'],
+  ['Giao hàng và đóng gói', 'Delivery and packaging'],
+  ['Mức độ đáp ứng kỳ vọng', 'Meets expectations'],
+  ['Chất âm', 'Sound quality'],
+  ['Giá cả', 'Price'],
+  ['Thời lượng pin', 'Battery life'],
+  ['Khác mô tả / hình ảnh', 'Differences from the description or images'],
+  ['Chất liệu / độ bền', 'Material and durability'],
+  ['Kích thước / độ phù hợp', 'Size and fit'],
+  ['Trải nghiệm sử dụng', 'User experience'],
+  ['Tính năng pin', 'Battery features'],
+  ['Micro đàm thoại', 'Call microphone'],
+  ['Có phản hồi tích cực', 'Positive feedback'],
+  ['Chưa có ưu điểm nổi trội', 'No standout strength identified'],
+  ['Có phản hồi cần cân nhắc', 'Feedback to consider'],
+  ['Chưa thấy nhược điểm lặp lại', 'No recurring drawback identified']
+]);
+
+function localizedSentimentItems(trust, key, items) {
+  if (window.RealViewI18n?.getLanguage?.() !== 'en') return items;
+  const translated = trust?.translations?.en?.[key];
+  const positive = key === 'pros';
+  return items.map((item, index) => {
+    const supplied = translated?.[index];
+    const title = String(supplied?.title || legacyEnglishTopics.get(item.title)
+      || (positive ? 'Positive product experience' : 'Product issue reported'));
+    const detail = String(supplied?.detail || (positive
+      ? `Buyers report a positive experience related to ${title.toLocaleLowerCase('en')} during actual use.`
+      : `Buyers report a specific issue related to ${title.toLocaleLowerCase('en')} during actual use.`));
+    return { ...item, title, detail };
+  });
+}
+
+function refreshSentimentLanguage(data) {
+  if (!data) return;
+  const reviews = Array.isArray(data.reviews) ? data.reviews : [];
+  const keptReviews = reviews.filter((review) => review.included !== false);
+  const trust = data.trust || fallbackTrust(data, reviews);
+  const fallback = fallbackTrust(data, reviews);
+  const pros = Array.isArray(trust.pros) && trust.pros.length ? trust.pros : fallback.pros;
+  const cons = Array.isArray(trust.cons) && trust.cons.length ? trust.cons : fallback.cons;
+  renderSentimentList('#pros-list', localizedSentimentItems(trust, 'pros', pros), keptReviews.length);
+  renderSentimentList('#cons-list', localizedSentimentItems(trust, 'cons', cons), keptReviews.length);
+}
+
 function driverIcon(impact) {
   if (impact === 'up') return '↗';
   if (impact === 'down') return '↘';
@@ -421,6 +469,7 @@ function linkSentimentEvidence() {
 }
 
 function renderResult(data) {
+  renderedResultData = data;
   const product = data.product || {};
   const stats = data.stats || {};
   const reviews = Array.isArray(data.reviews) ? data.reviews : [];
@@ -512,8 +561,7 @@ function renderResult(data) {
   document.querySelector('#excluded-count-top').textContent = excluded;
   document.querySelector('#kept-count').textContent = kept;
   document.querySelector('#excluded-count').textContent = excluded;
-  renderSentimentList('#pros-list', Array.isArray(trust.pros) && trust.pros.length ? trust.pros : fallbackTrust(data, reviews).pros, kept);
-  renderSentimentList('#cons-list', Array.isArray(trust.cons) && trust.cons.length ? trust.cons : fallbackTrust(data, reviews).cons, kept);
+  refreshSentimentLanguage(data);
 
   const drivers = Array.isArray(trust.drivers) ? trust.drivers : [];
   document.querySelector('#trust-drivers').innerHTML = renderDriverGroups(drivers);
@@ -555,6 +603,7 @@ let analysisGeneration = 0;
 let progressMascotStopTimer;
 let shopeeMetadataBackgroundStarted = false;
 let activeResultData = null;
+let renderedResultData = null;
 let historySavePromise = null;
 let activeAnalyzedAt = null;
 let verifiedShopeeProductMeta = null;
@@ -996,6 +1045,11 @@ if (hasBrowserWindow) window.addEventListener('realview:auth-changed', (event) =
   if (event.detail?.user && document.querySelector('#analysis-signup')?.hidden === false && activeAnalysisUrl) {
     startProgressiveAnalysis(activeAnalysisUrl);
   }
+});
+if (hasBrowserWindow) window.addEventListener('realview:language-changed', () => {
+  if (!renderedResultData) return;
+  refreshSentimentLanguage(renderedResultData);
+  linkSentimentEvidence();
 });
 if (hasBrowserWindow) window.addEventListener('pagehide', () => analysisController?.abort(), { once: true });
 
