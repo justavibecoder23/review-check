@@ -96,6 +96,10 @@ export async function analyzeProductUrl(rawUrl, options = {}) {
   const { reviews, source, product, warnings } = await getReviewsForAnalysis(rawUrl.trim(), {
     onProgress: options.onProgress,
     onProductMeta: (metadata) => emit(options.onProductMeta, metadata),
+    onProductIdentity: options.onProductIdentity,
+    onBackgroundWork: options.onBackgroundWork,
+    fetchShopeeDetailImpl: options.fetchShopeeDetailImpl,
+    metadataActorFetchImpl: options.metadataActorFetchImpl,
     signal: options.signal,
     redisFetchImpl: options.redisFetchImpl,
     blobGetImpl: options.blobGetImpl,

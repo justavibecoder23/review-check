@@ -52,7 +52,7 @@ test('trang chủ chuyển ngay sang kết quả và giao diện tiến trình k
   assert.doesNotMatch(resultsSource, /progress\.phase/);
   assert.doesNotMatch(resultsSource, /5 tài khoản|20\/20|Apify/i);
   assert.doesNotMatch(resultsSource, /Dữ liệu đã lưu gần đây|Dữ liệu trực tiếp/);
-  assert.ok(resultsSource.indexOf('renderResult(resultData)') < resultsSource.indexOf("import('./history-manager.js')"));
+  assert.ok(resultsSource.indexOf('renderResult(resultData)') < resultsSource.indexOf("historySavePromise = import('./history-manager.js')"));
   assert.match(resultsSource, /realview:analysis-result/);
   assert.match(resultsStyles, /\.analysis-stepper li\.is-done > span::after\s*{[^}]*position:\s*absolute;[^}]*inset:\s*0;[^}]*place-items:\s*center;/s);
 });

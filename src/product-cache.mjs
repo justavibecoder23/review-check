@@ -1,6 +1,7 @@
 import { isRedisConfigured, redisCommand, redisTransaction } from './redis-rest.mjs';
 import { cleanProductTitle } from './product-metadata-quality.mjs';
-import { blobReviewFallbackAllowed, getCloudflareReviewDataset, reviewStorageMode } from './cloudflare-review-store.mjs';
+import { blobReviewFallbackAllowed, getCloudflareReviewDataset, reviewStorageMode,
+  getCloudflareShopeeMetadata, saveCloudflareShopeeMetadata } from './cloudflare-review-store.mjs';
 
 export const SHOPEE_CACHE_TTL_SECONDS = 5 * 24 * 60 * 60;
 export const TIKTOK_CACHE_TTL_SECONDS = 5 * 24 * 60 * 60;
@@ -13,6 +14,59 @@ const MIN_TIKTOK_FALLBACK_REVIEWS = 20;
 const LATEST_POINTER_PREFIX = 'realview:cache:product:latest:v2:';
 const TIKTOK_PRODUCT_META_PREFIX = 'realview:product-meta:v1:tiktok:';
 const TIKTOK_PRODUCT_META_TTL_SECONDS = 30 * 24 * 60 * 60;
+const SHOPEE_PRODUCT_META_PREFIX = 'realview:product-meta:v1:shopee:';
+const SHOPEE_PRODUCT_META_TTL_SECONDS = SHOPEE_CACHE_TTL_SECONDS;
+
+export function getShopeeProductMetaKey(shopId, itemId) {
+  if (!/^\d+$/.test(String(shopId || '')) || !/^\d+$/.test(String(itemId || ''))) {
+    throw new Error('Shopee shopId:itemId không hợp lệ cho metadata cache.');
+  }
+  return `${SHOPEE_PRODUCT_META_PREFIX}${shopId}:${itemId}`;
+}
+
+export function normalizeShopeeProductMetadata(shopId, itemId, metadata = {}, options = {}) {
+  if (!/^\d+$/.test(String(shopId || '')) || !/^\d+$/.test(String(itemId || ''))) return null;
+  const title = cleanProductTitle(metadata.title);
+  const imageCandidate = safeProductImage(metadata.image);
+  const image = isMirroredProductImage(imageCandidate) ? '' : imageCandidate;
+  if (!title && !image) return null;
+  return {
+    shopId: String(shopId), itemId: String(itemId),
+    ...(title ? { title } : {}), ...(image ? { image } : {}),
+    source: String(options.source || metadata.source || 'unknown').slice(0, 40),
+    updatedAt: new Date(options.now || Date.now()).toISOString()
+  };
+}
+
+export async function getShopeeProductMetadata(shopId, itemId, options = {}) {
+  getShopeeProductMetaKey(shopId, itemId);
+  if (reviewStorageMode(options) !== 'blob') {
+    const data = await getCloudflareShopeeMetadata(shopId, itemId, options).catch(() => null);
+    return data ? normalizeShopeeProductMetadata(shopId, itemId, data, { source: data.source, now: data.updatedAt }) : null;
+  }
+  if (!isRedisConfigured() && !options.redisFetchImpl) return null;
+  const raw = await redisCommand(['GET', getShopeeProductMetaKey(shopId, itemId)], {
+    fetchImpl: options.redisFetchImpl, timeoutMs: options.redisTimeoutMs || 900
+  }).catch(() => null);
+  if (!raw) return null;
+  try {
+    const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (String(data.shopId) !== String(shopId) || String(data.itemId) !== String(itemId)) return null;
+    return normalizeShopeeProductMetadata(shopId, itemId, data, { source: data.source, now: data.updatedAt });
+  } catch { return null; }
+}
+
+export async function setShopeeProductMetadata(shopId, itemId, metadata, options = {}) {
+  const normalized = normalizeShopeeProductMetadata(shopId, itemId, metadata, options);
+  if (!normalized?.title && !normalized?.image) return { saved: false, reason: 'METADATA_EMPTY' };
+  if (reviewStorageMode(options) !== 'blob') return saveCloudflareShopeeMetadata(normalized, options);
+  if (!isRedisConfigured() && !options.redisFetchImpl) return { saved: false, reason: 'REDIS_NOT_CONFIGURED' };
+  await redisCommand(['SET', getShopeeProductMetaKey(shopId, itemId), JSON.stringify(normalized),
+    'EX', String(SHOPEE_PRODUCT_META_TTL_SECONDS)], {
+    fetchImpl: options.redisFetchImpl, timeoutMs: options.redisTimeoutMs || 1_200
+  });
+  return { saved: true, metadata: normalized };
+}
 
 export function isMirroredProductImage(value) {
   try {

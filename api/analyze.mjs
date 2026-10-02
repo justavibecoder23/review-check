@@ -3,8 +3,12 @@ import { clientDisconnectSignal } from '../src/sse.mjs';
 import { attachResultChatContext, scheduleResultChatContext } from '../src/result-chat-background.mjs';
 import { analysisAccessStatus, analysisErrorPayload, beginAnalysisAccess } from '../src/analysis-access.mjs';
 import { guestQuotaConfig } from '../src/guest-analysis-quota.mjs';
+import { waitUntil } from '@vercel/functions';
+import shopeeProductMetaHandler from '../src/shopee-product-meta-route.mjs';
 
 export default async function handler(request, response) {
+  const route = request.query?.route || new URL(request.url || '/', 'https://realview.local').searchParams.get('route');
+  if (route === 'shopee-product-meta') return shopeeProductMetaHandler(request, response);
   response.setHeader('Cache-Control', 'no-store');
   if (request.method === 'GET') {
     try {
@@ -22,7 +26,9 @@ export default async function handler(request, response) {
   try {
     const body = typeof request.body === 'string' ? JSON.parse(request.body || '{}') : (request.body || {});
     access = await beginAnalysisAccess(request, response, body.url);
-    const result = await analyzeProductUrl(body.url, { signal: clientDisconnectSignal(request, response) });
+    const result = await analyzeProductUrl(body.url, {
+      signal: clientDisconnectSignal(request, response), onBackgroundWork: (work) => waitUntil(work)
+    });
     const preparedContext = attachResultChatContext(result);
     const remainingGuestQuota = await access.confirm(result);
     const sent = response.status(200).json({ ...result, remainingGuestQuota, guestQuotaLimit: guestQuotaConfig.limit });

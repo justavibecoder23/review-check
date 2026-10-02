@@ -400,6 +400,7 @@ local maxShopeeUses = tonumber(ARGV[8]) or 20
 local usageCycles = cjson.decode(ARGV[9] or '{}')
 local minimumCycleRemainingMs = tonumber(ARGV[10]) or 120000
 local pricingVersion = ARGV[11]
+local taskType = ARGV[12] == 'shopee-product-detail' and 'shopee-product-detail' or 'counterpart'
 
 local function cleanCostLeases(accountKey)
   local state = {leases={}}
@@ -459,11 +460,12 @@ for _, group in ipairs(pool.groups or {}) do
           local reservationId = requestId .. ':1'
           costState.leases[reservationId] = {
             costMicroUsd=plannedCost, actorId=actorId, pricingVersion=pricingVersion,
-            platform='counterpart', expiresAtMs=nowMs + leaseMs
+            platform=taskType, expiresAtMs=nowMs + leaseMs
           }
           redis.call('HSET', KEYS[4], accountKey, cjson.encode(costState))
           local runCount = tonumber(redis.call('HINCRBY', KEYS[5], accountKey, 1))
-          redis.call('HINCRBY', KEYS[11], 'reservations', 1)
+          local statsField = taskType == 'shopee-product-detail' and accountKey .. ':detailReservations' or 'reservations'
+          redis.call('HINCRBY', KEYS[11], statsField, 1)
           local allocated = {}
           for key, value in pairs(credential) do allocated[key] = value end
           allocated.groupId = group.id
@@ -505,6 +507,14 @@ local cycleStartAt = ARGV[12]
 local cycleEndAt = ARGV[13]
 local actorStarted = ARGV[14] == '1'
 local actorId = ARGV[15]
+local taskType = ARGV[16] == 'shopee-product-detail' and 'shopee-product-detail' or 'counterpart'
+local metadataResolved = ARGV[17] == '1'
+local function statsField(name)
+  if taskType == 'shopee-product-detail' then
+    return accountKey .. ':detail' .. string.upper(string.sub(name, 1, 1)) .. string.sub(name, 2)
+  end
+  return name
+end
 if redis.call('HEXISTS', KEYS[3], operationId) == 1 then
   return cjson.encode({ok=true, alreadyFinalized=true})
 end
@@ -522,12 +532,15 @@ if failureClass == 'timeout' or failureClass == 'upstream_service_error' or fail
   lease.expiresAtMs = nowMs + math.max(60000, retryAfterMs)
   state.leases[reservationId] = lease
   redis.call('HSET', KEYS[2], accountKey, cjson.encode(state))
-  if failureClass == 'cost_pending' and not pendingRecorded then
-    if actorStarted then redis.call('HINCRBY', KEYS[7], 'actorStarts', 1) end
-    if statusCode >= 200 and statusCode < 300 then
-      redis.call('HINCRBY', KEYS[7], 'completedRuns', 1)
-      redis.call('HINCRBY', KEYS[7], 'itemsBilled', itemCount)
-      if itemCount == 0 then redis.call('HINCRBY', KEYS[7], 'emptyRuns', 1) end
+  if not pendingRecorded then
+    if actorStarted then redis.call('HINCRBY', KEYS[7], statsField('actorStarts'), 1) end
+    if failureClass == 'cost_pending' and statusCode >= 200 and statusCode < 300 then
+      redis.call('HINCRBY', KEYS[7], statsField('completedRuns'), 1)
+      redis.call('HINCRBY', KEYS[7], statsField('itemsBilled'), itemCount)
+      if itemCount == 0 then redis.call('HINCRBY', KEYS[7], statsField('emptyRuns'), 1) end
+      if taskType == 'shopee-product-detail' then
+        redis.call('HINCRBY', KEYS[7], statsField(metadataResolved and 'succeeded' or 'empty'), 1)
+      end
     end
     redis.call('HSET', KEYS[3], pendingOperationId, cjson.encode({
       operationId=operationId, reservationId=reservationId, pending=true,
@@ -544,17 +557,23 @@ if failureClass == 'billing_exhausted' then redis.call('HSET', KEYS[4], accountK
 if failureClass == 'actor_access_denied' then redis.call('HSET', KEYS[5], credentialId .. ':' .. actorId, nowMs) end
 if failureClass == 'invalid_auth' then redis.call('HSET', KEYS[5], credentialId .. ':*', nowMs) end
 if failureClass == 'temporary_throttle' then redis.call('HSET', KEYS[6], credentialId, nowMs + retryAfterMs) end
-if actorStarted and not pendingRecorded then redis.call('HINCRBY', KEYS[7], 'actorStarts', 1) end
+if actorStarted and not pendingRecorded then redis.call('HINCRBY', KEYS[7], statsField('actorStarts'), 1) end
 if statusCode >= 200 and statusCode < 300 and not pendingRecorded then
-  redis.call('HINCRBY', KEYS[7], 'completedRuns', 1)
-  redis.call('HINCRBY', KEYS[7], 'itemsBilled', itemCount)
-  if itemCount == 0 then redis.call('HINCRBY', KEYS[7], 'emptyRuns', 1) end
+  redis.call('HINCRBY', KEYS[7], statsField('completedRuns'), 1)
+  redis.call('HINCRBY', KEYS[7], statsField('itemsBilled'), itemCount)
+  if itemCount == 0 then redis.call('HINCRBY', KEYS[7], statsField('emptyRuns'), 1) end
+  if taskType == 'shopee-product-detail' then
+    redis.call('HINCRBY', KEYS[7], statsField(metadataResolved and 'succeeded' or 'empty'), 1)
+  end
 elseif not pendingRecorded then
-  redis.call('HINCRBY', KEYS[7], 'failedRuns', 1)
+  redis.call('HINCRBY', KEYS[7], statsField('failedRuns'), 1)
 end
-if actorStarted and actualCost > 0 then redis.call('HINCRBY', KEYS[7], 'spentMicroUsd', actualCost) end
+if actorStarted and actualCost > 0 then
+  redis.call('HINCRBY', KEYS[7], statsField('spentMicroUsd'), actualCost)
+  if taskType == 'shopee-product-detail' then redis.call('HINCRBY', KEYS[7], statsField('costMicroUsd'), actualCost) end
+end
 local entry = {
-  operationId=operationId, reservationId=reservationId, platform='counterpart',
+  operationId=operationId, reservationId=reservationId, platform=taskType,
   credentialId=credentialId, billingAccountId=billingAccountId,
   accountCycleId=accountKey, billingCycleStartAt=cycleStartAt,
   billingCycleEndAt=cycleEndAt, actorId=actorId,
@@ -1277,6 +1296,10 @@ function emptyPoolStatus(provider = 'none') {
       counterpart: {
         accounting: { reservations: 0, actorStarts: 0, completedRuns: 0, emptyRuns: 0, failedRuns: 0, itemsBilled: 0, spentMicroUsd: 0 },
         shopeeReservationUsesPerKey: DEFAULT_MAX_USES_PER_KEY
+      },
+      shopeeProductDetail: {
+        enabled: !['false', '0', 'off', 'no'].includes(String(process.env.SHOPEE_DETAIL_ACTOR_ENABLED || '').toLowerCase()),
+        cycles: []
       }
     },
     totals: { groups: 0, active: 0, reserve: 0, used: 0, credentials: 0, pending: 0 }
@@ -1916,6 +1939,7 @@ export async function reserveCounterpartCostCredential({
   actorId,
   plannedCostMicroUsd,
   pricingVersion = 'counterpart-search-v2',
+  taskType = 'counterpart',
   ...options
 } = {}) {
   if (!isRedisConfigured()) throw new Error('Cần cấu hình Upstash Redis để cấp phát Apify key cho tìm sản phẩm tương tự.');
@@ -1955,13 +1979,15 @@ export async function reserveCounterpartCostCredential({
       String(Math.max(120_000, Number(options.reservationLeaseMs) || 180_000)),
       String(usage.freeUsageMicroUsd), String(usage.shopeeRunCostMicroUsd),
       String(DEFAULT_MAX_USES_PER_KEY), JSON.stringify(usageCycles),
-      String(minimumCycleRemainingMs), String(pricingVersion)
+      String(minimumCycleRemainingMs), String(pricingVersion), String(taskType)
     ], options);
     allocation = typeof raw === 'string' ? JSON.parse(raw) : raw;
     if (allocation?.ok) return decryptCounterpartAllocation(allocation);
     if (allocation?.code !== 'COUNTERPART_BUDGET_PROTECTED') break;
   }
-  const error = new Error('Không còn Apify key an toàn cho tìm sản phẩm tương tự sau khi chừa đủ 20 lượt Shopee.');
+  const error = new Error(taskType === 'shopee-product-detail'
+    ? 'Không còn Apify key an toàn cho Actor chi tiết Shopee sau khi chừa đủ 20 lượt review.'
+    : 'Không còn Apify key an toàn cho tìm sản phẩm tương tự sau khi chừa đủ 20 lượt Shopee.');
   error.code = allocation?.code || 'COUNTERPART_BUDGET_PROTECTED';
   error.statusCode = 503;
   error.diagnostics = { ...scanner.diagnostics(), usageCycles: Object.keys(usageCycles).length };
@@ -1986,9 +2012,27 @@ export async function finalizeCounterpartCostCredential(credential, result = {},
     String(Math.max(1_000, Number(result.retryAfterMs) || 60_000)),
     credential.billingAccountId || credential.id, credential.billingCycleStartAt || '',
     credential.billingCycleEndAt || '', result.actorStarted === false ? '0' : '1',
-    String(result.actorId || '')
+    String(result.actorId || ''), String(result.taskType || 'counterpart'),
+    result.metadataResolved === true ? '1' : '0'
   ], options);
   return typeof raw === 'string' ? JSON.parse(raw) : raw;
+}
+
+// Product detail shares the existing Apify pool, cycle snapshots and cost
+// ledger. Only the task label and per-cycle statistics differ from counterpart.
+export async function reserveShopeeDetailCostCredential(options = {}) {
+  return reserveCounterpartCostCredential({
+    ...options,
+    taskType: 'shopee-product-detail',
+    pricingVersion: 'shopee-product-detail-v1'
+  });
+}
+
+export async function finalizeShopeeDetailCostCredential(credential, result = {}, options = {}) {
+  return finalizeCounterpartCostCredential(credential, {
+    ...result,
+    taskType: 'shopee-product-detail'
+  }, options);
 }
 
 function decryptShopeeCostAllocation(allocation) {
@@ -2220,6 +2264,21 @@ export async function getApifyCredentialPoolStatus(options = {}) {
       spentMicroUsd: Number(counterpartStats.spentMicroUsd) || 0
     },
     shopeeReservationUsesPerKey: DEFAULT_MAX_USES_PER_KEY
+  };
+  const detailCycles = {};
+  for (const [field, value] of Object.entries(counterpartStats)) {
+    const match = field.match(/^(.*):detail(ActorStarts|Succeeded|Empty|CostMicroUsd)$/);
+    if (!match) continue;
+    const cycle = detailCycles[match[1]] ||= {
+      accountCycleId: match[1], detailActorStarts: 0, detailSucceeded: 0,
+      detailEmpty: 0, detailCostMicroUsd: 0
+    };
+    const key = `detail${match[2]}`;
+    cycle[key] = Number(value) || 0;
+  }
+  status.platforms.shopeeProductDetail = {
+    enabled: !['false', '0', 'off', 'no'].includes(String(process.env.SHOPEE_DETAIL_ACTOR_ENABLED || '').toLowerCase()),
+    cycles: Object.values(detailCycles).sort((left, right) => right.accountCycleId.localeCompare(left.accountCycleId))
   };
   return status;
 }

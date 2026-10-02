@@ -74,7 +74,10 @@ test('metadata URL được đọc tuần tự và dừng khi đã có đủ ả
 test('Shopee vẫn dùng ảnh trang sản phẩm khi API metadata lỗi', async () => {
   const diagnostics = [];
   const metadataEvents = [];
+  const background = [];
   const result = await getReviews(`https://shopee.vn/product-i.${SHOP_ID}.${ITEM_ID}`, {
+    fetchShopeeDetailImpl: async () => ({ status: 'failed' }),
+    onBackgroundWork: (work) => background.push(work),
     onProductMeta: (metadata) => metadataEvents.push(metadata),
     onMetadataDiagnostic: (entry) => diagnostics.push(entry),
     fetchImpl: async (url) => String(url).includes('/api/v4/item/get')
@@ -87,7 +90,7 @@ test('Shopee vẫn dùng ảnh trang sản phẩm khi API metadata lỗi', async
     })
   });
   assert.equal(result.reviews.length, 1);
-  assert.equal(result.product.image, PRODUCT_IMAGE_URL);
+  await Promise.all(background);
   assert.ok(metadataEvents.some((metadata) => metadata.image === PRODUCT_IMAGE_URL));
   assert.ok(diagnostics.some((entry) => entry.source === 'shopee_item_api' && entry.status === 403));
   assert.ok(diagnostics.every((entry) => entry.traceId && entry.productId === ITEM_ID));
@@ -103,6 +106,28 @@ test('Shopee chỉ dùng fallback ảnh được đặt tên rõ là ảnh sản
   const trusted = normaliseProductMeta({ productImage: PRODUCT_IMAGE_URL });
   assert.equal(trusted.image, PRODUCT_IMAGE_URL);
   assert.equal(mergeProductMetadata({}, trusted, 'Shopee').image, PRODUCT_IMAGE_URL);
+});
+
+test('Shopee trả review trước metadata chậm và vẫn phát ảnh tên khi tác vụ nền hoàn tất', async () => {
+  const background = [];
+  const events = [];
+  let resolveMetadata;
+  const detail = new Promise((resolve) => { resolveMetadata = resolve; });
+  const result = await getReviews(`https://shopee.vn/product/${SHOP_ID}/${ITEM_ID}`, {
+    fetchShopeeDetailImpl: () => detail,
+    onBackgroundWork: (work) => background.push(work),
+    onProductMeta: (metadata) => events.push(metadata),
+    collectShopeeReviewsImpl: async () => ({
+      reviews: [{ id: 'review-fast', rating: 5, text: 'Sản phẩm tốt' }],
+      productMetaSource: {}, collection: { strategy: 'parallel-star-filters' }
+    })
+  });
+  assert.equal(result.reviews[0].id, 'review-fast');
+  assert.equal(events.some((event) => event.image === PRODUCT_IMAGE_URL), false);
+  resolveMetadata({ status: 'resolved', metadata: { title: 'Sản phẩm kiểm thử', image: PRODUCT_IMAGE_URL } });
+  await Promise.all(background);
+  assert.ok(events.some((event) => event.image === PRODUCT_IMAGE_URL
+    && event.title === 'Sản phẩm kiểm thử' && event.shopId === SHOP_ID && event.itemId === ITEM_ID));
 });
 
 test('metadata actor giữ category path để xác định ngành hàng', () => {

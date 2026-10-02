@@ -148,6 +148,7 @@
     { "source": "/results.html", "destination": "/ket-qua", "permanent": true }
   ],
   "rewrites": [
+    { "source": "/api/shopee-product-meta", "destination": "/api/analyze.mjs?route=shopee-product-meta" },
     { "source": "/chinh-sach-bao-mat", "destination": "/privacy.html" },
     { "source": "/dieu-khoan-su-dung", "destination": "/terms.html" },
     { "source": "/api/analyze", "destination": "/api/analyze.mjs" },

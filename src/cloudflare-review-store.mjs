@@ -75,3 +75,19 @@ export async function verifyCloudflareReviewBundle(datasetId, expectedBundle, op
   const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
   return { matches: hash(result.bundle) === hash(expectedBundle), contentHash: hash(result.bundle) };
 }
+
+export async function getCloudflareShopeeMetadata(shopId, itemId, options = {}) {
+  const result = await cloudflareRequest(`/v1/product-metadata?shopId=${encodeURIComponent(shopId)}&itemId=${encodeURIComponent(itemId)}`, options);
+  if (!result.hit) return null;
+  if (String(result.metadata?.shopId) !== String(shopId) || String(result.metadata?.itemId) !== String(itemId)
+    || !Number.isFinite(Date.parse(result.metadata?.expiresAt))
+    || Date.parse(result.metadata.expiresAt) <= Date.now()) throw new Error('CLOUDFLARE_METADATA_INVALID');
+  return result.metadata;
+}
+
+export async function saveCloudflareShopeeMetadata(metadata, options = {}) {
+  const result = await cloudflareRequest('/v1/product-metadata', options, metadata);
+  if (!result.saved || String(result.metadata?.shopId) !== String(metadata.shopId)
+    || String(result.metadata?.itemId) !== String(metadata.itemId)) throw new Error('CLOUDFLARE_METADATA_WRITE_NOT_CONFIRMED');
+  return result;
+}

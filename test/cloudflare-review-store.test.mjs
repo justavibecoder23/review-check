@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import worker from '../cloudflare/review-cache/worker.mjs';
 import { saveReviewDatasets } from '../src/review-dataset-storage.mjs';
-import { getCachedShopeeDataset, getCachedTikTokDataset } from '../src/product-cache.mjs';
+import { getCachedShopeeDataset, getCachedTikTokDataset, getShopeeProductMetadata, setShopeeProductMetadata } from '../src/product-cache.mjs';
+import { fetchShopeeDetailActorMetadata } from '../src/shopee-detail-metadata.mjs';
 import { saveCloudflareReviewBundle, verifyCloudflareReviewBundle } from '../src/cloudflare-review-store.mjs';
 import { migrateReviewDatasets } from '../tools/migrate-review-datasets-to-d1.mjs';
 
@@ -22,6 +23,7 @@ function fixture({ platform = 'Shopee', createdAt = new Date().toISOString(), ru
 function sqliteD1() {
   const sqlite = new DatabaseSync(':memory:');
   sqlite.exec(readFileSync(new URL('../cloudflare/review-cache/migrations/0001_review_cache.sql', import.meta.url), 'utf8'));
+  sqlite.exec(readFileSync(new URL('../cloudflare/review-cache/migrations/0002_product_metadata.sql', import.meta.url), 'utf8'));
   const db = {
     sqlite, failAt: null,
     prepare(sql) {
@@ -60,6 +62,38 @@ function setup() {
     cloudflareFetchImpl: (url, init) => worker.fetch(new Request(url, init), env) };
   return { db, env, options };
 }
+
+test('D1 metadata caches exact Shopee title/image URL for five days and skips paid Actor', async () => {
+  const { db, options } = setup();
+  const metadata = { title: 'Kính camera chính hãng', image: 'https://down-vn.img.susercontent.com/file/product-image-123456' };
+  const saved = await setShopeeProductMetadata('123', '456', metadata, options);
+  assert.equal(saved.saved, true);
+  assert.equal(Date.parse(saved.metadata.expiresAt) - Date.parse(saved.metadata.updatedAt), 5 * 86400_000);
+  assert.equal((await getShopeeProductMetadata('123', '456', options)).image, metadata.image);
+  assert.equal(await getShopeeProductMetadata('124', '456', options), null);
+  const actor = await fetchShopeeDetailActorMetadata('https://shopee.vn/product/123/456', {
+    ...options, reserveImpl: () => { throw new Error('Must not reserve an Actor'); },
+    fetchImpl: () => { throw new Error('Must not call Apify or download images'); }
+  });
+  assert.equal(actor.status, 'cached');
+  const repeated = await setShopeeProductMetadata('123', '456', metadata, options);
+  assert.equal(repeated.metadata.expiresAt, saved.metadata.expiresAt, 'identical writes do not refresh expiry');
+  db.sqlite.prepare('UPDATE product_metadata_cache SET expires_at = ?').run(Date.now() - 1);
+  assert.equal(await getShopeeProductMetadata('123', '456', options), null);
+  const partial = await setShopeeProductMetadata('123', '456', { title: 'Tên mới' }, options);
+  assert.equal(partial.metadata.image, undefined, 'expired image must not be revived by a title-only write');
+  db.sqlite.close();
+});
+
+test('D1 metadata rejects Blob images and unauthorized requests', async () => {
+  const { db, env } = setup();
+  const url = 'https://review.test/v1/product-metadata';
+  const body = { shopId: '123', itemId: '456', image: 'https://example.public.blob.vercel-storage.com/image.webp' };
+  assert.equal((await worker.fetch(new Request(url, { method: 'POST', body: JSON.stringify(body) }), env)).status, 401);
+  assert.equal((await worker.fetch(new Request(url, { method: 'POST', headers: { authorization: `Bearer ${env.REVIEW_CACHE_SECRET}` }, body: JSON.stringify(body) }), env)).status, 400);
+  assert.equal(db.sqlite.prepare('SELECT COUNT(*) AS n FROM product_metadata_cache').get().n, 0);
+  db.sqlite.close();
+});
 
 test('D1 reproduces raw, labels, Unicode, order and headers exactly; cache requires no Redis or Blob', async () => {
   const { db, options } = setup();

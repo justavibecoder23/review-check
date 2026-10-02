@@ -136,6 +136,48 @@ export default {
     }
     if (!await authorized(request, env)) return json({ error: 'UNAUTHORIZED' }, 401);
     try {
+      if (url.pathname === '/v1/product-metadata' && ['GET', 'POST'].includes(request.method)) {
+        if (Number(request.headers.get('content-length')) > 8192) return json({ error: 'PAYLOAD_TOO_LARGE' }, 413);
+        let input;
+        if (request.method === 'POST') {
+          const text = await request.text();
+          if (encoder.encode(text).byteLength > 8192) return json({ error: 'PAYLOAD_TOO_LARGE' }, 413);
+          input = JSON.parse(text);
+        } else input = Object.fromEntries(url.searchParams);
+        const shopId = String(input.shopId || '');
+        const itemId = String(input.itemId || '');
+        if (!/^\d{1,25}$/.test(shopId) || !/^\d{1,25}$/.test(itemId)) throw new Error('INVALID_METADATA_ID');
+        const key = `shopee:${shopId}:${itemId}`;
+        const now = Date.now();
+        const select = () => env.DB.prepare('SELECT * FROM product_metadata_cache WHERE product_key = ? AND expires_at > ?').bind(key, now);
+        if (request.method === 'POST') {
+          const title = String(input.title || '').trim().slice(0, 1000);
+          const image = String(input.image || '').trim();
+          if (image) {
+            const imageUrl = new URL(image);
+            if (imageUrl.protocol !== 'https:' || !/(?:^|\.)susercontent\.com$/i.test(imageUrl.hostname)
+              || imageUrl.username || imageUrl.password || image.length > 3000) throw new Error('INVALID_METADATA_IMAGE');
+          }
+          if (!title && !image) throw new Error('INVALID_METADATA_EMPTY');
+          await env.DB.batch([env.DB.prepare(`INSERT INTO product_metadata_cache
+            (product_key, shop_id, item_id, title, image_url, source, updated_at, expires_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(product_key) DO UPDATE SET
+              title = CASE WHEN excluded.title != '' THEN excluded.title WHEN product_metadata_cache.expires_at > ? THEN product_metadata_cache.title ELSE '' END,
+              image_url = CASE WHEN excluded.image_url != '' THEN excluded.image_url WHEN product_metadata_cache.expires_at > ? THEN product_metadata_cache.image_url ELSE '' END,
+              source = excluded.source, updated_at = excluded.updated_at, expires_at = excluded.expires_at
+            WHERE product_metadata_cache.expires_at <= ?
+              OR (excluded.title != '' AND excluded.title != COALESCE(product_metadata_cache.title, ''))
+              OR (excluded.image_url != '' AND excluded.image_url != COALESCE(product_metadata_cache.image_url, ''))`)
+            .bind(key, shopId, itemId, title, image, String(input.source || 'unknown').slice(0, 40), now,
+              now + REVIEW_CACHE_TTL_SECONDS * 1000, now, now, now)]);
+        }
+        const row = await select().first();
+        const metadata = row ? { shopId: row.shop_id, itemId: row.item_id,
+          ...(row.title ? { title: row.title } : {}), ...(row.image_url ? { image: row.image_url } : {}),
+          source: row.source, updatedAt: new Date(row.updated_at).toISOString(), expiresAt: new Date(row.expires_at).toISOString() } : null;
+        return json(request.method === 'GET' ? { hit: Boolean(row), metadata } : { saved: Boolean(row), metadata });
+      }
       if (request.method === 'POST' && url.pathname === '/v1/datasets') return await writeDataset(request, env);
       if (request.method === 'GET' && url.pathname === '/v1/cache') {
         const key = url.searchParams.get('key');

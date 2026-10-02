@@ -553,6 +553,15 @@ let progressProduct = {};
 let progressImageUrl = '';
 let analysisGeneration = 0;
 let progressMascotStopTimer;
+let shopeeMetadataBackgroundStarted = false;
+let activeResultData = null;
+let historySavePromise = null;
+let activeAnalyzedAt = null;
+let verifiedShopeeProductMeta = null;
+
+function hasShopeeProductTitle(title) {
+  return Boolean(title) && !/^Sản phẩm (?:đang phân tích )?trên Shopee$/i.test(String(title));
+}
 
 function stopProgressMascot() {
   window.clearTimeout(progressMascotStopTimer);
@@ -627,11 +636,98 @@ function renderProgressProduct(update = {}) {
       alt: `Ảnh ${title || 'sản phẩm đang phân tích'}`
     });
   }
-  productMetaReceived = true;
-  if (activeStepIndex < 2) {
+  productMetaReceived = Boolean((product.platform === 'Shopee' ? hasShopeeProductTitle(title) : title) || imageUrl);
+  if (productMetaReceived && activeStepIndex < 2) {
     setAnalysisStep(1);
     setProgress(28);
   }
+  scheduleShopeeMetadataBackground(product);
+}
+
+function scheduleShopeeMetadataBackground(product) {
+  if (product.platform !== 'Shopee' || !product.shopId || !product.itemId
+    || (hasShopeeProductTitle(product.title) && (product.image || product.imageUrl))
+    || shopeeMetadataBackgroundStarted) return;
+  shopeeMetadataBackgroundStarted = true;
+  const generation = analysisGeneration;
+  window.setTimeout(() => {
+    if (generation !== analysisGeneration) return;
+    void checkShopeeMetadataInBackground(product, generation);
+  }, 1_200);
+}
+
+async function checkShopeeMetadataInBackground(product, generation) {
+  const originalUrl = String(product.originalUrl || '');
+  // A share URL can be shortened and lack the product IDs. Keep the full
+  // named URL when it identifies this product; otherwise use its resolved URL.
+  const originalIds = originalUrl.match(/(?:-i\.|\/product-i\.)(\d+)\.(\d+)|\/product\/(\d+)\/(\d+)/i);
+  const originalMatches = originalIds
+    && String(originalIds[1] || originalIds[3]) === String(product.shopId)
+    && String(originalIds[2] || originalIds[4]) === String(product.itemId);
+  const requestUrl = originalMatches
+    ? originalUrl : String(product.url || activeAnalysisUrl || '');
+  if (!requestUrl || !product.shopId || !product.itemId) return;
+  try {
+    let response = await fetch('/api/shopee-product-meta', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url: requestUrl, metadataTicket: product.metadataTicket }),
+      signal: AbortSignal.timeout(25_000)
+    });
+    let payload = response.ok ? await response.json() : null;
+    const awaitingBackground = payload?.status === 'pending';
+    for (let attempt = 0; attempt < 7 && awaitingBackground
+      && !(payload?.metadata?.title && payload?.metadata?.image); attempt += 1) {
+      if (generation !== analysisGeneration) return;
+      await new Promise((resolve) => window.setTimeout(resolve, 2_000));
+      response = await fetch(`/api/shopee-product-meta?url=${encodeURIComponent(requestUrl)}`, {
+        signal: AbortSignal.timeout(3_000)
+      });
+      payload = response.ok ? await response.json() : null;
+    }
+    if (generation !== analysisGeneration || String(payload?.shopId) !== String(product.shopId)
+      || String(payload?.itemId) !== String(product.itemId)) return;
+    const metadata = payload.metadata || {};
+    if (!metadata.title && !metadata.image) return;
+    const update = {
+      platform: 'Shopee', shopId: product.shopId, itemId: product.itemId,
+      ...(metadata.title ? { title: metadata.title } : {}),
+      ...(metadata.image ? { image: metadata.image } : {})
+    };
+    verifiedShopeeProductMeta = update;
+    // Keep the latest verified metadata even when the progress panel has
+    // already closed. The final SSE result may be between parsing and render.
+    progressProduct = { ...progressProduct, ...update };
+    // Progress and the final report are updated independently; neither awaits
+    // this optional metadata request.
+    if (!progressPanel?.classList.contains('hidden')) renderProgressProduct(update);
+    if (!activeResultData || String(activeResultData.product?.itemId) !== String(product.itemId)
+      || String(activeResultData.product?.shopId) !== String(product.shopId)) return;
+    const previous = activeResultData.product;
+    const changed = Boolean((update.title && previous.title !== update.title)
+      || (update.image && previous.image !== update.image));
+    if (!changed) return;
+    activeResultData.product = {
+      ...previous,
+      ...(update.title ? { title: update.title } : {}),
+      ...(update.image ? { image: update.image } : {})
+    };
+    document.querySelector('#results-title').textContent = activeResultData.product.title || 'Sản phẩm trên Shopee';
+    if (activeResultData.product.image) loadProductImage({
+      image: document.querySelector('#product-image'),
+      fallback: document.querySelector('#product-illustration'),
+      url: activeResultData.product.image,
+      alt: `Ảnh ${activeResultData.product.title || 'sản phẩm Shopee'}`
+    });
+    try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(activeResultData)); } catch { /* Optional. */ }
+    const metadataResult = activeResultData;
+    const analyzedAt = activeAnalyzedAt;
+    await historySavePromise?.catch(() => null);
+    if (generation !== analysisGeneration) return;
+    const { saveToHistory } = await import('./history-manager.js');
+    if (generation !== analysisGeneration) return;
+    const saved = await saveToHistory(metadataResult, { now: () => analyzedAt || new Date() });
+    if (saved) window.dispatchEvent(new CustomEvent('realview:history-changed'));
+  } catch { /* Metadata is optional; never interrupt progress or result. */ }
 }
 
 function renderProgressSample(sample = {}) {
@@ -702,6 +798,10 @@ async function readAnalysisStream(url) {
     if (!dataLines.length) return;
     const payload = JSON.parse(dataLines.join('\n'));
     if (eventName === 'progress') handleProgressEvent(payload);
+    if (eventName === 'product_identity') {
+      progressProduct = { ...progressProduct, ...payload };
+      scheduleShopeeMetadataBackground(progressProduct);
+    }
     if (eventName === 'product_meta') renderProgressProduct(payload);
     if (eventName === 'reviews_sample') renderProgressSample(payload);
     if (eventName === 'layer1_stats') {
@@ -744,6 +844,11 @@ async function readAnalysisStream(url) {
 
 async function startProgressiveAnalysis(url) {
   analysisGeneration += 1;
+  shopeeMetadataBackgroundStarted = false;
+  activeResultData = null;
+  historySavePromise = null;
+  activeAnalyzedAt = null;
+  verifiedShopeeProductMeta = null;
   const marketplace = window.realviewMarketplaceFromUrl?.(url) || 'unknown';
   window.realviewTrackEvent?.('analysis_start', { marketplace });
   activeAnalysisUrl = url;
@@ -781,6 +886,18 @@ async function startProgressiveAnalysis(url) {
 
   try {
     const resultData = await readAnalysisStream(url);
+    if (String(resultData.product?.platform || '') === 'Shopee'
+      && String(resultData.product?.shopId || '') === String(progressProduct.shopId || '')
+      && String(resultData.product?.itemId || '') === String(progressProduct.itemId || '')) {
+      const missingTitle = !resultData.product.title
+        || /^Sản phẩm (?:đang phân tích )?trên Shopee$/i.test(String(resultData.product.title));
+      resultData.product = {
+        ...resultData.product,
+        ...(missingTitle && progressProduct.title ? { title: progressProduct.title } : {}),
+        ...(!resultData.product.image && progressProduct.image ? { image: progressProduct.image } : {}),
+        ...verifiedShopeeProductMeta
+      };
+    }
     // Reuse an image already verified in progress. A late result with an old
     // Blob URL or no image must not make that visible image disappear.
     const progressImage = document.querySelector('#analysis-product-image');
@@ -809,7 +926,23 @@ async function startProgressiveAnalysis(url) {
       step.removeAttribute('aria-current');
     });
     setProgress(100);
+    // Recheck immediately before publishing. A background response may land
+    // after the first merge above but before the final result is displayed.
+    if (String(resultData.product?.platform || '') === 'Shopee'
+      && String(resultData.product?.shopId || '') === String(progressProduct.shopId || '')
+      && String(resultData.product?.itemId || '') === String(progressProduct.itemId || '')) {
+      const missingTitle = !resultData.product.title
+        || /^Sản phẩm (?:đang phân tích )?trên Shopee$/i.test(String(resultData.product.title));
+      resultData.product = {
+        ...resultData.product,
+        ...(missingTitle && progressProduct.title ? { title: progressProduct.title } : {}),
+        ...(!resultData.product.image && progressProduct.image ? { image: progressProduct.image } : {}),
+        ...verifiedShopeeProductMeta
+      };
+    }
     try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(resultData)); } catch { /* Result remains visible without browser storage. */ }
+    activeResultData = resultData;
+    activeAnalyzedAt = new Date();
     window.dispatchEvent(new CustomEvent('realview:analysis-result', { detail: { result: resultData } }));
     window.history.replaceState({}, '', '/ket-qua');
     renderResult(resultData);
@@ -818,8 +951,8 @@ async function startProgressiveAnalysis(url) {
     progressPanel?.classList.add('hidden');
     // Đồng bộ lịch sử là tính năng bổ sung: thực hiện sau khi kết quả đã hiển
     // thị để Redis hoặc mạng chậm không giữ người dùng ở bước hoàn thiện.
-    void import('./history-manager.js')
-      .then(({ saveToHistory }) => saveToHistory(resultData))
+    historySavePromise = import('./history-manager.js')
+      .then(({ saveToHistory }) => saveToHistory(resultData, { now: () => activeAnalyzedAt }))
       .then((savedHistoryItem) => {
         if (savedHistoryItem) window.dispatchEvent(new CustomEvent('realview:history-changed'));
         return savedHistoryItem;

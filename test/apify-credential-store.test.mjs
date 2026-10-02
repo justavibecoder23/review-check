@@ -21,12 +21,14 @@ import {
   DEFAULT_MAX_USES_PER_KEY,
   finalizeShopeeCostCredential,
   finalizeCounterpartCostCredential,
+  finalizeShopeeDetailCostCredential,
   finalizeTikTokCredential,
   getApifyCredentialPoolStatus,
   reserveApifyCredential,
   reserveApifyCredentialSet,
   reserveShopeeCostCredentialSet,
   reserveCounterpartCostCredential,
+  reserveShopeeDetailCostCredential,
   reserveTikTokCostCredentials,
   reserveTikTokCredentials,
   finalizeTikTokCostCredential,
@@ -93,18 +95,25 @@ function createRedisFake() {
         const nowMs = Number(command[18]);
         const retryAfterMs = Number(command[19]);
         const actorStarted = command[23] === '1';
+        const detailTask = command[25] === 'shopee-product-detail';
+        const metadataResolved = command[26] === '1';
+        const stat = (name) => detailTask ? `${accountCycleId}:detail${name[0].toUpperCase()}${name.slice(1)}` : name;
         const state = JSON.parse(reserved[accountCycleId] || '{"leases":{}}');
         const pendingOperationId = `${operationId}:pending`;
         const pendingRecorded = Boolean(ledger[pendingOperationId]);
         if (['timeout', 'upstream_service_error', 'unknown_error', 'cost_pending'].includes(failureClass)) {
           state.leases[reservationId].expiresAtMs = nowMs + Math.max(60_000, retryAfterMs);
           reserved[accountCycleId] = JSON.stringify(state);
-          if (failureClass === 'cost_pending' && !ledger[pendingOperationId]) {
-            if (actorStarted) stats.actorStarts = String(Number(stats.actorStarts || 0) + 1);
-            if (statusCode >= 200 && statusCode < 300) {
-              stats.completedRuns = String(Number(stats.completedRuns || 0) + 1);
-              stats.itemsBilled = String(Number(stats.itemsBilled || 0) + itemCount);
-              if (!itemCount) stats.emptyRuns = String(Number(stats.emptyRuns || 0) + 1);
+          if (!ledger[pendingOperationId]) {
+            if (actorStarted) stats[stat('actorStarts')] = String(Number(stats[stat('actorStarts')] || 0) + 1);
+            if (failureClass === 'cost_pending' && statusCode >= 200 && statusCode < 300) {
+              stats[stat('completedRuns')] = String(Number(stats[stat('completedRuns')] || 0) + 1);
+              stats[stat('itemsBilled')] = String(Number(stats[stat('itemsBilled')] || 0) + itemCount);
+              if (!itemCount) stats[stat('emptyRuns')] = String(Number(stats[stat('emptyRuns')] || 0) + 1);
+              if (detailTask) {
+                const key = stat(metadataResolved ? 'succeeded' : 'empty');
+                stats[key] = String(Number(stats[key] || 0) + 1);
+              }
             }
             ledger[pendingOperationId] = JSON.stringify({ pending: true, operationId });
           }
@@ -115,15 +124,20 @@ function createRedisFake() {
         delete ledger[pendingOperationId];
         if (actorStarted) {
           spent[accountCycleId] = String(Number(spent[accountCycleId] || 0) + actualCost);
-          if (!pendingRecorded) stats.actorStarts = String(Number(stats.actorStarts || 0) + 1);
-          stats.spentMicroUsd = String(Number(stats.spentMicroUsd || 0) + actualCost);
+          if (!pendingRecorded) stats[stat('actorStarts')] = String(Number(stats[stat('actorStarts')] || 0) + 1);
+          stats[stat('spentMicroUsd')] = String(Number(stats[stat('spentMicroUsd')] || 0) + actualCost);
+          if (detailTask) stats[stat('costMicroUsd')] = String(Number(stats[stat('costMicroUsd')] || 0) + actualCost);
         }
         if (statusCode >= 200 && statusCode < 300 && !pendingRecorded) {
-          stats.completedRuns = String(Number(stats.completedRuns || 0) + 1);
-          stats.itemsBilled = String(Number(stats.itemsBilled || 0) + itemCount);
-          if (!itemCount) stats.emptyRuns = String(Number(stats.emptyRuns || 0) + 1);
+          stats[stat('completedRuns')] = String(Number(stats[stat('completedRuns')] || 0) + 1);
+          stats[stat('itemsBilled')] = String(Number(stats[stat('itemsBilled')] || 0) + itemCount);
+          if (!itemCount) stats[stat('emptyRuns')] = String(Number(stats[stat('emptyRuns')] || 0) + 1);
+          if (detailTask) {
+            const key = stat(metadataResolved ? 'succeeded' : 'empty');
+            stats[key] = String(Number(stats[key] || 0) + 1);
+          }
         } else if (!pendingRecorded) {
-          stats.failedRuns = String(Number(stats.failedRuns || 0) + 1);
+          stats[stat('failedRuns')] = String(Number(stats[stat('failedRuns')] || 0) + 1);
         }
         ledger[operationId] = JSON.stringify({ accountCycleId, actualCost });
         return JSON.stringify({ ok: true, alreadyFinalized: false, costMicroUsd: actualCost });
@@ -138,6 +152,7 @@ function createRedisFake() {
         const shopeeRunCost = Number(command[20]);
         const maxShopeeUses = Number(command[21]);
         const cycles = JSON.parse(command[22]);
+        const detailTask = command[25] === 'shopee-product-detail';
         const spent = hash(command[5]);
         const reserved = hash(command[6]);
         const stats = hash(command[13]);
@@ -157,7 +172,8 @@ function createRedisFake() {
         state.leases[reservationId] = { costMicroUsd: plannedCost, actorId, expiresAtMs: nowMs + leaseMs };
         reserved[cycle.accountCycleId] = JSON.stringify(state);
         spent[cycle.accountCycleId] = String(cycle.observedSpentMicroUsd);
-        stats.reservations = String(Number(stats.reservations || 0) + 1);
+        const stat = detailTask ? `${cycle.accountCycleId}:detailReservations` : 'reservations';
+        stats[stat] = String(Number(stats[stat] || 0) + 1);
         return JSON.stringify({
           ok: true,
           source: 'redis-vault-cost-ledger-v6-counterpart',
@@ -826,6 +842,68 @@ test('counterpart chưa có actual cost giữ reservation ngắn hạn và khôn
     assert.equal(reconciledStatus.platforms.counterpart.accounting.actorStarts, 1);
     assert.equal(reconciledStatus.platforms.counterpart.accounting.completedRuns, 1);
     assert.equal(reconciledStatus.platforms.counterpart.accounting.itemsBilled, 12);
+  } finally {
+    for (const name of names) {
+      if (previous[name] === undefined) delete process.env[name];
+      else process.env[name] = previous[name];
+    }
+  }
+});
+
+test('Shopee detail dùng ledger cũ, chừa 20 review và reset counter theo cycle Apify', async () => {
+  const names = ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'APIFY_TOKEN_VAULT_KEY'];
+  const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.example.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'redis-test-token';
+  process.env.APIFY_TOKEN_VAULT_KEY = Buffer.alloc(32, 7).toString('base64');
+  const redis = createRedisFake();
+  try {
+    await saveApifyCredentialPool({ groups: [group('primary', 'detail')] }, { fetchImpl: redis.fetchImpl });
+    let cycleStart = '2026-09-10T00:00:00.000Z';
+    const usageFetchImpl = async () => ({ ok: true, async json() {
+      return { data: { usageCycle: {
+        startAt: cycleStart,
+        endAt: cycleStart.startsWith('2026-09') ? '2026-10-10T00:00:00.000Z' : '2026-11-10T00:00:00.000Z'
+      }, totalUsageCreditsUsdAfterVolumeDiscount: 0.5 } };
+    } });
+    const allocate = (now) => reserveShopeeDetailCostCredential({
+      actorId: 'zen-studio/shopee-product-detail-scraper', plannedCostMicroUsd: 50_000,
+      now, fetchImpl: redis.fetchImpl, usageFetchImpl
+    });
+    const first = await allocate('2026-09-15T00:00:00.000Z');
+    assert.equal(first.credential.shopeeReservedMicroUsd, 20 * 87_800);
+    await finalizeShopeeDetailCostCredential(first.credential, {
+      actorId: 'zen-studio/shopee-product-detail-scraper', actorRunId: 'detail-1',
+      actualCostMicroUsd: 12_000, itemCount: 1, statusCode: 200, actorStarted: true,
+      metadataResolved: true
+    }, { fetchImpl: redis.fetchImpl, now: '2026-09-15T00:01:00.000Z' });
+    cycleStart = '2026-10-10T00:00:00.000Z';
+    const second = await allocate('2026-10-15T00:00:00.000Z');
+    await finalizeShopeeDetailCostCredential(second.credential, {
+      actorId: 'zen-studio/shopee-product-detail-scraper', actorRunId: 'detail-2',
+      actualCostMicroUsd: 8_000, itemCount: 1, statusCode: 200, actorStarted: true,
+      metadataResolved: false
+    }, { fetchImpl: redis.fetchImpl, now: '2026-10-15T00:01:00.000Z' });
+    const status = await getApifyCredentialPoolStatus({ fetchImpl: redis.fetchImpl });
+    const cycles = status.platforms.shopeeProductDetail.cycles;
+    assert.equal(cycles.length, 2);
+    assert.equal(cycles[0].detailActorStarts, 1);
+    assert.equal(cycles[0].detailEmpty, 1);
+    assert.equal(cycles[1].detailSucceeded, 1);
+    assert.equal(Number(redis.hashes.get(APIFY_POOL_COUNTERS_KEY)?.[first.credential.id] || 0), 0);
+    assert.equal(status.platforms.counterpart.accounting.actorStarts, 0);
+    const third = await allocate('2026-10-15T00:02:00.000Z');
+    assert.equal(third.credential.accountCycleId, second.credential.accountCycleId);
+    assert.equal(third.credential.shopeeReservedMicroUsd, 20 * 87_800);
+    await finalizeShopeeDetailCostCredential(third.credential, {
+      actorId: 'zen-studio/shopee-product-detail-scraper', actorRunId: 'detail-timeout',
+      actualCostMicroUsd: 0, itemCount: 0, statusCode: 201, actorStarted: true,
+      failureClass: 'timeout'
+    }, { fetchImpl: redis.fetchImpl, now: '2026-10-15T00:03:00.000Z' });
+    const afterTimeout = await getApifyCredentialPoolStatus({ fetchImpl: redis.fetchImpl });
+    assert.equal(afterTimeout.platforms.shopeeProductDetail.cycles[0].detailActorStarts, 2);
+    assert.equal(afterTimeout.platforms.shopeeProductDetail.cycles[0].detailEmpty, 1);
+    assert.equal(afterTimeout.platforms.shopeeProductDetail.cycles[0].detailCostMicroUsd, 8_000);
   } finally {
     for (const name of names) {
       if (previous[name] === undefined) delete process.env[name];

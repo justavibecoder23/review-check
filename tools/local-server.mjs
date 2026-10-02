@@ -13,6 +13,8 @@ import contactHandler from '../api/contact.mjs';
 import chatHandler from '../api/chat.mjs';
 import chatbotGeminiConfigHandler from '../api/chatbot-gemini-config.mjs';
 import matchCounterpartHandler from '../api/match-counterpart.mjs';
+import shopeeProductMetaHandler from '../src/shopee-product-meta-route.mjs';
+import { createShopeeMetadataTicket } from '../src/shopee-metadata-ticket.mjs';
 
 const port = Number(process.env.PORT || 3000);
 const host = process.env.HOST || '127.0.0.1';
@@ -82,6 +84,11 @@ const server = createServer(async (request, response) => {
     const url = new URL(request.url, `http://${request.headers.host}`);
     const apiPath = normalizeApiPath(url.pathname);
 
+    if (apiPath === '/api/shopee-product-meta') {
+      if (request.method === 'POST') request.body = await getBody(request);
+      return shopeeProductMetaHandler(request, vercelResponse(response));
+    }
+
     if (request.method === 'POST' && apiPath === '/api/analyze') {
       const body = await getBody(request);
       const result = await analyzeProductUrl(body.url, { signal: clientDisconnectSignal(request, response) });
@@ -98,6 +105,9 @@ const server = createServer(async (request, response) => {
         const result = await analyzeProductUrl(body.url, {
           onProgress: (progress) => stream.send('progress', progress),
           onProductMeta: (product) => stream.send('product_meta', product),
+          onProductIdentity: (product) => stream.send('product_identity', {
+            ...product, metadataTicket: createShopeeMetadataTicket(product.shopId, product.itemId)
+          }),
           onReviewsSample: (sample) => stream.send('reviews_sample', sample),
           onLayer1Stats: (stats) => stream.send('layer1_stats', stats),
           signal

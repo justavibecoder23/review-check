@@ -3,6 +3,8 @@ import { clientDisconnectSignal, openSse } from '../src/sse.mjs';
 import { attachResultChatContext, scheduleResultChatContext } from '../src/result-chat-background.mjs';
 import { analysisErrorPayload, beginAnalysisAccess } from '../src/analysis-access.mjs';
 import { guestQuotaConfig } from '../src/guest-analysis-quota.mjs';
+import { waitUntil } from '@vercel/functions';
+import { createShopeeMetadataTicket } from '../src/shopee-metadata-ticket.mjs';
 
 export default async function handler(request, response) {
   if (request.method !== 'POST') {
@@ -40,6 +42,10 @@ export default async function handler(request, response) {
     const result = await analyzeProductUrl(body.url, {
       onProgress: (progress) => stream.send('progress', progress),
       onProductMeta: (product) => stream.send('product_meta', product),
+      onProductIdentity: (identity) => stream.send('product_identity', {
+        ...identity, metadataTicket: createShopeeMetadataTicket(identity.shopId, identity.itemId)
+      }),
+      onBackgroundWork: (work) => waitUntil(work),
       onReviewsSample: (sample) => stream.send('reviews_sample', sample),
       onLayer1Stats: (stats) => stream.send('layer1_stats', stats),
       onLayer2Progress: (state) => stream.send('layer2_progress', state),
