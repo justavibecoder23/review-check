@@ -587,6 +587,33 @@ body.is-english .realviewee-speech {
   .chatbot-close { width: 38px; height: 38px; }
 }
 
+/* Structured answers share the same safe, readable presentation across FAQ and AI. */
+.chatbot-message > div { min-width: 0; }
+.chatbot-message--assistant > div { max-width: calc(100% - 45px); }
+.chatbot-answer-card { padding: 16px; border: 1px solid rgba(22,22,22,.1); border-radius: 17px 17px 17px 5px; background: #fff; color: #343431; font-size: 14px; line-height: 1.65; overflow-wrap: anywhere; box-shadow: 0 7px 20px rgba(22,22,22,.045); }
+.chatbot-message .chatbot-answer-card p { padding: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; font-size: inherit; line-height: inherit; white-space: normal; }
+.chatbot-answer-summary { font-weight: 650; color: #20201e; }
+.chatbot-answer-section { margin-top: 18px; }
+.chatbot-answer-section h3 { margin: 0 0 8px; font-size: 14px; line-height: 1.45; font-weight: 800; color: #20201e; }
+.chatbot-answer-section ul, .chatbot-answer-section ol { margin: 0; padding-left: 21px; }
+.chatbot-answer-section li + li, .chatbot-answer-section > div + div { margin-top: 10px; }
+.chatbot-answer-section li::marker { color: #ad490c; font-weight: 750; }
+.chatbot-answer-limitations { margin-top: 18px; padding: 12px; border-radius: 10px; background: #fff6ed; color: #65432e; font-size: 12px; }
+.chatbot-answer-limitations strong { display: block; margin-bottom: 5px; }
+.chatbot-message .chatbot-answer-limitations p + p { margin-top: 8px; }
+.chatbot-evidence { margin-top: 9px; padding: 9px 10px; border: 1px solid #d4e7db; border-radius: 9px; background: #f5faf7; font-size: 12px; }
+.chatbot-evidence summary { cursor: pointer; color: #185e40; font-weight: 700; min-height: 24px; }
+.chatbot-evidence-status { display: block; margin: 8px 0; color: #4a5c51; }
+.chatbot-evidence blockquote { margin: 0; padding-left: 10px; border-left: 2px solid #9abdac; white-space: pre-wrap; }
+.chatbot-evidence > span:last-child { display: block; margin-top: 8px; }
+.chatbot-answer-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.chatbot-answer-actions a { padding: 8px 10px; border: 1px solid #e8c5ae; border-radius: 8px; color: #9b3c07; text-decoration: underline; font-size: 12px; font-weight: 700; }
+.chatbot-evidence summary:focus-visible, .chatbot-answer-actions a:focus-visible { outline: 2px solid #ad490c; outline-offset: 3px; }
+.chatbot-retry { margin-top: 10px; padding: 9px 13px; border: 1px solid #d6b39b; border-radius: 8px; background: #fff6ed; color: #853708; font-size: 12px; font-weight: 700; cursor: pointer; }
+.chatbot-retry:disabled { opacity: .65; cursor: wait; }
+.chatbot-retry:focus-visible { outline: 2px solid #ad490c; outline-offset: 3px; }
+@media (max-width: 380px) { .chatbot-answer-card { padding: 12px; } .chatbot-message--assistant > div { max-width: calc(100% - 40px); } }
+
 /* The mobile homepage only needs these three frames, not the full sprite atlases. */
 @media (max-width: 700px) {
   .realviewee-sprite[data-mascot-state="happy"] {

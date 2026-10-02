@@ -231,8 +231,9 @@ test('chatbot lịch sử hỗ trợ cân nhắc mua dựa trên TrustScore và 
   assert.doesNotMatch(response.answer, /Ưu điểm thứ ba/);
   assert.doesNotMatch(response.answer, /Tập review có độ tin cậy cao/);
   assert.doesNotMatch(response.answer, /chưa có thông tin này trong kho dữ liệu/i);
-  assert.equal(response.answer.split('\n').length, 4);
-  assert.equal(response.answer.split('\n').every((line) => line.startsWith('• ')), true);
+  assert.equal(response.answerDocument.sections.length, 3);
+  assert.equal(response.answerDocument.sections[1].kind, 'bullets');
+  assert.match(response.answerDocument.limitations.join(' '), /không phải điểm chất lượng/);
 });
 
 test('quy tắc cân nhắc mua không áp dụng cho kết quả đang xem', () => withContextEnv(async () => {
@@ -269,7 +270,8 @@ test('chatbot lịch sử không bịa quyết định mua khi báo cáo thiếu
 
   assert.equal(response.engine, 'rules');
   assert.match(response.answer, /TrustScore: Chưa có đủ dữ liệu để xác định/i);
-  assert.equal(response.answer.split('\n').length, 4);
+  assert.equal(response.answerDocument.sections.length, 3);
+  assert.match(response.answerDocument.sections[2].items[0].text, /không có nghĩa sản phẩm không có hạn chế/);
   assert.doesNotMatch(response.answer, /bạn nên mua/i);
 });
 

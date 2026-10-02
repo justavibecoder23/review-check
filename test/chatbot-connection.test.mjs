@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCipheriv } from 'node:crypto';
+import { geminiCredentialId } from '../src/gemini-credential-store.mjs';
 import { answerWebsiteQuestion, retrieveKnowledge, OUT_OF_SCOPE_REPLY } from '../src/site-chatbot.mjs';
 
 const envNames = ['GEMINI_API_KEY', 'CHATBOT_GEMINI_API_KEY', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'KV_REST_API_URL', 'KV_REST_API_TOKEN', 'GEMINI_API_KEY_VAULT_KEY'];
@@ -93,6 +94,38 @@ test('key chatbot lỗi thì chuyển đúng một lần sang key dự phòng tr
   assert.doesNotMatch(JSON.stringify(result), /chatbot-(?:primary|backup)-key/);
 }));
 
+test('primary bị cooldown không tiêu provider attempt và vẫn dùng backup khỏe', () => withEnv({
+  CHATBOT_GEMINI_API_KEY: 'chatbot-primary-key',
+  UPSTASH_REDIS_REST_URL: 'https://redis.test', UPSTASH_REDIS_REST_TOKEN: 'redis-test-token',
+  GEMINI_API_KEY_VAULT_KEY: Buffer.alloc(32, 1).toString('base64')
+}, async () => {
+  const iv = Buffer.alloc(12, 9);
+  const cipher = createCipheriv('aes-256-gcm', Buffer.alloc(32, 1), iv);
+  const encrypted = Buffer.concat([cipher.update('chatbot-backup-key', 'utf8'), cipher.final()]);
+  const credentials = [{ id: 'backup-0', label: 'backup-0', iv: iv.toString('base64'),
+    tag: cipher.getAuthTag().toString('base64'), ciphertext: encrypted.toString('base64') }];
+  const primaryRoute = `${geminiCredentialId('chatbot-primary-key')}:gemini-3.5-flash-lite`;
+  const calls = [], events = [];
+  const result = await answerWebsiteQuestion(question('Giải thích giúp tôi quy trình RealView thật dễ hiểu nhé'), {
+    onProviderAttempt: event => events.push(event),
+    redisFetchImpl: async (url, init) => {
+      const command = JSON.parse(init.body);
+      if (url.endsWith('/multi-exec')) return new Response(JSON.stringify([{ result: JSON.stringify({ credentials }) }, { result: [] }]));
+      if (command[0] === 'HMGET') return new Response(JSON.stringify({ result: command.slice(2).map(route =>
+        route === primaryRoute ? JSON.stringify({ cooldownUntilMs: Date.now() + 30000 }) : null) }));
+      if (command[0] === 'EVAL') return new Response(JSON.stringify({ result: JSON.stringify({ ok: true, state: {} }) }));
+      throw new Error('Unexpected Redis command');
+    },
+    fetchImpl: async (_url, init) => {
+      calls.push(init.headers['x-goog-api-key']);
+      return success('RealView thu thập và tổng hợp review công khai.');
+    }
+  });
+  assert.deepEqual(calls, ['chatbot-backup-key']);
+  assert.equal(events.filter(event => event.phase === 'start').length, 1);
+  assert.equal(result.engine, 'gemini');
+}));
+
 test('câu hỏi chủ đề mới không bị lịch sử rating lấn át', () => withEnv({ CHATBOT_GEMINI_API_KEY: 'test-key' }, async () => {
   const messages = [...question('Rating cao có đồng nghĩa TrustScore cao không?'), { role: 'assistant', content: 'Hai chỉ số khác nhau.' }, ...question('Giải thích giúp tôi quy trình RealView thật dễ hiểu nhé')];
   const result = await answerWebsiteQuestion(messages, {
@@ -130,7 +163,7 @@ test('Gemini có thể từ chối câu hỏi ngoài dữ liệu', () => withEnv
 }));
 
 test('phân loại lỗi kết nối mà không trả khóa hoặc lỗi thô cho người dùng', () => withEnv({ CHATBOT_GEMINI_API_KEY: 'private-test-key' }, async () => {
-  for (const [status, expected] of [[403, 'authentication_failed'], [429, 'quota_exhausted'], [503, 'connection_failed']]) {
+  for (const [status, expected] of [[403, 'authentication_failed'], [429, 'quota_exhausted'], [503, 'provider_overloaded']]) {
     const logs = [];
     const result = await answerWebsiteQuestion(question('Giải thích giúp tôi ý nghĩa TrustScore thật dễ hiểu nhé'), {
       logGeminiErrors: true, logger: { error: (...args) => logs.push(args) },

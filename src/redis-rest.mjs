@@ -20,7 +20,8 @@ async function execute(path, commands, options = {}) {
       'content-type': 'application/json'
     },
     body: JSON.stringify(commands),
-    signal: AbortSignal.timeout(options.timeoutMs || 4_000)
+    signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(options.timeoutMs || 4_000)])
+      : AbortSignal.timeout(options.timeoutMs || 4_000)
   });
   if (!response.ok) throw new Error(`Redis trả về HTTP ${response.status}`);
   const body = await response.json();

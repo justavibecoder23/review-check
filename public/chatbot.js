@@ -76,6 +76,18 @@
   const languageNotice = panel.querySelector('[data-chatbot-language-notice]');
   const conversation = [];
   let isSending = false;
+  let lastRetryTurn = null;
+  let activeChatController=null,activeChatTurn=null;
+  function newRequestId() {
+    const bytes=new Uint8Array(16); window.crypto.getRandomValues(bytes);
+    return `chat_${Array.from(bytes,x=>x.toString(16).padStart(2,'0')).join('')}`;
+  }
+  let clientSessionId;
+  try { clientSessionId=sessionStorage.getItem('realview:chat-session:v1'); } catch {}
+  if(!/^chat_[a-f0-9]{32}$/.test(clientSessionId || '')) {
+    clientSessionId=newRequestId();
+    try { sessionStorage.setItem('realview:chat-session:v1',clientSessionId); } catch {}
+  }
   let selectedHistoryContext = null;
   let resultReadiness = { resultId: '', state: 'idle', timer: null };
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -438,7 +450,99 @@
     messagesRoot.scrollTo({ top: messagesRoot.scrollHeight, behavior: 'smooth' });
   }
 
-  function addMessage(role, content, engine, citations = []) {
+  function renderAnswerDocument(body, data) {
+    const doc = data?.answerDocument;
+    if (doc?.version !== '2.0' || typeof doc.summary !== 'string' || doc.summary.length > 900
+      || !Array.isArray(doc.sections) || doc.sections.length > 5 || !Array.isArray(doc.limitations)
+      || doc.limitations.length > 3 || !Array.isArray(doc.actions) || doc.actions.length > 2
+      || doc.limitations.some(x => typeof x !== 'string' || x.length > 700)
+      || doc.sections.some(s => !s || typeof s.title !== 'string' || s.title.length > 100
+        || !['paragraph', 'bullets', 'steps'].includes(s.kind) || !Array.isArray(s.items) || s.items.length > 6
+        || s.items.some(i => typeof i?.text !== 'string' || i.text.length > 1400))) return false;
+    const card = document.createElement('div');
+    card.className = 'chatbot-answer-card';
+    const summary = document.createElement('p'); summary.className = 'chatbot-answer-summary';
+    summary.textContent = doc.summary; card.append(summary);
+    const evidence = Array.isArray(data.evidence) ? data.evidence.slice(0, 40) : [];
+    const addEvidence = (parent, refs) => {
+      if (!Array.isArray(refs)) return;
+      for (const ref of [...new Set(refs)].slice(0, 8)) {
+        const review = evidence.find(r => r?.ref === ref && typeof r.text === 'string');
+        if (!review) continue;
+        const details = document.createElement('details'); details.className = 'chatbot-evidence';
+        const toggle = document.createElement('summary');
+        toggle.textContent = `Xem review ${ref}`;
+        const status = document.createElement('span'); status.className = 'chatbot-evidence-status';
+        status.textContent = `${review.productTitle || 'Sản phẩm'}${Number.isFinite(review.rating) ? ` · ${review.rating} sao` : ''} · ${review.included === true ? 'Được giữ trong phân tích' : review.included === false ? 'Bị loại khỏi phân tích' : 'Chưa rõ trạng thái'}`;
+        const quote = document.createElement('blockquote'); quote.textContent = review.text;
+        details.append(toggle, status, quote);
+        if (review.included === false && review.exclusionReason) {
+          const reason = document.createElement('span'); reason.textContent = `Lý do: ${review.exclusionReason}`;
+          details.append(reason);
+        }
+        parent.append(details);
+      }
+    };
+    addEvidence(card, doc.evidenceRefs);
+    for (const section of doc.sections) {
+      const group = document.createElement('section'); group.className = 'chatbot-answer-section';
+      if (section.title) { const title = document.createElement('h3'); title.textContent = section.title; group.append(title); }
+      const list = section.kind === 'paragraph' ? group : document.createElement(section.kind === 'steps' ? 'ol' : 'ul');
+      for (const item of section.items) {
+        const row = document.createElement(section.kind === 'paragraph' ? 'div' : 'li');
+        const text = document.createElement('p'); text.textContent = item.text; row.append(text);
+        addEvidence(row, item.evidenceRefs); list.append(row);
+      }
+      if (list !== group) group.append(list);
+      card.append(group);
+    }
+    if (doc.limitations.length) {
+      const note = document.createElement('aside'); note.className = 'chatbot-answer-limitations';
+      const label = document.createElement('strong'); label.textContent = 'Lưu ý'; note.append(label);
+      for (const value of doc.limitations) { const p = document.createElement('p'); p.textContent = value; note.append(p); }
+      card.append(note);
+    }
+    const actions = { analyze: ['Phân tích sản phẩm', '/'], criteria: ['Xem tiêu chí lọc review', '/tieu-chi-loc'], contact: ['Liên hệ RealView', '/lien-he'] };
+    const links = document.createElement('nav'); links.className = 'chatbot-answer-actions'; links.setAttribute('aria-label', 'Thao tác tiếp theo');
+    for (const id of doc.actions) {
+      if (!Object.hasOwn(actions, id)) continue;
+      const a = document.createElement('a'); [a.textContent, a.href] = actions[id]; links.append(a);
+    }
+    if (links.childElementCount) card.append(links);
+    body.append(card); return true;
+  }
+
+  function chatFailureMessage(error) {
+    const messages = {
+      RESULT_CONTEXT_PREPARING: 'Dữ liệu báo cáo vẫn đang được chuẩn bị. Bạn hãy đợi một chút rồi gửi lại câu hỏi.',
+      RESULT_CONTEXT_NOT_FOUND: 'Dữ liệu hỏi đáp của báo cáo này không còn khả dụng. Hãy mở báo cáo trong lịch sử nếu có hoặc phân tích lại sản phẩm.',
+      RESULT_CONTEXT_FORBIDDEN: 'Quyền hỏi đáp báo cáo không hợp lệ hoặc đã hết hạn. Hãy mở lại báo cáo hoặc phân tích lại sản phẩm.',
+      RESULT_CONTEXT_UNAVAILABLE: 'Chưa đọc được dữ liệu báo cáo. Bạn hãy thử lại sau; mình chưa thể diễn giải sản phẩm khi thiếu dữ liệu.',
+      AUTH_REQUIRED: 'Phiên đăng nhập đã hết hạn. Bạn hãy đăng nhập lại để hỏi về lịch sử.',
+      HISTORY_ITEM_NOT_FOUND: 'Không tìm thấy báo cáo đã chọn trong lịch sử của bạn. Hãy mở lại lịch sử và chọn báo cáo khác.',
+      CHAT_RATE_LIMITED: 'Bạn đã gửi nhiều câu hỏi trong thời gian ngắn. Hãy đợi ít phút rồi thử lại.'
+      ,CHAT_REQUEST_IN_PROGRESS: 'Câu hỏi này vẫn đang được xử lý. Kiểm tra lại sẽ không mở thêm lượt AI.'
+      ,CHAT_REQUEST_OUTCOME_UNKNOWN: 'Chưa xác nhận được kết quả của yêu cầu trước. Hệ thống không tự gọi AI lần nữa để tránh xử lý trùng. Bạn có thể hỏi câu khác hoặc thử lại sau.'
+      ,CHAT_REQUEST_ID_CONFLICT: 'Nội dung câu hỏi đã thay đổi. Bạn hãy gửi thành một câu hỏi mới.'
+      ,CHAT_IDEMPOTENCY_UNAVAILABLE: 'Chưa kết nối được bộ lưu trạng thái. Tạm dừng gọi AI để tránh xử lý trùng; bạn vẫn có thể hỏi các câu hướng dẫn có sẵn.'
+      ,CHAT_POOL_UNAVAILABLE: 'Chưa đọc được pool AI. Bạn vẫn có thể hỏi các câu hướng dẫn RealView có sẵn.'
+      ,CHAT_DEADLINE_EXCEEDED: 'Yêu cầu đã quá thời gian xử lý. Kiểm tra lại dùng cùng mã yêu cầu để tránh gọi AI trùng.'
+      ,AI_QUOTA_EXHAUSTED: 'AI đã chạm hạn mức. Không nên thử liên tục; bạn vẫn có thể xem hướng dẫn và dữ liệu báo cáo có sẵn.'
+      ,AI_TIMEOUT: 'AI chưa phản hồi kịp. Bạn có thể kiểm tra lại yêu cầu trước hoặc xem câu trả lời từ dữ liệu có sẵn.'
+      ,AI_BUSY: 'AI đang bận. Bạn có thể kiểm tra lại sau thời gian chờ.'
+      ,AI_OVERLOADED: 'Dịch vụ AI đang quá tải. Bạn có thể kiểm tra lại sau hoặc dùng dữ liệu có sẵn.'
+      ,AI_INVALID_RESPONSE: 'AI chưa trả được nội dung đầy đủ, hợp lệ. Hệ thống không hiển thị câu trả lời bị cắt.'
+      ,INVALID_CHAT_BODY:'Nội dung hội thoại không hợp lệ hoặc quá dài. Bạn hãy tải lại trang và nhập một câu hỏi ngắn hơn.'
+      ,INVALID_CHAT_REQUEST_ID:'Phiên hỏi đáp không hợp lệ. Bạn hãy tải lại trang rồi gửi câu hỏi mới.'
+      ,CHAT_RESPONSE_INVALID:'Phản hồi trả về chưa hợp lệ. Bạn có thể kiểm tra lại cùng yêu cầu; hệ thống không coi đây là một đáp án đã hoàn tất.'
+    };
+    if (Object.hasOwn(messages,error?.code)) return messages[error.code];
+    if (error?.name === 'TimeoutError' || error?.name === 'AbortError') return 'Yêu cầu trả lời đã quá thời gian chờ. Bạn hãy thử lại sau; báo cáo phân tích của bạn không thay đổi.';
+    return 'Hiện chưa kết nối được dịch vụ trả lời. Bạn có thể thử lại sau hoặc mở trang Liên hệ để được hỗ trợ.';
+  }
+
+  function addMessage(role, content, engine, citations = [], data = null) {
+    const followLatest = role === 'user' || messagesRoot.scrollHeight - messagesRoot.scrollTop - messagesRoot.clientHeight < 100;
     const message = document.createElement('article');
     message.className = `chatbot-message chatbot-message--${role}`;
     if (role === 'assistant') {
@@ -449,23 +553,27 @@
       message.append(avatar);
     }
     const body = document.createElement('div');
-    const text = document.createElement('p');
-    text.textContent = content;
-    body.append(text);
+    const structured = role === 'assistant' && renderAnswerDocument(body, data);
+    if (!structured) { const text = document.createElement('p'); text.textContent = content; body.append(text); }
     if (role === 'assistant') {
-      if (Array.isArray(citations) && citations.length) {
+      if (!structured && Array.isArray(citations) && citations.length) {
         const evidence = document.createElement('small');
         evidence.className = 'chatbot-citations';
         evidence.textContent = `Đối chiếu review: ${citations.join(', ')}`;
         body.append(evidence);
       }
       const label = document.createElement('time');
-      label.textContent = engine === 'knowledge-base' ? 'Kho dữ liệu RealView' : 'RealViewee';
+      const fallbackLabels = { quota_exhausted: 'AI hết hạn mức', temporarily_busy: 'AI đang bận', timeout: 'AI quá thời gian chờ',
+        invalid_response: 'AI chưa trả lời đầy đủ', connection_failed: 'Kết nối AI gián đoạn', not_configured: 'AI chưa khả dụng',
+        provider_overloaded:'AI quá tải',pool_unavailable:'Chưa đọc được pool AI',idempotency_unavailable:'Chưa lưu được trạng thái yêu cầu',
+        authentication_failed: 'AI chưa khả dụng', request_rejected: 'AI chưa khả dụng', model_unavailable: 'AI chưa khả dụng' };
+      label.textContent = engine === 'knowledge-base' ? 'Kho dữ liệu RealView' : engine === 'rules'
+        ? `Dữ liệu RealView${data?.fallbackReason ? ` · ${fallbackLabels[data.fallbackReason] || 'trả lời dự phòng'}` : ''}` : 'RealViewee';
       body.append(label);
     }
     message.append(body);
     messagesRoot.append(message);
-    scrollToLatest();
+    if (followLatest) scrollToLatest();
     return message;
   }
 
@@ -478,27 +586,52 @@
     return message;
   }
 
-  async function sendQuestion(value) {
+  function turnContext() { return selectedHistoryContext ? {type:'history_item',historyItemId:selectedHistoryContext.historyItemId} : currentResultAccess(); }
+  function clearRetryTurns() {
+    lastRetryTurn=null;messagesRoot.querySelectorAll('.chatbot-retry').forEach(button=>button.remove());
+    if(activeChatTurn)activeChatTurn.cancelled=true;
+    activeChatController?.abort();
+  }
+  function addRetry(message, turn, data) {
+    if(turn.retries>=2 || data?.idempotency?.replayed || data?.retryable===false) return;
+    const button=document.createElement('button'); button.type='button';button.className='chatbot-retry';
+    const waitMs=Math.min(300000,Math.max(0,Number(data?.retryAfterMs) || 0));
+    const waitSeconds=Math.ceil(waitMs/1000);
+    button.textContent=waitMs?`Thử lại sau ${waitSeconds} giây`:'Thử lại';button.disabled=waitMs>0;
+    message.querySelector('div').append(button);
+    if(waitMs)window.setTimeout(()=>{button.disabled=false;button.textContent='Thử lại';},waitMs);
+    button.addEventListener('click',()=>{button.disabled=true;sendQuestion(turn.question,turn);});
+  }
+  async function sendQuestion(value, retryTurn = null) {
     if (window.RealViewI18n?.getLanguage?.() === 'en') {
       syncResultMode();
       return;
     }
     const question = String(value || '').replace(/\s+/g, ' ').trim().slice(0, 500);
     if (!question || isSending) return;
+    const context=turnContext();
+    if(!retryTurn && lastRetryTurn?.question===question && JSON.stringify(lastRetryTurn.context)===JSON.stringify(context))retryTurn=lastRetryTurn;
+    if(retryTurn && (JSON.stringify(retryTurn.context)!==JSON.stringify(context) || retryTurn.retries>=2)) {
+      addMessage('assistant','Phạm vi hỏi đáp đã thay đổi hoặc đã hết số lần thử lại. Bạn hãy gửi một câu hỏi mới.');return;
+    }
+    const turn=retryTurn || {question,context,clientRequestId:newRequestId(),retries:0,retryCause:null};
+    if(retryTurn)turn.retries++;
     isSending = true;
+    activeChatController=new AbortController();activeChatTurn=turn;
     input.value = '';
     input.style.height = '';
     input.disabled = true;
     submitButton.disabled = true;
     suggestions?.remove();
-    addMessage('user', question);
-    conversation.push({ role: 'user', content: question });
+    if(!retryTurn) {
+      addMessage('user', question);conversation.push({role:'user',content:question});
+      turn.messages=conversation.slice(-8).map(message=>({...message}));
+      while(turn.messages.length>1 && turn.messages.reduce((sum,message)=>sum+message.content.length,0)>14000)turn.messages.shift();
+    }
     const loading = addLoadingMessage();
 
     try {
-      const context = selectedHistoryContext
-        ? { type: 'history_item', historyItemId: selectedHistoryContext.historyItemId }
-        : resultReadiness.state === 'unavailable' ? null : currentResultAccess();
+      const requestSignal=AbortSignal.any([activeChatController.signal,AbortSignal.timeout(15_000)]);
       let response;
       let data;
       for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -507,26 +640,45 @@
           credentials: 'same-origin',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
-            messages: conversation.slice(-8),
+            messages: turn.messages,
+            clientRequestId:turn.clientRequestId,clientSessionId,
+            ...(turn.retryCause?{retryCause:turn.retryCause}:{}),
             language: window.RealViewI18n?.getLanguage?.() || 'vi',
             ...(context ? { context } : {})
           }),
-          signal: AbortSignal.timeout(15_000)
+          signal: requestSignal
         });
-        data = await response.json().catch(() => ({}));
-        if (response.status !== 409 || data.code !== 'RESULT_CONTEXT_PREPARING' || attempt === 2) break;
-        await new Promise((resolve) => setTimeout(resolve, 350 + attempt * 250));
+        try { data = await response.json(); }
+        catch { throw Object.assign(new Error('CHAT_RESPONSE_INVALID'), {code:'CHAT_RESPONSE_INVALID',retryable:true}); }
+        if(!data || typeof data!=='object' || Array.isArray(data) || (response.ok && (typeof data.answer!=='string' || !data.answer.trim()))) {
+          throw Object.assign(new Error('CHAT_RESPONSE_INVALID'), {code:'CHAT_RESPONSE_INVALID',retryable:true});
+        }
+        if (response.status !== 409 || !['RESULT_CONTEXT_PREPARING','CHAT_REQUEST_IN_PROGRESS'].includes(data.code) || attempt === 2) break;
+        turn.retryCause='context_wait';
+        const pause=Math.max(350,Number(data.retryAfterMs)||350+attempt*250);
+        if(pause>1500)break;
+        await new Promise((resolve,reject)=>{const timer=setTimeout(()=>{requestSignal.removeEventListener('abort',abort);resolve();},pause);
+          const abort=()=>{clearTimeout(timer);reject(requestSignal.reason);};requestSignal.addEventListener('abort',abort,{once:true});if(requestSignal.aborted)abort();});
       }
-      if (!response.ok) throw new Error(data.error || 'Không thể kết nối Trợ lý RealView.');
+      if (!response.ok) throw Object.assign(new Error('CHAT_REQUEST_FAILED'), { code: data.code || (response.status === 429 ? 'CHAT_RATE_LIMITED' : null), status: response.status, retryable:data.retryable,retryAfterMs:data.retryAfterMs });
+      if(turn.cancelled)return;
       const answer = String(data.answer || 'Mình chưa có thông tin này trong kho dữ liệu RealView. Bạn có thể liên hệ đội ngũ để được hỗ trợ.');
       loading.remove();
-      addMessage('assistant', answer, data.engine, data.citations);
-      conversation.push({ role: 'assistant', content: answer });
+      const message=addMessage('assistant', answer, data.engine, data.citations, data);
+      if(!turn.answerRecorded){conversation.push({ role: 'assistant', content: answer });turn.answerRecorded=true;}
+      lastRetryTurn=data.retryable?turn:null;
+      if(data.retryable)addRetry(message,turn,data);
       if (conversation.length > 8) conversation.splice(0, conversation.length - 8);
-    } catch {
+    } catch (error) {
       loading.remove();
-      addMessage('assistant', 'Hiện mình chưa thể kết nối. Bạn vui lòng thử lại sau hoặc liên hệ đội ngũ RealView.');
+      if(turn.cancelled)return;
+      turn.retryCause=['TimeoutError','AbortError'].includes(error?.name)?'frontend_timeout':error?.code?'manual':'network_error';
+      const retryable=error.retryable ?? (['TypeError','TimeoutError','AbortError'].includes(error?.name));
+      const message=addMessage('assistant',chatFailureMessage(error));
+      lastRetryTurn=retryable?turn:null;
+      if(retryable){if(!input.value)input.value=question;addRetry(message,turn,{retryable,retryAfterMs:error.retryAfterMs});}
     } finally {
+      loading.remove();activeChatController=null;activeChatTurn=null;
       isSending = false;
       syncResultMode();
       input.focus();
@@ -539,6 +691,7 @@
   });
   closeButton.addEventListener('click', () => setOpen(false));
   contextClearButton.addEventListener('click', () => {
+    clearRetryTurns();
     selectedHistoryContext = null;
     conversation.splice(0);
     syncResultMode();
@@ -570,22 +723,23 @@
   window.addEventListener('realview:chat-history-select', (event) => {
     const historyItemId = String(event.detail?.historyItemId || '');
     if (!historyItemId) return;
+    clearRetryTurns();
     selectedHistoryContext = { historyItemId, title: String(event.detail?.title || 'Sản phẩm trong lịch sử') };
     conversation.splice(0);
     setOpen(true);
   });
   window.addEventListener('realview:analysis-result', () => {
+    clearRetryTurns();
     clearTimeout(resultReadiness.timer);
     resultReadiness = { resultId: '', state: 'idle', timer: null };
     if (trigger.getAttribute('aria-expanded') === 'true') beginResultReadinessCheck();
     syncResultMode();
   });
   window.addEventListener('realview:auth-changed', (event) => {
-    if (!event.detail?.user) {
-      selectedHistoryContext = null;
-      conversation.splice(0);
-      syncResultMode();
-    }
+    clearRetryTurns();
+    selectedHistoryContext=null;conversation.splice(0);
+    messagesRoot.querySelectorAll('.chatbot-message').forEach((message,index)=>{if(index>0)message.remove();});
+    syncResultMode();
   });
   window.addEventListener('realview:language-changed', syncResultMode);
 })();

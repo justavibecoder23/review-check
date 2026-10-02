@@ -14,7 +14,8 @@ test('kho kiến thức chứa các nội dung cốt lõi của website', () => 
   assert.equal(new Set(knowledgeBase.map((entry) => entry.id)).size, 90);
   assert.match(siteKnowledge, /TrustScore/);
   assert.match(siteKnowledge, /Shopee/);
-  assert.match(siteKnowledge, /reviewcheckteam@gmail\.com/);
+  assert.match(siteKnowledge, /realviewueh@gmail\.com/);
+  assert.doesNotMatch(siteKnowledge, /reviewcheckteam@gmail\.com/);
   assert.match(siteKnowledge, /không kết luận một review là giả hoặc thật/i);
   assert.match(siteKnowledge, /context hỏi đáp.*lưu tạm tối đa 5 ngày/i);
   assert.match(siteKnowledge, /lưu riêng theo tài khoản/i);

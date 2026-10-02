@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { answerWebsiteQuestion, directKnowledgeAnswer, knowledgeBase, CHATBOT_RESPONSE_BUDGET_MS, OUT_OF_SCOPE_REPLY } from '../src/site-chatbot.mjs';
+import { formatAnswerText } from '../src/chatbot-answer-format.mjs';
 
 const question = content => [{ role: 'user', content }];
 const failedNetwork = { fetchImpl() { throw new Error('FAQ must not call Gemini'); }, redisFetchImpl() { throw new Error('FAQ must not call Redis'); } };
@@ -13,7 +14,10 @@ test('mọi tiêu đề và biến thể của 90 FAQ đều trả trực tiếp
       const result = await answerWebsiteQuestion(question(text), failedNetwork);
       assert.equal(result.engine, 'knowledge-base', text);
       assert.equal(result.sourceId, entry.id, text);
-      assert.equal(result.answer, entry.answer, text);
+      assert.equal(result.answerDocument.version, '2.0', text);
+      assert.equal(result.answer, formatAnswerText(result.answerDocument), text);
+      const legacy = await answerWebsiteQuestion(question(text), { ...failedNetwork, structuredAnswers: false });
+      assert.equal(legacy.answer, entry.answer, text);
       count += 1;
     }
   }

@@ -30,6 +30,7 @@ function cleanText(value, maximum = MAX_REVIEW_TEXT) {
 }
 
 function numberOrNull(value) {
+  if (value == null || typeof value === 'boolean' || (typeof value === 'string' && !value.trim())) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -305,6 +306,7 @@ export async function loadResultChatContext(resultId, accessToken, options = {})
   }
   const serialized = await redisCommand(['GET', contextKey(normalizedId)], {
     fetchImpl: options.redisFetchImpl,
+    signal: options.signal,
     timeoutMs: options.redisTimeoutMs || 900
   });
   if (!serialized) {

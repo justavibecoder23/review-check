@@ -142,6 +142,12 @@ export async function geminiHttpError(response, context = 'Gemini') {
     : /per.?minute|requestsperminute|tokensperminute/i.test(rawQuotaDetails)
       ? 'minute'
       : 'unknown';
+  const retryHeader = response?.headers?.get?.('retry-after');
+  const retryHeaderMs = retryHeader == null ? 0 : /^\d+(?:\.\d+)?$/.test(retryHeader)
+    ? Number(retryHeader) * 1000 : Math.max(0, Date.parse(retryHeader) - Date.now());
+  const retryInfo = (payload?.error?.details || []).find(detail => /RetryInfo$/.test(detail?.['@type'] || ''));
+  const duration = String(retryInfo?.retryDelay || '').match(/^(\d+(?:\.\d+)?)s$/);
+  error.retryAfterMs = Math.max(Number.isFinite(retryHeaderMs) ? retryHeaderMs : 0, duration ? Number(duration[1]) * 1000 : 0) || null;
   return error;
 }
 
@@ -162,7 +168,9 @@ export async function requestGeminiWithFallback({
   retryOnTimeout = true,
   routeContext,
   avoidBusyRoutes = false,
-  validateResponse
+  validateResponse,
+  retryPolicy,
+  waitForRetryImpl
 }) {
   const requestStartedAt = Date.now();
   const models = geminiModelChain();
@@ -409,6 +417,13 @@ export async function requestGeminiWithFallback({
     }
     if (request?.signal?.aborted) throw lastError;
     if (timedOut && !retryOnTimeout) throw lastError;
+    // Opt-in only: chatbot supplies its bounded retry policy. The review
+    // analysis pipeline retains the previous routing behavior.
+    if (retryPolicy && actualAttempts < maxAttempts) {
+      const decision = retryPolicy(lastError, remainingBudget(deadlineAt));
+      if (!decision.retry) break;
+      if (decision.delayMs > 0 && waitForRetryImpl) await waitForRetryImpl(decision.delayMs, request?.signal);
+    }
     // Mọi lỗi của route hiện tại đều đưa key vào pending/used và chuyển ngay
     // sang key khác. attemptedRoutes đảm bảo không gọi lại cùng key trong request này.
   }

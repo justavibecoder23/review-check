@@ -99,6 +99,7 @@ export function redisLuaMock() {
       case 'EXISTS': return strings.has(key) ? 1 : 0;
       case 'INCR': { const count = Number(strings.get(key) || 0) + 1; strings.set(key, String(count)); return count; }
       case 'EXPIRE': expiry.set(key, Date.now() + Number(args[1]) * 1000); return 1;
+      case 'PTTL': return strings.has(key) ? (expiry.has(key) ? Math.max(0,expiry.get(key)-Date.now()) : -1) : -2;
       case 'DEL': return args.reduce((n, k) => n + Number(strings.delete(k)) + Number(sorted.delete(k)), 0);
       case 'SADD': {
         const set = sets.get(key) || new Set(); const before = set.size;
