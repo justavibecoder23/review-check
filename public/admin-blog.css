@@ -42,6 +42,7 @@ button { color: inherit; }
 .admin-topbar .auth-button, .admin-topbar .account-chip { min-height: 40px; }
 
 .admin-shell { min-height: calc(100vh - 72px); display: grid; grid-template-columns: 236px minmax(0, 1fr); }
+.admin-shell.is-access-locked { grid-template-columns: minmax(0, 1fr); }
 .admin-sidebar {
   position: sticky; top: 72px; height: calc(100vh - 72px); padding: 30px 18px 22px;
   display: flex; flex-direction: column; border-right: 1px solid var(--admin-line); background: #eeede8;

@@ -1,4 +1,7 @@
 node_modules/
+.blog-migration-private/
+**/private.pem
+**/preview-import.sql
 .wrangler/
 data/cloudflare-review-migration*.json
 bot/node_modules/

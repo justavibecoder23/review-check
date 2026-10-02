@@ -1,0 +1,19 @@
+{
+  "name": "realview-blog-preview",
+  "main": "worker.mjs",
+  "account_id": "84e83ee7665b51263769f065a0e9ad93",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+  "triggers": { "crons": ["17 * * * *"] },
+  "r2_buckets": [{
+    "binding": "BLOG_MEDIA",
+    "bucket_name": "realview-blog-media-preview"
+  }],
+  "d1_databases": [{
+    "binding": "BLOG_DB",
+    "database_name": "realview-blog-preview",
+    "database_id": "e71ba88a-6bd6-4b7d-975f-b9df1650cdcd",
+    "migrations_dir": "migrations"
+  }]
+}
