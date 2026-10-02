@@ -16,8 +16,11 @@ const BLOCK_LABELS = {
 
 const state = {
   posts: [], currentPost: null, filter: 'all', query: '', dirty: false, saving: false,
-  autosaveTimer: null, conflict: null, user: null, authorized: false, role: null
+  autosaveTimer: null, conflict: null, user: null, authorized: false, role: null,
+  backend: null, readOnly: false, capabilities: null
 };
+// Keep the logical key across a timeout/retry. A changed payload gets a new key.
+const requestKeys = new Map();
 
 const $ = (selector, scope = document) => scope.querySelector(selector);
 const $$ = (selector, scope = document) => [...scope.querySelectorAll(selector)];
@@ -44,9 +47,20 @@ async function apiGet(action, params = {}) {
 }
 
 async function apiPost(body) {
+  if (body.action === 'save') {
+    const fingerprint = JSON.stringify(body);
+    if (!requestKeys.has(fingerprint)) {
+      if (requestKeys.size > 20) requestKeys.delete(requestKeys.keys().next().value);
+      requestKeys.set(fingerprint, uid());
+    }
+    body = { ...body, idempotencyKey: requestKeys.get(fingerprint) };
+  }
+  if (body.action === 'upload_media') body = { ...body, fileName: String(body.fileName || '').slice(0, 200), alt: String(body.alt || '').slice(0, 300) };
+  const serialized = JSON.stringify(body);
+  if (new TextEncoder().encode(serialized).length > 4_300_000) throw new ApiError('Dữ liệu tải lên quá lớn.', 413);
   const response = await fetch(API_URL, {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    credentials: 'same-origin', body: JSON.stringify(body)
+    credentials: 'same-origin', body: serialized
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new ApiError(payload.error || payload.message || 'Không thể xử lý yêu cầu.', response.status, payload);
@@ -225,6 +239,11 @@ function sameDateTime(left, right) {
 }
 
 function setAccess(title, message, { login = false } = {}) {
+  state.authorized = false;
+  state.role = null;
+  state.capabilities = null;
+  state.readOnly = true;
+  applyRolePermissions();
   const access = $('[data-access-state]');
   $('h1', access).textContent = title;
   $('[data-access-message]', access).textContent = message;
@@ -234,6 +253,7 @@ function setAccess(title, message, { login = false } = {}) {
 }
 
 function showView(name) {
+  if (!state.authorized || !['admin', 'editor'].includes(state.role)) return;
   $('[data-access-state]').hidden = true;
   $$('[data-view]').forEach((view) => { view.hidden = view.dataset.view !== name; });
   $$('[data-view-link]').forEach((button) => {
@@ -265,12 +285,13 @@ function toast(message, type = 'success', action = null) {
 }
 
 function canRetryMediaUpload(error) {
-  return ['BLOG_MEDIA_RETRY', 'BLOG_MEDIA_UPLOAD_FAILED'].includes(error?.payload?.code);
+  return ['BLOG_MEDIA_RETRY', 'BLOG_MEDIA_UPLOAD_FAILED', 'BLOG_AUDIT_UNAVAILABLE', 'BLOG_WORKER_RETRY'].includes(error?.payload?.code);
 }
 
 function setSaveState(label, kind = '') {
   const element = $('[data-save-state]');
-  element.textContent = label;
+  element.textContent = state.backend === 'cloudflare-preview' && state.authorized
+    ? `${state.readOnly ? 'Preview đang khóa ghi' : 'Preview D1/R2 · chưa bật xuất bản'} · ${label}` : label;
   element.className = `admin-save-state${kind ? ` is-${kind}` : ''}`;
 }
 
@@ -280,12 +301,27 @@ async function loadPosts() {
     const payload = await apiGet('list', { limit: 200 });
     state.posts = (payload.posts || payload.items || payload.data || []).map(normalizePost);
     state.role = payload.role || state.role;
+    state.backend = payload.backend || null;
+    state.readOnly = Boolean(payload.readOnly);
+    state.capabilities = payload.capabilities || null;
     state.authorized = true;
     renderPosts();
     renderStats();
     renderRelatedPicker();
     $('[data-total-badge]').textContent = String(state.posts.length);
     applyRolePermissions();
+    if (state.backend === 'cloudflare-preview') {
+      setSaveState('Chưa có thay đổi');
+      const notices = $$('.admin-snapshot-notice');
+      if (notices[0]) notices[0].textContent = 'Studio preview D1/R2 chỉ chứa dữ liệu mới. Các bài HTML/snapshot cũ vẫn ở website công khai, chưa được nhập để chỉnh sửa trong Studio này.';
+      if (notices[1]) notices[1].textContent = state.readOnly
+        ? 'Preview đang khóa ghi. Chưa thể lưu nháp hoặc tải ảnh; chưa bật xuất bản. Không có thao tác nào ở đây cập nhật website production.'
+        : 'Preview D1/R2 chưa bật xuất bản. Lưu nháp và tải ảnh chỉ phục vụ kiểm thử, không cập nhật website production.';
+    }
+    if (state.backend === 'cloudflare-preview' && (payload.maintenance?.stale || payload.maintenance?.warning)) {
+      toast(payload.maintenance.stale ? 'Chưa xác nhận tác vụ dọn dữ liệu thành công trong 3 giờ gần nhất.'
+        : 'Tác vụ dọn dữ liệu còn tồn đọng. Cần kiểm tra usage và công suất dọn.', 'error');
+    }
   } finally {
     $('[data-list-loading]').hidden = true;
   }
@@ -335,8 +371,8 @@ function renderPosts() {
     const viewLink = $('[data-view-row]', row);
     viewLink.href = post.status === 'published' && post.slug ? `/bai-viet/${post.slug}` : `/api/admin-blog?action=preview&id=${encodeURIComponent(post.id || '')}`;
     const canManagePosts = ['admin', 'editor'].includes(state.role);
-    $('[data-unpublish-row]', row).hidden = post.isStaticFallback || !canManagePosts || post.status !== 'published';
-    $('[data-archive-row]', row).hidden = post.isStaticFallback || !canManagePosts || post.status === 'archived';
+    $('[data-unpublish-row]', row).hidden = post.isStaticFallback || !canManagePosts || state.capabilities?.publishPosts === false || post.status !== 'published';
+    $('[data-archive-row]', row).hidden = post.isStaticFallback || !canManagePosts || state.backend === 'cloudflare-preview' || post.status === 'archived';
     tbody.append(row);
   });
   $('[data-list-empty]').hidden = filtered.length > 0;
@@ -344,11 +380,18 @@ function renderPosts() {
 }
 
 function applyRolePermissions() {
-  const isAdmin = state.role === 'admin';
-  const canManagePosts = isAdmin || state.role === 'editor';
-  $('[data-publish-post]').hidden = !canManagePosts;
-  $('[data-unpublish-post]').hidden = !canManagePosts || state.currentPost?.status !== 'published';
-  $('[data-access-management]').hidden = !isAdmin;
+  const isAdmin = state.authorized && state.role === 'admin';
+  const canManagePosts = state.authorized && (isAdmin || state.role === 'editor');
+  $('.admin-sidebar').hidden = !canManagePosts;
+  $('.admin-shell').classList.toggle('is-access-locked', !canManagePosts);
+  const canPublish = canManagePosts && state.capabilities?.publishPosts !== false;
+  $('[data-publish-post]').hidden = !canPublish;
+  $('[data-unpublish-post]').hidden = !canPublish || state.currentPost?.status !== 'published';
+  $('[data-access-management]').hidden = !isAdmin || state.capabilities?.manageAccess === false;
+  if (state.backend === 'cloudflare-preview') $('[data-discard-draft]').hidden = true;
+  $$('[data-save-post],[data-choose-hero],[data-choose-block-image]').forEach(button => {
+    button.disabled = state.readOnly || state.saving || !canManagePosts;
+  });
 }
 
 function switchEditorTab(name) {
@@ -369,6 +412,7 @@ function setFormValue(name, value) {
 }
 
 function openEditor(post = emptyPost()) {
+  if (!state.authorized || !['admin', 'editor'].includes(state.role)) return;
   clearTimeout(state.autosaveTimer);
   state.currentPost = normalizePost(post);
   state.dirty = false;
@@ -950,6 +994,7 @@ function markDirty() {
 }
 
 async function savePost({ quiet = false, forceCopy = false } = {}) {
+  if (state.readOnly) { toast('Preview đang khóa ghi.', 'error'); return null; }
   if (state.saving) return state.currentPost;
   clearTimeout(state.autosaveTimer);
   const post = collectPost();
@@ -986,6 +1031,7 @@ async function savePost({ quiet = false, forceCopy = false } = {}) {
   } finally {
     state.saving = false;
     $$('[data-save-post],[data-publish-post]').forEach((button) => { button.disabled = false; });
+    applyRolePermissions();
   }
 }
 
@@ -1134,6 +1180,7 @@ function uploadFileName(file, suffix = 'image') {
 }
 
 async function uploadMedia(file, { alt = '', suffix = 'image' } = {}) {
+  if (state.readOnly) throw new Error('Preview đang khóa ghi.');
   validateMediaFile(file);
   const data = await readFileAsBase64(file);
   const payload = await apiPost({
@@ -1247,7 +1294,7 @@ async function loadRevisions() {
       const savedByLabel = typeof savedBy === 'string' ? savedBy : savedBy.username || savedBy.email || savedBy.name || 'Admin RealView';
       title.textContent = `Revision ${revision.revision ?? revision.version}`; meta.textContent = `${formatDate(revision.savedAt || revision.createdAt || revision.modifiedAt)} · ${savedByLabel}`; copy.append(title, meta);
       const actions = document.createElement('div'); const preview = document.createElement('button'); preview.type = 'button'; preview.dataset.previewRevision = revision.revision ?? revision.version; preview.textContent = 'Xem phiên bản'; actions.append(preview);
-      if (Number(revision.revision ?? revision.version) !== Number(state.currentPost.revision)) {
+      if (state.backend !== 'cloudflare-preview' && Number(revision.revision ?? revision.version) !== Number(state.currentPost.revision)) {
         const restore = document.createElement('button'); restore.type = 'button'; restore.dataset.restoreRevision = revision.revision ?? revision.version; restore.textContent = 'Khôi phục'; actions.append(restore);
       }
       item.append(copy, actions); list.append(item);

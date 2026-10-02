@@ -1,4 +1,9 @@
 .env
 .env.*
+.vercel/
+.blog-migration-private/
+**/private.pem
+**/preview-import.sql
+.wrangler/
 config/*.local.json
 data/review-runs/**/*.json

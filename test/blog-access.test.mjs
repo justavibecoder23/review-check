@@ -141,7 +141,7 @@ test('frontend chỉ render menu quyền truy cập theo capability manageAccess
   assert.match(auth, /href="\/admin\/access"/);
   assert.match(page, /data-access-list/);
   assert.match(script, /Editor và user không có quyền/);
-  assert.match(blogScript, /const canManagePosts = isAdmin \|\| state\.role === 'editor'/);
+  assert.match(blogScript, /const canManagePosts = state\.authorized && \(isAdmin \|\| state\.role === 'editor'\)/);
   assert.doesNotMatch(adminRoute, /BLOG_ADMIN_REQUIRED|minimumRole.*\? 'admin'/);
   assert.match(vercel, /"source": "\/api\/admin-access", "destination": "\/api\/blog\.mjs\?route=access-admin"/);
   assert.match(vercel, /"source": "\/admin\/access"/);
