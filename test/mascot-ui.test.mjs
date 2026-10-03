@@ -81,6 +81,7 @@ test('hai mascot review trên trang kết quả dùng cutout RGBA riêng không 
   }
   assert.match(styles, /results-page \.realviewee-static \.realviewee-sprite\[data-mascot-state="surprised"\][^}]*realviewee-result-surprised-cutout-v1\.png/);
   assert.match(styles, /results-page \.realviewee-static \.realviewee-sprite\[data-mascot-state="concerned"\][^}]*realviewee-result-concerned-cutout-v1\.png/);
+  assert.match(styles, /results-page \.realviewee-static \.realviewee-sprite\[data-mascot-state="surprised"\]\s*\{[^}]*left:\s*50%;[^}]*width:\s*122\.4%;[^}]*transform:\s*translateX\(-50%\)/);
 });
 
 test('mascot homepage mở chatbot và mascot Confident đóng mở giải thích TrustScore', () => {

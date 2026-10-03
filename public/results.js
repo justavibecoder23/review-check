@@ -665,7 +665,9 @@ function renderProgressProduct(update = {}) {
   const product = progressProduct;
   const title = String(product.title || '').trim();
   const platform = String(product.platform || '').trim();
-  document.querySelector('#analysis-platform').textContent = platform || 'Đã nhận diện sản phẩm';
+  const platformElement = document.querySelector('#analysis-platform');
+  platformElement.textContent = platform || 'Đã nhận diện sản phẩm';
+  platformElement.classList.toggle('analysis-platform--tiktok', /tiktok/i.test(platform));
   const titleElement = document.querySelector('#analysis-product-title');
   titleElement.textContent = title || `Sản phẩm trên ${platform || 'sàn thương mại điện tử'}`;
   titleElement.title = title || '';
@@ -905,6 +907,7 @@ async function startProgressiveAnalysis(url) {
   productMetaReceived = false;
   progressProduct = {};
   progressImageUrl = '';
+  document.querySelector('#analysis-platform')?.classList.remove('analysis-platform--tiktok');
   loadProductImage({
     image: document.querySelector('#analysis-product-image'),
     fallback: document.querySelector('#analysis-product-illustration'),

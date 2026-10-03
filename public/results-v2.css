@@ -256,6 +256,15 @@
 .analysis-product-visual.is-skeleton { animation: analysis-shimmer 1.7s ease-in-out infinite; }
 .analysis-product-copy { min-width: 0; }
 .analysis-platform { color: var(--orange-dark); font-size: 11px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; }
+.analysis-platform.analysis-platform--tiktok { color: #FE2C55; }
+@supports ((background-clip: text) or (-webkit-background-clip: text)) {
+  .analysis-platform.analysis-platform--tiktok {
+    background: linear-gradient(90deg, #25F4EE 0%, #161616 52%, #FE2C55 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+}
 .analysis-product-copy h2 { margin: 11px 0 9px; color: var(--ink); font-size: clamp(21px, 2.5vw, 30px); line-height: 1.1; letter-spacing: -.8px; }
 .analysis-product-copy h2:not(.skeleton-line) {
   display: -webkit-box;
