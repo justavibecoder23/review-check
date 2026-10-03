@@ -24,6 +24,9 @@ local rpm = math.max(0, tonumber(ARGV[5]) or 0)
 local tpm = math.max(0, tonumber(ARGV[6]) or 0)
 local rpd = math.max(0, tonumber(ARGV[7]) or 0)
 local reservedTokens = math.max(0, tonumber(ARGV[8]) or 0)
+if ARGV[9] == '1' and (state.permissionDisabled == true or tonumber(state.lastStatusCode) == 401 or tonumber(state.lastStatusCode) == 403) then
+  return cjson.encode({ok=false, code='PERMISSION_DISABLED', state=state})
+end
 if state.day ~= ARGV[4] then
   state.day = ARGV[4]
   state.dayRequests = 0
@@ -79,6 +82,13 @@ local ok = ARGV[5] == '1'
 local neutral = ARGV[8] == 'cancelled'
 local statusCode = tonumber(ARGV[6]) or 0
 local latencyMs = math.max(0, tonumber(ARGV[7]) or 0)
+-- Chatbot only: permission failures are not a daily quota or a cooldown.
+-- Never clear this field on success/day rollover; recovery is explicit.
+if ARGV[11] ~= nil and ARGV[11] ~= '' and not ok then
+  state.permissionDisabled = true
+  state.permissionReason = ARGV[11]
+  state.permissionDisabledAt = ARGV[3]
+end
 if state.day ~= ARGV[4] then
   state.day = ARGV[4]
   state.dayRequests = 0
@@ -300,7 +310,8 @@ export function geminiRoutePressure(state, model, nowMs = Date.now()) {
   };
 }
 
-export function geminiRouteScore(state, model, nowMs = Date.now()) {
+export function geminiRouteScore(state, model, nowMs = Date.now(), options = {}) {
+  if (options.honorPermissionDisabled && (state?.permissionDisabled === true || [401,403].includes(Number(state?.lastStatusCode)))) return Number.POSITIVE_INFINITY;
   const pressure = geminiRoutePressure(state, model, nowMs);
   if (pressure.cooldown || pressure.minuteLimited || pressure.dailyLimited || pressure.inFlight > 0) return Number.POSITIVE_INFINITY;
   return pressure.value;
@@ -329,7 +340,8 @@ export async function beginGeminiRoute(routeId, options = {}) {
   const raw = await redisCommand([
     'EVAL', BEGIN_ROUTE_SCRIPT, '1', healthKey,
     routeId, String(nowMs), new Date(nowMs).toISOString(), pacificDay(nowMs),
-    String(limits.rpm), String(limits.tpm), String(limits.rpd), String(Math.max(0, number(options.reservedTokens)))
+    String(limits.rpm), String(limits.tpm), String(limits.rpd), String(Math.max(0, number(options.reservedTokens))),
+    options.honorPermissionDisabled ? '1' : '0'
   ], options);
   return parseJson(raw, null);
 }
@@ -346,7 +358,8 @@ export async function finishGeminiRoute(routeId, result, options = {}) {
       'EVAL', FINISH_ROUTE_SCRIPT, '1', healthKey,
       routeId, String(nowMs), new Date(nowMs).toISOString(), pacificDay(nowMs), ok ? '1' : '0',
       String(statusCode || 0), String(latencyMs), String(result?.errorType || 'unknown').slice(0, 80),
-      String(Math.max(0, number(result?.tokens))), String(Math.max(0, number(result?.reservedTokens)))
+      String(Math.max(0, number(result?.tokens))), String(Math.max(0, number(result?.reservedTokens))),
+      options.honorPermissionDisabled ? String(result?.permissionReason || '').slice(0, 80) : ''
     ], options);
     return parseJson(raw, null);
   } catch {

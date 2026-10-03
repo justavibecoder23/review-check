@@ -130,8 +130,8 @@ export function createChatHandler(deps = {}) {
       if(claimed && providerAttempts===0)await schedule(releaseUnstartedChatRequest(scope,{commandImpl:deps.redisCommandImpl,timeoutMs:600}));
       return send(error?.statusCode || 503,errorState(error,budget.requestId));
     }finally{
-      // Allowlist only; no question, review, account/result/credential ID,
-      // cookie, access token or raw provider error text.
+      // No content, account/result ID, key, cookie or raw provider text.
+      // Provider events include a one-way key fingerprint and fixed reason/source labels.
       (deps.logger || console).log(JSON.stringify({event:'chat_request_completed',requestId:budget.requestId,contextType,
         clientRequestId,clientRetryCause,
         status:result?.status || 'temporarily_unavailable',code:result?.code || null,httpStatus:statusCode,source,

@@ -4,7 +4,7 @@ import { createCipheriv } from 'node:crypto';
 import { geminiCredentialId } from '../src/gemini-credential-store.mjs';
 import { answerWebsiteQuestion, retrieveKnowledge, OUT_OF_SCOPE_REPLY } from '../src/site-chatbot.mjs';
 
-const envNames = ['GEMINI_API_KEY', 'CHATBOT_GEMINI_API_KEY', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'KV_REST_API_URL', 'KV_REST_API_TOKEN', 'GEMINI_API_KEY_VAULT_KEY'];
+const envNames = ['GEMINI_API_KEY', 'CHATBOT_GEMINI_API_KEY', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'KV_REST_API_URL', 'KV_REST_API_TOKEN', 'GEMINI_API_KEY_VAULT_KEY', 'CHATBOT_GEMINI_API_KEY_VAULT_KEY'];
 async function withEnv(values, run) {
   const before = Object.fromEntries(envNames.map(name => [name, process.env[name]]));
   for (const name of envNames) delete process.env[name];

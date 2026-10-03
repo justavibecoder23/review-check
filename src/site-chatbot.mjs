@@ -457,26 +457,43 @@ ${contextEntries.map(entry => `[${entry.id}] ${entry.title}\n${entry.answer}`).j
   const requestGemini = ({ credentials, maxRetries, attemptTimeoutMs, standaloneApiKey = '' }) => requestGeminiWithFallback({
       fetchImpl: async (url, init) => {
         const started = Date.now();
+        const fingerprint = geminiCredentialId(init.headers['x-goog-api-key']);
+        const source = init.headers['x-goog-api-key'] === dedicatedKey ? 'dedicated' : 'chatbot_pool';
         try {
           const response = await boundedFetch(async (target,request)=>{
             request.signal.throwIfAborted();providerAttempted=true;options.onProviderAttempt?.({phase:'start'});
             return (options.fetchImpl || fetch)(target,request);
           },'provider')(url, init);
           providerStatus = Number(response.status) || null;
-          options.onProviderAttempt?.({phase:'response',status:providerStatus,durationMs:Date.now()-started});
+          options.onProviderAttempt?.({phase:'response',status:providerStatus,durationMs:Date.now()-started,fingerprint,source});
           return response;
         } catch(error) { options.onProviderAttempt?.({phase:'error',code:error?.name==='TimeoutError'||error?.name==='AbortError'?'AI_TIMEOUT':'AI_CONNECTION_FAILED',durationMs:Date.now()-started}); throw error; }
       },
       redisFetchImpl: boundedFetch(options.redisFetchImpl || fetch,'pool',700),
       apiKey: standaloneApiKey,
-      listCredentialsImpl: credentials ? async () => credentials : listAvailableChatbotGeminiCredentials,
+      listCredentialsImpl: credentials ? async () => credentials : async (settings) => {
+        const pool = await listAvailableChatbotGeminiCredentials(settings);
+        // A duplicate copy of the primary is not a backup and must not be retried.
+        return pool.filter(credential => credential.apiKey !== dedicatedKey);
+      },
       markModelExhaustedImpl: markChatbotGeminiModelExhausted,
       getHealthSnapshotImpl: getChatbotGeminiHealthSnapshot,
       beginRouteImpl: beginChatbotGeminiRoute,
-      finishRouteImpl: options.onBackgroundWork ? async (routeId,result) => {
-        options.onBackgroundWork(finishChatbotGeminiRoute(routeId,result,{fetchImpl:options.redisFetchImpl,timeoutMs:700}));
-        return null;
-      } : finishChatbotGeminiRoute,
+      finishRouteImpl: async (routeId,result,settings) => {
+        const work = finishChatbotGeminiRoute(routeId,result,{...settings,timeoutMs:700});
+        // Persist permission quarantine before returning; normal telemetry can run in background.
+        if (result.permissionReason) {
+          const state = await work;
+          options.onProviderAttempt?.({phase:'permission_quarantine',persisted:state?.permissionDisabled===true,reason:result.permissionReason});
+          return state;
+        }
+        if (options.onBackgroundWork) { options.onBackgroundWork(work);return null; }
+        return await work;
+      },
+      honorPermissionDisabled: true,
+      onProviderFailure: (error,credential) => options.onProviderAttempt?.({phase:'provider_failure',
+        status:Number(error.statusCode)||null,reason:error.permissionReason || null,
+        fingerprint:geminiCredentialId(credential.apiKey),source:credential.apiKey===dedicatedKey?'dedicated':'chatbot_pool'}),
       deadlineAt,
       attemptTimeoutMs,
       maxRetries,
@@ -539,7 +556,7 @@ ${contextEntries.map(entry => `[${entry.id}] ${entry.title}\n${entry.answer}`).j
         });
       } catch (dedicatedError) {
         if (requestSignal.aborted) throw dedicatedError;
-        const skipped=dedicatedError.attempts===0 && ['GEMINI_KEYS_PENDING','RPD_LIMIT','RPM_LIMIT','TPM_LIMIT','COOLDOWN','BUSY'].includes(dedicatedError.code);
+        const skipped=dedicatedError.attempts===0 && ['GEMINI_KEYS_PENDING','PERMISSION_DISABLED','RPD_LIMIT','RPM_LIMIT','TPM_LIMIT','COOLDOWN','BUSY'].includes(dedicatedError.code);
         // A route skipped by health consumed no provider attempt. Try the
         // existing backup pool without waiting or calling that unhealthy key.
         if(!skipped) {
@@ -575,6 +592,7 @@ ${contextEntries.map(entry => `[${entry.id}] ${entry.title}\n${entry.answer}`).j
       (options.logger || console).error('[site-chatbot] Gemini request failed', {
         model,
         reason: fallbackReason(error),
+        permissionReason: error.permissionReason || null,
         status: Number(error?.statusCode) || null
       });
     }

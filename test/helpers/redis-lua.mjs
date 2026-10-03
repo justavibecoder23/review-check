@@ -73,6 +73,7 @@ function executeLua(script, keys, args, command) {
 export function redisLuaMock() {
   const strings = new Map();
   const sets = new Map();
+  const hashes = new Map();
   const sorted = new Map();
   const expiry = new Map();
   const commands = [];
@@ -111,12 +112,20 @@ export function redisLuaMock() {
       case 'ZREVRANGE': return range(key, args[1], args[2], true);
       case 'ZREM': return args.slice(1).reduce((n, id) => n + Number(sorted.get(key)?.delete(id) || false), 0);
       case 'MGET': return args.map((key) => strings.get(key) ?? null);
+      case 'HGET': return hashes.get(key)?.get(String(args[1])) ?? null;
+      case 'HMGET': return args.slice(1).map(field => hashes.get(key)?.get(String(field)) ?? null);
+      case 'HGETALL': return [...(hashes.get(key) || new Map()).entries()].flat();
+      case 'HSET': {
+        const hash = hashes.get(key) || new Map(); let added = 0;
+        for (let i = 1; i < args.length; i += 2) { const field = String(args[i]); added += Number(!hash.has(field)); hash.set(field, String(args[i + 1])); }
+        hashes.set(key, hash); return added;
+      }
       case 'EVAL': return executeLua(args[0], args.slice(2, 2 + Number(args[1])), args.slice(2 + Number(args[1])), command);
       default: throw new Error(`Unsupported command ${name}`);
     }
   }
   return {
-    strings, sets, sorted, expiry, commands, command,
+    strings, sets, hashes, sorted, expiry, commands, command,
     fetchImpl: async (url, options) => {
       const input = JSON.parse(options.body);
       const result = url.endsWith('/multi-exec') ? input.map((parts) => ({ result: command(parts) })) : { result: command(input) };

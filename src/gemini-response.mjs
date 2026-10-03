@@ -136,6 +136,17 @@ export async function geminiHttpError(response, context = 'Gemini') {
   const error = new Error(`${context} trả về HTTP ${httpStatus}${detail ? `: ${detail}` : ''}`);
   error.statusCode = Number(response?.status) || null;
   error.geminiStatus = truncate(payload?.error?.status, 80) || null;
+  // A fixed vocabulary is safe for server logs; never log Google's raw text.
+  if ([401, 403].includes(error.statusCode)) {
+    const reasons = (Array.isArray(payload?.error?.details) ? payload.error.details : [])
+      .map(item => String(item?.reason || ''));
+    error.permissionReason = /your project has been denied access/i.test(String(payload?.error?.message || ''))
+      ? 'project_denied'
+      : reasons.includes('API_KEY_INVALID') ? 'api_key_invalid'
+        : reasons.includes('API_KEY_SERVICE_BLOCKED') ? 'service_blocked'
+          : reasons.includes('API_KEY_IP_ADDRESS_BLOCKED') ? 'ip_blocked'
+            : error.statusCode === 401 ? 'authentication_failed' : 'permission_denied';
+  }
   error.quotaExhausted = error.statusCode === 429 || error.geminiStatus === 'RESOURCE_EXHAUSTED';
   error.quotaScope = /per.?day|requestsperday|tokensperday/i.test(rawQuotaDetails)
     ? 'day'
@@ -170,6 +181,8 @@ export async function requestGeminiWithFallback({
   avoidBusyRoutes = false,
   validateResponse,
   retryPolicy,
+  honorPermissionDisabled = false,
+  onProviderFailure,
   waitForRetryImpl
 }) {
   const requestStartedAt = Date.now();
@@ -244,7 +257,7 @@ export async function requestGeminiWithFallback({
         if (attemptedRoutes.has(routeId) || sharedFailedRoutes.has(routeId)) return;
         const state = health[routeId] || {};
         const pressureDetails = geminiRoutePressure(state, model, nowMs);
-        const pressure = geminiRouteScore(state, model, nowMs);
+        const pressure = geminiRouteScore(state, model, nowMs, { honorPermissionDisabled });
         if (pressureDetails.dayRequests >= configuredGeminiLimit(model).rpd) return;
         candidates.push({
           credential,
@@ -269,7 +282,13 @@ export async function requestGeminiWithFallback({
     const choices = idle.length ? idle : avoidBusyRoutes ? [] : usable;
     if (!choices.length) {
       lastError ||= new Error(`${context} đang chờ API key Gemini hết thời gian pending.`);
-      lastError.code = 'GEMINI_KEYS_PENDING';
+      const permissionBlocked = honorPermissionDisabled && candidates.every(candidate =>
+        candidate.state.permissionDisabled === true || [401,403].includes(Number(candidate.state.lastStatusCode)));
+      lastError.code = permissionBlocked ? 'PERMISSION_DISABLED' : 'GEMINI_KEYS_PENDING';
+      if (permissionBlocked) {
+        lastError.statusCode = 403;
+        lastError.permissionReason = candidates[0]?.state.permissionReason || 'permission_denied';
+      }
       break;
     }
     if (remainingBudget(deadlineAt) < GEMINI_MIN_ATTEMPT_BUDGET_MS) {
@@ -390,11 +409,13 @@ export async function requestGeminiWithFallback({
     lastError.attempts = actualAttempts;
     lastError.totalDurationMs = Date.now() - requestStartedAt;
     lastError.attemptedRouteIds = [...attemptedRoutes];
+    onProviderFailure?.(lastError, credential);
     const state = await finishRouteImpl(routeId, {
       ok: false,
       statusCode: lastError.statusCode,
       latencyMs: attempt.latencyMs,
       errorType: healthErrorType(lastError),
+      permissionReason: honorPermissionDisabled ? lastError.permissionReason : null,
       reservedTokens,
       tokens: responseTokens
     }, { fetchImpl: redisFetchImpl });
@@ -406,7 +427,7 @@ export async function requestGeminiWithFallback({
 
     const completedDayRequests = Number(state?.dayRequests ?? (geminiRoutePressure(selected.state, model, nowMs).dayRequests + 1));
     const dailyLimitReached = completedDayRequests >= configuredGeminiLimit(model).rpd;
-    const permanentlyUnavailable = [401, 403].includes(Number(lastError.statusCode));
+    const permanentlyUnavailable = !honorPermissionDisabled && [401, 403].includes(Number(lastError.statusCode));
     if (credential.id && (dailyLimitReached || permanentlyUnavailable || (lastError.quotaExhausted && lastError.quotaScope === 'day'))) {
       try {
         await markModelExhaustedImpl(credential, model, { fetchImpl: redisFetchImpl });
