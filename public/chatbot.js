@@ -593,13 +593,15 @@
     activeChatController?.abort();
   }
   function addRetry(message, turn, data) {
-    if(turn.retries>=2 || data?.idempotency?.replayed || data?.retryable===false) return;
+    if(turn.retries>=2 || (data?.idempotency?.replayed && !turn.completedRetryable) || data?.retryable===false) return;
     const button=document.createElement('button'); button.type='button';button.className='chatbot-retry';
     const waitMs=Math.min(300000,Math.max(0,Number(data?.retryAfterMs) || 0));
     const waitSeconds=Math.ceil(waitMs/1000);
-    button.textContent=waitMs?`Thử lại sau ${waitSeconds} giây`:'Thử lại';button.disabled=waitMs>0;
+    turn.retryAt=Date.now()+waitMs;
+    const label=turn.completedRetryable?'Thử trả lời lại':'Thử lại';
+    button.textContent=waitMs?`Thử lại sau ${waitSeconds} giây`:label;button.disabled=waitMs>0;
     message.querySelector('div').append(button);
-    if(waitMs)window.setTimeout(()=>{button.disabled=false;button.textContent='Thử lại';},waitMs);
+    if(waitMs)window.setTimeout(()=>{button.disabled=false;button.textContent=label;},waitMs);
     button.addEventListener('click',()=>{button.disabled=true;sendQuestion(turn.question,turn);});
   }
   async function sendQuestion(value, retryTurn = null) {
@@ -611,11 +613,21 @@
     if (!question || isSending) return;
     const context=turnContext();
     if(!retryTurn && lastRetryTurn?.question===question && JSON.stringify(lastRetryTurn.context)===JSON.stringify(context))retryTurn=lastRetryTurn;
+    if(retryTurn && Date.now()<(retryTurn.retryAt || 0))return;
     if(retryTurn && (JSON.stringify(retryTurn.context)!==JSON.stringify(context) || retryTurn.retries>=2)) {
       addMessage('assistant','Phạm vi hỏi đáp đã thay đổi hoặc đã hết số lần thử lại. Bạn hãy gửi một câu hỏi mới.');return;
     }
     const turn=retryTurn || {question,context,clientRequestId:newRequestId(),retries:0,retryCause:null};
-    if(retryTurn)turn.retries++;
+    if(retryTurn) {
+      turn.retries++;
+      if(turn.completedRetryable) {
+        // Only a confirmed, persisted terminal response authorizes a new ID
+        // on an explicit user retry. Network/ambiguous outcomes keep the old ID.
+        turn.retryOfClientRequestId=turn.clientRequestId;
+        turn.clientRequestId=newRequestId();turn.retryCause='manual';turn.completedRetryable=false;
+      }
+    }
+    messagesRoot.querySelectorAll('.chatbot-retry').forEach(button=>button.remove());
     isSending = true;
     activeChatController=new AbortController();activeChatTurn=turn;
     input.value = '';
@@ -643,6 +655,7 @@
             messages: turn.messages,
             clientRequestId:turn.clientRequestId,clientSessionId,
             ...(turn.retryCause?{retryCause:turn.retryCause}:{}),
+            ...(turn.retryOfClientRequestId?{retryOfClientRequestId:turn.retryOfClientRequestId}:{}),
             language: window.RealViewI18n?.getLanguage?.() || 'vi',
             ...(context ? { context } : {})
           }),
@@ -665,7 +678,12 @@
       const answer = String(data.answer || 'Mình chưa có thông tin này trong kho dữ liệu RealView. Bạn có thể liên hệ đội ngũ để được hỗ trợ.');
       loading.remove();
       const message=addMessage('assistant', answer, data.engine, data.citations, data);
-      if(!turn.answerRecorded){conversation.push({ role: 'assistant', content: answer });turn.answerRecorded=true;}
+      if(!data.fallbackReason || data.fallbackUseful===true){
+        if(turn.recordedAnswer && conversation.includes(turn.recordedAnswer))turn.recordedAnswer.content=answer;
+        else {turn.recordedAnswer={role:'assistant',content:answer};conversation.push(turn.recordedAnswer);}
+      }
+      turn.completedRetryable=data.retryable===true && ['fallback','temporarily_unavailable'].includes(data.status)
+        && data.idempotency?.stored===true;
       lastRetryTurn=data.retryable?turn:null;
       if(data.retryable)addRetry(message,turn,data);
       if (conversation.length > 8) conversation.splice(0, conversation.length - 8);

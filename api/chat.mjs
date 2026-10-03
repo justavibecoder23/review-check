@@ -61,7 +61,7 @@ export function createChatHandler(deps = {}) {
     let generationId=null, contexts=[], idempotencyAvailable=true, statusCode=200, result;
     const attempts=[];
     const localBackground=[];
-    let clientRequestId=null,clientRetryCause=null;
+    let clientRequestId=null,clientRetryCause=null,retryOfClientRequestId=null;
     const schedule=async task=>{
       const safe=task.catch(()=>false);
       try {
@@ -80,6 +80,7 @@ export function createChatHandler(deps = {}) {
       const body=validateBody(request);
       clientRequestId=/^[a-zA-Z0-9_-]{16,100}$/.test(body.clientRequestId || '')?body.clientRequestId:null;
       clientRetryCause=['frontend_timeout','network_error','context_wait','manual'].includes(body.retryCause)?body.retryCause:null;
+      retryOfClientRequestId=/^[a-zA-Z0-9_-]{16,100}$/.test(body.retryOfClientRequestId || '')?body.retryOfClientRequestId:null;
       const requestedType=body.context?.type || (body.resultId?'current_result':'website');
       contextType=['website','current_result','history_item','history_comparison'].includes(requestedType)?requestedType:'invalid';
       const resolved=await budget.run('context',signal=>resolveChatContexts(request,body,deps,signal),2000);
@@ -133,7 +134,7 @@ export function createChatHandler(deps = {}) {
       // No content, account/result ID, key, cookie or raw provider text.
       // Provider events include a one-way key fingerprint and fixed reason/source labels.
       (deps.logger || console).log(JSON.stringify({event:'chat_request_completed',requestId:budget.requestId,contextType,
-        clientRequestId,clientRetryCause,
+        clientRequestId,clientRetryCause,retryOfClientRequestId,
         status:result?.status || 'temporarily_unavailable',code:result?.code || null,httpStatus:statusCode,source,
         fallbackReason:result?.fallbackReason || null,providerAttempts,providerOutcomes:attempts,
         replayed,tokenUsage:tokens,timingsMs:budget.timings,totalMs:Date.now()-budget.startedAt}));

@@ -181,6 +181,8 @@ export async function requestGeminiWithFallback({
   avoidBusyRoutes = false,
   validateResponse,
   retryPolicy,
+  getAttemptTimeoutMs,
+  onRoutingEvent,
   honorPermissionDisabled = false,
   onProviderFailure,
   waitForRetryImpl
@@ -219,6 +221,11 @@ export async function requestGeminiWithFallback({
   const routeIds = credentials.flatMap((credential) => models
     .filter((model) => !(credential.exhaustedModels || []).includes(model))
     .map((model) => geminiRouteId(credential.id, model)));
+  if (getAttemptTimeoutMs && !routeIds.length) {
+    const error = new Error(`${context} không còn credential có quota cho model hiện tại.`);
+    Object.assign(error,{code:'POOL_EXHAUSTED',statusCode:429,quotaExhausted:true,quotaScope:'day',attempts:0});
+    throw error;
+  }
   if (remainingBudget(deadlineAt) < GEMINI_MIN_ATTEMPT_BUDGET_MS) {
     throw deadlineError(context);
   }
@@ -280,6 +287,8 @@ export async function requestGeminiWithFallback({
     const usable = candidates.filter((candidate) => Number.isFinite(candidate.pressure));
     const idle = usable.filter((candidate) => !sharedBusyRoutes.has(candidate.routeId));
     const choices = idle.length ? idle : avoidBusyRoutes ? [] : usable;
+    onRoutingEvent?.({phase:'route_snapshot',eligibleRoutes:choices.length,totalRoutes:routeIds.length,
+      excludedRoutes:routeIds.length-choices.length,attempts:actualAttempts});
     if (!choices.length) {
       lastError ||= new Error(`${context} đang chờ API key Gemini hết thời gian pending.`);
       const permissionBlocked = honorPermissionDisabled && candidates.every(candidate =>
@@ -303,6 +312,13 @@ export async function requestGeminiWithFallback({
       || Number(left.state?.cooldownUntilMs || 0) - Number(right.state?.cooldownUntilMs || 0));
     const selected = choices[0];
     const { credential, model, routeId } = selected;
+    const plannedTimeoutMs = getAttemptTimeoutMs
+      ? getAttemptTimeoutMs({remainingMs:remainingBudget(deadlineAt),eligibleRoutes:choices.length,attempts:actualAttempts})
+      : timeoutMs;
+    if (!(plannedTimeoutMs > 0)) {
+      onRoutingEvent?.({phase:'retry_budget_exhausted',remainingMs:remainingBudget(deadlineAt),attempts:actualAttempts});
+      lastError ||= deadlineError(context,{attemptedModels,attemptedCredentialIds,attemptedRouteIds:attemptedRoutes});break;
+    }
     routeSelections += 1;
     attemptedRoutes.add(routeId);
     sharedBusyRoutes.add(routeId);
@@ -331,19 +347,30 @@ export async function requestGeminiWithFallback({
         error.credentialId = credential.id;
         lastError = error;
         reservationRejects.push({ routeId, code: error.code });
+        onRoutingEvent?.({phase:'route_skipped',code:error.code,attempts:actualAttempts});
         // BUSY/COOLDOWN/RPM/TPM là kết quả giữ chỗ, chưa gọi Gemini nên không
         // được tiêu hao retry. Thử ngay route khác trong cùng lượt gọi thực tế.
         continue;
       }
       if (reservation?.state) health[routeId] = reservation.state;
+      const remainingMs = Number.isFinite(Number(deadlineAt)) ? Number(deadlineAt) - Date.now() : timeoutMs;
+      const allocatedMs = getAttemptTimeoutMs
+        ? Math.min(plannedTimeoutMs,getAttemptTimeoutMs({remainingMs,eligibleRoutes:choices.length,attempts:actualAttempts}))
+        : Math.max(10,Math.min(timeoutMs,remainingMs));
+      if (!(allocatedMs > 0)) {
+        onRoutingEvent?.({phase:'retry_budget_exhausted',remainingMs,attempts:actualAttempts});
+        await finishRouteImpl(routeId,{ok:false,errorType:'cancelled',reservedTokens,tokens:0},{fetchImpl:redisFetchImpl});
+        lastError ||= deadlineError(context,{attemptedModels,attemptedCredentialIds,attemptedRouteIds:attemptedRoutes});
+        break;
+      }
+      onRoutingEvent?.({phase:'attempt_budget',timeoutMs:allocatedMs,remainingMs,eligibleRoutes:choices.length,attempt:actualAttempts+1});
       actualAttempts += 1;
       attemptedModels.push(model);
       if (credential.id && !attemptedCredentialIds.includes(credential.id)) attemptedCredentialIds.push(credential.id);
-      const remainingMs = Number.isFinite(Number(deadlineAt)) ? Number(deadlineAt) - Date.now() : timeoutMs;
       attempt = await fetchGemini(
         fetchImpl,
         `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-        { ...request, signal: attemptSignal(request?.signal, Math.max(10, Math.min(timeoutMs, remainingMs))) },
+        { ...request, signal: attemptSignal(request?.signal, allocatedMs) },
         context,
         model
       );
@@ -416,6 +443,7 @@ export async function requestGeminiWithFallback({
       latencyMs: attempt.latencyMs,
       errorType: healthErrorType(lastError),
       permissionReason: honorPermissionDisabled ? lastError.permissionReason : null,
+      retryAfterMs:lastError.retryAfterMs,
       reservedTokens,
       tokens: responseTokens
     }, { fetchImpl: redisFetchImpl });
@@ -440,11 +468,17 @@ export async function requestGeminiWithFallback({
     if (timedOut && !retryOnTimeout) throw lastError;
     // Opt-in only: chatbot supplies its bounded retry policy. The review
     // analysis pipeline retains the previous routing behavior.
-    if (retryPolicy && actualAttempts < maxAttempts) {
+    const hasAlternative = credentials.some(candidate => models.some(candidateModel => {
+      const candidateRoute = geminiRouteId(candidate.id,candidateModel);
+      return !(candidate.exhaustedModels || []).includes(candidateModel) && !attemptedRoutes.has(candidateRoute)
+        && !sharedFailedRoutes.has(candidateRoute) && Number.isFinite(geminiRouteScore(health[candidateRoute] || {},candidateModel,Date.now(),{honorPermissionDisabled}));
+    }));
+    if (retryPolicy && actualAttempts < maxAttempts && (!getAttemptTimeoutMs || hasAlternative)) {
       const decision = retryPolicy(lastError, remainingBudget(deadlineAt));
       if (!decision.retry) break;
       if (decision.delayMs > 0 && waitForRetryImpl) await waitForRetryImpl(decision.delayMs, request?.signal);
     }
+    if (getAttemptTimeoutMs && !hasAlternative) break;
     // Mọi lỗi của route hiện tại đều đưa key vào pending/used và chuyển ngay
     // sang key khác. attemptedRoutes đảm bảo không gọi lại cùng key trong request này.
   }

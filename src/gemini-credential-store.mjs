@@ -278,7 +278,7 @@ export async function listAvailableGeminiCredentials(options = {}) {
       resetAt: validState?.resetAt || resetAt
     };
   });
-  if (!credentials.some((credential) => credential.exhaustedModels.length < DEFAULT_GEMINI_MODELS.length)) {
+  if (!options.allowExhausted && !credentials.some((credential) => credential.exhaustedModels.length < DEFAULT_GEMINI_MODELS.length)) {
     const error = new Error(`Tất cả Gemini API key đã dùng hết quota ngày. Pool sẽ tự mở lại sau ${resetAt}.`);
     error.code = 'POOL_EXHAUSTED';
     error.statusCode = 429;

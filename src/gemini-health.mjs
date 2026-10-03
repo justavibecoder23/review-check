@@ -138,6 +138,9 @@ if not ok and not neutral then
     cooldownMs = state.consecutiveFailures >= 2 and 120000 or ${MINUTE_MS}
   elseif statusCode >= 500 then cooldownMs = 15000 end
   if cooldownMs == 0 then cooldownMs = ${MINUTE_MS} end
+  -- Optional chatbot-only lower bound: respect provider Retry-After and keep
+  -- a dedicated (non-vault) daily-exhausted key blocked until the quota day resets.
+  cooldownMs = math.max(cooldownMs, (tonumber(ARGV[12]) or 0) - nowMs)
   state.cooldownUntilMs = math.max(cooldownUntilMs, nowMs + cooldownMs)
 elseif ok then
   state.cooldownUntilMs = 0
@@ -359,7 +362,8 @@ export async function finishGeminiRoute(routeId, result, options = {}) {
       routeId, String(nowMs), new Date(nowMs).toISOString(), pacificDay(nowMs), ok ? '1' : '0',
       String(statusCode || 0), String(latencyMs), String(result?.errorType || 'unknown').slice(0, 80),
       String(Math.max(0, number(result?.tokens))), String(Math.max(0, number(result?.reservedTokens))),
-      options.honorPermissionDisabled ? String(result?.permissionReason || '').slice(0, 80) : ''
+      options.honorPermissionDisabled ? String(result?.permissionReason || '').slice(0, 80) : '',
+      String(options.honorPermissionDisabled ? Math.max(0,number(result?.minCooldownUntilMs)) : 0)
     ], options);
     return parseJson(raw, null);
   } catch {

@@ -5,7 +5,7 @@ import { currentWebsiteFacts, REALVIEW_CONTACT_EMAIL, REVIEW_SCORE_LIMITATION, R
 import { answerDocumentSchema, attachAnswerDocument, formatAnswerText, normalizeAnswerDocument, paragraphAnswer, section, structuredAnswersEnabled } from './chatbot-answer-format.mjs';
 import { formatKnowledgeAnswer } from './chatbot-knowledge-format.mjs';
 import { reportFallbackDocument, validateReportNumbers } from './chatbot-report-format.mjs';
-import { retryDecision, waitForRetry } from './chatbot-reliability.mjs';
+import { retryDecision, waitForRetry, chatbotAttemptTimeout, CHATBOT_MIN_RETRY_MS, CHATBOT_VALIDATION_RESERVE_MS } from './chatbot-reliability.mjs';
 import {
   beginChatbotGeminiRoute,
   finishChatbotGeminiRoute,
@@ -414,6 +414,11 @@ async function generateWebsiteAnswer(messages, options = {}) {
   const deadlineAt = Math.min(Date.now() + budgetMs, options.deadlineAt ?? Infinity);
   const deadlineSignal = AbortSignal.timeout(Math.max(1, deadlineAt - Date.now()));
   const requestSignal = options.signal ? AbortSignal.any([options.signal, deadlineSignal]) : deadlineSignal;
+  const adaptiveRouting = options.adaptiveRouting ?? process.env.CHATBOT_ADAPTIVE_ROUTING_ENABLED !== 'false';
+  // Deployment-specific owner confirmation: each chatbot key is a separate project.
+  // Turn off quota failover if that invariant changes; shared routing defaults stay unchanged.
+  const independentProjects = options.independentProjects ?? process.env.CHATBOT_POOL_INDEPENDENT_PROJECTS !== 'false';
+  const validationReserveMs = Math.min(CHATBOT_VALIDATION_RESERVE_MS,Math.floor(budgetMs * .05));
   const boundedFetch = (implementation, phase, maximum = Infinity) => async (url, init = {}) => {
     requestSignal.throwIfAborted();
     const signal = AbortSignal.any([requestSignal, ...(init.signal ? [init.signal] : []), AbortSignal.timeout(Math.max(1, Math.min(maximum,deadlineAt-Date.now())))]);
@@ -454,7 +459,7 @@ CÁC MỤC LIÊN QUAN TRONG KHO DỮ LIỆU:
 ${contextEntries.map(entry => `[${entry.id}] ${entry.title}\n${entry.answer}`).join('\n\n')}
 `.trim();
 
-  const requestGemini = ({ credentials, maxRetries, attemptTimeoutMs, standaloneApiKey = '' }) => requestGeminiWithFallback({
+  const requestGemini = ({ credentials, maxRetries, attemptTimeoutMs, standaloneApiKey = '', unified = false }) => requestGeminiWithFallback({
       fetchImpl: async (url, init) => {
         const started = Date.now();
         const fingerprint = geminiCredentialId(init.headers['x-goog-api-key']);
@@ -462,17 +467,44 @@ ${contextEntries.map(entry => `[${entry.id}] ${entry.title}\n${entry.answer}`).j
         try {
           const response = await boundedFetch(async (target,request)=>{
             request.signal.throwIfAborted();providerAttempted=true;options.onProviderAttempt?.({phase:'start'});
-            return (options.fetchImpl || fetch)(target,request);
+            const response = await (options.fetchImpl || fetch)(target,request);
+            if (unified) options.onProviderAttempt?.({phase:'provider_headers',status:Number(response.status)||null,
+              durationMs:Date.now()-started,fingerprint,source});
+            // Keep body transfer inside the attempt deadline too. A headers-only
+            // response must not consume the entire budget before failover is possible.
+            if (unified && typeof response.arrayBuffer === 'function') {
+              const bytes = await response.arrayBuffer();
+              return new Response(bytes,{status:response.status,headers:response.headers});
+            }
+            return response;
           },'provider')(url, init);
           providerStatus = Number(response.status) || null;
           options.onProviderAttempt?.({phase:'response',status:providerStatus,durationMs:Date.now()-started,fingerprint,source});
           return response;
-        } catch(error) { options.onProviderAttempt?.({phase:'error',code:error?.name==='TimeoutError'||error?.name==='AbortError'?'AI_TIMEOUT':'AI_CONNECTION_FAILED',durationMs:Date.now()-started}); throw error; }
+        } catch(error) { options.onProviderAttempt?.({phase:'error',code:error?.name==='TimeoutError'||error?.name==='AbortError'?'AI_TIMEOUT':'AI_CONNECTION_FAILED',durationMs:Date.now()-started,
+          timeoutBoundary:requestSignal.aborted?'request_deadline':init.signal?.aborted?'attempt_deadline':null,fingerprint,source}); throw error; }
       },
       redisFetchImpl: boundedFetch(options.redisFetchImpl || fetch,'pool',700),
       apiKey: standaloneApiKey,
       listCredentialsImpl: credentials ? async () => credentials : async (settings) => {
-        const pool = await listAvailableChatbotGeminiCredentials(settings);
+        let pool;
+        try { pool = await listAvailableChatbotGeminiCredentials({...settings,allowExhausted:unified}); }
+        catch (error) {
+          if (!unified || !dedicatedKey) throw error;
+          // A pool read failure must not disable an independently configured
+          // primary. Its own health and atomic reservation are still checked.
+          options.onProviderAttempt?.({phase:'pool_unavailable',primaryOnly:true});
+          pool = [];
+        }
+        if (unified) {
+          const all = [...(dedicatedKey ? [{id:geminiCredentialId(dedicatedKey),apiKey:dedicatedKey,
+            exhaustedModels:pool.filter(item=>item.apiKey===dedicatedKey).flatMap(item=>item.exhaustedModels || [])}] : []),...pool];
+          const seen = new Set();
+          return all.filter(credential => {const fingerprint=geminiCredentialId(credential.apiKey);
+            if(seen.has(fingerprint))return false;
+            credential.exhaustedModels=[...new Set(all.filter(item=>item.apiKey===credential.apiKey).flatMap(item=>item.exhaustedModels || []))];
+            seen.add(fingerprint);return true;});
+        }
         // A duplicate copy of the primary is not a backup and must not be retried.
         return pool.filter(credential => credential.apiKey !== dedicatedKey);
       },
@@ -497,7 +529,10 @@ ${contextEntries.map(entry => `[${entry.id}] ${entry.title}\n${entry.answer}`).j
       deadlineAt,
       attemptTimeoutMs,
       maxRetries,
-      retryPolicy: error => retryDecision(error,deadlineAt-Date.now(),options.randomImpl || Math.random),
+      ...(unified ? {getAttemptTimeoutMs: state => chatbotAttemptTimeout(state,validationReserveMs),
+        onRoutingEvent:event=>options.onProviderAttempt?.(event)} : {}),
+      retryPolicy: error => retryDecision(error,deadlineAt-Date.now(),options.randomImpl || Math.random,
+        unified ? {independentProjects,minimumAttemptMs:CHATBOT_MIN_RETRY_MS,completionReserveMs:validationReserveMs} : {}),
       waitForRetryImpl: options.waitForRetryImpl || waitForRetry,
       context: 'Gemini chatbot',
       validateResponse: async (response) => {
@@ -546,7 +581,9 @@ ${contextEntries.map(entry => `[${entry.id}] ${entry.title}\n${entry.answer}`).j
 
   try {
     let geminiResult;
-    if (dedicatedKey) {
+    if (adaptiveRouting) {
+      geminiResult = await requestGemini({maxRetries:1,attemptTimeoutMs:9_000,unified:true});
+    } else if (dedicatedKey) {
       try {
         geminiResult = await requestGemini({
           credentials: [{ id: geminiCredentialId(dedicatedKey), apiKey: dedicatedKey, exhaustedModels: [] }],

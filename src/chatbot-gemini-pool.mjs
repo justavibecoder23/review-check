@@ -5,7 +5,8 @@ import {
   listAvailableGeminiCredentials,
   markGeminiModelExhausted,
   saveGeminiCredentialPool,
-  geminiCredentialId
+  geminiCredentialId,
+  nextPacificResetAt
 } from './gemini-credential-store.mjs';
 import {
   beginGeminiRoute,
@@ -54,7 +55,11 @@ export function beginChatbotGeminiRoute(routeId, options = {}) {
 }
 
 export function finishChatbotGeminiRoute(routeId, result, options = {}) {
-  return finishGeminiRoute(routeId, result, { ...options, healthKey: CHATBOT_GEMINI_HEALTH_KEY, honorPermissionDisabled: true });
+  const nowMs = options.nowMs ?? Date.now();
+  const quotaCooldown = result?.errorType === 'daily-quota'
+    ? Date.parse(nextPacificResetAt(new Date(nowMs)))
+    : Number(result?.statusCode) === 429 ? nowMs + Math.max(60_000,Number(result.retryAfterMs) || 0) : 0;
+  return finishGeminiRoute(routeId, {...result,minCooldownUntilMs:quotaCooldown}, { ...options, healthKey: CHATBOT_GEMINI_HEALTH_KEY, honorPermissionDisabled: true });
 }
 
 function safeEqual(left, right) {

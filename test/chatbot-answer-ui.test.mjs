@@ -148,3 +148,66 @@ test('account change cancels an in-flight private answer and does not restore it
     assert.equal(dom.window.document.querySelector('.chatbot-retry'),null);assert.equal(dom.window.document.querySelector('#chatbot-input').value,'');
   }finally{dom.window.close();}
 });
+
+test('explicit retry of a confirmed persisted timeout creates a new ID but excludes the error from AI history',async()=>{
+  const dom=fixture();try{
+    const bodies=[];dom.window.fetch=async(_url,init)=>{
+      bodies.push(JSON.parse(init.body));
+      return {ok:true,status:200,json:async()=>bodies.length===1
+        ? {answer:'Kết nối đang gián đoạn.',engine:'rules',fallbackReason:'timeout',status:'temporarily_unavailable',
+          retryable:true,retryAfterMs:0,idempotency:{stored:true,replayed:false}}
+        : {answer:'RealView tổng hợp review công khai.',engine:'gemini',status:'answered',retryable:false,idempotency:{stored:true}}};
+    };
+    await dom.window.chatTest.sendQuestion('Giải thích RealView theo cách khác nhé');
+    assert.equal(dom.window.document.querySelector('.chatbot-retry').textContent,'Thử trả lời lại');
+    await dom.window.chatTest.sendQuestion('Giải thích RealView theo cách khác nhé');
+    assert.notEqual(bodies[0].clientRequestId,bodies[1].clientRequestId);
+    assert.equal(bodies[1].retryOfClientRequestId,bodies[0].clientRequestId);
+    assert.equal(bodies[1].retryCause,'manual');assert.deepEqual(bodies[1].messages,bodies[0].messages);
+    assert.equal(dom.window.document.querySelectorAll('.chatbot-message--user').length,1);
+    assert.equal(dom.window.document.querySelectorAll('.chatbot-retry').length,0);
+    await dom.window.chatTest.sendQuestion('Vậy tôi nên bắt đầu thế nào?');
+    assert.ok(bodies[2].messages.some(message=>message.role==='assistant' && /tổng hợp/.test(message.content)));
+    assert.ok(!bodies[2].messages.some(message=>/gián đoạn/.test(message.content)));
+  }finally{dom.window.close();}
+});
+
+test('ambiguous storage outcome retries the same ID; only confirmed replayed failure permits an explicit new attempt',async()=>{
+  const dom=fixture();try{
+    const bodies=[];dom.window.fetch=async(_url,init)=>{
+      bodies.push(JSON.parse(init.body));
+      return {ok:true,status:200,json:async()=>({answer:'Kết nối đang gián đoạn.',engine:'rules',fallbackReason:'timeout',
+        status:'temporarily_unavailable',retryable:true,retryAfterMs:0,
+        idempotency:{stored:bodies.length>1,replayed:bodies.length===2}})};
+    };
+    for(let i=0;i<3;i++)await dom.window.chatTest.sendQuestion('Một câu hỏi cần giải thích');
+    assert.equal(bodies[0].clientRequestId,bodies[1].clientRequestId);
+    assert.notEqual(bodies[1].clientRequestId,bodies[2].clientRequestId);
+    assert.equal(dom.window.document.querySelector('.chatbot-retry'),null);
+  }finally{dom.window.close();}
+});
+
+test('typing the same question cannot bypass a server retry wait',async()=>{
+  const dom=fixture();try{
+    let calls=0;dom.window.fetch=async()=>{calls++;return {ok:true,status:200,json:async()=>({answer:'Chờ rồi thử lại.',
+      engine:'rules',fallbackReason:'timeout',status:'temporarily_unavailable',retryable:true,retryAfterMs:10000,idempotency:{stored:true}})};};
+    await dom.window.chatTest.sendQuestion('Một câu hỏi cần giải thích');
+    await dom.window.chatTest.sendQuestion('Một câu hỏi cần giải thích');assert.equal(calls,1);
+    assert.equal(dom.window.document.querySelector('.chatbot-retry').disabled,true);
+  }finally{dom.window.close();}
+});
+
+test('successful retry replaces a useful partial fallback in subsequent AI history',async()=>{
+  const dom=fixture();try{
+    const bodies=[];dom.window.fetch=async(_url,init)=>{
+      bodies.push(JSON.parse(init.body));return {ok:true,status:200,json:async()=>bodies.length===1
+        ? {answer:'Phần có sẵn từ dữ liệu.',engine:'rules',fallbackReason:'timeout',fallbackUseful:true,status:'fallback',
+          retryable:true,retryAfterMs:0,idempotency:{stored:true}}
+        : {answer:'Câu trả lời đã hoàn tất.',engine:'gemini',status:'answered',retryable:false}};
+    };
+    await dom.window.chatTest.sendQuestion('Câu hỏi đầu');await dom.window.chatTest.sendQuestion('Câu hỏi đầu');
+    await dom.window.chatTest.sendQuestion('Câu hỏi tiếp theo');
+    assert.ok(bodies[2].messages.some(message=>message.content==='Câu trả lời đã hoàn tất.'));
+    assert.ok(!bodies[2].messages.some(message=>message.content==='Phần có sẵn từ dữ liệu.'));
+  }finally{dom.window.close();}
+});

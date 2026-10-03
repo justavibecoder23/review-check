@@ -46,14 +46,31 @@ export function errorState(error, requestId) {
   return { status: 'temporarily_unavailable', code, requestId, retryable: ERROR_RETRY.has(code),
     retryAfterMs: error?.retryAfterMs ?? (code === 'RESULT_CONTEXT_PREPARING' ? 400 : code === 'CHAT_REQUEST_IN_PROGRESS' ? 1000 : null), error: code };
 }
-export function retryDecision(error, remainingMs, random = Math.random) {
-  // Project scope is not known in the existing vault. A different key is NOT
-  // evidence of an independent quota: never switch keys after any quota error.
-  if (error?.quotaExhausted || [400, 401, 402, 403, 404, 429].includes(Number(error?.statusCode))) return { retry: false };
+export function retryDecision(error, remainingMs, random = Math.random, options = {}) {
+  // Default remains conservative for all existing callers. Only the chatbot
+  // opts in after the owner confirmed its credentials belong to separate projects.
+  const quota = error?.quotaExhausted || Number(error?.statusCode) === 429;
+  if ([400, 401, 402, 403, 404].includes(Number(error?.statusCode)) || (quota && !options.independentProjects)) return { retry: false };
   const transient = error?.transient || error?.name === 'TimeoutError' || error?.name === 'AbortError'
-    || error?.code === 'GEMINI_INVALID_RESPONSE' || error?.statusCode === 408 || Number(error?.statusCode) >= 500;
-  const delayMs = Math.max(Number(error?.retryAfterMs) || 0, 200 + Math.floor(random() * 200));
-  return { retry: Boolean(transient && delayMs + 500 < remainingMs), delayMs };
+    || error?.code === 'GEMINI_INVALID_RESPONSE' || error?.statusCode === 408 || Number(error?.statusCode) >= 500 || (quota && options.independentProjects);
+  // Retry-After belongs to the failed project on quota errors, not a different
+  // independently authorized project. Other provider errors retain that wait.
+  const delayMs = Math.max(quota ? 0 : Number(error?.retryAfterMs) || 0, 200 + Math.floor(random() * 200));
+  const requiredMs = (options.minimumAttemptMs ?? 0) + (options.completionReserveMs ?? 500);
+  return { retry: Boolean(transient && delayMs + requiredMs < remainingMs), delayMs };
+}
+
+export const CHATBOT_FIRST_ATTEMPT_MS = 4_000;
+export const CHATBOT_SINGLE_ATTEMPT_MS = 9_000;
+export const CHATBOT_BACKUP_ATTEMPT_MS = 5_500;
+export const CHATBOT_MIN_RETRY_MS = 3_000;
+export const CHATBOT_VALIDATION_RESERVE_MS = 500;
+export function chatbotAttemptTimeout({ remainingMs, eligibleRoutes, attempts }, reserveMs = CHATBOT_VALIDATION_RESERVE_MS) {
+  const available = Math.floor(remainingMs - reserveMs);
+  if (available < 1 || (attempts > 0 && available < CHATBOT_MIN_RETRY_MS)) return 0;
+  const cap = attempts > 0 ? CHATBOT_BACKUP_ATTEMPT_MS
+    : eligibleRoutes > 1 ? CHATBOT_FIRST_ATTEMPT_MS : CHATBOT_SINGLE_ATTEMPT_MS;
+  return Math.min(cap, available);
 }
 export function waitForRetry(delayMs, signal) {
   return new Promise((resolve, reject) => {
