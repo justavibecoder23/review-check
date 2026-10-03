@@ -327,7 +327,7 @@ test('section đối ứng ẩn mặc định và chỉ có module nền riêng'
   assert.match(resultsScript, /platformElement\.classList\.toggle\('analysis-platform--tiktok', \/tiktok\/i\.test\(platform\)\)/);
   assert.match(resultsScript, /classList\.remove\('analysis-platform--tiktok'\)/);
   assert.match(resultsStyles, /\.analysis-platform\.analysis-platform--tiktok \{ color: #FE2C55; \}/);
-  assert.match(resultsStyles, /\.analysis-platform\.analysis-platform--tiktok \{[\s\S]*linear-gradient\(90deg, #25F4EE 0%, #161616 52%, #FE2C55 100%\);[\s\S]*background-clip: text;[\s\S]*text-fill-color: transparent;/);
+  assert.match(resultsStyles, /\.analysis-platform\.analysis-platform--tiktok \{[\s\S]*linear-gradient\(90deg, #00B8B3 0%, #161616 52%, #FE2C55 100%\);[\s\S]*background-clip: text;[\s\S]*text-fill-color: transparent;/);
   const readyToastSource = script.slice(script.indexOf('function showReadyToast'), script.indexOf('function showStatusToast'));
   const statusToastSource = script.slice(script.indexOf('function showStatusToast'), script.indexOf('function announceWhenVisible'));
   assert.match(script, /const READY_TOAST_DURATION_MS = 5_000;/);

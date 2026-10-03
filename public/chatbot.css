@@ -312,6 +312,7 @@
   top: 50%;
   right: calc(100% + 5px);
   transform: translateY(-50%);
+  animation: none;
 }
 .realviewee-static--kept .realviewee-static-speech::after,
 .realviewee-static--excluded .realviewee-static-speech::after {

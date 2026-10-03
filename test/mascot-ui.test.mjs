@@ -128,6 +128,8 @@ test('chỉ triển khai các biểu cảm đã duyệt và khung chạy, không
   }
   assert.match(styles, /\.trust-copy > h2,[\s\S]*?\.trust-copy > p \{ max-width:\s*calc\(100% - 98px\); \}/);
   assert.match(styles, /\.realviewee-static--kept \.realviewee-static-speech,[\s\S]*?right:\s*calc\(100% \+ 5px\)/);
+  assert.match(styles, /\.realviewee-static--kept \.realviewee-static-speech,[\s\S]*?\.realviewee-static--excluded \.realviewee-static-speech \{[^}]*animation:\s*none;/);
+  assert.match(styles, /\.realviewee-static:hover \{ transform:\s*translateY\(-3px\); \}/);
   assert.match(styles, /\.realviewee-static--counterpart \.realviewee-static-speech \{[\s\S]*?right:\s*calc\(100% - 22px\);[\s\S]*?bottom:\s*calc\(100% - 8px\)/);
   assert.match(styles, /\.realviewee-static--trust \.realviewee-static-speech \{[\s\S]*?bottom:\s*calc\(100% \+ 4px\)/);
   assert.match(styles, /\.realviewee-speech \{[\s\S]*?bottom:\s*calc\(100% \+ 10px\);[\s\S]*?border-radius:\s*12px;[\s\S]*?color:\s*var\(--orange-dark\);/);

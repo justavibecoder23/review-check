@@ -259,7 +259,7 @@
 .analysis-platform.analysis-platform--tiktok { color: #FE2C55; }
 @supports ((background-clip: text) or (-webkit-background-clip: text)) {
   .analysis-platform.analysis-platform--tiktok {
-    background: linear-gradient(90deg, #25F4EE 0%, #161616 52%, #FE2C55 100%);
+    background: linear-gradient(90deg, #00B8B3 0%, #161616 52%, #FE2C55 100%);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
