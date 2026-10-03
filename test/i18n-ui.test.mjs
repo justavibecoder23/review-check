@@ -6,8 +6,9 @@ import { LEGAL_PAGES } from '../src/legal-content.mjs';
 const publicFile = (name) => new URL(`../public/${name}`, import.meta.url);
 
 test('language toggle is minimal, persistent, accessible, and responsive', async () => {
-  const [i18n, styles] = await Promise.all([
+  const [i18n, nav, styles] = await Promise.all([
     readFile(publicFile('i18n.js'), 'utf8'),
+    readFile(publicFile('nav.js'), 'utf8'),
     readFile(publicFile('styles.css'), 'utf8')
   ]);
   assert.match(i18n, /realview-language/);
@@ -18,7 +19,10 @@ test('language toggle is minimal, persistent, accessible, and responsive', async
   assert.match(i18n, /window\.dispatchEvent\(new CustomEvent\('realview:language-changed'/);
   assert.match(styles, /\.language-toggle[\s\S]*background:\s*transparent/);
   assert.match(styles, /\.language-toggle button\.is-active\s*\{[^}]*color:\s*var\(--orange\)/);
-  assert.match(styles, /@media \(max-width: 420px\)[\s\S]*\.language-toggle/);
+  assert.match(nav, /class="mobile-language-menu"/);
+  assert.match(nav, /data-mobile-language-current/);
+  assert.match(styles, /@media \(max-width: 700px\)[\s\S]*\.header-brand-cluster \.language-toggle\s*\{[^}]*display:\s*none/s);
+  assert.match(styles, /@media \(max-width: 700px\)[\s\S]*\.mobile-language-menu\s*\{[^}]*display:\s*grid/s);
 });
 
 test('English navigation and longer interface copy reflow without stale measurements', async () => {

@@ -81,11 +81,30 @@
         <div class="nav-blog-content">Blog</div>
       </a>
       <span class="nav-blog-badge">New</span>
+    </div>
+    <div class="mobile-language-menu" data-i18n-skip>
+      <button class="mobile-language-trigger" type="button" aria-expanded="false" aria-controls="mobile-language-options">
+        <span data-mobile-language-label>Ngôn ngữ</span>
+        <span class="mobile-language-current" data-mobile-language-current>Tiếng Việt</span>
+        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m6 8 4 4 4-4"/></svg>
+      </button>
+      <div id="mobile-language-options" class="mobile-language-options" role="group" aria-label="Chọn ngôn ngữ">
+        <button type="button" data-language="vi" aria-pressed="false"><span>Tiếng Việt</span></button>
+        <button type="button" data-language="en" aria-pressed="false"><span>English</span></button>
+      </div>
     </div>`;
 
   const dropdownWraps = [...nav.querySelectorAll('.nav-parent-wrap')];
+  const languageMenu = nav.querySelector('.mobile-language-menu');
+  const languageTrigger = languageMenu?.querySelector('.mobile-language-trigger');
+
+  const setLanguageMenuState = (open) => {
+    languageMenu?.classList.toggle('is-open', open);
+    languageTrigger?.setAttribute('aria-expanded', String(open));
+  };
 
   const setDropdownState = (targetWrap, open) => {
+    if (targetWrap && open) setLanguageMenuState(false);
     dropdownWraps.forEach((wrap) => {
       const shouldOpen = wrap === targetWrap && open;
       wrap.classList.toggle('is-dropdown-open', shouldOpen);
@@ -102,8 +121,15 @@
     toggle?.setAttribute('aria-expanded', 'false');
     if (toggleLabel) toggleLabel.textContent = 'Mở menu';
     setDropdownState(null, false);
+    setLanguageMenuState(false);
     if (restoreFocus) toggle?.focus();
   };
+
+  languageTrigger?.addEventListener('click', () => {
+    const willOpen = !languageMenu.classList.contains('is-open');
+    setDropdownState(null, false);
+    setLanguageMenuState(willOpen);
+  });
 
   dropdownWraps.forEach((wrap) => {
     const parent = wrap.querySelector('.nav-parent');
@@ -133,6 +159,10 @@
     }, 0);
   });
   nav.addEventListener('click', (event) => {
+    if (event.target.closest('.mobile-language-options [data-language]')) {
+      setLanguageMenuState(false);
+      return;
+    }
     if (isMobileNav() && event.target.closest('a')) closeMenu();
   });
 

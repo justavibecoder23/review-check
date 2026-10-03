@@ -1003,6 +1003,18 @@
         ? (language === 'vi' ? 'Tiếng Việt đang được chọn' : 'Switch to Vietnamese')
         : (language === 'en' ? 'English is selected' : 'Chuyển sang tiếng Anh'));
     });
+    document.querySelectorAll('[data-mobile-language-label]').forEach((label) => {
+      label.textContent = language === 'en' ? 'Language' : 'Ngôn ngữ';
+    });
+    document.querySelectorAll('[data-mobile-language-current]').forEach((label) => {
+      label.textContent = language === 'en' ? 'English' : 'Tiếng Việt';
+    });
+    document.querySelectorAll('.mobile-language-trigger').forEach((button) => {
+      button.setAttribute('aria-label', language === 'en' ? 'Choose language' : 'Chọn ngôn ngữ');
+    });
+    document.querySelectorAll('.mobile-language-options').forEach((options) => {
+      options.setAttribute('aria-label', language === 'en' ? 'Choose language' : 'Chọn ngôn ngữ');
+    });
   }
 
   function ensureToggle() {
