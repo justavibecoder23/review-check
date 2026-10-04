@@ -8,6 +8,10 @@ import { getCachedShopeeDataset, getCachedTikTokDataset, getShopeeProductMetadat
 import { fetchShopeeDetailActorMetadata } from '../src/shopee-detail-metadata.mjs';
 import { saveCloudflareReviewBundle, verifyCloudflareReviewBundle } from '../src/cloudflare-review-store.mjs';
 import { migrateReviewDatasets } from '../tools/migrate-review-datasets-to-d1.mjs';
+import { createShopeeProductMetaHandler } from '../src/shopee-product-meta-route.mjs';
+import { createShopeeMetadataTicket } from '../src/shopee-metadata-ticket.mjs';
+import { fetchShopeePublicMetadata } from '../src/shopee-public-metadata.mjs';
+import { publicProductHtml, PUBLIC_IMAGE } from './fixtures/shopee-public-metadata.mjs';
 
 function fixture({ platform = 'Shopee', createdAt = new Date().toISOString(), runId = 'test-run', text = 'Sản phẩm đúng mô tả, dùng tốt.' } = {}) {
   const product = platform === 'Shopee' ? { platform, shopId: '452200291', itemId: '17701438002', title: 'Kính camera', image: 'https://down-vn.img.susercontent.com/file/example' }
@@ -93,6 +97,44 @@ test('D1 metadata rejects Blob images and unauthorized requests', async () => {
   assert.equal((await worker.fetch(new Request(url, { method: 'POST', headers: { authorization: `Bearer ${env.REVIEW_CACHE_SECRET}` }, body: JSON.stringify(body) }), env)).status, 400);
   assert.equal(db.sqlite.prepare('SELECT COUNT(*) AS n FROM product_metadata_cache').get().n, 0);
   db.sqlite.close();
+});
+
+test('public-source POST persists exact metadata in D1, GET/cache skip public requests and paid usage', async () => {
+  const { db, options } = setup();
+  const oldSecret = process.env.RESULT_CONTEXT_SIGNING_SECRET;
+  process.env.RESULT_CONTEXT_SIGNING_SECRET = 'public-source-d1-local-test';
+  let requests = 0;
+  let actorCalls = 0;
+  const route = createShopeeProductMetaHandler({
+    getMetadata: (shopId, itemId) => getShopeeProductMetadata(shopId, itemId, options),
+    saveMetadata: (shopId, itemId, metadata, extra) => setShopeeProductMetadata(shopId, itemId, metadata, { ...options, ...extra }),
+    fetchPublic: (url, ids) => fetchShopeePublicMetadata(url, { ...ids, fetchImpl: async () => {
+      requests++; return new Response(publicProductHtml(), { headers: { 'content-type': 'text/html' } });
+    } }),
+    fetchActor: async () => { actorCalls++; throw new Error('Must not reserve paid Actor'); }
+  });
+  const productUrl = 'https://shopee.vn/product/452200291/17701438002';
+  const response = () => ({ setHeader() {}, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; } });
+  try {
+    const request = { method: 'POST', headers: { host: 'realview.com.vn' }, body: {
+      url: productUrl, metadataTicket: createShopeeMetadataTicket('452200291', '17701438002')
+    } };
+    const first = response(); await route(request, first);
+    assert.equal(first.body.status, 'resolved');
+    assert.equal(first.body.metadata.image, PUBLIC_IMAGE);
+    assert.equal(Date.parse(first.body.metadata.expiresAt) - Date.parse(first.body.metadata.updatedAt), 5 * 86400_000);
+    const second = response(); await route(request, second);
+    assert.equal(second.body.status, 'cached');
+    const read = response(); await route({ method: 'GET', headers: {}, url: `/api/shopee-product-meta?url=${encodeURIComponent(productUrl)}` }, read);
+    assert.equal(read.body.metadata.image, PUBLIC_IMAGE);
+    assert.equal(requests, 1);
+    assert.equal(actorCalls, 0);
+    assert.equal(db.sqlite.prepare('SELECT COUNT(*) AS n FROM product_metadata_cache').get().n, 1);
+  } finally {
+    db.sqlite.close();
+    if (oldSecret === undefined) delete process.env.RESULT_CONTEXT_SIGNING_SECRET;
+    else process.env.RESULT_CONTEXT_SIGNING_SECRET = oldSecret;
+  }
 });
 
 test('D1 reproduces raw, labels, Unicode, order and headers exactly; cache requires no Redis or Blob', async () => {

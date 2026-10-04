@@ -21,6 +21,7 @@ import { assertPlatformReviewEnabled } from './platform-availability.mjs';
 import { cleanProductTitle } from './product-metadata-quality.mjs';
 import { fetchShopeeDetailActorMetadata } from './shopee-detail-metadata.mjs';
 import { createShopeeMetadataTicket } from './shopee-metadata-ticket.mjs';
+import { fetchShopeePublicMetadata, fetchShopeeSeoMetadata } from './shopee-public-metadata.mjs';
 
 const DEMO_REVIEWS = [
   { rating: 5, text: 'Nhận xu nên đánh giá cho shop 5 sao nha mọi người.', date: '12/08/2026', verified: false },
@@ -744,6 +745,7 @@ export async function getReviews(url, options = {}) {
     ? await resolveTikTokProductUrl(parsed.href, { signal: options.signal, fetchImpl: options.fetchImpl })
     : null;
   const productUrl = shopeeProduct?.canonicalUrl || tiktokProduct?.productUrl || parsed.href;
+  const displayProductUrl = shopeeProduct && !shopeeProduct.wasShortened ? parsed.href : productUrl;
   const perStarLimit = platform === 'Shopee' ? getShopeeReviewsPerStar() : null;
   const reviewLimit = 100;
   const shopeeMetadataTraceId = platform === 'Shopee' ? options.metadataTraceId || randomUUID() : null;
@@ -785,12 +787,12 @@ export async function getReviews(url, options = {}) {
     };
     if (next.title === shopeeMetadata.title && next.image === shopeeMetadata.image) return;
     shopeeMetadata = next;
-    emitProductMeta({ platform, url: productUrl, originalUrl: parsed.href,
+    emitProductMeta({ platform, url: displayProductUrl, originalUrl: parsed.href,
       shopId: shopeeProduct.shopId, itemId: shopeeProduct.itemId, ...next }, source);
     if (source !== 'redis-overlay') {
       shopeeMetadataWrite = shopeeMetadataWrite.catch(() => {}).then(() =>
-        setShopeeProductMetadata(shopeeProduct.shopId, shopeeProduct.itemId, next, {
-          redisFetchImpl: options.redisFetchImpl, source
+        (options.setShopeeProductMetadataImpl || setShopeeProductMetadata)(shopeeProduct.shopId, shopeeProduct.itemId, next, {
+          ...options, source
         })).catch(() => {});
     }
   };
@@ -799,13 +801,65 @@ export async function getReviews(url, options = {}) {
     warnings.push('Đã mở link chia sẻ Shopee và chuẩn hóa về đúng sản phẩm trước khi thu thập review.');
   }
   const shopeeOverlayPromise = shopeeProduct
-    ? getShopeeProductMetadata(shopeeProduct.shopId, shopeeProduct.itemId, {
-        redisFetchImpl: options.redisFetchImpl
+    ? (options.getShopeeProductMetadataImpl || getShopeeProductMetadata)(shopeeProduct.shopId, shopeeProduct.itemId, {
+        ...options
       }).then((metadata) => { acceptShopeeMetadata(metadata, 'redis-overlay'); return metadata; }).catch(() => null)
     : Promise.resolve(null);
   if (tiktokProduct?.wasShortened) {
     warnings.push('Đã mở link chia sẻ TikTok và khôi phục đúng mã sản phẩm trước khi thu thập review.');
   }
+
+  const metadataUrls = productMetadataUrls(productUrl, {
+    platform, productId: tiktokProduct?.productId,
+    shopId: shopeeProduct?.shopId, itemId: shopeeProduct?.itemId
+  });
+  const fetchFreeProductMeta = () => Promise.all([
+    fetchProductPageMetaCandidates(metadataUrls, {
+      expectedProductId: tiktokProduct?.productId,
+      expectedShopId: shopeeProduct?.shopId, expectedItemId: shopeeProduct?.itemId,
+      signal: options.signal, fetchImpl: options.fetchImpl,
+      ...(shopeeProduct ? { timeoutMs: 2_500, onDiagnostic: reportShopeeMetadata } : {})
+    }).then((metadata) => { acceptShopeeMetadata(metadata, 'product-page'); return metadata; }),
+    shopeeProduct ? fetchShopeeProductApiMeta(shopeeProduct.shopId, shopeeProduct.itemId, {
+      signal: options.signal, fetchImpl: options.fetchImpl, timeoutMs: 2_500,
+      onDiagnostic: reportShopeeMetadata
+    }).then((metadata) => { acceptShopeeMetadata(metadata, 'shopee-item-api'); return metadata; }) : Promise.resolve({})
+  ].map((promise) => shopeeProduct ? Promise.resolve(promise).catch(() => ({})) : promise))
+    .then(([pageMeta, platformMeta]) => ({ ...pageMeta, ...platformMeta }))
+    .then((metadata) => {
+      if (!shopeeProduct) emitProductMeta({ platform, url: productUrl, originalUrl: parsed.href,
+        ...metadata, ...(tiktokProduct ? { productId: tiktokProduct.productId,
+          resolvedFromShortLink: tiktokProduct.wasShortened } : {}) });
+      return metadata;
+    }).catch(() => ({}));
+  let shopeeMetadataWork;
+  const startShopeeMetadata = () => {
+    if (shopeeMetadataWork) return shopeeMetadataWork;
+    shopeeMetadataWork = shopeeOverlayPromise.then(async () => {
+      if (shopeeMetadata.title && shopeeMetadata.image) return shopeeMetadata;
+      const sourceOptions = { shopId: shopeeProduct.shopId, itemId: shopeeProduct.itemId,
+        signal: options.signal, env: options.env,
+        fetchImpl: options.publicMetadataFetchImpl || options.fetchImpl, onDiagnostic: reportShopeeMetadata };
+      const publicResult = await (options.fetchShopeePublicImpl || fetchShopeePublicMetadata)(productUrl, sourceOptions)
+        .catch(() => ({ status: 'failed' }));
+      acceptShopeeMetadata(publicResult.metadata, 'bangiare-exact-id');
+      if (shopeeMetadata.title && shopeeMetadata.image) return shopeeMetadata;
+      await fetchFreeProductMeta();
+      if (shopeeMetadata.title && shopeeMetadata.image) return shopeeMetadata;
+      const seo = await (options.fetchShopeeSeoImpl || fetchShopeeSeoMetadata)(productUrl, sourceOptions)
+        .catch(() => ({ status: 'failed' }));
+      acceptShopeeMetadata(seo.metadata, 'bangiare-exact-id');
+      if (shopeeMetadata.title && shopeeMetadata.image) return shopeeMetadata;
+      const actor = await (options.fetchShopeeDetailImpl || fetchShopeeDetailActorMetadata)(productUrl, {
+        ...options, shopId: shopeeProduct.shopId, itemId: shopeeProduct.itemId,
+        fetchImpl: options.metadataActorFetchImpl
+      }).catch(() => ({ status: 'failed' }));
+      acceptShopeeMetadata(actor.metadata, 'detail-actor');
+      return shopeeMetadata;
+    }).catch(() => shopeeMetadata);
+    try { options.onBackgroundWork?.(shopeeMetadataWork.then(() => shopeeMetadataWrite)); } catch { /* Local runtime. */ }
+    return shopeeMetadataWork;
+  };
 
   // TikTok ưu tiên raw dataset không quá năm ngày của đúng productId. Cache
   // không yêu cầu năm tầng sao vì actor tạm thời chỉ hỗ trợ lấy mẫu gần nhất.
@@ -864,7 +918,8 @@ export async function getReviews(url, options = {}) {
 
   if (shopeeProduct?.itemId) {
     progress('cache', 12, 'Đang kiểm tra dữ liệu Shopee gần đây...');
-    const cached = await getCachedShopeeDataset(shopeeProduct.itemId, {
+    const cached = await (options.getCachedShopeeDatasetImpl || getCachedShopeeDataset)(shopeeProduct.itemId, {
+      ...options,
       shopId: shopeeProduct.shopId,
       redisFetchImpl: options.redisFetchImpl,
       blobGetImpl: options.blobGetImpl,
@@ -877,7 +932,7 @@ export async function getReviews(url, options = {}) {
         recordShopeeServed({ redisFetchImpl: options.redisFetchImpl })
       ]);
       const cachedProduct = cached.dataset.product || {};
-      const cachedTitle = cleanShopeeTitle(cachedProduct.title);
+      const cachedTitle = cleanShopeeTitle(shopeeMetadata.title || cachedProduct.title);
       // Existing exact-product review datasets may already carry verified
       // product metadata. Reuse it before requesting a new paid detail run.
       acceptShopeeMetadata({ ...(cachedTitle ? { title: cachedTitle } : {}),
@@ -885,15 +940,19 @@ export async function getReviews(url, options = {}) {
       const product = {
         ...cachedProduct,
         platform: 'Shopee',
-        url: productUrl,
+        url: displayProductUrl,
         originalUrl: parsed.href,
         shopId: shopeeProduct.shopId,
         itemId: shopeeProduct.itemId,
-        resolvedFromShortLink: shopeeProduct.wasShortened
+        resolvedFromShortLink: shopeeProduct.wasShortened,
+        ...shopeeMetadata
       };
       if (cachedTitle) product.title = cachedTitle;
       else delete product.title;
       emitProductMeta(product);
+      // Cached reviews may predate a successful name/image lookup. Hydrate in
+      // the background too; a cache hit must not perpetuate empty metadata.
+      startShopeeMetadata();
       return {
         reviews: cached.dataset.reviews,
         source: {
@@ -917,70 +976,13 @@ export async function getReviews(url, options = {}) {
   }
 
   if (shopeeProduct) {
-    try { options.onProductIdentity?.({ platform, url: productUrl, originalUrl: parsed.href,
+    try { options.onProductIdentity?.({ platform, url: displayProductUrl, originalUrl: parsed.href,
       shopId: shopeeProduct.shopId, itemId: shopeeProduct.itemId,
       ...shopeeMetadata }); } catch { /* Optional. */ }
   }
-  const metadataUrls = productMetadataUrls(productUrl, {
-    platform,
-    productId: tiktokProduct?.productId,
-    shopId: shopeeProduct?.shopId,
-    itemId: shopeeProduct?.itemId
-  });
-  const fetchFreeProductMeta = () => Promise.all([
-    fetchProductPageMetaCandidates(metadataUrls, {
-      expectedProductId: tiktokProduct?.productId,
-      expectedShopId: shopeeProduct?.shopId,
-      expectedItemId: shopeeProduct?.itemId,
-      signal: options.signal,
-      fetchImpl: options.fetchImpl,
-      ...(shopeeProduct ? { onDiagnostic: reportShopeeMetadata } : {})
-    }).then((metadata) => { acceptShopeeMetadata(metadata, 'product-page'); return metadata; }),
-    shopeeProduct
-      ? fetchShopeeProductApiMeta(shopeeProduct.shopId, shopeeProduct.itemId, {
-          signal: options.signal,
-          fetchImpl: options.fetchImpl,
-          onDiagnostic: reportShopeeMetadata
-        }).then((metadata) => { acceptShopeeMetadata(metadata, 'shopee-item-api'); return metadata; })
-      : Promise.resolve({})
-  ].map((promise) => shopeeProduct ? Promise.resolve(promise).catch(() => ({})) : promise))
-    .then(([pageMeta, platformMeta]) => ({ ...pageMeta, ...platformMeta }))
-    .then((metadata) => {
-      if (!shopeeProduct) emitProductMeta({
-        platform,
-        url: productUrl,
-        originalUrl: parsed.href,
-        ...metadata,
-        ...(shopeeProduct ? {
-          shopId: shopeeProduct.shopId,
-          itemId: shopeeProduct.itemId,
-          resolvedFromShortLink: shopeeProduct.wasShortened
-        } : {}),
-        ...(tiktokProduct ? {
-          productId: tiktokProduct.productId,
-          resolvedFromShortLink: tiktokProduct.wasShortened
-        } : {})
-      });
-      return metadata;
-    })
-    .catch(() => ({}));
   // Start independently of review collection. Register this work with the
   // Function lifetime so an early result does not interrupt the metadata run.
-  const productMetaPromise = shopeeProduct ? shopeeOverlayPromise.then(async (cached) => {
-    if (cached?.title && cached?.image) return cached;
-    const actor = await (options.fetchShopeeDetailImpl || fetchShopeeDetailActorMetadata)(productUrl, {
-      shopId: shopeeProduct.shopId, itemId: shopeeProduct.itemId,
-      env: options.env, redisFetchImpl: options.redisFetchImpl,
-      fetchImpl: options.metadataActorFetchImpl
-    }).catch(() => ({ status: 'failed' }));
-    acceptShopeeMetadata(actor.metadata, 'detail-actor');
-    if (shopeeMetadata.title && shopeeMetadata.image) return shopeeMetadata;
-    if (actor.status !== 'pending') await fetchFreeProductMeta();
-    return shopeeMetadata;
-  }).catch(() => shopeeMetadata) : fetchFreeProductMeta();
-  if (shopeeProduct) {
-    try { options.onBackgroundWork?.(productMetaPromise.then(() => shopeeMetadataWrite)); } catch { /* Local runtime. */ }
-  }
+  const productMetaPromise = shopeeProduct ? startShopeeMetadata() : fetchFreeProductMeta();
   try {
     progress('collecting', 14, 'Đang khởi tạo hệ thống lấy reviews...');
     const collectShopee = options.collectShopeeReviewsImpl || collectShopeeReviews;
@@ -1019,7 +1021,7 @@ export async function getReviews(url, options = {}) {
     }
     const product = {
       platform,
-      url: productUrl,
+      url: displayProductUrl,
       originalUrl: parsed.href,
       ...productMeta,
       ...(shopeeProduct ? {

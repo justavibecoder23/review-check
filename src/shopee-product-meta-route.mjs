@@ -3,6 +3,7 @@ import { getShopeeProductMetadata, setShopeeProductMetadata } from '../src/produ
 import { fetchProductPageMetaCandidates, fetchShopeeProductApiMeta, productMetadataUrls } from '../src/sources.mjs';
 import { fetchShopeeDetailActorMetadata, shopeeDetailEnabled } from '../src/shopee-detail-metadata.mjs';
 import { verifyShopeeMetadataTicket } from '../src/shopee-metadata-ticket.mjs';
+import { fetchShopeePublicMetadata, fetchShopeeSeoMetadata } from './shopee-public-metadata.mjs';
 
 function send(response, status, body) {
   response.setHeader('Cache-Control', 'private, no-store');
@@ -15,9 +16,10 @@ function requestProduct(request) {
     ? new URL(request.url, 'https://realview.local').searchParams.get('url') || ''
     : body.url || '').slice(0, 2_000);
   const url = new URL(productUrl);
-  if (url.protocol !== 'https:' || !isShopeeUrl(url.href)) throw new Error('INVALID_SHOPEE_URL');
+  if (url.protocol !== 'https:' || !isShopeeUrl(url.href)
+    || url.username || url.password || url.port) throw new Error('INVALID_SHOPEE_URL');
   const ids = getShopeeProductIds(url);
-  if (!ids) throw new Error('MISSING_PRODUCT_ID');
+  if (!ids || !/^\d{1,25}$/.test(ids.shopId) || !/^\d{1,25}$/.test(ids.itemId)) throw new Error('MISSING_PRODUCT_ID');
   return { url: url.href, ...ids };
 }
 
@@ -31,6 +33,10 @@ function sameOrigin(request) {
 export function createShopeeProductMetaHandler({
   fetchActor = fetchShopeeDetailActorMetadata,
   actorEnabled = shopeeDetailEnabled,
+  fetchPublic = fetchShopeePublicMetadata,
+  fetchSeo = fetchShopeeSeoMetadata,
+  getMetadata = getShopeeProductMetadata,
+  saveMetadata = setShopeeProductMetadata,
   fetchPage = fetchProductPageMetaCandidates,
   fetchItemApi = fetchShopeeProductApiMeta
 } = {}) {
@@ -42,7 +48,7 @@ export function createShopeeProductMetaHandler({
   if (!sameOrigin(request)) return send(response, 403, { error: 'ORIGIN_NOT_ALLOWED' });
   let product;
   try { product = requestProduct(request); } catch { return send(response, 400, { error: 'INVALID_SHOPEE_PRODUCT' }); }
-  const cached = await getShopeeProductMetadata(product.shopId, product.itemId).catch(() => null);
+  const cached = await getMetadata(product.shopId, product.itemId).catch(() => null);
   if (request.method === 'GET' || (cached?.title && cached?.image)) {
     return send(response, 200, { status: cached ? 'cached' : 'missing', shopId: product.shopId,
       itemId: product.itemId, metadata: cached });
@@ -54,34 +60,41 @@ export function createShopeeProductMetaHandler({
     return send(response, 403, { error: 'METADATA_TICKET_INVALID' });
   }
 
-  // This route is independent of the analysis request. The Actor is the
-  // primary source; free page/API probes only run if it fails or is disabled.
+  // Exact-ID public data first: an existing paid run's lock must not prevent
+  // recovery of this product from a working independent source.
   const ids = { platform: 'Shopee', shopId: product.shopId, itemId: product.itemId };
-  const actor = actorEnabled()
-    ? await fetchActor(product.url, ids)
-    : { status: 'disabled' };
-  let metadata = { ...cached, ...actor.metadata };
-  if (actor.status === 'pending') return send(response, 200, {
-    status: 'pending', shopId: product.shopId, itemId: product.itemId, metadata
-  });
-  if (metadata.title && metadata.image) return send(response, 200, {
-    status: 'resolved', shopId: product.shopId, itemId: product.itemId, metadata,
-    ...(actor.latencyMs != null ? { actorLatencyMs: actor.latencyMs } : {})
-  });
+  const onDiagnostic = (entry) => {
+    if (process.env.VERCEL) console.log(JSON.stringify({ event: 'product_metadata_probe',
+      platform: 'Shopee', shopId: product.shopId, productId: product.itemId, ...entry }));
+  };
+  const publicResult = await fetchPublic(product.url, { ...ids, onDiagnostic }).catch(() => ({ status: 'failed' }));
+  let metadata = { ...cached, ...publicResult.metadata };
+  const resolved = async (source) => {
+    const saved = await saveMetadata(product.shopId, product.itemId, metadata, { source }).catch(() => null);
+    return send(response, 200, { status: 'resolved', shopId: product.shopId,
+      itemId: product.itemId, metadata: saved?.metadata || metadata });
+  };
+  if (metadata.title && metadata.image) return resolved('bangiare-exact-id');
   const [page, api] = await Promise.all([
     fetchPage(productMetadataUrls(product.url, ids), {
-      expectedShopId: product.shopId, expectedItemId: product.itemId, timeoutMs: 2_500
+      expectedShopId: product.shopId, expectedItemId: product.itemId, timeoutMs: 2_500, onDiagnostic
     }).catch(() => ({})),
-    fetchItemApi(product.shopId, product.itemId, { timeoutMs: 2_500 }).catch(() => ({}))
+    fetchItemApi(product.shopId, product.itemId, { timeoutMs: 2_500, onDiagnostic }).catch(() => ({}))
   ]);
   metadata = { ...metadata, ...page, ...api };
   if (metadata.title || metadata.image) {
-    const saved = await setShopeeProductMetadata(product.shopId, product.itemId, metadata,
+    const saved = await saveMetadata(product.shopId, product.itemId, metadata,
       { source: 'background-free-probe' }).catch(() => null);
     metadata = saved?.metadata || metadata;
   }
   if (metadata.title && metadata.image) return send(response, 200, { status: 'resolved',
     shopId: product.shopId, itemId: product.itemId, metadata });
+  const seo = await fetchSeo(product.url, { ...ids, onDiagnostic }).catch(() => ({ status: 'failed' }));
+  metadata = { ...metadata, ...seo.metadata };
+  if (metadata.title && metadata.image) return resolved('bangiare-exact-id');
+  const actor = actorEnabled() ? await fetchActor(product.url, ids) : { status: 'disabled' };
+  metadata = { ...metadata, ...actor.metadata };
+  if (metadata.title && metadata.image) return resolved('detail-actor');
   return send(response, 200, {
     status: metadata.title || metadata.image ? 'partial' : actor.status === 'disabled' ? 'free_sources_empty' : actor.status,
     shopId: product.shopId, itemId: product.itemId,
