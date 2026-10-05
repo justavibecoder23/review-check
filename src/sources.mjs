@@ -22,6 +22,7 @@ import { cleanProductTitle } from './product-metadata-quality.mjs';
 import { fetchShopeeDetailActorMetadata } from './shopee-detail-metadata.mjs';
 import { createShopeeMetadataTicket } from './shopee-metadata-ticket.mjs';
 import { fetchShopeePublicMetadata, fetchShopeeSeoMetadata } from './shopee-public-metadata.mjs';
+import { tiktokMetadataImage, tiktokMetadataTime } from './tiktok-metadata-policy.mjs';
 
 const DEMO_REVIEWS = [
   { rating: 5, text: 'Nhận xu nên đánh giá cho shop 5 sao nha mọi người.', date: '12/08/2026', verified: false },
@@ -586,7 +587,7 @@ export function mergeProductMetadata(pageMeta = {}, collectedMeta = {}, platform
   return merged;
 }
 
-async function hydrateTikTokProductMetadata(productId, productUrl, product = {}, options = {}) {
+export async function hydrateTikTokProductMetadata(productId, productUrl, product = {}, options = {}) {
   let merged = { ...product, ...normaliseProductMeta(product) };
   // Cached datasets from the old mirror flow can contain suspended Blob URLs.
   if (/\.public\.blob\.vercel-storage\.com(?:\/|$)/i.test(String(merged.image || ''))) delete merged.image;
@@ -595,9 +596,20 @@ async function hydrateTikTokProductMetadata(productId, productUrl, product = {},
   else delete merged.title;
   let source = merged.title && merged.image ? 'dataset' : '';
 
-  const overlay = await getTikTokProductMetadata(productId, {
-    redisFetchImpl: options.redisFetchImpl
-  }).catch(() => null);
+  const now = new Date(options.now ?? Date.now()).getTime();
+  const datasetFresh = options.metadataFresh === true || tiktokMetadataTime(options.metadataObservedAt, now) != null;
+  // Only actually observed fields are candidates for a write. Never copy a
+  // cached overlay or the display-only URL fallback into a fresh cache entry.
+  const observed = options.metadataFresh === true ? { ...merged } : {};
+  let observedAt = new Date(now).toISOString();
+  if (!options.metadataFresh && options.metadataObservedAt) {
+    // Historical fallback can still be displayed, but must not create or
+    // overwrite a current metadata cache as though it had just been fetched.
+    if (!datasetFresh) delete merged.image;
+  }
+  if (merged.image && !tiktokMetadataImage(merged.image)) delete merged.image;
+  const readCache = !(merged.title && merged.image && datasetFresh);
+  const overlay = readCache ? await getTikTokProductMetadata(productId, { ...options }).catch(() => null) : null;
   if (overlay && (!merged.title || !merged.image)) {
       // The overlay has already been normalized and its image URL validated by
       // product-cache. Merge its explicit `image` field directly: the generic
@@ -610,7 +622,7 @@ async function hydrateTikTokProductMetadata(productId, productUrl, product = {},
         ...(!merged.price && overlay.price ? { price: overlay.price } : {}),
         ...(!merged.rating && overlay.rating ? { rating: overlay.rating } : {})
       };
-    source = 'redis-overlay';
+    source = overlay.source || 'metadata-cache';
   }
 
   if (!merged.title || !merged.image) {
@@ -621,21 +633,35 @@ async function hydrateTikTokProductMetadata(productId, productUrl, product = {},
       timeoutMs: 6_500
     }).catch(() => ({}));
     if (pageMeta.title || pageMeta.image) {
+      // Retain freshly observed Actor fields when the page only fills a gap.
+      // If both sources contribute, keep the earlier observation timestamp.
+      const hadFreshFields = Boolean(observed.title || observed.image);
+      for (const key of ['title', 'image', 'price', 'rating']) {
+        if (!observed[key] && pageMeta[key]) observed[key] = pageMeta[key];
+      }
+      if (!hadFreshFields) observedAt = new Date(options.now ?? Date.now()).toISOString();
       merged = {
         ...merged,
         ...(!merged.title && pageMeta.title ? { title: pageMeta.title } : {}),
-        ...(!merged.image && pageMeta.image ? { image: pageMeta.image } : {})
+        ...(!merged.image && tiktokMetadataImage(pageMeta.image) ? { image: pageMeta.image } : {})
       };
       source = 'page';
     }
   }
 
   if (!merged.title) merged.title = productTitleFromUrl(productUrl) || 'Sản phẩm trên TikTok Shop';
-  if (merged.title || merged.image) {
-    await setTikTokProductMetadata(productId, merged, {
-      redisFetchImpl: options.redisFetchImpl,
-      source: source || 'url-fallback'
-    }).catch(() => null);
+  const changed = ['title', 'image', 'price', 'rating'].some((key) => observed[key] != null && observed[key] !== overlay?.[key]);
+  if (changed && (cleanProductTitle(observed.title) || tiktokMetadataImage(observed.image))) {
+    const write = setTikTokProductMetadata(productId, observed, {
+      ...options, observedAt,
+      source: source === 'page' ? 'page' : 'actor-dataset'
+    }).catch(() => {
+      console.error(JSON.stringify({ event: 'tiktok_metadata_cache_write_failed', productId: String(productId) }));
+      return null;
+    });
+    if (typeof options.onBackgroundWork === 'function') {
+      try { options.onBackgroundWork(write); } catch { await write; }
+    } else await write;
   }
   if (process.env.VERCEL) {
     console.log(JSON.stringify({
@@ -868,6 +894,7 @@ export async function getReviews(url, options = {}) {
     && tiktokProduct?.productId) {
     progress('cache', 12, 'Đang lấy dữ liệu review của sản phẩm...');
     let cached = await getCachedTikTokDataset(tiktokProduct.productId, {
+      ...options,
       redisFetchImpl: options.redisFetchImpl,
       blobGetImpl: options.blobGetImpl,
       blobToken: options.blobToken,
@@ -879,7 +906,7 @@ export async function getReviews(url, options = {}) {
         tiktokProduct.productId,
         productUrl,
         cached.dataset.product || {},
-        options
+        { ...options, metadataObservedAt: cached.dataset.createdAt }
       );
       const product = {
         ...cachedProduct,
@@ -1016,7 +1043,7 @@ export async function getReviews(url, options = {}) {
         tiktokProduct.productId,
         productUrl,
         productMeta,
-        options
+        { ...options, metadataFresh: true }
       );
     }
     const product = {
@@ -1057,6 +1084,7 @@ export async function getReviews(url, options = {}) {
     // exact product. A dataset from another product is never substituted.
     if (platform === 'TikTok Shop' && tiktokProduct?.productId) {
       const fallback = await getFallbackTikTokDataset(tiktokProduct.productId, {
+        ...options,
         redisFetchImpl: options.redisFetchImpl,
         blobGetImpl: options.blobGetImpl,
         blobToken: options.blobToken,
@@ -1068,7 +1096,7 @@ export async function getReviews(url, options = {}) {
           tiktokProduct.productId,
           productUrl,
           fallback.dataset.product || {},
-          options
+          { ...options, metadataObservedAt: fallback.dataset.createdAt }
         );
         warnings.push(`Nguồn trực tiếp tạm thời không khả dụng: ${error.message}`);
         warnings.push('Đã dùng dữ liệu lưu gần nhất của đúng sản phẩm TikTok.');

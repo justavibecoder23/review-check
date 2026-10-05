@@ -1,7 +1,9 @@
 import { isRedisConfigured, redisCommand, redisTransaction } from './redis-rest.mjs';
 import { cleanProductTitle } from './product-metadata-quality.mjs';
 import { blobReviewFallbackAllowed, getCloudflareReviewDataset, reviewStorageMode,
-  getCloudflareShopeeMetadata, saveCloudflareShopeeMetadata } from './cloudflare-review-store.mjs';
+  getCloudflareShopeeMetadata, saveCloudflareShopeeMetadata,
+  getCloudflareTikTokMetadata, saveCloudflareTikTokMetadata } from './cloudflare-review-store.mjs';
+import { normalizeD1TikTokMetadata } from './tiktok-metadata-policy.mjs';
 
 export const SHOPEE_CACHE_TTL_SECONDS = 5 * 24 * 60 * 60;
 export const TIKTOK_CACHE_TTL_SECONDS = 5 * 24 * 60 * 60;
@@ -95,7 +97,7 @@ export function getTikTokCacheKey(productId) {
 
 export function getTikTokProductMetaKey(productId) {
   const normalized = String(productId || '').trim();
-  if (!/^\d{8,25}$/.test(normalized)) throw new Error('TikTok productId không hợp lệ cho metadata cache.');
+  if (typeof productId !== 'string' || !/^\d{8,25}$/.test(normalized)) throw new Error('TikTok productId không hợp lệ cho metadata cache.');
   return `${TIKTOK_PRODUCT_META_PREFIX}${normalized}`;
 }
 
@@ -131,6 +133,13 @@ export function normalizeTikTokProductMetadata(productId, metadata = {}, options
 }
 
 export async function getTikTokProductMetadata(productId, options = {}) {
+  getTikTokProductMetaKey(productId);
+  if (tiktokMetadataBackend(options) === 'd1') {
+    return getCloudflareTikTokMetadata(productId, options).catch((error) => {
+      console.error(JSON.stringify({ event: 'tiktok_metadata_d1_read_failed', code: error.message }));
+      return null;
+    });
+  }
   if (!isRedisConfigured() && !options.redisFetchImpl) return null;
   const raw = await redisCommand(['GET', getTikTokProductMetaKey(productId)], {
     fetchImpl: options.redisFetchImpl,
@@ -149,6 +158,15 @@ export async function getTikTokProductMetadata(productId, options = {}) {
 }
 
 export async function setTikTokProductMetadata(productId, metadata, options = {}) {
+  getTikTokProductMetaKey(productId);
+  if (tiktokMetadataBackend(options) === 'd1') {
+    const now = new Date(options.now ?? Date.now()).getTime();
+    const normalized = normalizeD1TikTokMetadata(productId, { ...metadata,
+      source: options.source || metadata.source || 'unknown',
+      observedAt: options.observedAt || metadata.observedAt || new Date(now).toISOString() }, now);
+    if (!normalized) return { saved: false, reason: 'METADATA_INVALID_OR_EXPIRED' };
+    return saveCloudflareTikTokMetadata(normalized, options);
+  }
   if (!isRedisConfigured() && !options.redisFetchImpl) return { saved: false, reason: 'REDIS_NOT_CONFIGURED' };
   const normalized = normalizeTikTokProductMetadata(productId, metadata, options);
   if (!normalized) return { saved: false, reason: 'METADATA_EMPTY' };
@@ -160,6 +178,12 @@ export async function setTikTokProductMetadata(productId, metadata, options = {}
     timeoutMs: options.redisTimeoutMs || 1_200
   });
   return { saved: true, metadata: normalized };
+}
+
+export function tiktokMetadataBackend(options = {}) {
+  const override = options.tiktokMetadataBackend || process.env.TIKTOK_METADATA_BACKEND;
+  if (override && !['d1', 'redis'].includes(override)) throw new Error('TIKTOK_METADATA_BACKEND không hợp lệ.');
+  return override || (reviewStorageMode(options) === 'blob' ? 'redis' : 'd1');
 }
 
 export function getLatestDatasetPointerKey(platform, productId) {

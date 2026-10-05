@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { productCacheIdentity } from './review-cache-policy.mjs';
+import { normalizeD1TikTokMetadata, TIKTOK_METADATA_TTL_MS } from './tiktok-metadata-policy.mjs';
 
 const MAX_BYTES = 10 * 1024 * 1024;
 
@@ -90,4 +91,28 @@ export async function saveCloudflareShopeeMetadata(metadata, options = {}) {
   if (!result.saved || String(result.metadata?.shopId) !== String(metadata.shopId)
     || String(result.metadata?.itemId) !== String(metadata.itemId)) throw new Error('CLOUDFLARE_METADATA_WRITE_NOT_CONFIRMED');
   return result;
+}
+
+function verifiedTikTokMetadata(productId, input, options) {
+  const now = new Date(options.now ?? Date.now()).getTime();
+  const data = normalizeD1TikTokMetadata(productId, input, now);
+  const expiresAt = Date.parse(input?.expiresAt);
+  const updatedAt = Date.parse(input?.updatedAt);
+  if (!data || String(input?.productId) !== String(productId) || !Number.isFinite(expiresAt)
+    || !Number.isFinite(updatedAt) || expiresAt <= now
+    || expiresAt > Date.parse(data.observedAt) + TIKTOK_METADATA_TTL_MS) {
+    throw new Error('CLOUDFLARE_TIKTOK_METADATA_INVALID');
+  }
+  return { ...data, updatedAt: input.updatedAt, expiresAt: input.expiresAt };
+}
+
+export async function getCloudflareTikTokMetadata(productId, options = {}) {
+  const result = await cloudflareRequest(`/v1/tiktok-product-metadata?productId=${encodeURIComponent(productId)}`, options);
+  return result.hit ? verifiedTikTokMetadata(productId, result.metadata, options) : null;
+}
+
+export async function saveCloudflareTikTokMetadata(metadata, options = {}) {
+  const result = await cloudflareRequest('/v1/tiktok-product-metadata', options, metadata);
+  if (!result.saved) throw new Error('CLOUDFLARE_TIKTOK_METADATA_WRITE_NOT_CONFIRMED');
+  return { ...result, metadata: verifiedTikTokMetadata(metadata.productId, result.metadata, options) };
 }

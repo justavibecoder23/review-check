@@ -6,6 +6,7 @@
   "workers_dev": true,
   "limits": { "cpu_ms": 1000 },
   "observability": { "enabled": true, "head_sampling_rate": 0.1 },
+  "triggers": { "crons": ["17 * * * *"] },
   "d1_databases": [{
     "binding": "DB",
     "database_name": "realview-review-cache",
@@ -15,6 +16,7 @@
   "env": {
     "preview": {
       "name": "realview-review-cache-preview",
+      "triggers": { "crons": ["17 * * * *"] },
       "d1_databases": [{
         "binding": "DB",
         "database_name": "realview-review-cache-preview",

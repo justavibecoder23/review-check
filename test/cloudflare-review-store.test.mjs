@@ -28,6 +28,7 @@ function sqliteD1() {
   const sqlite = new DatabaseSync(':memory:');
   sqlite.exec(readFileSync(new URL('../cloudflare/review-cache/migrations/0001_review_cache.sql', import.meta.url), 'utf8'));
   sqlite.exec(readFileSync(new URL('../cloudflare/review-cache/migrations/0002_product_metadata.sql', import.meta.url), 'utf8'));
+  sqlite.exec(readFileSync(new URL('../cloudflare/review-cache/migrations/0003_tiktok_product_metadata.sql', import.meta.url), 'utf8'));
   const db = {
     sqlite, failAt: null,
     prepare(sql) {

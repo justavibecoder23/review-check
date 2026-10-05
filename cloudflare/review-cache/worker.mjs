@@ -1,4 +1,5 @@
 import { productCacheIdentity, REVIEW_CACHE_TTL_SECONDS, validateReviewCache } from '../../src/review-cache-policy.mjs';
+import { tiktokMetadataRoute, cleanupTikTokMetadata } from './tiktok-metadata.mjs';
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const MAX_ROW_BYTES = 1_900_000;
@@ -129,6 +130,13 @@ async function writeDataset(request, env) {
 }
 
 export default {
+  async scheduled(_event, env) {
+    try { await cleanupTikTokMetadata(env); }
+    catch (error) {
+      console.error(JSON.stringify({ event: 'tiktok_metadata_cleanup_failed', code: 'STORAGE_ERROR' }));
+      throw error;
+    }
+  },
   async fetch(request, env) {
     const url = new URL(request.url);
     if (request.method === 'GET' && url.pathname === '/health') {
@@ -136,6 +144,9 @@ export default {
     }
     if (!await authorized(request, env)) return json({ error: 'UNAUTHORIZED' }, 401);
     try {
+      if (url.pathname === '/v1/tiktok-product-metadata' && ['GET', 'POST'].includes(request.method)) {
+        return json(await tiktokMetadataRoute(request, env));
+      }
       if (url.pathname === '/v1/product-metadata' && ['GET', 'POST'].includes(request.method)) {
         if (Number(request.headers.get('content-length')) > 8192) return json({ error: 'PAYLOAD_TOO_LARGE' }, 413);
         let input;
