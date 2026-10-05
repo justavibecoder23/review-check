@@ -134,7 +134,9 @@ test('giao diện giải thích nhanh hiển thị bốn tỷ lệ lấy từ ba
   assert.match(html, /Điểm số được hình thành thế nào\?/);
   assert.match(html, /id="explanation-(?:text|auth|label|coverage)-meter"/);
   assert.match(script, /baseQualityScore/);
-  assert.match(script, /guardrails\?\.totalPenalty/);
+  assert.doesNotMatch(html, /id="trust-explanation-(?:copy|adjustment)"/);
+  assert.doesNotMatch(script, /#trust-explanation-(?:copy|adjustment)/);
+  assert.doesNotMatch(script, /Mức tin cậy trước khi xét độ phủ mẫu|Ba tỷ lệ đầu|vì vậy hệ thống đã giảm/);
   assert.match(css, /\.trust-signal-grid/);
 });
 

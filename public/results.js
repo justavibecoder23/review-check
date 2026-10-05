@@ -127,33 +127,6 @@ function setScoreMeter(selector, value) {
   if (meter) meter.style.setProperty('--meter-value', `${clamp(value, 0, 100)}%`);
 }
 
-function trustExplanation(method, score) {
-  const base = Number(method.baseQualityScore);
-  const coverage = Number(method.adequacy?.coverage) * 100;
-  const reduction = Number(method.guardrails?.totalPenalty);
-  if (!Number.isFinite(score)) {
-    return {
-      copy: 'Chưa đủ review có nội dung chữ để công bố TrustScore.',
-      adjustment: 'RealView cần ít nhất 20 review có nội dung chữ trước khi hiển thị điểm.'
-    };
-  }
-  const baseText = Number.isFinite(base)
-    ? `Mức tin cậy trước khi xét độ phủ mẫu là ${methodScore(base)}.`
-    : '';
-  let adjustment;
-  if (Number.isFinite(reduction) && reduction > 0.05) {
-    adjustment = `Độ phủ mẫu đạt ${methodScore(coverage)}, vì vậy hệ thống đã giảm ${methodScore(reduction)} từ phần điểm cao hơn 50 để kết quả thận trọng hơn.`;
-  } else if (Number.isFinite(coverage)) {
-    adjustment = `Độ phủ mẫu đạt ${methodScore(coverage)} nên không làm giảm TrustScore sau bước tổng hợp.`;
-  } else {
-    adjustment = 'Không có điều chỉnh bổ sung nào làm thay đổi điểm sau bước tổng hợp.';
-  }
-  return {
-    copy: `${baseText} Ba tỷ lệ đầu tạo mức tin cậy ban đầu, độ phủ mẫu cho biết điểm có cần được điều chỉnh thận trọng hay không.`.trim(),
-    adjustment
-  };
-}
-
 function toneForScore(score) {
   if (typeof score !== 'number' || !Number.isFinite(score)) return { id: 'neutral', label: 'Chưa đủ bằng chứng' };
   if (score >= 80) return { id: 'green', label: 'Độ tin cậy cao' };
@@ -523,7 +496,6 @@ function renderResult(data) {
   const coverageScore = Number.isFinite(Number(method.adequacy?.coverage)) ? Number(method.adequacy.coverage) * 100 : null;
   const methodBaseScore = method.baseQualityScore;
   const methodRawScore = Number(method.rawScore);
-  const explanation = trustExplanation(method, scoreAvailable ? score : null);
 
   document.querySelector('#method-text-score').textContent = methodScore(textScore);
   document.querySelector('#method-auth-score').textContent = methodScore(authenticityScore);
@@ -546,8 +518,6 @@ function renderResult(data) {
   document.querySelector('#explanation-label-score').textContent = methodScore(labelingScore);
   document.querySelector('#explanation-coverage-score').textContent = methodScore(coverageScore);
   document.querySelector('#trust-explanation-score').textContent = scoreAvailable ? `${score}/100` : 'Chưa đủ dữ liệu';
-  document.querySelector('#trust-explanation-copy').textContent = explanation.copy;
-  document.querySelector('#trust-explanation-adjustment').textContent = explanation.adjustment;
   setScoreMeter('#explanation-text-meter', textScore);
   setScoreMeter('#explanation-auth-meter', authenticityScore);
   setScoreMeter('#explanation-label-meter', labelingScore);
