@@ -1570,6 +1570,3 @@ body.is-english .hero-copy h1 .hero-heading-line-primary { font-size: .94em; }
     letter-spacing: -1.9px;
   }
 }
-
-/* Small Arena entry in the existing About RealView footer column. */
-.footer-links a.arena-footer-link { font-size: 13px; }
