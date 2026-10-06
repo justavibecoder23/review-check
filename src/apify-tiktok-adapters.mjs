@@ -126,7 +126,7 @@ const adapters = {
         product_ids: [String(productId)],
         reviews_limit: reviewLimit,
         reviews_filter: reviewFilter,
-        reviews_sort: 'most_recent',
+        reviews_sort: 'recommended',
         include_personal_information: false
       };
     }

@@ -101,6 +101,7 @@ test('TikTok chia 100 review thành 5 star filter chạy song song và không l�
 
   assert.equal(inputs.length, 5);
   assert.deepEqual(inputs.map((input) => input.reviews_filter), ['5_star', '4_star', '3_star', '2_star', '1_star']);
+  assert.ok(inputs.every((input) => input.reviews_sort === 'recommended'));
   assert.ok(inputs.every((input) => input.reviews_limit === 20));
   assert.ok(inputs.every((input) => input.region === 'VN'));
   assert.equal(result.reviews.length, 100);
@@ -166,6 +167,7 @@ test('TikTok dùng một account unfiltered khi allocation chỉ có một key',
   });
   assert.equal(inputs.length, 1);
   assert.equal(inputs[0].reviews_filter, 'all');
+  assert.equal(inputs[0].reviews_sort, 'recommended');
   assert.equal(inputs[0].reviews_limit, 100);
   assert.equal(result.collection.strategy, 'single-unfiltered');
 });
