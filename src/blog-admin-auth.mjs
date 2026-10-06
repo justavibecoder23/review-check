@@ -25,6 +25,12 @@ export function resolveBlogRole(account, env = process.env) {
 
 export async function resolveEffectiveBlogRole(account, options = {}) {
   const env = options.env || process.env;
+  if (env.BLOG_STORAGE_BACKEND === 'cloudflare' || env.VERCEL_ENV === 'production') {
+    if (!account?.id) return null;
+    const { productionWorkerCall } = await import('./blog-cloudflare-client.mjs');
+    try {return (await productionWorkerCall('/v1/read',{action:'access'},account.id,{env})).role;}
+    catch(error) {if(error.statusCode===403)return null;throw error;}
+  }
   const configuredRole = resolveBlogRole(account, env);
   if (configuredRole === 'admin') return 'admin';
   let dynamicRole = null;

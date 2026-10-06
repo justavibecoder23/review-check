@@ -47,7 +47,7 @@ async function apiGet(action, params = {}) {
 }
 
 async function apiPost(body) {
-  if (body.action === 'save') {
+  if (['save','import_legacy','publish','unpublish','archive','restore','discard_draft'].includes(body.action)) {
     const fingerprint = JSON.stringify(body);
     if (!requestKeys.has(fingerprint)) {
       if (requestKeys.size > 20) requestKeys.delete(requestKeys.keys().next().value);
@@ -310,6 +310,12 @@ async function loadPosts() {
     renderRelatedPicker();
     $('[data-total-badge]').textContent = String(state.posts.length);
     applyRolePermissions();
+    if (state.backend === 'cloudflare') {
+      const notices = $$('.admin-snapshot-notice');
+      if (notices[0]) notices[0].textContent = 'Blog Studio dùng Cloudflare D1/R2. Bài công khai cũ giữ nguyên bản HTML hiện tại.';
+      if (notices[1]) notices[1].textContent = state.readOnly ? 'Studio đang khóa ghi để đối chiếu dữ liệu.'
+        : 'Mở bài cũ không tạo revision. Khi lưu, Studio tạo bản nháp mới từ HTML đã khôi phục. Chỉ xuất bản khi bạn chủ động chọn cập nhật; lịch sử revision cũ trong Blob không được khôi phục.';
+    }
     if (state.backend === 'cloudflare-preview') {
       setSaveState('Chưa có thay đổi');
       const notices = $$('.admin-snapshot-notice');
@@ -449,7 +455,7 @@ function openEditor(post = emptyPost()) {
   $('[data-editor-kicker]').textContent = state.currentPost.id ? 'CHỈNH SỬA BÀI VIẾT' : 'BÀI VIẾT MỚI';
   $('[data-editor-title]').textContent = state.currentPost.id ? 'Biên tập nội dung' : 'Soạn bài viết';
   $('[data-unpublish-post]').hidden = state.currentPost.status !== 'published';
-  $('[data-discard-draft]').hidden = !state.currentPost.hasUnpublishedChanges;
+  $('[data-discard-draft]').hidden = !state.currentPost.hasUnpublishedChanges || (state.backend === 'cloudflare' && !state.currentPost.publishedRevision);
   $('[data-publish-post]').textContent = state.currentPost.status === 'published' ? 'Cập nhật bài viết →' : 'Xuất bản →';
   applyRolePermissions();
   setSaveState('Chưa có thay đổi');
@@ -1015,7 +1021,7 @@ async function savePost({ quiet = false, forceCopy = false } = {}) {
     state.currentPost = normalizeApiPost(payload, { ...post, id: payload.id || post.id, revision: payload.revision ?? (post.revision + 1) });
     state.dirty = false; setSaveState(`Đã lưu lúc ${new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`, 'saved');
     updateEditorMeta(); renderRelatedPicker();
-    $('[data-discard-draft]').hidden = !state.currentPost.hasUnpublishedChanges;
+    $('[data-discard-draft]').hidden = !state.currentPost.hasUnpublishedChanges || (state.backend === 'cloudflare' && !state.currentPost.publishedRevision);
     if (!quiet) toast(forceCopy ? 'Đã lưu thành một bài viết mới.' : 'Đã lưu bản nháp.');
     return state.currentPost;
   } catch (error) {
