@@ -4,62 +4,290 @@
     {
       "path": "blog/snapshots/tieu-chi-danh-gia-cong-cu-check-review.html",
       "originalSha256": "60246e822e1d5d15d9670fbe0c406dcf685cc180ccff57c179522a5b141b7144",
-      "deployedSha256": "60246e822e1d5d15d9670fbe0c406dcf685cc180ccff57c179522a5b141b7144",
-      "bytes": 33594
+      "deployedSha256": "7af14e236b85e2fc13a86e8a5fcdd9683ae5f9140a4cfdd517ac255f98a01275",
+      "bytes": 33648,
+      "publicationDateReplacements": [
+        {
+          "from": "\"datePublished\":\"2026-09-28T00:00:00+07:00\"",
+          "to": "\"datePublished\":\"2026-09-28T08:00:00+07:00\""
+        },
+        {
+          "from": "<meta property=\"article:published_time\" content=\"2026-09-28T00:00:00+07:00\" />",
+          "to": "<meta property=\"article:published_time\" content=\"2026-09-28T08:00:00+07:00\" />"
+        },
+        {
+          "from": "\"dateModified\":\"2026-09-28T00:00:00+07:00\"",
+          "to": "\"dateModified\":\"2026-09-28T08:00:00+07:00\""
+        }
+      ]
     },
     {
       "path": "blog/snapshots/trang-check-review-uy-tin-5-cong-cu-dang-biet.html",
       "originalSha256": "2944bda4e7a1d72cb2005a25421558a00131dd305506da0ede795978f6e9248c",
-      "deployedSha256": "ecc2f2cfb5d2df110008e167af328f70d96067a5d6404fd1e967b8fe5b073e7c",
-      "bytes": 46400
+      "deployedSha256": "78feaba7535f7de7e8fb03a9a176f1cb83fdb54466eb2acb9fe32f5852253f79",
+      "bytes": 46449,
+      "publicationDateReplacements": [
+        {
+          "from": "\"datePublished\":\"2026-09-24T07:51:59.621Z\"",
+          "to": "\"datePublished\":\"2026-09-27T08:00:00+07:00\""
+        },
+        {
+          "from": "<meta property=\"article:published_time\" content=\"2026-09-24T07:51:59.621Z\" />",
+          "to": "<meta property=\"article:published_time\" content=\"2026-09-27T08:00:00+07:00\" />"
+        },
+        {
+          "from": "<time datetime=\"2026-09-24\">24 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-27\">27 tháng 9, 2026</time>"
+        },
+        {
+          "from": "\"dateModified\":\"2026-09-24T07:58:09.168Z\"",
+          "to": "\"dateModified\":\"2026-09-27T08:00:00+07:00\""
+        }
+      ]
     },
     {
       "path": "blog/snapshots/realview-la-gi-cach-su-dung-realview-de-check-review-san-pham-shopee-va-tiktok-shop.html",
       "originalSha256": "00be87f99805b8b33524fdc46d12537aad43bc00afd3b6f7ecead38ba1b96f3e",
-      "deployedSha256": "838337064a05c379ede9bf3d740f2049893ff0c8214702c41914ee1eab1cc276",
-      "bytes": 46560
+      "deployedSha256": "12152ab792c1c84deaa4f77451802e9f4e7639b8756af41cab18bdffd7380861",
+      "bytes": 46619,
+      "publicationDateReplacements": [
+        {
+          "from": "\"datePublished\":\"2026-09-22T17:21:47.860Z\"",
+          "to": "\"datePublished\":\"2026-09-26T08:00:00+07:00\""
+        },
+        {
+          "from": "<meta property=\"article:published_time\" content=\"2026-09-22T17:21:47.860Z\" />",
+          "to": "<meta property=\"article:published_time\" content=\"2026-09-26T08:00:00+07:00\" />"
+        },
+        {
+          "from": "<time datetime=\"2026-09-22\">23 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-26\">26 tháng 9, 2026</time>"
+        },
+        {
+          "from": "\"dateModified\":\"2026-09-23T07:19:46.417Z\"",
+          "to": "\"dateModified\":\"2026-09-26T08:00:00+07:00\""
+        },
+        {
+          "from": "<time datetime=\"2026-09-23\">Cập nhật 23 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-26\">Cập nhật 26 tháng 9, 2026</time>"
+        }
+      ]
     },
     {
       "path": "blog/snapshots/vi-sao-realview-huu-ich.html",
       "originalSha256": "2e22684043496c6b1b6f2e3e0d0197eb841a5e70781566008a0f6b58646a14ec",
-      "deployedSha256": "dcdf899d16b22423aa1efe5376b35b78b44a6201174680c629ce079a97d27dda",
-      "bytes": 53676
+      "deployedSha256": "36699f99e326986bee6320bce9407fcd5a67a4c901d94cf9895e314de1f8ab79",
+      "bytes": 53741,
+      "publicationDateReplacements": [
+        {
+          "from": "\"datePublished\":\"2026-09-22T17:13:11.806Z\"",
+          "to": "\"datePublished\":\"2026-09-25T08:00:00+07:00\""
+        },
+        {
+          "from": "<meta property=\"article:published_time\" content=\"2026-09-22T17:13:11.806Z\" />",
+          "to": "<meta property=\"article:published_time\" content=\"2026-09-25T08:00:00+07:00\" />"
+        },
+        {
+          "from": "<time datetime=\"2026-09-22\">23 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-25\">25 tháng 9, 2026</time>"
+        },
+        {
+          "from": "\"dateModified\":\"2026-09-23T07:18:41.727Z\"",
+          "to": "\"dateModified\":\"2026-09-25T08:00:00+07:00\""
+        },
+        {
+          "from": "<time datetime=\"2026-09-23\">Cập nhật 23 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-25\">Cập nhật 25 tháng 9, 2026</time>"
+        }
+      ]
     },
     {
       "path": "blog/snapshots/tips-kiem-tra-review-san-pham-checklist-truoc-khi-mua-hang.html",
       "originalSha256": "fe526d5a005ee7769575d2cf3d8e58e886fdf1018a111d397c9a0adaf8aeb8a3",
-      "deployedSha256": "16294018ce000d8cb9643725512fe660790059f55e5333b4152b66ed7ec48b53",
-      "bytes": 54202
+      "deployedSha256": "6f612425bdc110074bfc85a5a6813ac196642245867f42bccb6738257993bda4",
+      "bytes": 54263,
+      "publicationDateReplacements": [
+        {
+          "from": "\"datePublished\":\"2026-09-22T12:38:57.094Z\"",
+          "to": "\"datePublished\":\"2026-09-24T08:00:00+07:00\""
+        },
+        {
+          "from": "<meta property=\"article:published_time\" content=\"2026-09-22T12:38:57.094Z\" />",
+          "to": "<meta property=\"article:published_time\" content=\"2026-09-24T08:00:00+07:00\" />"
+        },
+        {
+          "from": "<time datetime=\"2026-09-22\">22 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-24\">24 tháng 9, 2026</time>"
+        },
+        {
+          "from": "\"dateModified\":\"2026-09-22T12:38:57.094Z\"",
+          "to": "\"dateModified\":\"2026-09-24T08:00:00+07:00\""
+        }
+      ]
     },
     {
       "path": "blog/snapshots/san-pham-nhieu-review-van-tiem-an-rui-ro.html",
       "originalSha256": "4cce1fc8e663a4a0d2470aef4a62860a85c5c31cec85cc04c8354267c4bf20f7",
-      "deployedSha256": "711e1de8aa6c01179b399dd4b57b34cdc5579feaae1d3edae93c50f09ae1a9fa",
-      "bytes": 34612
+      "deployedSha256": "791b56c7233b17b2033df68abeedb63759bc2201d3b1a3a4ea0e08f688dbf80f",
+      "bytes": 34654,
+      "publicationDateReplacements": [
+        {
+          "from": "\"datePublished\":\"2026-09-20T02:30:32.705Z\"",
+          "to": "\"datePublished\":\"2026-09-22T08:00:00+07:00\""
+        },
+        {
+          "from": "<meta property=\"article:published_time\" content=\"2026-09-20T02:30:32.705Z\" />",
+          "to": "<meta property=\"article:published_time\" content=\"2026-09-22T08:00:00+07:00\" />"
+        },
+        {
+          "from": "<time datetime=\"2026-09-20\">20 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-22\">22 tháng 9, 2026</time>"
+        },
+        {
+          "from": "\"dateModified\":\"2026-09-20T03:53:01.216Z\"",
+          "to": "\"dateModified\":\"2026-09-22T08:00:00+07:00\""
+        }
+      ]
     },
     {
       "path": "blog/snapshots/check-review-la-gi-tai-sao-can-check-review-truoc-khi-dat-hang.html",
       "originalSha256": "38eef1d7e73b13cce01949f367c01fdfb6df6d56bf5ebcb1b6f9b6b3622c07d8",
-      "deployedSha256": "0b5851a40fb2e6123735145265a94ac88adbbe8f0bb1d03993c4ab6381507cc1",
-      "bytes": 47948
+      "deployedSha256": "7b660e59e461bb97221d8d06d3d9ee05eaabfc3e0aaaa6eee8475afb62789679",
+      "bytes": 48014,
+      "publicationDateReplacements": [
+        {
+          "from": "\"datePublished\":\"2026-09-20T03:51:07.652Z\"",
+          "to": "\"datePublished\":\"2026-09-23T08:00:00+07:00\""
+        },
+        {
+          "from": "<meta property=\"article:published_time\" content=\"2026-09-20T03:51:07.652Z\" />",
+          "to": "<meta property=\"article:published_time\" content=\"2026-09-23T08:00:00+07:00\" />"
+        },
+        {
+          "from": "<time datetime=\"2026-09-20\">20 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-23\">23 tháng 9, 2026</time>"
+        },
+        {
+          "from": "\"dateModified\":\"2026-09-20T03:51:07.652Z\"",
+          "to": "\"dateModified\":\"2026-09-23T08:00:00+07:00\""
+        }
+      ]
     },
     {
       "path": "blog/snapshots/seeding-review-la-gi.html",
       "originalSha256": "d2bb8c305afeb4ee6681b3cf90a5922d00f07d5f3d452efc2be7b34596441242",
-      "deployedSha256": "a0b7d50b03a32f4a101bbfecf6f155cbecaec28f520c64894c174611e613fe1e",
-      "bytes": 56485
+      "deployedSha256": "35aa7ac17b34c5d877117af768e69c520f42333fd2ff616d6085586ec35b9927",
+      "bytes": 56569,
+      "publicationDateReplacements": [
+        {
+          "from": "\"datePublished\":\"2026-09-19T17:36:29.319Z\"",
+          "to": "\"datePublished\":\"2026-09-21T08:00:00+07:00\""
+        },
+        {
+          "from": "<meta property=\"article:published_time\" content=\"2026-09-19T17:36:29.319Z\" />",
+          "to": "<meta property=\"article:published_time\" content=\"2026-09-21T08:00:00+07:00\" />"
+        },
+        {
+          "from": "<time datetime=\"2026-09-19\">20 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-21\">21 tháng 9, 2026</time>"
+        },
+        {
+          "from": "\"dateModified\":\"2026-09-19T17:36:29.319Z\"",
+          "to": "\"dateModified\":\"2026-09-21T08:00:00+07:00\""
+        }
+      ]
     },
     {
       "path": "blog/snapshots/seeding-review-shopee-tiktok.html",
       "originalSha256": "0d118f8116fd2de36785f7279f7172927acce9835aec84e6e0c9fdf0367e59e6",
-      "deployedSha256": "b9700d69e73f0870a1457502db75b41c25b8905e8d95c5abe5e18447d25c89ef",
-      "bytes": 31083
+      "deployedSha256": "1484e6f7b59098390f76d0b70149122f29aa0e526389eb5ca265760ee06423e6",
+      "bytes": 31133,
+      "publicationDateReplacements": [
+        {
+          "from": "\"datePublished\":\"2026-09-19T12:15:36.269Z\"",
+          "to": "\"datePublished\":\"2026-09-20T08:00:00+07:00\""
+        },
+        {
+          "from": "<meta property=\"article:published_time\" content=\"2026-09-19T12:15:36.269Z\" />",
+          "to": "<meta property=\"article:published_time\" content=\"2026-09-20T08:00:00+07:00\" />"
+        },
+        {
+          "from": "<time datetime=\"2026-09-19\">19 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-20\">20 tháng 9, 2026</time>"
+        },
+        {
+          "from": "\"dateModified\":\"2026-09-19T14:40:07.446Z\"",
+          "to": "\"dateModified\":\"2026-09-20T08:00:00+07:00\""
+        }
+      ]
     },
     {
       "path": "blog/snapshots/index-snapshot.html",
       "originalSha256": "116d1d9774ddc13c294fb3d38c8786ff8fe90eaafeaf5532add707a5283c90ea",
-      "deployedSha256": "8a9ea31559f91b0880c0b8cb923a9fcffb149cdcbd2747bac45c32ae3bb89b6c",
-      "bytes": 49947
+      "deployedSha256": "7a2595efb8a2fd06e5f400aeb38a14b96c732f16dabf9efeba5f89b71b1e1a98",
+      "bytes": 49947,
+      "publicationDateReplacements": [
+        {
+          "from": "<time datetime=\"2026-09-22\">23 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-26\">26 tháng 9, 2026</time>"
+        },
+        {
+          "from": "<time datetime=\"2026-10-01\">1 tháng 10, 2026</time>",
+          "to": "<time datetime=\"2026-09-29\">29 tháng 9, 2026</time>"
+        },
+        {
+          "from": "<time datetime=\"2026-09-24\">24 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-27\">27 tháng 9, 2026</time>"
+        },
+        {
+          "from": "<time datetime=\"2026-09-22\">23 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-25\">25 tháng 9, 2026</time>"
+        },
+        {
+          "from": "<time datetime=\"2026-09-22\">22 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-24\">24 tháng 9, 2026</time>"
+        },
+        {
+          "from": "<time datetime=\"2026-09-20\">20 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-23\">23 tháng 9, 2026</time>"
+        },
+        {
+          "from": "<time datetime=\"2026-09-20\">20 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-22\">22 tháng 9, 2026</time>"
+        },
+        {
+          "from": "<time datetime=\"2026-09-19\">20 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-21\">21 tháng 9, 2026</time>"
+        },
+        {
+          "from": "<time datetime=\"2026-09-19\">19 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-20\">20 tháng 9, 2026</time>"
+        },
+        {
+          "from": "<time datetime=\"2026-09-17\">17 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-19\">19 tháng 9, 2026</time>"
+        },
+        {
+          "from": "<time datetime=\"2026-09-16\">16 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-18\">18 tháng 9, 2026</time>"
+        },
+        {
+          "from": "<time datetime=\"2026-09-16\">16 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-17\">17 tháng 9, 2026</time>"
+        },
+        {
+          "from": "<time datetime=\"2026-09-15\">15 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-16\">16 tháng 9, 2026</time>"
+        },
+        {
+          "from": "<time datetime=\"2026-09-14\">14 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-13\">13 tháng 9, 2026</time>"
+        },
+        {
+          "from": "<time datetime=\"2026-09-11\">11 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-12\">12 tháng 9, 2026</time>"
+        }
+      ]
     },
     {
       "path": "blog/snapshots/sitemap-snapshot.xml",
@@ -67,45 +295,147 @@
       "deployedSha256": "056ffd008da0398f4a1828de43242db3682f3212ab9d7f5d1c5eb17e0f54ea63",
       "bytes": 6284,
       "sitemapAdditions": [
-        { "path": "/chinh-sach-bao-mat", "lastmod": "2026-10-01" },
-        { "path": "/dieu-khoan-su-dung", "lastmod": "2026-10-01" }
+        {
+          "path": "/chinh-sach-bao-mat",
+          "lastmod": "2026-10-01"
+        },
+        {
+          "path": "/dieu-khoan-su-dung",
+          "lastmod": "2026-10-01"
+        }
       ]
     },
     {
       "path": "blog/snapshots/trustscore-la-gi.html",
       "originalSha256": "1695adc1bff8fb444264a8d9398987d3f8c2ff6f84be0d76054a25c113f33691",
-      "deployedSha256": "1695adc1bff8fb444264a8d9398987d3f8c2ff6f84be0d76054a25c113f33691",
-      "bytes": 39016
+      "deployedSha256": "5b71e102c050efb865bb8747ae8272ae18523354d9fabea90c13dd947d100a0e",
+      "bytes": 39095,
+      "publicationDateReplacements": [
+        {
+          "from": "\"datePublished\":\"2026-09-11T01:00:00.000Z\"",
+          "to": "\"datePublished\":\"2026-09-11T08:00:00+07:00\""
+        },
+        {
+          "from": "<meta property=\"article:published_time\" content=\"2026-09-11T01:00:00.000Z\" />",
+          "to": "<meta property=\"article:published_time\" content=\"2026-09-11T08:00:00+07:00\" />"
+        }
+      ]
     },
     {
       "path": "blog/snapshots/review-san-pham-co-dang-tin-khong.html",
       "originalSha256": "eaa422a0ed5aeebd1cfb717f43f1e80f6b3ccdce8e494c46b390ed0dc93b7728",
-      "deployedSha256": "eaa422a0ed5aeebd1cfb717f43f1e80f6b3ccdce8e494c46b390ed0dc93b7728",
-      "bytes": 26570
+      "deployedSha256": "9a2f439430e4ca1d3fdb25f21dd4fcd2542b59f55679d908f22ccc1c15818847",
+      "bytes": 26668,
+      "publicationDateReplacements": [
+        {
+          "from": "\"datePublished\": \"2026-09-16T08:00:00+07:00\"",
+          "to": "\"datePublished\": \"2026-09-18T08:00:00+07:00\""
+        },
+        {
+          "from": "<meta property=\"article:published_time\" content=\"2026-09-16T08:00:00+07:00\" />",
+          "to": "<meta property=\"article:published_time\" content=\"2026-09-18T08:00:00+07:00\" />"
+        },
+        {
+          "from": "<time datetime=\"2026-09-16\">16 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-18\">18 tháng 9, 2026</time>"
+        },
+        {
+          "from": "\"dateModified\": \"2026-09-16T08:00:00+07:00\"",
+          "to": "\"dateModified\": \"2026-09-18T08:00:00+07:00\""
+        }
+      ]
     },
     {
       "path": "blog/snapshots/review-gia-la-gi-dau-hieu-nhan-biet.html",
       "originalSha256": "0cfed830af0b853dddb59dbe738ffe75a0619bd947ee09a1381fd3c1b6556e1c",
-      "deployedSha256": "0cfed830af0b853dddb59dbe738ffe75a0619bd947ee09a1381fd3c1b6556e1c",
-      "bytes": 37509
+      "deployedSha256": "d8ed8ae91fae4a2a4e264a53fed0cd44aa0b33867bc70be80ceee3f9c3229520",
+      "bytes": 37649,
+      "publicationDateReplacements": [
+        {
+          "from": "\"datePublished\": \"2026-09-17T08:00:00+07:00\"",
+          "to": "\"datePublished\": \"2026-09-19T08:00:00+07:00\""
+        },
+        {
+          "from": "<meta property=\"article:published_time\" content=\"2026-09-17T08:00:00+07:00\" />",
+          "to": "<meta property=\"article:published_time\" content=\"2026-09-19T08:00:00+07:00\" />"
+        },
+        {
+          "from": "<time datetime=\"2026-09-17\">17 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-19\">19 tháng 9, 2026</time>"
+        },
+        {
+          "from": "\"dateModified\": \"2026-09-17T08:00:00+07:00\"",
+          "to": "\"dateModified\": \"2026-09-19T08:00:00+07:00\""
+        }
+      ]
     },
     {
       "path": "blog/snapshots/review-san-pham-la-gi.html",
       "originalSha256": "e4f65cafafaa7f091b49bf3cc8994c050f9e7aa29a03059f917076f18b808d51",
-      "deployedSha256": "e4f65cafafaa7f091b49bf3cc8994c050f9e7aa29a03059f917076f18b808d51",
-      "bytes": 37124
+      "deployedSha256": "6a314f09aa59fd90a837ab92053c23d5a7e629368b3b70826cfe87f1c442ee68",
+      "bytes": 37244,
+      "publicationDateReplacements": [
+        {
+          "from": "\"datePublished\": \"2026-09-16T08:00:00+07:00\"",
+          "to": "\"datePublished\": \"2026-09-17T08:00:00+07:00\""
+        },
+        {
+          "from": "<meta property=\"article:published_time\" content=\"2026-09-16T08:00:00+07:00\" />",
+          "to": "<meta property=\"article:published_time\" content=\"2026-09-17T08:00:00+07:00\" />"
+        },
+        {
+          "from": "<time datetime=\"2026-09-16\">16 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-17\">17 tháng 9, 2026</time>"
+        },
+        {
+          "from": "\"dateModified\": \"2026-09-16T08:00:00+07:00\"",
+          "to": "\"dateModified\": \"2026-09-17T08:00:00+07:00\""
+        }
+      ]
     },
     {
       "path": "blog/snapshots/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang.html",
       "originalSha256": "8623014263dd4582c085ba25b09d5a2ad489775d540222d318a843d87fc81f1f",
-      "deployedSha256": "8623014263dd4582c085ba25b09d5a2ad489775d540222d318a843d87fc81f1f",
-      "bytes": 39382
+      "deployedSha256": "e03fae2cc42b01dc3e6f1edd4088066a865ac7c5115989aae643b61ad21f6a86",
+      "bytes": 39627,
+      "publicationDateReplacements": [
+        {
+          "from": "\"datePublished\": \"2026-09-11T09:00:00+07:00\"",
+          "to": "\"datePublished\": \"2026-09-12T08:00:00+07:00\""
+        },
+        {
+          "from": "<meta property=\"article:published_time\" content=\"2026-09-11T09:00:00+07:00\" />",
+          "to": "<meta property=\"article:published_time\" content=\"2026-09-12T08:00:00+07:00\" />"
+        },
+        {
+          "from": "<time datetime=\"2026-09-11\">11 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-12\">12 tháng 9, 2026</time>"
+        }
+      ]
     },
     {
       "path": "blog/snapshots/shopee-hay-tiktok-shop-mua-hang-o-dau-tot-hon.html",
       "originalSha256": "f200d679744545d0c0685d114919bb3553a0db9ae8ae0d454c687c562b0aa9d8",
-      "deployedSha256": "f200d679744545d0c0685d114919bb3553a0db9ae8ae0d454c687c562b0aa9d8",
-      "bytes": 27846
+      "deployedSha256": "7a85650435d8da48d89f8e7481dbe8c393131cb0d30ad8e8c35172e1a63644f7",
+      "bytes": 28001,
+      "publicationDateReplacements": [
+        {
+          "from": "\"datePublished\": \"2026-09-15T08:00:00+07:00\"",
+          "to": "\"datePublished\": \"2026-09-16T08:00:00+07:00\""
+        },
+        {
+          "from": "<meta property=\"article:published_time\" content=\"2026-09-15T08:00:00+07:00\" />",
+          "to": "<meta property=\"article:published_time\" content=\"2026-09-16T08:00:00+07:00\" />"
+        },
+        {
+          "from": "<time datetime=\"2026-09-15\">15 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-16\">16 tháng 9, 2026</time>"
+        },
+        {
+          "from": "\"dateModified\": \"2026-09-15T08:00:00+07:00\"",
+          "to": "\"dateModified\": \"2026-09-16T08:00:00+07:00\""
+        }
+      ]
     },
     {
       "path": "blog/snapshots/shopee-mall-la-gi-co-nen-mua-khong.html",
@@ -122,14 +452,42 @@
     {
       "path": "blog/snapshots/cach-tim-shop-uy-tin-tren-shopee.html",
       "originalSha256": "3ea1a0497f5c9c0e280527cc83d16747bf1b55644987541d5ebf052c5062db62",
-      "deployedSha256": "3ea1a0497f5c9c0e280527cc83d16747bf1b55644987541d5ebf052c5062db62",
-      "bytes": 35824
+      "deployedSha256": "81e53404fd1a1a8196cd175ff9775106efba6f9db0445a63503952e5d4688319",
+      "bytes": 35953,
+      "publicationDateReplacements": [
+        {
+          "from": "\"datePublished\": \"2026-09-14T08:00:00+07:00\"",
+          "to": "\"datePublished\": \"2026-09-13T08:00:00+07:00\""
+        },
+        {
+          "from": "<meta property=\"article:published_time\" content=\"2026-09-14T08:00:00+07:00\" />",
+          "to": "<meta property=\"article:published_time\" content=\"2026-09-13T08:00:00+07:00\" />"
+        },
+        {
+          "from": "<time datetime=\"2026-09-14\">14 tháng 9, 2026</time>",
+          "to": "<time datetime=\"2026-09-13\">13 tháng 9, 2026</time>"
+        }
+      ]
     },
     {
       "path": "blog/snapshots/check-review-truoc-khi-mua-hang.html",
       "originalSha256": "47e3d7f9cfc9d33e2719f6bcf186d03f1edd560fdb94710849958be8425ad92b",
-      "deployedSha256": "47e3d7f9cfc9d33e2719f6bcf186d03f1edd560fdb94710849958be8425ad92b",
-      "bytes": 36113
+      "deployedSha256": "4a4f4ff9a13c72d328c0005d7d1a18a5dbecc0938c8049d403ef0b56ea14cbc5",
+      "bytes": 36113,
+      "publicationDateReplacements": [
+        {
+          "from": "\"datePublished\": \"2026-10-01T09:00:00+07:00\"",
+          "to": "\"datePublished\": \"2026-09-29T08:00:00+07:00\""
+        },
+        {
+          "from": "<meta property=\"article:published_time\" content=\"2026-10-01T09:00:00+07:00\">",
+          "to": "<meta property=\"article:published_time\" content=\"2026-09-29T08:00:00+07:00\">"
+        },
+        {
+          "from": "<time datetime=\"2026-10-01\">1 tháng 10, 2026</time>",
+          "to": "<time datetime=\"2026-09-29\">29 tháng 9, 2026</time>"
+        }
+      ]
     }
   ],
   "images": [

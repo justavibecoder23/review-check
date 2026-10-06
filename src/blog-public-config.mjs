@@ -1,3 +1,5 @@
+import { blogPublicationDate } from './blog-publication-dates.mjs';
+
 export const LEGACY_BLOG_SLUGS = Object.freeze([
   'review-gia-la-gi-dau-hieu-nhan-biet',
   'review-san-pham-co-dang-tin-khong',
@@ -77,6 +79,7 @@ export const LEGACY_BLOG_SUMMARIES = Object.freeze([
   }
 ].map((post) => Object.freeze({
   ...post,
+  publishedAt: blogPublicationDate(post.slug, post.publishedAt),
   h1: post.title,
   deck: post.excerpt,
   tags: [],

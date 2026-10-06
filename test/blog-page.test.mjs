@@ -293,8 +293,8 @@ test('four supplied SEO articles preserve source lists, emphasis, dates, and sta
   assert.equal((trustedShopeeShopArticleHtml.match(/<ul>/g) || []).length >= 4, true);
   assert.doesNotMatch(trustedShopeeShopArticleHtml, /<p>nó<\/p>/);
   assert.match(trustedShopeeShopArticleHtml, /<p>RealView – Real Reviews – Real Value<\/p>\s*<p>Góc nhìn thật – Lựa chọn đúng\.<\/p>/);
-  assert.match(trustedShopeeShopArticleHtml, /datePublished": "2026-09-14T08:00:00\+07:00"/);
-  assert.match(trustedShopeeShopArticleHtml, /<time datetime="2026-09-14">14 tháng 9, 2026<\/time>/);
+  assert.match(trustedShopeeShopArticleHtml, /datePublished": "2026-09-13T08:00:00\+07:00"/);
+  assert.match(trustedShopeeShopArticleHtml, /<time datetime="2026-09-13">13 tháng 9, 2026<\/time>/);
 
   assert.match(blogStyles, /\.article-content \.article-source-cta \{[^}]*width: 100%;[^}]*grid-template-columns: minmax\(0, 1fr\) auto;[^}]*grid-template-areas: "eyebrow action" "title action" "copy action";/);
   assert.match(blogStyles, /\.article-content \.article-source-cta > p \{[^}]*min-width: 0;[^}]*font-weight: 400;/);

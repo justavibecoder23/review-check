@@ -33,7 +33,11 @@ test('bản tĩnh giữ nguyên nguồn, ngoại trừ ảnh mirror và hai URL 
     const html = await readFile(new URL(article.path, root), 'utf8');
     assert.equal(sha256(html), article.deployedSha256, article.path);
     assert.doesNotMatch(html, /\.public\.blob\.vercel-storage\.com/);
-    let original = html;
+    let original = html.replace(/\r\n/g, '\n');
+    for (const edit of [...(article.publicationDateReplacements || [])].reverse()) {
+      assert.ok(original.includes(edit.to), article.path);
+      original = original.replaceAll(edit.to, edit.from);
+    }
     for (const image of manifest.images) {
       original = original.replaceAll(`https://www.realview.com.vn${image.local}`, image.source);
     }

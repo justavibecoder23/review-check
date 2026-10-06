@@ -4,6 +4,8 @@ import {
   validateBlogPost
 } from './blog-post-model.mjs';
 
+import { blogPublicationDate } from './blog-publication-dates.mjs';
+
 const DEFAULT_BASE_URL = 'https://www.realview.com.vn';
 const DEFAULT_LOGO_PATH = '/assets/realview-logo-v1.webp';
 
@@ -106,7 +108,7 @@ function recordParts(value, options = {}) {
     post,
     meta: {
       status: meta.status || value?.status || options.status || '',
-      publishedAt: meta.publishedAt || value?.publishedAt || options.publishedAt || '',
+      publishedAt: blogPublicationDate(post.slug, meta.publishedAt || value?.publishedAt || options.publishedAt || ''),
       updatedAt: meta.updatedAt || value?.updatedAt || value?.modifiedAt || options.updatedAt || ''
     }
   };

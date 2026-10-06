@@ -1,3 +1,5 @@
+import { blogPublicationDate } from './blog-publication-dates.mjs';
+
 function buildPublicBlogSummary(source = {}, envelope = source) {
   return {
     id: envelope.id || source.id,
@@ -28,7 +30,7 @@ function buildPublicBlogSummary(source = {}, envelope = source) {
       allowIndexing: source.settings?.allowIndexing !== false
     },
     status: envelope.status,
-    publishedAt: envelope.publishedAt,
+    publishedAt: blogPublicationDate(source.slug || envelope.publishedSlug || envelope.slug, envelope.publishedAt),
     updatedAt: source.publishedUpdatedAt || source.updatedAt || envelope.publishedUpdatedAt || envelope.updatedAt
   };
 }
