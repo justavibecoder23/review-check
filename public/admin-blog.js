@@ -313,8 +313,10 @@ async function loadPosts() {
     if (state.backend === 'cloudflare') {
       const notices = $$('.admin-snapshot-notice');
       if (notices[0]) notices[0].textContent = 'Blog Studio dùng Cloudflare D1/R2. Bài công khai cũ giữ nguyên bản HTML hiện tại.';
-      if (notices[1]) notices[1].textContent = state.readOnly ? 'Studio đang khóa ghi để đối chiếu dữ liệu.'
-        : 'Mở bài cũ không tạo revision. Khi lưu, Studio tạo bản nháp mới từ HTML đã khôi phục. Chỉ xuất bản khi bạn chủ động chọn cập nhật; lịch sử revision cũ trong Blob không được khôi phục.';
+      if (notices[1]) {
+        notices[1].hidden = !state.readOnly;
+        notices[1].textContent = state.readOnly ? 'Studio đang khóa ghi để đối chiếu dữ liệu.' : '';
+      }
     }
     if (state.backend === 'cloudflare-preview') {
       setSaveState('Chưa có thay đổi');
