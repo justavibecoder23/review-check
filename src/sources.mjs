@@ -537,20 +537,34 @@ export function productMetadataUrls(productUrl, product = {}) {
     // Chỉ dùng URL người dùng/actor đã xác nhận; productId sẽ được kiểm tra sau redirect.
     const parsedId = getTikTokProductId(productUrl);
     if (parsedId !== String(product.productId)) return [];
+    // Session-specific feed/SEO tracking can return Security Check even when
+    // the identical PDP without tracking has valid SSR. Keep the original path
+    // (including its slug) and identity parameters; never guess another PDP.
+    const cleanUrl = new URL(productUrl);
+    for (const key of [...cleanUrl.searchParams.keys()]) {
+      if (/^(?:btm_|utm_)/i.test(key) || /^(?:source|enter_method|first_entrance(?:_position|_tt_scene)?|_r|_svg|_src|referer|refer|share_app_id|share_link_id|timestamp)$/i.test(key)) {
+        cleanUrl.searchParams.delete(key);
+      }
+    }
+    if (getTikTokProductId(cleanUrl) === parsedId) urls.unshift(cleanUrl.href);
   }
   return [...new Set(urls.filter(isSafeMarketplacePageUrl))];
 }
 
 export async function fetchProductPageMetaCandidates(urls, options = {}) {
   let combined = {};
+  const deadline = options.totalTimeoutMs ? Date.now() + Number(options.totalTimeoutMs) : null;
   // Shopee thường chặn khi hai biến thể URL của cùng sản phẩm được gọi đồng
   // thời. Đọc tuần tự và dừng ngay khi đã có đủ title + ảnh giúp giảm tỷ lệ
   // challenge mà không làm chậm đường thành công phổ biến.
   for (const [candidateIndex, url] of [...new Set(urls)].entries()) {
+    const remaining = deadline ? deadline - Date.now() : null;
+    if (remaining != null && remaining <= 0) break;
+    const requestOptions = remaining == null ? options : { ...options, timeoutMs: Math.min(Number(options.timeoutMs) || 8000, remaining) };
     try {
-      const metadata = await fetchProductPageMeta(url, options.onDiagnostic
-        ? { ...options, onDiagnostic: (diagnostic) => options.onDiagnostic({ ...diagnostic, candidateIndex }) }
-        : options);
+      const metadata = await fetchProductPageMeta(url, requestOptions.onDiagnostic
+        ? { ...requestOptions, onDiagnostic: (diagnostic) => requestOptions.onDiagnostic({ ...diagnostic, candidateIndex }) }
+        : requestOptions);
       combined = {
         ...combined,
         ...(!combined.title && metadata.title ? { title: metadata.title } : {}),
@@ -626,11 +640,12 @@ export async function hydrateTikTokProductMetadata(productId, productUrl, produc
   }
 
   if (!merged.title || !merged.image) {
-    const pageMeta = await fetchProductPageMetaCandidates([productUrl], {
+    const pageMeta = await fetchProductPageMetaCandidates(productMetadataUrls(productUrl, { platform: 'TikTok Shop', productId }), {
       expectedProductId: productId,
       signal: options.signal,
       fetchImpl: options.fetchImpl,
-      timeoutMs: 6_500
+      timeoutMs: 6_500,
+      totalTimeoutMs: 6_500
     }).catch(() => ({}));
     if (pageMeta.title || pageMeta.image) {
       // Retain freshly observed Actor fields when the page only fills a gap.
@@ -844,7 +859,8 @@ export async function getReviews(url, options = {}) {
       expectedProductId: tiktokProduct?.productId,
       expectedShopId: shopeeProduct?.shopId, expectedItemId: shopeeProduct?.itemId,
       signal: options.signal, fetchImpl: options.fetchImpl,
-      ...(shopeeProduct ? { timeoutMs: 2_500, onDiagnostic: reportShopeeMetadata } : {})
+      ...(shopeeProduct ? { timeoutMs: 2_500, onDiagnostic: reportShopeeMetadata } : {}),
+      ...(tiktokProduct ? { timeoutMs: 6_500, totalTimeoutMs: 6_500 } : {})
     }).then((metadata) => { acceptShopeeMetadata(metadata, 'product-page'); return metadata; }),
     shopeeProduct ? fetchShopeeProductApiMeta(shopeeProduct.shopId, shopeeProduct.itemId, {
       signal: options.signal, fetchImpl: options.fetchImpl, timeoutMs: 2_500,
