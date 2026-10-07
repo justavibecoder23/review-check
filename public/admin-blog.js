@@ -312,7 +312,10 @@ async function loadPosts() {
     applyRolePermissions();
     if (state.backend === 'cloudflare') {
       const notices = $$('.admin-snapshot-notice');
-      if (notices[0]) notices[0].textContent = 'Blog Studio dùng Cloudflare D1/R2. Bài công khai cũ giữ nguyên bản HTML hiện tại.';
+      if (notices[0]) {
+        notices[0].hidden = true;
+        notices[0].textContent = '';
+      }
       if (notices[1]) {
         notices[1].hidden = !state.readOnly;
         notices[1].textContent = state.readOnly ? 'Studio đang khóa ghi để đối chiếu dữ liệu.' : '';
