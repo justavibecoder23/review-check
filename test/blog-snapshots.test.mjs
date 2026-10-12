@@ -91,7 +91,7 @@ test('toàn bộ bài published, index và sitemap đọc bản tĩnh mà không
   }
 });
 
-test('rewrites công khai trỏ đúng 19 bài và không gọi function', async () => {
+test('rewrite bài tĩnh giữ snapshot; blog index và sitemap dùng nguồn CMS động', async () => {
   const config = JSON.parse(await readFile(new URL('../vercel.json', import.meta.url), 'utf8'));
   for (const article of manifest.articles.filter((item) => item.path.endsWith('.html') && !item.path.endsWith('index-snapshot.html'))) {
     const slug = article.path.split('/').at(-1).replace(/\.html$/, '');
@@ -101,8 +101,8 @@ test('rewrites công khai trỏ đúng 19 bài và không gọi function', async
       slug
     );
   }
-  assert.equal(config.rewrites.find((rule) => rule.source === '/bai-viet')?.destination, '/blog/snapshots/index-snapshot.html');
-  assert.equal(config.rewrites.find((rule) => rule.source === '/sitemap.xml')?.destination, '/blog/snapshots/sitemap-snapshot.xml');
+  assert.equal(config.rewrites.find((rule) => rule.source === '/bai-viet')?.destination, '/api/blog.mjs?route=index');
+  assert.equal(config.rewrites.find((rule) => rule.source === '/sitemap.xml')?.destination, '/api/blog.mjs?route=sitemap');
 });
 
 test('Studio không báo xuất bản thành công khi bản công khai đang đóng băng', async () => {
@@ -120,3 +120,4 @@ test('Studio không báo xuất bản thành công khi bản công khai đang đ
     else process.env.BLOG_PUBLIC_SNAPSHOT = previous;
   }
 });
+
