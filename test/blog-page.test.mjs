@@ -39,18 +39,18 @@ function tocEntryIds(html) {
     .map((match) => match[1]);
 }
 
-test('blog hub publishes nine articles and features the five-star review article', () => {
+test('blog hub includes its current 16 article cards and features the five-star review article', () => {
   assert.match(blogHtml, /<link rel="canonical" href="https:\/\/www\.realview\.com\.vn\/bai-viet"/);
   assert.equal((blogHtml.match(/<h1\b/g) || []).length, 1);
-  assert.equal((blogHtml.match(/data-blog-card/g) || []).length, 9);
+  assert.equal((blogHtml.match(/data-blog-card/g) || []).length, 16);
   assert.match(blogHtml, /class="featured-post"[\s\S]*?href="\/bai-viet\/kiem-tra-do-tin-cay-review-truoc-khi-mua-hang"/);
   assert.match(blogHtml, /Review 5 sao có đáng tin không\?/);
   assert.match(blogHtml, /href="\/bai-viet\/trustscore-la-gi"/);
   assert.doesNotMatch(blogHtml, /cach-doc-review-thong-minh/);
   assert.doesNotMatch(blogHtml, /Bài viết sắp xuất bản/);
   const collection = structuredData(blogHtml).find((item) => item['@type'] === 'CollectionPage');
-  assert.equal(collection.mainEntity.numberOfItems, 9);
-  assert.equal(collection.mainEntity.itemListElement.length, 9);
+  assert.equal(collection.mainEntity.numberOfItems, 16);
+  assert.equal(collection.mainEntity.itemListElement.length, 16);
   assert.match(blogHtml, /href="\/bai-viet\/review-san-pham-la-gi"/);
   assert.match(blogHtml, /href="\/bai-viet\/review-san-pham-co-dang-tin-khong"/);
   assert.match(blogHtml, /href="\/bai-viet\/review-gia-la-gi-dau-hieu-nhan-biet"/);
@@ -383,7 +383,7 @@ test('TrustScore article uses the dedicated thumbnail while preserving its first
 test('blog library uses the streamlined aligned layout', () => {
   assert.doesNotMatch(blogHtml, /Nội dung tập trung vào cách kiểm chứng/);
   assert.doesNotMatch(blogHtml, /Chủ đề nổi bật|data-sidebar-filter/);
-  assert.equal((blogHtml.match(/class="blog-list-item" data-blog-card/g) || []).length, 9);
+  assert.equal((blogHtml.match(/class="blog-list-item" data-blog-card/g) || []).length, 16);
   assert.match(blogStyles, /\.blog-tools \{[^}]*display: grid;[^}]*grid-template-columns: minmax\(0, 1fr\) 310px;[^}]*align-items: center;[^}]*column-gap: 72px;/);
   assert.match(blogStyles, /\.blog-search \{[^}]*width: 100%;[^}]*height: 48px;[^}]*padding: 0 16px;[^}]*box-sizing: border-box;[^}]*border: 1px solid #d1d5db;[^}]*background-color: #fff;[^}]*box-shadow: 0 1px 2px rgba\(0,0,0,\.05\);/);
   assert.match(blogStyles, /\.blog-search svg \{[^}]*width: 21px;[^}]*height: 21px;/);
@@ -496,3 +496,4 @@ test('sitemap động không bị file tĩnh che và robots khai báo đúng URL
   assert.doesNotMatch(sitemapXml, /results\.html/);
   assert.match(sitemapXml, /xmlns:image="http:\/\/www\.google\.com\/schemas\/sitemap-image\/1\.1"/);
 });
+
