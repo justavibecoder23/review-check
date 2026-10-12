@@ -171,11 +171,11 @@
     { "source": "/api/blog-public", "destination": "/api/blog.mjs?route=public" },
     { "source": "/admin/blog", "destination": "/admin-blog.html" },
     { "source": "/admin/access", "destination": "/admin-access.html" },
-    { "source": "/sitemap.xml", "destination": "/blog/snapshots/sitemap-snapshot.xml" },
+    { "source": "/sitemap.xml", "destination": "/api/blog.mjs?route=sitemap" },
     { "source": "/bai-viet/rss.xml", "destination": "/api/blog.mjs?route=rss" },
     { "source": "/tieu-chi-loc", "destination": "/criteria.html" },
     { "source": "/lien-he", "destination": "/contact.html" },
-    { "source": "/bai-viet", "destination": "/blog/snapshots/index-snapshot.html" },
+    { "source": "/bai-viet", "destination": "/api/blog.mjs?route=index" },
     { "source": "/bai-viet/check-review-truoc-khi-mua-hang", "destination": "/blog/snapshots/check-review-truoc-khi-mua-hang.html" },
     { "source": "/bai-viet/trang-check-review-uy-tin-5-cong-cu-dang-biet", "destination": "/blog/snapshots/trang-check-review-uy-tin-5-cong-cu-dang-biet.html" },
     { "source": "/bai-viet/realview-la-gi-cach-su-dung-realview-de-check-review-san-pham-shopee-va-tiktok-shop", "destination": "/blog/snapshots/realview-la-gi-cach-su-dung-realview-de-check-review-san-pham-shopee-va-tiktok-shop.html" },
@@ -199,4 +199,5 @@
     { "source": "/ket-qua", "destination": "/results.html" }
   ]
 }
+
 
