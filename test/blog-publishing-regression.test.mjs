@@ -90,3 +90,21 @@ test('actual HTTP requests through Vercel rewrite config preserve every legacy s
  record={kind:'gone'};r=await fetch(base+routes[0].source);assert.equal(r.status,410);assert.equal(r.headers.get('vercel-cdn-cache-control'),'no-store');
  }finally{await new Promise(r=>server.close(r));}
 });
+
+
+test('hosted preview public routes read the same public CMS without enabling admin writes',async()=>{
+ const {default:router,blogRouterInternals}=await import('../api/blog.mjs');
+ assert.equal(blogRouterInternals.previewPublicRoutes.has('admin'),false);
+ assert.equal(blogRouterInternals.previewPublicRoutes.has('access-admin'),false);
+ const previous={env:process.env.VERCEL_ENV,backend:process.env.BLOG_STORAGE_BACKEND,fetch:globalThis.fetch};
+ process.env.VERCEL_ENV='preview';delete process.env.BLOG_STORAGE_BACKEND;let reads=0;
+ globalThis.fetch=async url=>{assert.equal(new URL(url).pathname,'/public/list');reads++;return new Response(JSON.stringify({posts:[],changed:false}),{headers:{'content-type':'application/json'}});};
+ try{
+  const index=res();await router({method:'GET',query:{route:'index'}},index);assert.equal(index.statusCode,200);assert.equal(reads,1);
+  const denied=res();await router({method:'POST',query:{route:'post',slug:'trustscore-la-gi'}},denied);assert.equal(denied.statusCode,405);assert.equal(reads,1);
+ }finally{
+  globalThis.fetch=previous.fetch;
+  if(previous.env===undefined)delete process.env.VERCEL_ENV;else process.env.VERCEL_ENV=previous.env;
+  if(previous.backend===undefined)delete process.env.BLOG_STORAGE_BACKEND;else process.env.BLOG_STORAGE_BACKEND=previous.backend;
+ }
+});

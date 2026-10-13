@@ -8,6 +8,10 @@ import blogSitemapHandler from '../src/blog-sitemap-route.mjs';
 import cloudflarePreviewHandler, { cloudflarePreviewEnabled } from '../src/blog-cloudflare-preview.mjs';
 import cloudflareProductionHandler from '../src/blog-cloudflare-production.mjs';
 
+// Preview public pages use the live public CMS too. This does not enable admin
+// writes or require a production HMAC credential in preview environments.
+const previewPublicRoutes = new Set(['index','post','public','rss','sitemap','cloudflare-media']);
+
 const handlers = new Map([
   ['access-admin', blogAccessHandler],
   ['admin', adminBlogHandler],
@@ -28,7 +32,8 @@ export default async function handler(request, response) {
   const route = String(firstQueryValue(request.query?.route) || firstQueryValue(request.query?.action) || '').trim();
   // Production never falls back to the retired Redis/Blob CMS, even if an
   // environment variable is accidentally removed on a future deployment.
-  if (process.env.BLOG_STORAGE_BACKEND === 'cloudflare' || process.env.VERCEL_ENV === 'production') return cloudflareProductionHandler(request,response);
+  if (process.env.BLOG_STORAGE_BACKEND === 'cloudflare' || process.env.VERCEL_ENV === 'production'
+    || (process.env.VERCEL_ENV === 'preview' && previewPublicRoutes.has(route))) return cloudflareProductionHandler(request,response);
   if (['admin', 'access-admin', 'cloudflare-media'].includes(route) && process.env.BLOG_STORAGE_BACKEND === 'cloudflare-preview') {
     response.setHeader('Cache-Control', 'private, no-store');
     response.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
@@ -49,4 +54,4 @@ export default async function handler(request, response) {
   return routeHandler(request, response);
 }
 
-export const blogRouterInternals = { handlers, firstQueryValue };
+export const blogRouterInternals = { handlers, firstQueryValue, previewPublicRoutes };
