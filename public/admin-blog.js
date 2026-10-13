@@ -17,10 +17,11 @@ const BLOCK_LABELS = {
 const state = {
   posts: [], currentPost: null, filter: 'all', query: '', dirty: false, saving: false,
   autosaveTimer: null, conflict: null, user: null, authorized: false, role: null,
-  backend: null, readOnly: false, capabilities: null
+  backend: null, readOnly: false, capabilities: null, publicationBusy: false, pendingPublication: null
 };
-// Keep the logical key across a timeout/retry. A changed payload gets a new key.
+// Keep keys only for unresolved operations, and share concurrent requests.
 const requestKeys = new Map();
+const requestFlights = new Map();
 
 const $ = (selector, scope = document) => scope.querySelector(selector);
 const $$ = (selector, scope = document) => [...scope.querySelectorAll(selector)];
@@ -47,24 +48,83 @@ async function apiGet(action, params = {}) {
 }
 
 async function apiPost(body) {
-  if (['save','import_legacy','publish','unpublish','archive','restore','discard_draft'].includes(body.action)) {
-    const fingerprint = JSON.stringify(body);
+  const mutation = ['save','import_legacy','publish','unpublish','archive','restore','discard_draft'].includes(body.action);
+  const fingerprint = mutation ? JSON.stringify(body) : null;
+  if (fingerprint && requestFlights.has(fingerprint)) return requestFlights.get(fingerprint);
+  // Store only a digest and a random key; never persist draft text in the browser.
+  const digest = fingerprint && globalThis.crypto?.subtle
+    ? [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(fingerprint)))].map(v => v.toString(16).padStart(2, '0')).join('') : null;
+  const storageKey = digest ? `rv-blog-command:${digest}` : null;
+  if (fingerprint && requestFlights.has(fingerprint)) return requestFlights.get(fingerprint);
+  if (fingerprint) {
     if (!requestKeys.has(fingerprint)) {
-      if (requestKeys.size > 20) requestKeys.delete(requestKeys.keys().next().value);
-      requestKeys.set(fingerprint, uid());
+      let key;
+      try { key = storageKey && sessionStorage.getItem(storageKey); } catch {}
+      requestKeys.set(fingerprint, key || uid());
     }
     body = { ...body, idempotencyKey: requestKeys.get(fingerprint) };
+    try { if (storageKey) sessionStorage.setItem(storageKey, body.idempotencyKey); } catch {}
   }
-  if (body.action === 'upload_media') body = { ...body, fileName: String(body.fileName || '').slice(0, 200), alt: String(body.alt || '').slice(0, 300) };
-  const serialized = JSON.stringify(body);
-  if (new TextEncoder().encode(serialized).length > 4_300_000) throw new ApiError('Dữ liệu tải lên quá lớn.', 413);
-  const response = await fetch(API_URL, {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    credentials: 'same-origin', body: serialized
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new ApiError(payload.error || payload.message || 'Không thể xử lý yêu cầu.', response.status, payload);
-  return payload;
+  const clearKey = () => {
+    if (fingerprint) requestKeys.delete(fingerprint);
+    try { if (storageKey) sessionStorage.removeItem(storageKey); } catch {}
+  };
+  const operation = (async () => {
+    if (body.action === 'upload_media') body = { ...body, fileName: String(body.fileName || '').slice(0, 200), alt: String(body.alt || '').slice(0, 300) };
+    const serialized = JSON.stringify(body);
+    if (new TextEncoder().encode(serialized).length > 4_300_000) {
+      clearKey(); throw new ApiError('Dữ liệu tải lên quá lớn.', 413);
+    }
+    const response = await fetch(API_URL, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      credentials: 'same-origin', body: serialized
+    });
+    // A missing/invalid ACK is unresolved even when the HTTP status is 2xx.
+    const payload = await response.json();
+    if (!response.ok) {
+      if ([400,401,403,404,409,413,422].includes(response.status)) clearKey();
+      throw new ApiError(payload.error || payload.message || 'Không thể xử lý yêu cầu.', response.status, payload);
+    }
+    clearKey(); return payload;
+  })();
+  if (fingerprint) requestFlights.set(fingerprint, operation);
+  try { return await operation; }
+  finally { if (fingerprint) requestFlights.delete(fingerprint); }
+}
+
+function publicationNotice(payload, successMessage) {
+  const pending = payload.publication?.status === 'pending';
+  const entry = { id: payload.id, revision: payload.revision, action: payload.publication?.action };
+  try {
+    if (pending) sessionStorage.setItem(`rv-blog-verification:${payload.id}`, JSON.stringify(entry));
+    else sessionStorage.removeItem(`rv-blog-verification:${payload.id}`);
+  } catch {}
+  state.pendingPublication = pending ? entry : null;
+  $('[data-check-publication]').hidden = !pending;
+  if (!pending) { toast(successMessage); return; }
+  toast('Thay đổi đã lưu. Trang bài, blog hoặc sitemap đang chờ cập nhật.', 'info', { label: 'Kiểm tra lại', onClick: checkPublication });
+}
+
+async function checkPublication() {
+  const entry = state.pendingPublication;
+  if (!entry) return;
+  const button = $('[data-check-publication]');
+  if (button.disabled) return;
+  button.disabled = true;
+  try {
+    const checked = await apiGet('verify_publication', { id: entry.id, expectedRevision: entry.revision, publicationAction: entry.action });
+    publicationNotice(checked, 'Đã xác nhận thay đổi trên website và sitemap.');
+  } catch (error) { toast(error.message, 'error'); }
+  finally { button.disabled = false; }
+}
+
+async function runPublication(task) {
+  if (state.publicationBusy) return;
+  state.publicationBusy = true;
+  const buttons = $$('[data-publish-post],[data-unpublish-post],[data-unpublish-row],[data-archive-row]');
+  buttons.forEach(button => { button.disabled = true; });
+  try { await task(); }
+  finally { state.publicationBusy = false; buttons.forEach(button => { button.disabled = false; }); applyRolePermissions(); }
 }
 
 function emptyPost() {
@@ -396,6 +456,7 @@ function applyRolePermissions() {
   $('.admin-sidebar').hidden = !canManagePosts;
   $('.admin-shell').classList.toggle('is-access-locked', !canManagePosts);
   const canPublish = canManagePosts && state.capabilities?.publishPosts !== false;
+  $$('[data-publish-post],[data-unpublish-post]').forEach(button => { button.disabled = state.readOnly || state.saving || state.publicationBusy || !canPublish; });
   $('[data-publish-post]').hidden = !canPublish;
   $('[data-unpublish-post]').hidden = !canPublish || state.currentPost?.status !== 'published';
   $('[data-access-management]').hidden = !isAdmin || state.capabilities?.manageAccess === false;
@@ -462,6 +523,9 @@ function openEditor(post = emptyPost()) {
   $('[data-unpublish-post]').hidden = state.currentPost.status !== 'published';
   $('[data-discard-draft]').hidden = !state.currentPost.hasUnpublishedChanges || (state.backend === 'cloudflare' && !state.currentPost.publishedRevision);
   $('[data-publish-post]').textContent = state.currentPost.status === 'published' ? 'Cập nhật bài viết →' : 'Xuất bản →';
+  state.pendingPublication = null;
+  try { state.pendingPublication = JSON.parse(sessionStorage.getItem(`rv-blog-verification:${state.currentPost.id}`) || 'null'); } catch {}
+  $('[data-check-publication]').hidden = !state.pendingPublication;
   applyRolePermissions();
   setSaveState('Chưa có thay đổi');
   showView('editor');
@@ -1080,7 +1144,7 @@ async function publishPost() {
     const payload = await apiPost({ action: 'publish', id: post.id, expectedRevision: post.revision });
     state.currentPost = normalizeApiPost(payload, { ...post, status: 'published', revision: payload.revision ?? post.revision });
     updateEditorMeta(); $('[data-unpublish-post]').hidden = false; $('[data-discard-draft]').hidden = true; $('[data-publish-post]').textContent = 'Cập nhật bài viết →';
-    toast('Bài viết đã được xuất bản.'); await loadPosts();
+    publicationNotice(payload, 'Bài viết đã được xuất bản.'); await loadPosts();
   } catch (error) {
     if (error.status === 409) { state.conflict = error.payload; $('[data-conflict-dialog]').showModal(); }
     else toast(error.message, 'error');
@@ -1097,7 +1161,7 @@ async function unpublishPost(id = state.currentPost?.id, revision = state.curren
       state.currentPost = normalizeApiPost(payload, { ...state.currentPost, status: 'draft', revision: payload.revision ?? state.currentPost.revision });
       updateEditorMeta(); $('[data-unpublish-post]').hidden = true; $('[data-publish-post]').textContent = 'Xuất bản →';
     }
-    toast('Bài viết đã được chuyển về bản nháp.'); await loadPosts();
+    publicationNotice(payload, 'Bài viết đã được chuyển về bản nháp.'); await loadPosts();
   } catch (error) { toast(error.message, 'error'); }
 }
 
@@ -1126,8 +1190,8 @@ async function archivePost(post) {
   const confirmed = await confirmAction('Lưu trữ bài viết?', 'Bài viết sẽ được gỡ khỏi danh sách nội dung đang hoạt động. Lịch sử phiên bản vẫn được giữ lại.', 'Lưu trữ');
   if (!confirmed) return;
   try {
-    await apiPost({ action: 'archive', id: post.id, expectedRevision: post.revision });
-    toast('Đã lưu trữ bài viết.'); await loadPosts();
+    const payload = await apiPost({ action: 'archive', id: post.id, expectedRevision: post.revision });
+    publicationNotice(payload, 'Đã lưu trữ bài viết.'); await loadPosts();
   } catch (error) { toast(error.message, 'error'); }
 }
 
@@ -1343,8 +1407,9 @@ function initializeEvents() {
   $('[data-close-editor]').addEventListener('click', closeEditor);
   $('[data-save-post]').addEventListener('click', () => savePost());
   $('[data-discard-draft]').addEventListener('click', discardDraft);
-  $('[data-publish-post]').addEventListener('click', publishPost);
-  $('[data-unpublish-post]').addEventListener('click', () => unpublishPost());
+  $('[data-publish-post]').addEventListener('click', () => runPublication(publishPost));
+  $('[data-check-publication]').addEventListener('click', checkPublication);
+  $('[data-unpublish-post]').addEventListener('click', () => runPublication(() => unpublishPost()));
   $('[data-preview-post]').addEventListener('click', previewPost);
   $('[data-open-seo]').addEventListener('click', () => switchEditorTab('seo'));
   $('[data-refresh-revisions]').addEventListener('click', loadRevisions);
@@ -1372,8 +1437,8 @@ function initializeEvents() {
       if (payload) { const copy = normalizePost(payload.post || payload); copy.id = null; copy.revision = 0; copy.status = 'draft'; copy.title = `${copy.title} (bản sao)`; copy.slug = `${copy.slug}-ban-sao`; openEditor(copy); }
       return;
     }
-    if (event.target.closest('[data-unpublish-row]')) return unpublishPost(post.id, post.revision);
-    if (event.target.closest('[data-archive-row]')) return archivePost(post);
+    if (event.target.closest('[data-unpublish-row]')) return runPublication(() => unpublishPost(post.id, post.revision));
+    if (event.target.closest('[data-archive-row]')) return runPublication(() => archivePost(post));
   });
 
   $('[data-editor-form]').addEventListener('input', (event) => {

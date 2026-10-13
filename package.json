@@ -13,7 +13,8 @@
     "generate:chatbot-gemini-pool": "node tools/generate-gemini-pool.mjs --chatbot",
     "sync:shopee-cache": "node tools/sync-blob-to-redis.mjs --platform=shopee",
     "sync:product-cache": "node tools/sync-blob-to-redis.mjs",
-    "test": "node --test"
+    "test": "node --test",
+    "test:blog-publishing": "node --test test/blog-publishing-regression.test.mjs test/blog-production-store.test.mjs test/blog-production-http.test.mjs test/blog-preview-ui.test.mjs test/blog-snapshots.test.mjs test/blog-page.test.mjs test/blog-cms.test.mjs test/blog-publication-dates.test.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",
