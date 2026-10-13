@@ -49,9 +49,9 @@ test('production publish commits D1 before invalidation and verifies public revi
       if(path==='/v1/publication'){const result=await changePublication(f.db,input,{...e,requestId:randomUUID(),idempotencyKey:options.idempotencyKey,bodyHash:hash(JSON.stringify(input))});order.push('commit');return result;}
       throw Error('Unexpected non-D1 route');
     },invalidateImpl:async()=>{assert.equal((await publicPost(f.db,slug)).kind,'published');order.push('invalidate');},
-    fetchImpl:async()=>{order.push('verify');return new Response('ok',{headers:{'x-blog-revision':'1'}});}});
+    fetchImpl:async url=>{order.push('verify');return new Response(url.endsWith('/'+slug)?'ok':url.endsWith('sitemap.xml')?`<urlset><url><loc>https://www.realview.com.vn/bai-viet/${slug}</loc></url></urlset>`:`<a href="/bai-viet/${slug}">Bài</a>`,{headers:{'x-blog-revision':'1'}});}});
     const res=response();await handler(request('admin',{action:'publish',id:saved.id,expectedRevision:1,idempotencyKey:randomUUID()},'POST'),res);
-    assert.equal(res.statusCode,200,JSON.stringify(res.body));assert.deepEqual(order,['commit','invalidate','verify']);
+    assert.equal(res.statusCode,200,JSON.stringify(res.body));assert.deepEqual(order,['commit','invalidate','verify','verify','verify']);
     assert.equal((await listProductionPosts(f.db,{publicOnly:true})).length,1);
   }finally{f.close();}
 });

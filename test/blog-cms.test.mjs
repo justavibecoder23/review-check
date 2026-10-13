@@ -380,13 +380,13 @@ test('dashboard quản trị hợp nhất bài mới từ main và giữ đúng 
   assert.equal(merged.length, LEGACY_BLOG_SUMMARIES.length);
   assert.equal(newest.id, `static:${newestSlug}`);
   assert.equal(newest.isStaticFallback, true);
-  assert.equal(newest.publishedAt, '2026-09-17T01:00:00.000Z');
-  assert.equal(reliable.publishedAt, '2026-09-16T01:00:00.000Z');
+  assert.equal(newest.publishedAt, '2026-09-19T08:00:00+07:00');
+  assert.equal(reliable.publishedAt, '2026-09-18T08:00:00+07:00');
   assert.equal(blogAdminRouteInternals.staticSlugFromId(newest.id), newestSlug);
 
   const source = await blogAdminRouteInternals.readStaticLegacyRecord(newestSlug);
-  assert.equal(source.meta.publishedAt, '2026-09-17T08:00:00+07:00');
-  assert.equal(source.meta.updatedAt, '2026-09-17T08:00:00+07:00');
+  assert.equal(source.meta.publishedAt, '2026-09-19T08:00:00+07:00');
+  assert.equal(source.meta.updatedAt, '2026-09-19T08:00:00+07:00');
   assert.equal(source.post.slug, newestSlug);
 });
 
@@ -405,8 +405,8 @@ test('nhấn chỉnh sửa bài mới từ main chỉ nhập CMS một lần và
     assert.equal(first.meta.id, 'import-main-post');
     assert.equal(first.meta.status, 'published');
     assert.equal(first.meta.revision, 1);
-    assert.equal(first.meta.publishedAt, '2026-09-17T01:00:00.000Z');
-    assert.equal(first.meta.publishedUpdatedAt, '2026-09-17T01:00:00.000Z');
+    assert.equal(first.meta.publishedAt, '2026-09-19T01:00:00.000Z');
+    assert.equal(first.meta.publishedUpdatedAt, '2026-09-19T01:00:00.000Z');
     assert.equal(second.meta.id, first.meta.id);
     assert.equal(second.meta.revision, 1);
   } finally {

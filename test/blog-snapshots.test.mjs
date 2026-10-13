@@ -91,13 +91,13 @@ test('toàn bộ bài published, index và sitemap đọc bản tĩnh mà không
   }
 });
 
-test('rewrite bài tĩnh giữ snapshot; blog index và sitemap dùng nguồn CMS động', async () => {
+test('rewrite bài legacy qua CMS handler; fallback giữ snapshot, index và sitemap giữ CMS động', async () => {
   const config = JSON.parse(await readFile(new URL('../vercel.json', import.meta.url), 'utf8'));
   for (const article of manifest.articles.filter((item) => item.path.endsWith('.html') && !item.path.endsWith('index-snapshot.html'))) {
     const slug = article.path.split('/').at(-1).replace(/\.html$/, '');
     assert.deepEqual(
       config.rewrites.filter((rule) => rule.source === `/bai-viet/${slug}`).map((rule) => rule.destination),
-      [`/${article.path}`],
+      [`/api/blog.mjs?route=post&slug=${slug}`],
       slug
     );
   }

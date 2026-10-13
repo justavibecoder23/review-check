@@ -60,7 +60,7 @@ async function servePublic(request,response,route,options={}) {
     const slug=String(firstQueryValue(request.query.slug)||'');
     if(!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)||slug.length>160)throw fail('BLOG_POST_NOT_FOUND',404);
     const record=await publicWorkerCall('/public/post',{slug});
-    if(record.kind==='gone') {response.setHeader('Cache-Control','no-store');return response.status(410).end('Bài viết đã được gỡ đăng.');}
+    if(record.kind==='gone') {response.setHeader('Cache-Control','no-store');response.setHeader('Vercel-CDN-Cache-Control','no-store');return response.status(410).end('Bài viết đã được gỡ đăng.');}
     let html;
     if(record.kind==='published') {html=record.html;response.setHeader('X-Blog-Revision',String(record.revision));}
     else {try {html=await read(`blog/snapshots/${slug}.html`);}catch {throw fail('BLOG_POST_NOT_FOUND',404);}}
@@ -92,18 +92,33 @@ async function accountByEmail(email) {
   return user;
 }
 async function refreshPublished(result,action,options={}) {
-  // D1 commit is already durable. Invalidation is NEVER run before that commit.
+  // Verification never repeats the mutation. Keep the HTTP work bounded;
+  // a durable commit with incomplete visibility is a 202, not a failed save.
+  const checks={article:false,index:false,sitemap:false};
+  const path=`/bai-viet/${result.slug}`;
+  const indexable=action==='publish' && result.post?.settings?.allowIndexing!==false
+    && (result.post?.seo?.robots||'index').startsWith('index');
+  const containsUrl=(text)=>[...text.matchAll(/(?:href=["']([^"']+)["']|<loc>([^<]+)<\/loc>)/g)]
+    .some(match=>{try{const url=new URL((match[1]||match[2]).replaceAll('&amp;','&'),'https://www.realview.com.vn');return url.origin==='https://www.realview.com.vn'&&url.pathname===path;}catch{return false;}});
   try {
     await (options.invalidateImpl||invalidateByTag)(TAG);
-    for(const delay of [0,3000,7000]) {
-      if(delay)await new Promise(resolve=>setTimeout(resolve,delay));
-      const response=await (options.fetchImpl||fetch)(`https://www.realview.com.vn/bai-viet/${result.slug}`,{signal:AbortSignal.timeout(4000)});
-      await response.body?.cancel();
-      if(action==='publish'?response.ok&&Number(response.headers.get('x-blog-revision'))===result.revision:response.status===410)return;
-      await (options.invalidateImpl||invalidateByTag)(TAG);
-    }
+    await Promise.all(Object.keys(checks).map(async scene=>{
+      try {
+        const url=scene==='article'?path:scene==='index'?'/bai-viet':'/sitemap.xml';
+        const response=await (options.fetchImpl||fetch)(`https://www.realview.com.vn${url}`,{signal:AbortSignal.timeout(2000)});
+        if(scene==='article') {
+          checks.article=action==='publish'?response.ok&&Number(response.headers.get('x-blog-revision'))===result.revision:response.status===410;
+          await response.body?.cancel();
+        } else {
+          const text=await response.text();
+          checks[scene]=response.ok && containsUrl(text)===indexable;
+        }
+      }catch{}
+    }));
   }catch{}
-  throw fail('BLOG_PUBLICATION_COMMITTED_VERIFY_PENDING',503);
+  const publication={action,status:Object.values(checks).every(Boolean)?'verified':'pending',checks};
+  (options.loggerImpl||console.info)(JSON.stringify({event:'blog.publication.verify',id:result.id,revision:result.revision,...publication}));
+  return publication;
 }
 const defaultCurrentAccount=currentAccount,defaultWorkerCall=call,defaultPublicWorkerCall=publicWorkerCall;
 export function createCloudflareProductionHandler(options={}) {
@@ -132,6 +147,15 @@ export function createCloudflareProductionHandler(options={}) {
           role:body.role||'editor',active:!revoke,startsAt:Math.floor(Date.parse(body.startsAt||new Date().toISOString())/1000),
           expiresAt:body.expiresAt?Math.floor(Date.parse(body.expiresAt)/1000):null},account.id,mutationOptions);
       }
+    } else if(request.method==='GET' && action==='verify_publication') {
+      const publicationAction=String(firstQueryValue(body.publicationAction)||'');
+      if(!['publish','unpublish','archive'].includes(publicationAction))throw fail('INVALID_BLOG_ACTION',400);
+      result=await call('/v1/read',{action:'detail',id:firstQueryValue(body.id)},account.id);
+      const expectedStatus=publicationAction==='publish'?'published':publicationAction==='archive'?'archived':'draft';
+      if(result.revision!==Number(firstQueryValue(body.expectedRevision))||result.meta.status!==expectedStatus)throw fail('BLOG_REVISION_CONFLICT',409);
+      result={...result,slug:result.meta.slug};
+      result.publication=await refreshPublished(result,publicationAction,options);
+      return sendAdminJson(response,result.publication.status==='verified'?200:202,result);
     } else if(request.method==='GET') {
       result=await call('/v1/read',{action,id:firstQueryValue(body.id),revision:firstQueryValue(body.revision)},account.id);
       if(action==='preview')result.preview=renderBlogPreviewDocument(result.post,{relatedPosts:{}}).html;
@@ -177,7 +201,9 @@ export function createCloudflareProductionHandler(options={}) {
         payload.html=renderBlogPost({...record,meta:{...record.meta,publishedAt:record.meta.publishedAt||new Date().toISOString(),updatedAt:new Date().toISOString()}},
           {baseUrl:'https://www.realview.com.vn',forPublish:true,relatedPosts:{}});
       }
-      result=await call('/v1/publication',payload,account.id,{idempotencyKey:body.idempotencyKey});await refreshPublished(result,action,options);
+      result=await call('/v1/publication',payload,account.id,{idempotencyKey:body.idempotencyKey});
+      result={...result,publication:await refreshPublished(result,action,options)};
+      return sendAdminJson(response,result.publication.status==='verified'?200:202,result);
     } else if(['restore','discard_draft'].includes(action))result=await call('/v1/restore',{...body,action},account.id,mutationOptions);
     else throw fail('INVALID_BLOG_ACTION',400);
     return sendAdminJson(response,200,result);

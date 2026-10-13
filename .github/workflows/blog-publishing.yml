@@ -1,0 +1,21 @@
+name: Blog publishing regression
+on:
+  pull_request:
+    paths: ['api/**', 'src/**', 'cloudflare/blog-preview/**', 'public/**', 'test/blog-*.test.mjs', 'test/helpers/**', 'vercel.json', 'package*.json', '.github/workflows/blog-publishing.yml']
+  push:
+    branches: [main]
+    paths: ['api/**', 'src/**', 'cloudflare/blog-preview/**', 'public/**', 'test/blog-*.test.mjs', 'test/helpers/**', 'vercel.json', 'package*.json', '.github/workflows/blog-publishing.yml']
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run test:blog-publishing
