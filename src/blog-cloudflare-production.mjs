@@ -15,10 +15,12 @@ import { invalidateByTag } from '@vercel/functions';
 
 const TAG='realview-blog-public';
 const fail=(code,statusCode)=>Object.assign(new Error(code),{code,statusCode});
-const read=path=>readFile(new URL(`../public/${path}`,import.meta.url),'utf8');
+// Keep tracing inside Blog resources; a dynamic public/ root packages all site assets.
+const readTemplate=()=>readFile(new URL('../public/blog.html',import.meta.url),'utf8');
+const readSnapshot=filename=>readFile(new URL(`../public/blog/snapshots/${filename}`,import.meta.url),'utf8');
 async function legacyRecord(slug) {
   if(!/^[a-z0-9-]{1,160}$/.test(slug))throw fail('BLOG_POST_NOT_FOUND',404);
-  const html=await read(`blog/snapshots/${slug}.html`),source=migrateStaticBlogHtml(html,{sourcePath:`public/blog/snapshots/${slug}.html`});
+  const html=await readSnapshot(`${slug}.html`),source=migrateStaticBlogHtml(html,{sourcePath:`public/blog/snapshots/${slug}.html`});
   const sourceHash=createHash('sha256').update(html).digest('hex');
   // Stable editor IDs make import retries deterministic; original HTML is untouched.
   source.post.blocks=source.post.blocks.map((block,index)=>({...block,id:`legacy-${sourceHash.slice(0,16)}-${index}`}));
@@ -63,7 +65,7 @@ async function servePublic(request,response,route,options={}) {
     if(record.kind==='gone') {response.setHeader('Cache-Control','no-store');response.setHeader('Vercel-CDN-Cache-Control','no-store');return response.status(410).end('Bài viết đã được gỡ đăng.');}
     let html;
     if(record.kind==='published') {html=record.html;response.setHeader('X-Blog-Revision',String(record.revision));}
-    else {try {html=await read(`blog/snapshots/${slug}.html`);}catch {throw fail('BLOG_POST_NOT_FOUND',404);}}
+    else {try {html=await readSnapshot(`${slug}.html`);}catch {throw fail('BLOG_POST_NOT_FOUND',404);}}
     publicHeaders(response);return response.status(200).end(request.method==='HEAD'?undefined:html);
   }
   const {posts,changed}=await publicWorkerCall('/public/list');
@@ -72,11 +74,11 @@ async function servePublic(request,response,route,options={}) {
     publicHeaders(response,'application/json; charset=utf-8');return response.status(200).json({posts,managedSlugs:posts.map(p=>p.slug),cmsAvailable:true});
   }
   let output,type='text/html; charset=utf-8';
-  if(route==='index')output=!changed?await read('blog/snapshots/index-snapshot.html'):
-    renderBlogIndexTemplate(await read('blog.html'),records,{baseUrl:'https://www.realview.com.vn'});
+  if(route==='index')output=!changed?await readSnapshot('index-snapshot.html'):
+    renderBlogIndexTemplate(await readTemplate(),records,{baseUrl:'https://www.realview.com.vn'});
   else if(route==='sitemap') {
     type='application/xml; charset=utf-8';
-    output=!changed?await read('blog/snapshots/sitemap-snapshot.xml'):
+    output=!changed?await readSnapshot('sitemap-snapshot.xml'):
       renderSitemap(records,STATIC_SITEMAP_ENTRIES.filter(e=>!/^\/bai-viet\/[^/]+$/.test(e.path)),{baseUrl:'https://www.realview.com.vn'});
   } else if(route==='rss') {type='application/rss+xml; charset=utf-8';output=renderRss(records,{baseUrl:'https://www.realview.com.vn',limit:50});}
   else throw fail('INVALID_BLOG_ACTION',404);
